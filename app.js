@@ -19,9 +19,11 @@ function cocRole(role) {
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 
-db.auth.onAuthStateChange((_event, session) => {
+db.auth.onAuthStateChange(async (_event, session) => {
   if (session) {
-    showApp(session.user);
+    // Refresh per avere user_metadata (role admin) sempre aggiornato
+    const { data: refreshed } = await db.auth.refreshSession();
+    showApp(refreshed?.session?.user ?? session.user);
   } else {
     showLogin();
   }
