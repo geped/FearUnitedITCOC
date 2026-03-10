@@ -106,12 +106,13 @@ async function loadMembers() {
     renderMembers(data || []);
 }
 
-function thClass(level) {
-    if (!level) return 'th-unknown';
-    if (level >= 14) return 'th-legendary';
-    if (level >= 11) return 'th-high';
-    if (level >= 7)  return 'th-mid';
-    return 'th-low';
+function thImg(level) {
+    if (!level) return '<span class="th-unknown">?</span>';
+    const n = String(level).padStart(2, '0');
+    return `<div class="th-cell">
+        <img src="th/level_${n}.png" alt="TH${level}" class="th-img">
+        <span class="th-label">TH${level}</span>
+    </div>`;
 }
 
 function renderMembers(members) {
@@ -132,10 +133,9 @@ function renderMembers(members) {
         const joinDate = m.first_seen ? new Date(m.first_seen) : now;
         const isNew = Math.floor((now - joinDate) / 86400000) < 7;
         const role = cocRole(m.role);
-        const th = m.th_level ?? '?';
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td><span class="th-badge ${thClass(m.th_level)}">TH${th}</span></td>
+            <td class="th-col">${thImg(m.th_level)}</td>
             <td>
                 <span class="member-name">${m.name}</span>
                 ${isNew ? '<span class="new-badge">NUOVO</span>' : ''}
