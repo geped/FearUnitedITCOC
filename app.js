@@ -165,50 +165,108 @@ document.getElementById('sync-btn').addEventListener('click', async () => {
     }
 });
 
-// ── CWL BONUS ─────────────────────────────────────────────────────────────────
+// ── CWL ────────────────────────────────────────────────────────────────────────
 
-function calculateMerit(stats, history) {
-    let score = (stats.stars || 0) * 100 + (stats.destructionPercentage || 0);
-    if (stats.attacksRequired != null && stats.attacksMade != null) {
-        score -= (stats.attacksRequired - stats.attacksMade) * 500;
-    }
-    if (history?.received_last_month) score = 0;
-    return Math.max(score, 0);
+let cwlLiveData = null; // cache stats live
+
+async function loadCwlHistory() {
+    const { data } = await db.from('cwl_history')
+        .select('*')
+        .order('bonus_score', { ascending: false });
+    return data || [];
 }
 
-document.getElementById('generate-bonus').addEventListener('click', async () => {
-    const resultsDiv = document.getElementById('bonus-results');
-    resultsDiv.innerHTML = '<p>Calcolo in corso…</p>';
+function renderCwlTable(history, live) {
+    const div = document.getElementById('bonus-results');
 
-    const { data: members } = await db.from('members').select('*');
-    const { data: history } = await db.from('cwl_bonuses').select('*');
+    // Mappa live per nome (approssimazione, idealmente per tag)
+    const liveMap = {};
+    if (live) live.forEach(p => { liveMap[p.name.toLowerCase()] = p; });
 
-    const historyMap = {};
-    (history || []).forEach(h => { historyMap[h.tag] = h; });
+    // Dividi: attivi vs ex-player vs secondari
+    const active    = history.filter(h => h.still_in_clan && !h.is_secondary);
+    const exPlayers = history.filter(h => !h.still_in_clan);
+    const secondary = history.filter(h => h.is_secondary);
 
-    const computed = (members || []).map(m => {
-        const stats = {
-            stars: Math.floor(Math.random() * 6),
-            destructionPercentage: Math.floor(Math.random() * 100),
-            attacksMade: Math.floor(Math.random() * 2),
-            attacksRequired: 2
-        };
-        return { ...m, score: calculateMerit(stats, historyMap[m.tag]) };
-    }).sort((a, b) => b.score - a.score);
+    function buildRows(rows) {
+        return rows.map((h, i) => {
+            const lp = liveMap[h.player_name.toLowerCase()];
+            const stars = lp ? lp.stars : '—';
+            const destr = lp ? lp.destruction.toFixed(1) + '%' : '—';
+            const atk   = lp ? `${lp.attacks_made}/${lp.attacks_required}` : '—';
+            const participated = h.participated
+                ? '<span class="cwl-yes">✓ Marzo</span>'
+                : '<span class="cwl-no">✗</span>';
+            const statusCls = !h.still_in_clan ? 'cwl-exmember' : '';
+            return `<tr class="${statusCls}">
+                <td class="stat-cell">${i + 1}</td>
+                <td class="member-name">${h.player_name}</td>
+                <td>${participated}</td>
+                <td class="stat-cell">${stars}</td>
+                <td class="stat-cell">${destr}</td>
+                <td class="stat-cell">${atk}</td>
+                <td class="stat-cell"><strong>${h.bonus_score}</strong></td>
+            </tr>`;
+        }).join('');
+    }
 
-    resultsDiv.innerHTML = '<ol>' + computed.map(m => `
-        <li>${m.name} (${m.tag}) — punteggio ${m.score}
-            ${historyMap[m.tag]?.received_last_month ? '<em>(bonus precedente)</em>' : ''}
-        </li>
-    `).join('') + '</ol>';
+    div.innerHTML = `
+        <div class="table-wrap">
+        <table id="cwl-table">
+            <thead>
+                <tr>
+                    <th>#</th><th>Nome</th><th>CWL Marzo</th>
+                    <th>⭐ Stelle</th><th>💥 Distruzione</th>
+                    <th>⚔ Attacchi</th><th>Bonus</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${buildRows(active)}
+                ${exPlayers.length ? `
+                    <tr class="cwl-section-row"><td colspan="7">Ex-Player</td></tr>
+                    ${buildRows(exPlayers)}
+                ` : ''}
+                ${secondary.length ? `
+                    <tr class="cwl-section-row"><td colspan="7">Account Secondari</td></tr>
+                    ${buildRows(secondary)}
+                ` : ''}
+            </tbody>
+        </table>
+        </div>
+    `;
+}
 
-    await db.from('cwl_bonuses').upsert(
-        computed.map((m, idx) => ({
-            tag: m.tag, name: m.name, score: m.score, rank: idx + 1,
-            assigned_at: new Date().toISOString(), received_last_month: false
-        })),
-        { onConflict: 'tag' }
-    );
+document.getElementById('load-cwl-history').addEventListener('click', async () => {
+    const btn = document.getElementById('load-cwl-history');
+    btn.textContent = 'Caricamento…';
+    const history = await loadCwlHistory();
+    renderCwlTable(history, cwlLiveData);
+    btn.textContent = 'Storico Marzo';
+});
+
+document.getElementById('fetch-cwl-live').addEventListener('click', async () => {
+    const btn = document.getElementById('fetch-cwl-live');
+    const status = document.getElementById('cwl-status');
+    btn.textContent = 'Caricamento…';
+    status.textContent = '';
+    try {
+        const res = await fetch('/api/cwl-stats');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
+        if (data.state === 'notInWar') {
+            status.textContent = 'CWL non in corso al momento.';
+            btn.textContent = 'Aggiorna da API CoC';
+            return;
+        }
+        cwlLiveData = data.players;
+        const season = data.season ? ` — Stagione ${data.season}` : '';
+        status.textContent = `✓ Stats CWL live aggiornate${season}`;
+        const history = await loadCwlHistory();
+        renderCwlTable(history, cwlLiveData);
+    } catch (err) {
+        status.textContent = '✗ ' + err.message;
+    }
+    btn.textContent = 'Aggiorna da API CoC';
 });
 
 // ── ADMIN: GESTIONE UTENTI ────────────────────────────────────────────────────

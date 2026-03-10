@@ -369,21 +369,25 @@ td button.btn-danger:hover { background: rgba(200,0,0,0.4); }
     white-space: nowrap;
 }
 
-/* ── BONUS RESULTS ── */
-#bonus-results ol {
-    padding-left: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
+/* ── CWL ── */
+#cwl-status {
+    margin-bottom: 0.75rem;
+    font-size: 0.88rem;
+    color: #5a7a98;
+    min-height: 1.2em;
 }
 
-#bonus-results li {
-    background: #1a2636;
-    border: 1px solid #1e3050;
-    border-radius: 6px;
-    padding: 0.5rem 1rem;
-    font-size: 0.92rem;
-    color: #c8d8e8;
-}
+#cwl-table .cwl-yes { color: #50c878; font-weight: 700; font-size: 0.82rem; }
+#cwl-table .cwl-no  { color: #555; font-size: 0.82rem; }
 
-#bonus-results em { color: #7a9ab8; font-style: normal; font-size: 0.85rem; }
+#cwl-table .cwl-exmember td { opacity: 0.5; }
+
+#cwl-table .cwl-section-row td {
+    background: #131f2e;
+    color: #5a7a98;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    padding: 0.35rem 1rem;
+}

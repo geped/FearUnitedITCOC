@@ -83,8 +83,12 @@
         <section id="tab-cwl" class="tab-content" style="display:none">
             <div class="section-header">
                 <h2>Pannello CWL</h2>
-                <button id="generate-bonus">Genera Classifica Bonus</button>
+                <div style="display:flex;gap:0.5rem">
+                    <button id="load-cwl-history">Storico Marzo</button>
+                    <button id="fetch-cwl-live">Aggiorna da API CoC</button>
+                </div>
             </div>
+            <div id="cwl-status"></div>
             <div id="bonus-results"></div>
         </section>
 
