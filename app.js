@@ -29,11 +29,15 @@ db.auth.onAuthStateChange((_event, session) => {
 
 document.getElementById("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const { error } = await db.auth.signInWithPassword({
-    email: document.getElementById("email").value,
-    password: document.getElementById("password").value,
-  });
-  if (error) showLoginError(error.message);
+  try {
+    const { error } = await db.auth.signInWithPassword({
+      email: document.getElementById("email").value,
+      password: document.getElementById("password").value,
+    });
+    if (error) showLoginError(error.message);
+  } catch (err) {
+    showLoginError("Errore di connessione. Ricarica la pagina e riprova.");
+  }
 });
 
 document.getElementById("signup-form").addEventListener("submit", async (e) => {
