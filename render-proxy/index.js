@@ -17,7 +17,15 @@ async function syncMembers() {
     }
     const data = await res.json();
     const members = (data.items || []).map(m => ({
-        tag: m.tag, name: m.name, role: m.role
+        tag: m.tag,
+        name: m.name,
+        role: m.role,
+        th_level: m.townHallLevel ?? null,
+        trophies: m.trophies ?? null,
+        donations: m.donations ?? null,
+        donations_received: m.donationsReceived ?? null,
+        exp_level: m.expLevel ?? null,
+        clan_rank: m.clanRank ?? null
     }));
 
     const supabase = createClient(

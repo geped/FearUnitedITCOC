@@ -6,7 +6,7 @@ const db = window.sb;
 // Nota: nell'API CoC "admin" = Anziano (Elder), NON admin app
 const COC_ROLES = {
     leader:   { label: 'Capo',      cls: 'role-leader' },
-    coLeader: { label: 'Vice Capo', cls: 'role-coleader' },
+    coLeader: { label: 'Co-Capo',   cls: 'role-coleader' },
     admin:    { label: 'Anziano',   cls: 'role-elder' },
     member:   { label: 'Membro',    cls: 'role-member' }
 };
@@ -106,16 +106,25 @@ async function loadMembers() {
     renderMembers(data || []);
 }
 
+function thClass(level) {
+    if (!level) return 'th-unknown';
+    if (level >= 14) return 'th-legendary';
+    if (level >= 11) return 'th-high';
+    if (level >= 7)  return 'th-mid';
+    return 'th-low';
+}
+
 function renderMembers(members) {
     const tbody = document.querySelector('#members-table tbody');
     tbody.innerHTML = '';
     const now = new Date();
 
-    // Ordina: Capo → Vice Capo → Anziano → Membro, poi per nome
+    // Ordina: Capo → Co-Capo → Anziano → Membro, poi per TH desc, poi per nome
     members.sort((a, b) => {
         const ra = ROLE_ORDER[a.role] ?? 4;
         const rb = ROLE_ORDER[b.role] ?? 4;
         if (ra !== rb) return ra - rb;
+        if ((b.th_level ?? 0) !== (a.th_level ?? 0)) return (b.th_level ?? 0) - (a.th_level ?? 0);
         return (a.name || '').localeCompare(b.name || '');
     });
 
@@ -123,12 +132,20 @@ function renderMembers(members) {
         const joinDate = m.first_seen ? new Date(m.first_seen) : now;
         const isNew = Math.floor((now - joinDate) / 86400000) < 7;
         const role = cocRole(m.role);
+        const th = m.th_level ?? '?';
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>${m.name}${isNew ? '<span class="new-badge">NUOVO</span>' : ''}</td>
-            <td class="tag-cell">${m.tag}</td>
+            <td><span class="th-badge ${thClass(m.th_level)}">TH${th}</span></td>
+            <td>
+                <span class="member-name">${m.name}</span>
+                ${isNew ? '<span class="new-badge">NUOVO</span>' : ''}
+                <br><span class="tag-cell">${m.tag}</span>
+            </td>
             <td><span class="role-badge ${role.cls}">${role.label}</span></td>
-            <td>${joinDate.toLocaleDateString('it-IT')}</td>
+            <td class="stat-cell">${m.trophies ?? '—'}</td>
+            <td class="stat-cell">${m.donations ?? '—'} / ${m.donations_received ?? '—'}</td>
+            <td class="stat-cell">${m.clan_rank ?? '—'}</td>
+            <td class="date-cell">${joinDate.toLocaleDateString('it-IT')}</td>
         `;
         tbody.appendChild(tr);
     });

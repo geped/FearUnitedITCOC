@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');
+/* Fonts caricati via <link> nell'HTML */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -30,8 +30,8 @@ body {
 }
 
 .login-box h1 {
-    font-size: 2rem;
-    font-weight: 800;
+    font-family: 'Lilita One', cursive;
+    font-size: 2.2rem;
     color: #f0a500;
     letter-spacing: 1px;
     margin-bottom: 0.25rem;
@@ -128,8 +128,8 @@ header {
 }
 
 header h1 {
-    font-size: 1.2rem;
-    font-weight: 800;
+    font-family: 'Lilita One', cursive;
+    font-size: 1.25rem;
     color: #f0a500;
     letter-spacing: 0.5px;
 }
@@ -320,6 +320,42 @@ td button {
 td button:hover { background: #3e5f80; color: #e0e6ee; }
 td button.btn-danger { background: rgba(200,0,0,0.2); color: #ff6b6b; }
 td button.btn-danger:hover { background: rgba(200,0,0,0.4); }
+
+/* ── TH BADGE ── */
+.th-badge {
+    display: inline-block;
+    min-width: 40px;
+    padding: 0.2rem 0.45rem;
+    border-radius: 5px;
+    font-family: 'Lilita One', cursive;
+    font-size: 0.85rem;
+    text-align: center;
+    letter-spacing: 0.3px;
+}
+
+.th-legendary { background: rgba(240,165,0,0.25); color: #f0c040; border: 1px solid rgba(240,165,0,0.5); }
+.th-high      { background: rgba(140,80,220,0.2);  color: #c090ff; border: 1px solid rgba(140,80,220,0.4); }
+.th-mid       { background: rgba(50,120,200,0.2);  color: #70b0ff; border: 1px solid rgba(50,120,200,0.35); }
+.th-low       { background: rgba(100,120,140,0.15); color: #7a9ab8; border: 1px solid rgba(100,120,140,0.25); }
+.th-unknown   { background: rgba(80,80,80,0.2);    color: #666;    border: 1px solid #333; }
+
+/* ── MEMBER NAME / STATS ── */
+.member-name {
+    font-weight: 700;
+    color: #e0e6ee;
+}
+
+.stat-cell {
+    font-size: 0.88rem;
+    color: #a0bcd8;
+    white-space: nowrap;
+}
+
+.date-cell {
+    font-size: 0.82rem;
+    color: #5a7a98;
+    white-space: nowrap;
+}
 
 /* ── BONUS RESULTS ── */
 #bonus-results ol {
