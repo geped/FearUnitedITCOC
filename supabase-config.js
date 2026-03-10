@@ -3,5 +3,11 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const { createClient } = supabase;
 window.sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { storageKey: 'fear-united-auth', persistSession: true }
+    auth: {
+        storageKey: 'fear-united-auth',
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: false,
+        flowType: 'implicit'
+    }
 });
