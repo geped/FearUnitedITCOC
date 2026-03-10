@@ -1,0 +1,11 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /members/{doc} {
+      allow read, write: if true;
+    }
+    match /cwl_bonuses/{doc} {
+      allow read, write: if true;
+    }
+  }
+}

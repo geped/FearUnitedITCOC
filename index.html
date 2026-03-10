@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fear United – CWL Manager</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+    <div class="login-box">
+        <h1>Fear United</h1>
+        <p class="login-sub">CWL Manager</p>
+        <div id="login-error" class="error-msg" style="display:none"></div>
+
+        <form id="login-form">
+            <input type="email" id="email" placeholder="Email" required>
+            <input type="password" id="password" placeholder="Password" required>
+            <button type="submit">Accedi</button>
+        </form>
+        <button id="show-signup" class="link-btn">Non hai un account? Registrati</button>
+
+        <form id="signup-form" style="display:none">
+            <input type="email" id="signup-email" placeholder="Email" required>
+            <input type="password" id="signup-password" placeholder="Password (min 6 caratteri)" required>
+            <button type="submit">Crea Account</button>
+        </form>
+        <button id="show-login" class="link-btn" style="display:none">Hai già un account? Accedi</button>
+    </div>
+</div>
+
+<!-- APP (visibile dopo login) -->
+<div id="app" style="display:none">
+    <header>
+        <div>
+            <h1>Fear United – CWL Manager</h1>
+        </div>
+        <div class="user-bar">
+            <span id="user-email"></span>
+            <span id="user-role-badge" class="badge" style="display:none">Admin</span>
+            <button id="logout-btn">Esci</button>
+        </div>
+    </header>
+
+    <nav class="tabs">
+        <button class="tab-btn active" data-tab="members">Membri</button>
+        <button class="tab-btn" data-tab="cwl">CWL Bonus</button>
+        <button class="tab-btn admin-only" data-tab="admin" style="display:none">Gestione Utenti</button>
+    </nav>
+
+    <main>
+        <!-- TAB: MEMBRI -->
+        <section id="tab-members" class="tab-content">
+            <div class="section-header">
+                <h2>Tabella Membri</h2>
+                <button id="sync-btn">Sincronizza da CoC</button>
+            </div>
+            <div id="sync-status"></div>
+            <table id="members-table">
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Tag</th>
+                        <th>Ruolo</th>
+                        <th>Primo Ingresso</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </section>
+
+        <!-- TAB: CWL BONUS -->
+        <section id="tab-cwl" class="tab-content" style="display:none">
+            <div class="section-header">
+                <h2>Pannello CWL</h2>
+                <button id="generate-bonus">Genera Classifica Bonus</button>
+            </div>
+            <div id="bonus-results"></div>
+        </section>
+
+        <!-- TAB: ADMIN -->
+        <section id="tab-admin" class="tab-content" style="display:none">
+            <div class="section-header">
+                <h2>Gestione Utenti</h2>
+                <button id="refresh-users">Aggiorna</button>
+            </div>
+            <div id="admin-msg" class="info-msg" style="display:none"></div>
+            <table id="users-table">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Ruolo</th>
+                        <th>Registrato il</th>
+                        <th>Azioni</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </section>
+    </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabase-config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
