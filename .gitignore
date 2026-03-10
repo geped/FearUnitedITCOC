@@ -3,5 +3,6 @@
 .history
 node_modules
 render-proxy/node_modules
-# Firebase service account key — NEVER commit
+# Firebase — file non più usati, rimuovi dal tracking
 fearunitedit-firebase-adminsdk-fbsvc-7b4b4382ad.json
+firebase-config.js
