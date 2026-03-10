@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fear United – CWL Manager</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 </head>
 <body>
 
@@ -58,6 +60,7 @@
                 <button id="sync-btn">Sincronizza da CoC</button>
             </div>
             <div id="sync-status"></div>
+            <div class="table-wrap">
             <table id="members-table">
                 <thead>
                     <tr>
@@ -69,6 +72,7 @@
                 </thead>
                 <tbody></tbody>
             </table>
+            </div>
         </section>
 
         <!-- TAB: CWL BONUS -->
@@ -87,17 +91,19 @@
                 <button id="refresh-users">Aggiorna</button>
             </div>
             <div id="admin-msg" class="info-msg" style="display:none"></div>
+            <div class="table-wrap">
             <table id="users-table">
                 <thead>
                     <tr>
                         <th>Email</th>
-                        <th>Ruolo</th>
+                        <th>Ruolo App</th>
                         <th>Registrato il</th>
                         <th>Azioni</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
             </table>
+            </div>
         </section>
     </main>
 </div>

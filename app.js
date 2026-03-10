@@ -2,6 +2,21 @@ const COC_CLAN_TAG = '%232J2VLPP9R';
 
 const db = window.sb;
 
+// Mappatura ruoli CoC API → etichette italiane
+// Nota: nell'API CoC "admin" = Anziano (Elder), NON admin app
+const COC_ROLES = {
+    leader:   { label: 'Capo',      cls: 'role-leader' },
+    coLeader: { label: 'Vice Capo', cls: 'role-coleader' },
+    admin:    { label: 'Anziano',   cls: 'role-elder' },
+    member:   { label: 'Membro',    cls: 'role-member' }
+};
+
+const ROLE_ORDER = { leader: 0, coLeader: 1, admin: 2, member: 3 };
+
+function cocRole(role) {
+    return COC_ROLES[role] || { label: role || '—', cls: 'role-member' };
+}
+
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 
 db.auth.onAuthStateChange((_event, session) => {
@@ -95,15 +110,24 @@ function renderMembers(members) {
     const tbody = document.querySelector('#members-table tbody');
     tbody.innerHTML = '';
     const now = new Date();
+
+    // Ordina: Capo → Vice Capo → Anziano → Membro, poi per nome
+    members.sort((a, b) => {
+        const ra = ROLE_ORDER[a.role] ?? 4;
+        const rb = ROLE_ORDER[b.role] ?? 4;
+        if (ra !== rb) return ra - rb;
+        return (a.name || '').localeCompare(b.name || '');
+    });
+
     members.forEach(m => {
         const joinDate = m.first_seen ? new Date(m.first_seen) : now;
-        const daysSince = Math.floor((now - joinDate) / 86400000);
+        const isNew = Math.floor((now - joinDate) / 86400000) < 7;
+        const role = cocRole(m.role);
         const tr = document.createElement('tr');
-        if (daysSince < 7) tr.classList.add('new-member');
         tr.innerHTML = `
-            <td>${m.name}</td>
-            <td>${m.tag}</td>
-            <td>${m.role || '-'}</td>
+            <td>${m.name}${isNew ? '<span class="new-badge">NUOVO</span>' : ''}</td>
+            <td class="tag-cell">${m.tag}</td>
+            <td><span class="role-badge ${role.cls}">${role.label}</span></td>
             <td>${joinDate.toLocaleDateString('it-IT')}</td>
         `;
         tbody.appendChild(tr);
