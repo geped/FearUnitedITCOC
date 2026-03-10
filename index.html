@@ -90,6 +90,21 @@
             </div>
             <div id="cwl-status"></div>
             <div id="bonus-results"></div>
+
+            <!-- PANNELLO ASSEGNAZIONE BONUS (solo admin) -->
+            <div id="bonus-panel" class="admin-only" style="display:none; margin-top:2rem">
+                <div class="section-header">
+                    <h2>Assegna Bonus Extra</h2>
+                    <div class="bonus-controls">
+                        <label>Stagione: <input id="bonus-season" type="month"></label>
+                        <label>Bonus disponibili: <input id="bonus-count" type="number" min="1" max="8" value="6" class="bonus-count-input"></label>
+                        <button id="generate-bonus">Auto-genera</button>
+                        <button id="save-bonus" class="btn-save-bonus" style="display:none">Salva Assegnazione</button>
+                    </div>
+                </div>
+                <div id="bonus-msg" class="bonus-msg-bar"></div>
+                <div id="bonus-player-list"></div>
+            </div>
         </section>
 
         <!-- TAB: ADMIN -->

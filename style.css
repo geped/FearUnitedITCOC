@@ -391,3 +391,58 @@ td button.btn-danger:hover { background: rgba(200,0,0,0.4); }
     letter-spacing: 0.6px;
     padding: 0.35rem 1rem;
 }
+
+/* ── BONUS PANEL ── */
+.bonus-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    font-size: 0.88rem;
+    color: #7a9ab8;
+}
+
+.bonus-controls label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.bonus-controls input[type="month"],
+.bonus-controls input[type="number"] {
+    background: #0f1923;
+    border: 1px solid #2e4560;
+    border-radius: 5px;
+    color: #e0e6ee;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.88rem;
+    font-family: inherit;
+}
+
+.bonus-count-input { width: 55px; }
+
+.bonus-msg-bar {
+    font-size: 0.88rem;
+    color: #7a9ab8;
+    min-height: 1.4em;
+    margin-bottom: 0.5rem;
+}
+
+.bonus-badge { font-size: 0.85rem; margin-left: 4px; }
+
+.btn-save-bonus {
+    background: #27643c !important;
+    color: #e0f5ea !important;
+}
+.btn-save-bonus:hover { background: #338c52 !important; }
+
+#bonus-player-list .bonus-top td:first-child {
+    border-left: 3px solid #f0a500;
+}
+
+#bonus-player-list input[type="checkbox"] {
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+    accent-color: #f0a500;
+}
