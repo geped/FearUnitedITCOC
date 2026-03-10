@@ -145,5 +145,34 @@ app.get('/cwl-live', authMiddleware, async (_req, res) => {
     }
 });
 
+app.get('/war-log', authMiddleware, async (_req, res) => {
+    try {
+        const r = await fetch(
+            `https://api.clashofclans.com/v1/clans/${COC_CLAN_TAG}/warlog?limit=30`,
+            { headers: cocHeaders() }
+        );
+        const data = await r.json();
+        if (!r.ok) return res.status(r.status).json({ error: data.reason || 'CoC API error', detail: data });
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/clan-members', authMiddleware, async (_req, res) => {
+    try {
+        const r = await fetch(
+            `https://api.clashofclans.com/v1/clans/${COC_CLAN_TAG}/members`,
+            { headers: cocHeaders() }
+        );
+        const data = await r.json();
+        if (!r.ok) return res.status(r.status).json({ error: data.reason || 'CoC API error' });
+        const items = (data.items || []).map(m => ({ name: m.name, tag: m.tag, role: m.role }));
+        res.json({ items });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Proxy listening on port ${PORT}`));
