@@ -112,8 +112,10 @@ const ROLE_LABELS = Object.fromEntries(ROLES.map(r => [r.value, r]));
 
 async function showApp(sessionUser) {
   document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
+  document.getElementById('app').style.display = 'flex';
   document.getElementById('user-email').textContent = sessionUser.email;
+  const topbarEmailEl = document.getElementById('topbar-email');
+  if (topbarEmailEl) topbarEmailEl.textContent = sessionUser.email;
 
   // Recupera i dati utente aggiornati dal server (evita metadata stale)
   let user = sessionUser;
@@ -169,14 +171,24 @@ async function showApp(sessionUser) {
 
 // ── NAVIGATION ────────────────────────────────────────────────────────────────
 
+const TAB_TITLES = {
+  members: 'Clan',
+  warlog:  'Registri Guerre',
+  cwl:     'Bonus CWL',
+  admin:   'Gestione Utenti',
+};
+
 function activateTab(tabId) {
-  // Aggiorna TUTTI i tab-btn (topnav + sidebar + bottom-nav)
+  // Aggiorna TUTTI i tab-btn (sidebar + bottom-nav)
   document.querySelectorAll('.tab-btn, .bnav-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === tabId);
   });
   document.querySelectorAll('.tab-content').forEach(s => (s.style.display = 'none'));
   const sec = document.getElementById('tab-' + tabId);
   if (sec) sec.style.display = 'block';
+  // Aggiorna titolo topbar
+  const titleEl = document.getElementById('topbar-title');
+  if (titleEl) titleEl.textContent = TAB_TITLES[tabId] || tabId;
   if (tabId === 'admin') loadUsers();
   if (tabId === 'warlog') setTimeout(loadWarLog, 80);
   if (tabId === 'cwl') setTimeout(loadAssignBonus, 80);
@@ -189,15 +201,14 @@ document.querySelectorAll('.tab-btn, .bnav-btn').forEach(btn => {
 // Hamburger
 function openNav() {
   document.getElementById('sidebar').classList.add('open');
-  document.getElementById('nav-overlay').classList.add('visible');
+  document.getElementById('nav-overlay').classList.add('open');
   document.body.style.overflow = 'hidden';
 }
 function closeNav() {
   document.getElementById('sidebar').classList.remove('open');
-  document.getElementById('nav-overlay').classList.remove('visible');
+  document.getElementById('nav-overlay').classList.remove('open');
   document.body.style.overflow = '';
 }
-document.getElementById('hamburger').addEventListener('click', openNav);
 
 
 // ── MEMBRI ────────────────────────────────────────────────────────────────────

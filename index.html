@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
     <title>Fear United – CWL Manager</title>
     <meta name="description" content="Gestione CWL e guerra del clan Fear United IT">
-    <meta name="theme-color" content="#0f1923">
+    <meta name="theme-color" content="#0D0B08">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -54,293 +54,297 @@
 <!-- ─── APP ───────────────────────────────────────────────────────────────── -->
 <div id="app" style="display:none">
 
-    <!-- HEADER -->
-    <header class="app-header">
-        <div class="header-left">
-            <button class="hamburger" id="hamburger" aria-label="Menu">
-                <span></span><span></span><span></span>
+    <!-- ─── SIDEBAR ─── -->
+    <aside class="app-sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <span class="sidebar-brand-icon">⚔️</span>
+            <div class="sidebar-brand-text">
+                <h2>Fear United</h2>
+                <span>CWL Manager</span>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <button class="tab-btn active" data-tab="members" onclick="closeNav()">
+                <span class="nav-icon">🏠</span> Clan
             </button>
-            <div class="header-brand">
-                <span class="header-icon">⚔️</span>
-                <h1>Fear United</h1>
+            <button class="tab-btn" data-tab="warlog" onclick="closeNav()">
+                <span class="nav-icon">⚔️</span> Registri Guerre
+            </button>
+            <button class="tab-btn" data-tab="cwl" onclick="closeNav()">
+                <span class="nav-icon">🏆</span> Bonus CWL
+            </button>
+            <button class="tab-btn admin-only" data-tab="admin" style="display:none" onclick="closeNav()">
+                <span class="nav-icon">👥</span> Gestione Utenti
+            </button>
+        </nav>
+
+        <div class="sidebar-user">
+            <span id="user-email" class="sidebar-user-email"></span>
+            <div class="sidebar-user-row">
+                <span id="user-role-badge" class="badge badge-gold" style="display:none"></span>
+                <button id="logout-btn" class="btn-logout" style="margin-left:auto">Esci</button>
             </div>
         </div>
-        <div class="header-right">
-            <div class="user-info">
-                <span id="user-email" class="user-email"></span>
-                <span id="user-role-badge" class="badge" style="display:none"></span>
-            </div>
-            <button id="logout-btn" class="btn-logout">Esci</button>
-        </div>
-    </header>
+    </aside>
 
     <!-- NAV OVERLAY (mobile) -->
     <div class="nav-overlay" id="nav-overlay" onclick="closeNav()"></div>
 
-    <!-- SIDEBAR NAV (mobile: slide-in / desktop: top bar) -->
-    <nav class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-            <span>Menu</span>
-            <button class="sidebar-close" onclick="closeNav()">✕</button>
+    <!-- ─── BODY ─── -->
+    <div class="app-body">
+
+        <!-- TOPBAR -->
+        <div class="app-topbar">
+            <button class="hamburger" id="hamburger" aria-label="Menu" onclick="openNav()">
+                <span></span><span></span><span></span>
+            </button>
+            <span id="topbar-title">Clan</span>
+            <div class="topbar-right">
+                <div class="user-info" style="display:none">
+                    <span class="topbar-email" id="topbar-email"></span>
+                </div>
+            </div>
         </div>
-        <button class="tab-btn active" data-tab="members" onclick="closeNav()">🏠 Clan</button>
-        <button class="tab-btn" data-tab="warlog" onclick="closeNav()">⚔️ Registri Guerre</button>
-        <button class="tab-btn" data-tab="cwl" onclick="closeNav()">🏆 Bonus CWL</button>
-        <button class="tab-btn admin-only" data-tab="admin" style="display:none" onclick="closeNav()">👥 Gestione Utenti</button>
-    </nav>
 
-    <!-- TOP NAB BAR (desktop) -->
-    <nav class="topnav" id="topnav">
-        <button class="tab-btn active" data-tab="members">🏠 Clan</button>
-        <button class="tab-btn" data-tab="warlog">⚔️ Registri</button>
-        <button class="tab-btn" data-tab="cwl">🏆 Bonus CWL</button>
-        <button class="tab-btn admin-only" data-tab="admin" style="display:none">👥 Utenti</button>
-    </nav>
+        <!-- MAIN -->
+        <main class="app-main">
 
-    <!-- MAIN -->
-    <main class="app-main">
-
-        <!-- ── TAB: CLAN ─────────────────────────────────────────── -->
-        <section id="tab-members" class="tab-content">
-            <div class="page-header">
-                <div>
-                    <h2>🏠 Clan</h2>
-                    <p class="page-sub">Membri attuali di Fear United IT</p>
+            <!-- ── TAB: CLAN ─────────────────────────────────────────── -->
+            <section id="tab-members" class="tab-content">
+                <div class="page-header">
+                    <div>
+                        <h2>🏠 Clan</h2>
+                        <p class="page-sub">Membri attuali di Fear United IT</p>
+                    </div>
+                    <button id="sync-btn" class="btn-primary btn-sm">🔄 Sincronizza</button>
                 </div>
-                <button id="sync-btn" class="btn-primary">🔄 Sincronizza</button>
-            </div>
-            <div id="sync-status" class="status-bar"></div>
+                <div id="sync-status" class="status-bar"></div>
 
-            <!-- Stat cards -->
-            <div class="stat-cards" id="clan-stats">
-                <div class="stat-card">
-                    <div class="stat-icon">👥</div>
-                    <div class="stat-val" id="stat-total">—</div>
-                    <div class="stat-label">Membri</div>
+                <div class="stat-cards" id="clan-stats">
+                    <div class="stat-card">
+                        <div class="stat-icon">👥</div>
+                        <div class="stat-val" id="stat-total">—</div>
+                        <div class="stat-label">Membri</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">🏆</div>
+                        <div class="stat-val" id="stat-leaders">—</div>
+                        <div class="stat-label">Capi / Co-Capi</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">⚔️</div>
+                        <div class="stat-val" id="stat-avg-th">—</div>
+                        <div class="stat-label">TH Medio</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">🆕</div>
+                        <div class="stat-val" id="stat-new">—</div>
+                        <div class="stat-label">Nuovi (7gg)</div>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-icon">🏆</div>
-                    <div class="stat-val" id="stat-leaders">—</div>
-                    <div class="stat-label">Capi / Co-Capi</div>
+
+                <div class="card">
+                    <div class="table-wrap">
+                        <table id="members-table">
+                            <thead>
+                                <tr>
+                                    <th>TH</th>
+                                    <th>Nome / Tag</th>
+                                    <th>Ruolo</th>
+                                    <th class="hide-xs">Trofei</th>
+                                    <th class="hide-sm">Don. / Ric.</th>
+                                    <th class="hide-sm">#</th>
+                                    <th class="hide-md">Dal</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-icon">⚔️</div>
-                    <div class="stat-val" id="stat-avg-th">—</div>
-                    <div class="stat-label">TH Medio</div>
+            </section>
+
+            <!-- ── TAB: REGISTRI GUERRE ──────────────────────────────── -->
+            <section id="tab-warlog" class="tab-content" style="display:none">
+                <div class="page-header">
+                    <div>
+                        <h2>⚔️ Registri Guerre</h2>
+                        <p class="page-sub">War classiche e Cronologia Leghe CWL</p>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-icon">🆕</div>
-                    <div class="stat-val" id="stat-new">—</div>
-                    <div class="stat-label">Nuovi (7gg)</div>
+
+                <div class="subtab-bar">
+                    <button class="subtab-btn active" onclick="switchWarTab('classic', this)">🏹 War Classiche</button>
+                    <button class="subtab-btn" onclick="switchWarTab('cwl', this)">🏆 Cronologia Leghe</button>
                 </div>
-            </div>
 
-            <div class="card">
-                <div class="table-wrap">
-                    <table id="members-table">
-                        <thead>
-                            <tr>
-                                <th>TH</th>
-                                <th>Nome / Tag</th>
-                                <th>Ruolo</th>
-                                <th class="hide-xs">Trofei</th>
-                                <th class="hide-sm">Don. / Ric.</th>
-                                <th class="hide-sm">#</th>
-                                <th class="hide-md">Dal</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
+                <!-- WAR CLASSICHE -->
+                <div id="wl-classic">
+                    <div class="toolbar">
+                        <span class="toolbar-label">Ultime war classiche del clan</span>
+                        <button class="btn-primary btn-sm" onclick="loadWarLog()">🔄 Carica</button>
+                    </div>
+                    <div id="wl-classic-results"></div>
                 </div>
-            </div>
-        </section>
 
-        <!-- ── TAB: REGISTRI GUERRE ──────────────────────────────── -->
-        <section id="tab-warlog" class="tab-content" style="display:none">
-            <div class="page-header">
-                <div>
-                    <h2>⚔️ Registri Guerre</h2>
-                    <p class="page-sub">War classiche e Cronologia Leghe CWL</p>
+                <!-- CRONOLOGIA LEGHE -->
+                <div id="wl-cwl" style="display:none">
+                    <div class="toolbar">
+                        <span class="toolbar-label">📅 Cronologia Leghe — Fear United IT</span>
+                        <button class="btn-secondary btn-sm" onclick="loadCwlSeasons()">🔄 Aggiorna</button>
+                    </div>
+                    <div id="cwl-seasons-list">
+                        <p class="wl-loading">Caricamento cronologia…</p>
+                    </div>
                 </div>
-            </div>
+            </section>
 
-            <div class="subtab-bar">
-                <button class="subtab-btn active" onclick="switchWarTab('classic', this)">🏹 War Classiche</button>
-                <button class="subtab-btn" onclick="switchWarTab('cwl', this)">🏆 Cronologia Leghe</button>
-            </div>
 
-            <!-- WAR CLASSICHE -->
-            <div id="wl-classic">
-                <div class="toolbar">
-                    <span class="toolbar-label">Ultime war classiche del clan</span>
-                    <button class="btn-primary btn-sm" onclick="loadWarLog()">🔄 Carica</button>
+            <!-- ── TAB: BONUS CWL ────────────────────────────────────── -->
+            <section id="tab-cwl" class="tab-content" style="display:none">
+                <div class="page-header">
+                    <div>
+                        <h2>🏆 Bonus CWL</h2>
+                        <p class="page-sub">Assegnazione e storico bonus stagionali</p>
+                    </div>
+                    <span id="cwl-live-badge" class="cwl-live-badge" style="display:none">🟢 CWL LIVE</span>
                 </div>
-                <div id="wl-classic-results"></div>
-            </div>
 
-            <!-- CRONOLOGIA LEGHE -->
-            <div id="wl-cwl" style="display:none">
-                <div class="toolbar">
-                    <span class="toolbar-label">📅 Cronologia Leghe — Fear United IT</span>
-                    <button class="btn-secondary btn-sm" onclick="loadCwlSeasons()">🔄 Aggiorna</button>
+                <div class="subtab-bar">
+                    <button class="subtab-btn active" data-cwl-tab="assign" onclick="switchCwlTab('assign',this)">🎯 Assegna Bonus</button>
+                    <button class="subtab-btn" data-cwl-tab="storico" onclick="switchCwlTab('storico',this)">📋 Storico</button>
+                    <button class="subtab-btn" data-cwl-tab="hof" onclick="switchCwlTab('hof',this)">🏅 Hall of Fame</button>
                 </div>
-                <div id="cwl-seasons-list">
-                    <p class="wl-loading">Caricamento cronologia…</p>
-                </div>
-            </div>
-        </section>
 
+                <!-- ── ASSEGNA BONUS ── -->
+                <div id="cwl-tab-assign">
+                    <div id="cwl-status" class="status-bar"></div>
 
-        <!-- ── TAB: BONUS CWL ────────────────────────────────────── -->
-        <section id="tab-cwl" class="tab-content" style="display:none">
-            <div class="page-header">
-                <div>
-                    <h2>🏆 Bonus CWL</h2>
-                    <p class="page-sub">Assegnazione e storico bonus stagionali</p>
-                </div>
-                <span id="cwl-live-badge" class="cwl-live-badge" style="display:none">🟢 CWL LIVE</span>
-            </div>
+                    <div id="assign-live-banner" class="cwl-live-banner" style="display:none">
+                        <div class="cwl-live-left">
+                            <span class="cwl-live-dot"></span>
+                            <div>
+                                <strong>CWL in corso</strong>
+                                <span id="assign-live-season"></span>
+                            </div>
+                        </div>
+                        <button class="btn-secondary btn-sm" onclick="loadAssignLive()">🔄 Aggiorna live</button>
+                    </div>
 
-            <!-- Sub-tabs -->
-            <div class="subtab-bar">
-                <button class="subtab-btn active" data-cwl-tab="assign" onclick="switchCwlTab('assign',this)">🎯 Assegna Bonus</button>
-                <button class="subtab-btn" data-cwl-tab="storico" onclick="switchCwlTab('storico',this)">📋 Storico</button>
-                <button class="subtab-btn" data-cwl-tab="hof" onclick="switchCwlTab('hof',this)">🏅 Hall of Fame</button>
-            </div>
-
-            <!-- ── ASSEGNA BONUS ── -->
-            <div id="cwl-tab-assign">
-                <div id="cwl-status" class="status-bar"></div>
-
-                <!-- Banner CWL live -->
-                <div id="assign-live-banner" class="cwl-live-banner" style="display:none">
-                    <div class="cwl-live-left">
-                        <span class="cwl-live-dot"></span>
-                        <div>
-                            <strong>CWL in corso</strong>
-                            <span id="assign-live-season"></span>
+                    <div id="assign-month-selector" class="card" style="margin-bottom:1rem">
+                        <div class="form-row">
+                            <label class="form-label-inline">
+                                📅 Seleziona mese
+                                <input type="month" id="assign-season-pick" class="form-input-sm">
+                            </label>
+                            <button class="btn-primary btn-sm" onclick="loadAssignMonth()">Carica</button>
+                            <span id="assign-load-status"></span>
                         </div>
                     </div>
-                    <button class="btn-secondary btn-sm" onclick="loadAssignLive()">🔄 Aggiorna live</button>
-                </div>
 
-                <!-- Selettore mese -->
-                <div id="assign-month-selector" class="card" style="margin-bottom:1rem">
-                    <div class="form-row">
-                        <label class="form-label-inline">
-                            📅 Seleziona mese
-                            <input type="month" id="assign-season-pick" class="form-input-sm">
-                        </label>
-                        <button class="btn-primary btn-sm" onclick="loadAssignMonth()">Carica</button>
-                        <span id="assign-load-status" style="font-size:0.83rem;color:#5a7a98;min-height:1em"></span>
+                    <div id="assign-content"></div>
+
+                    <div class="admin-only" style="display:none;margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+                        <button id="open-bonus-modal" class="btn-secondary btn-sm">⚙️ Criteri automatici avanzati</button>
                     </div>
                 </div>
 
-                <!-- Contenuto assegnazione (bonus cards + tabella) -->
-                <div id="assign-content"></div>
-
-                <!-- Criteri automatici avanzati (solo admin/co-capo) -->
-                <div class="admin-only" style="display:none;margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
-                    <button id="open-bonus-modal" class="btn-secondary btn-sm">⚙️ Criteri automatici avanzati</button>
-                </div>
-            </div>
-
-            <!-- ── STORICO ASSEGNAZIONI ── -->
-            <div id="cwl-tab-storico" style="display:none">
-                <div class="toolbar">
-                    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
-                        <input type="text" id="storico-search" class="form-input-sm" placeholder="🔍 Cerca giocatore…" oninput="filterStorico()" style="min-width:150px">
-                        <select id="storico-filter" class="admin-select" onchange="filterStorico()" style="font-size:0.82rem;padding:0.33rem 0.55rem">
-                            <option value="">Tutti</option>
-                            <option value="active">Nel clan</option>
-                            <option value="ex">Ex-player</option>
-                            <option value="secondary">Account 2°</option>
-                        </select>
+                <!-- ── STORICO ASSEGNAZIONI ── -->
+                <div id="cwl-tab-storico" style="display:none">
+                    <div class="toolbar">
+                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+                            <input type="text" id="storico-search" class="form-input-sm" placeholder="🔍 Cerca giocatore…" oninput="filterStorico()" style="min-width:150px">
+                            <select id="storico-filter" class="admin-select" onchange="filterStorico()" style="font-size:0.82rem;padding:0.33rem 0.55rem">
+                                <option value="">Tutti</option>
+                                <option value="active">Nel clan</option>
+                                <option value="ex">Ex-player</option>
+                                <option value="secondary">Account 2°</option>
+                            </select>
+                        </div>
+                        <button class="btn-secondary btn-sm" onclick="loadStorico()">🔄 Aggiorna</button>
                     </div>
-                    <button class="btn-secondary btn-sm" onclick="loadStorico()">🔄 Aggiorna</button>
-                </div>
-                <div id="storico-content">
-                    <p class="wl-loading">Caricamento storico…</p>
-                </div>
-            </div>
-
-            <!-- ── HALL OF FAME ── -->
-            <div id="cwl-tab-hof" style="display:none">
-                <div class="toolbar">
-                    <span class="toolbar-label">🏅 Classifica storica bonus CWL di tutti i tempi</span>
-                    <button class="btn-secondary btn-sm" onclick="loadHallOfFame()">🔄 Aggiorna</button>
-                </div>
-                <div id="hof-content">
-                    <p class="wl-loading">Caricamento…</p>
-                </div>
-            </div>
-        </section>
-
-        <!-- ── TAB: GESTIONE UTENTI ──────────────────────────────── -->
-        <section id="tab-admin" class="tab-content" style="display:none">
-            <div class="page-header">
-                <div>
-                    <h2>👥 Gestione Utenti</h2>
-                    <p class="page-sub">Crea utenti e gestisci i ruoli</p>
-                </div>
-                <button id="refresh-users" class="btn-secondary btn-sm">🔄 Aggiorna</button>
-            </div>
-            <div id="admin-msg" class="admin-msg-box" style="display:none"></div>
-
-            <!-- Form creazione -->
-            <div class="card" style="margin-bottom:1.25rem">
-                <h3 class="card-title">➕ Crea nuovo utente</h3>
-                <div class="admin-form-grid">
-                    <div class="admin-field">
-                        <label>Nome utente <span class="req">*</span></label>
-                        <input type="text" id="new-username" placeholder="es. Geped" autocomplete="off">
-                    </div>
-                    <div class="admin-field">
-                        <label>Email <span class="opt">(facoltativa)</span></label>
-                        <input type="email" id="new-email" placeholder="email@example.com" autocomplete="off">
-                    </div>
-                    <div class="admin-field">
-                        <label>Password <span class="req">*</span></label>
-                        <input type="password" id="new-password" placeholder="min 6 caratteri" autocomplete="new-password">
-                    </div>
-                    <div class="admin-field">
-                        <label>Ruolo</label>
-                        <select id="new-role" class="admin-select">
-                            <option value="utente">Utente</option>
-                            <option value="membro">Membro</option>
-                            <option value="anziano">Anziano</option>
-                            <option value="co-capo">Co-Capo</option>
-                            <option value="admin">Admin</option>
-                        </select>
+                    <div id="storico-content">
+                        <p class="wl-loading">Caricamento storico…</p>
                     </div>
                 </div>
-                <div class="admin-form-footer">
-                    <span id="create-user-msg" class="admin-inline-msg"></span>
-                    <button class="btn-primary" onclick="createUser()">➕ Crea Utente</button>
-                </div>
-            </div>
 
-            <!-- Tabella utenti -->
-            <div class="card">
-                <h3 class="card-title">👥 Utenti registrati</h3>
-                <div class="table-wrap">
-                    <table id="users-table">
-                        <thead>
-                            <tr>
-                                <th>Nome</th>
-                                <th class="hide-sm">Email / Login ID</th>
-                                <th>Ruolo</th>
-                                <th class="hide-xs">Dal</th>
-                                <th>Azioni</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                    </table>
+                <!-- ── HALL OF FAME ── -->
+                <div id="cwl-tab-hof" style="display:none">
+                    <div class="toolbar">
+                        <span class="toolbar-label">🏅 Classifica storica bonus CWL di tutti i tempi</span>
+                        <button class="btn-secondary btn-sm" onclick="loadHallOfFame()">🔄 Aggiorna</button>
+                    </div>
+                    <div id="hof-content">
+                        <p class="wl-loading">Caricamento…</p>
+                    </div>
                 </div>
-            </div>
-        </section>
+            </section>
 
-    </main>
+            <!-- ── TAB: GESTIONE UTENTI ──────────────────────────────── -->
+            <section id="tab-admin" class="tab-content" style="display:none">
+                <div class="page-header">
+                    <div>
+                        <h2>👥 Gestione Utenti</h2>
+                        <p class="page-sub">Crea utenti e gestisci i ruoli</p>
+                    </div>
+                    <button id="refresh-users" class="btn-secondary btn-sm">🔄 Aggiorna</button>
+                </div>
+                <div id="admin-msg" class="admin-msg-box" style="display:none"></div>
+
+                <div class="card" style="margin-bottom:1.25rem">
+                    <h3 class="card-title">➕ Crea nuovo utente</h3>
+                    <div class="admin-form-grid">
+                        <div class="admin-field">
+                            <label>Nome utente <span class="req">*</span></label>
+                            <input type="text" id="new-username" placeholder="es. Geped" autocomplete="off">
+                        </div>
+                        <div class="admin-field">
+                            <label>Email <span class="opt">(facoltativa)</span></label>
+                            <input type="email" id="new-email" placeholder="email@example.com" autocomplete="off">
+                        </div>
+                        <div class="admin-field">
+                            <label>Password <span class="req">*</span></label>
+                            <input type="password" id="new-password" placeholder="min 6 caratteri" autocomplete="new-password">
+                        </div>
+                        <div class="admin-field">
+                            <label>Ruolo</label>
+                            <select id="new-role" class="admin-select">
+                                <option value="utente">Utente</option>
+                                <option value="membro">Membro</option>
+                                <option value="anziano">Anziano</option>
+                                <option value="co-capo">Co-Capo</option>
+                                <option value="admin">Admin</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="admin-form-footer">
+                        <span id="create-user-msg" class="admin-inline-msg"></span>
+                        <button class="btn-primary" onclick="createUser()">➕ Crea Utente</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="card-title">👥 Utenti registrati</h3>
+                    <div class="table-wrap">
+                        <table id="users-table">
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th class="hide-sm">Email / Login ID</th>
+                                    <th>Ruolo</th>
+                                    <th class="hide-xs">Dal</th>
+                                    <th>Azioni</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+    </div><!-- /.app-body -->
 
     <!-- BOTTOM NAV (mobile only) -->
     <nav class="bottom-nav" id="bottom-nav">
@@ -362,7 +366,7 @@
         </button>
     </nav>
 
-</div>
+</div><!-- /#app -->
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="supabase-config.js"></script>
@@ -425,7 +429,7 @@
           <label class="form-label-inline">Stagione <input type="month" id="bm-manual-season" class="form-input-sm"></label>
           <button class="btn-primary btn-sm" onclick="loadManualMemberList()">📋 Carica</button>
         </div>
-        <p style="font-size:0.82rem;color:#5a7a98;margin-bottom:0.6rem">
+        <p style="font-size:0.82rem;color:var(--text-3);margin-bottom:0.6rem">
           Seleziona chi ha ricevuto il bonus CWL questa stagione.
         </p>
         <div id="bm-manual-list"></div>
@@ -454,7 +458,7 @@
       </div>
       <div id="bm-history-overview" style="display:none">
         <div class="form-row" style="margin-bottom:0.5rem">
-          <span style="font-size:0.84rem;color:#5a7a98">Tutti i giocatori per bonus totali ricevuti</span>
+          <span style="font-size:0.84rem;color:var(--text-3)">Tutti i giocatori per bonus totali ricevuti</span>
           <button class="btn-secondary btn-sm" onclick="loadBonusOverview()">🔄 Aggiorna</button>
         </div>
         <div id="bm-overview-results"></div>
