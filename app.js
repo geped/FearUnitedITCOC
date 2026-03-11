@@ -1698,19 +1698,15 @@ async function loadCwlSeasons() {
   const div = document.getElementById('cwl-seasons-list');
   div.innerHTML = '<p class="wl-loading">Caricamento cronologia…</p>';
 
-  // Carica dati manuali (posizione, lega) da DB
-  const { data: dbSeasons, error } = await db
-    .from('cwl_seasons')
-    .select('*')
-    .order('season', { ascending: false });
-
-  if (error && error.code !== '42P01' && !error.message?.includes('does not exist')) {
-    div.innerHTML = `<p class="wl-err">Errore: ${error.message}</p>`;
-    return;
-  }
-
+  // Prova a caricare dati supplementari (posizione, lega) da DB — silenzioso se tabella assente
   const dbMap = {};
-  (dbSeasons || []).forEach(s => { dbMap[s.season] = s; });
+  try {
+    const { data: dbSeasons } = await db
+      .from('cwl_seasons')
+      .select('*')
+      .order('season', { ascending: false });
+    (dbSeasons || []).forEach(s => { dbMap[s.season] = s; });
+  } catch (_) {}
 
   // Carica dati CWL dal war log API (raggruppati per stagione)
   let apiSeasonMap = {};
