@@ -7,7 +7,10 @@ module.exports = async (req, res) => {
             headers: { 'x-sync-key': process.env.SYNC_SECRET || '' }
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(data.error || 'Errore proxy');
+        if (!response.ok) {
+            // Pass through reason field so frontend can distinguish accessDenied vs server error
+            return res.status(response.status).json(data);
+        }
         res.status(200).json(data);
     } catch (err) {
         res.status(500).json({ error: err.message });
