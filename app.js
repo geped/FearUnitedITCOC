@@ -1609,8 +1609,12 @@ async function loadWarLog() {
   try {
     const r = await fetch('/api/war-log');
     const data = await r.json();
-    if (!r.ok || data.reason === 'accessDenied') {
-      div.innerHTML = '<p class="wl-err">⚠️ War log privato o non disponibile. Imposta il war log come pubblico nelle impostazioni clan su CoC.</p>';
+    if (data.reason === 'accessDenied') {
+      div.innerHTML = '<p class="wl-err">⚠️ War log privato. Vai nelle impostazioni clan su CoC → Informazioni clan → imposta il Registro di guerra su "Pubblico".</p>';
+      return;
+    }
+    if (!r.ok) {
+      div.innerHTML = `<p class="wl-err">⚠️ Servizio temporaneamente non disponibile (${r.status}). Riprova tra qualche secondo. <button class="btn-secondary btn-sm" onclick="loadWarLog()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
       return;
     }
     const items = data.items || [];
@@ -1656,7 +1660,7 @@ async function loadWarLog() {
         </table>
       </div>`;
   } catch(e) {
-    div.innerHTML = `<p class="wl-err">Errore: ${e.message}</p>`;
+    div.innerHTML = `<p class="wl-err">⚠️ Servizio non raggiungibile. Il proxy potrebbe essere in riavvio (attendi 30s). <button class="btn-secondary btn-sm" onclick="loadWarLog()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
   }
 }
 
@@ -1708,14 +1712,20 @@ async function loadCwlSeasons() {
     (dbSeasons || []).forEach(s => { dbMap[s.season] = s; });
   } catch (_) {}
 
-  // Carica dati CWL dal war log API (raggruppati per stagione)
+  // Carica dati CWL dal war log API (raggruppati per stagione usando endTime)
   let apiSeasonMap = {};
+  let warLogError = null;
   try {
     const r = await fetch('/api/war-log');
-    if (r.ok) {
-      const warData = await r.json();
-      (warData.items || []).filter(w => w.warType === 'cwl' && w.season).forEach(w => {
-        const s = w.season;
+    const warData = await r.json();
+    if (warData.reason === 'accessDenied') {
+      warLogError = 'accessDenied';
+    } else if (!r.ok) {
+      warLogError = `server_${r.status}`;
+    } else {
+      (warData.items || []).filter(w => w.warType === 'cwl' && w.endTime).forEach(w => {
+        // Estrae stagione da endTime: "20250315T000000.000Z" → "2025-03"
+        const s = w.endTime.slice(0, 4) + '-' + w.endTime.slice(4, 6);
         if (!apiSeasonMap[s]) apiSeasonMap[s] = { wins: 0, losses: 0, draws: 0, totalStars: 0, totalDestr: 0, warCount: 0 };
         const ws = apiSeasonMap[s];
         ws.warCount++;
@@ -1726,7 +1736,7 @@ async function loadCwlSeasons() {
         ws.totalDestr += w.clan?.destructionPercentage || 0;
       });
     }
-  } catch (_) {}
+  } catch (e) { warLogError = 'network'; }
 
   // Merge: tutte le stagioni trovate da DB o API
   const allKeys = new Set([...Object.keys(dbMap), ...Object.keys(apiSeasonMap)]);
@@ -1748,19 +1758,22 @@ async function loadCwlSeasons() {
     });
   });
   merged.sort((a, b) => b.season.localeCompare(a.season));
-  renderCwlSeasons(merged);
+  renderCwlSeasons(merged, warLogError);
 }
 
-function renderCwlSeasons(seasons) {
+function renderCwlSeasons(seasons, warLogError) {
   const div = document.getElementById('cwl-seasons-list');
-  const canEdit = window._canEdit;
 
   if (!seasons.length) {
-    div.innerHTML = `<div class="cwl-empty">
-      <span style="font-size:2rem">📋</span>
-      <p>Nessuna stagione CWL trovata.</p>
-      ${canEdit ? '<p style="font-size:0.83rem;color:#5a7a98">Usa il form sopra per aggiungere una stagione, oppure il war log verrà aggiornato automaticamente.</p>' : ''}
-    </div>`;
+    let msg = '';
+    if (warLogError === 'accessDenied') {
+      msg = '<p class="wl-err">⚠️ War log privato. Vai nelle impostazioni clan su CoC → imposta il Registro di guerra su "Pubblico".</p>';
+    } else if (warLogError) {
+      msg = `<p class="wl-err">⚠️ Servizio API temporaneamente non disponibile. <button class="btn-secondary btn-sm" onclick="loadCwlSeasons()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
+    } else {
+      msg = '<div class="cwl-empty"><span style="font-size:2rem">⚔️</span><p>Nessuna stagione CWL trovata nel war log.</p><p style="font-size:0.83rem;color:#5a7a98">Le stagioni appariranno automaticamente man mano che vengono giocate.</p></div>';
+    }
+    div.innerHTML = msg;
     return;
   }
 
