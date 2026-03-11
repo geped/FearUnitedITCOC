@@ -1617,8 +1617,8 @@ async function loadWarLog() {
       div.innerHTML = `<p class="wl-err">⚠️ Servizio temporaneamente non disponibile (${r.status}). Riprova tra qualche secondo. <button class="btn-secondary btn-sm" onclick="loadWarLog()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
       return;
     }
-    const items = data.items || [];
-    if (!items.length) { div.innerHTML = '<p class="wl-loading">Nessuna war nel log.</p>'; return; }
+    const items = (data.items || []).filter(w => w.warType !== 'cwl');
+    if (!items.length) { div.innerHTML = '<p class="wl-loading">Nessuna war classica nel log.</p>'; return; }
 
     const rows = items.map(w => {
       const date = w.endTime ? new Date(
