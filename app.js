@@ -1628,7 +1628,11 @@ async function loadWarLog() {
       div.innerHTML = `<p class="wl-err">⚠️ Servizio temporaneamente non disponibile (${r.status}). Riprova tra qualche secondo. <button class="btn-secondary btn-sm" onclick="loadWarLog()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
       return;
     }
-    const items = (data.items || []).filter(w => w.warType !== 'cwl');
+    // Mantieni solo war classiche: esclude CWL (warType cwl o opponent assente)
+    const items = (data.items || []).filter(w => {
+      const wt = (w.warType || '').toLowerCase();
+      return wt !== 'cwl' && w.opponent?.name;
+    });
     if (!items.length) { div.innerHTML = '<p class="wl-loading">Nessuna war classica nel log.</p>'; return; }
 
     const rows = items.map(w => {
@@ -1734,7 +1738,10 @@ async function loadCwlSeasons() {
     } else if (!r.ok) {
       warLogError = `server_${r.status}`;
     } else {
-      (warData.items || []).filter(w => w.warType === 'cwl' && w.endTime).forEach(w => {
+      (warData.items || []).filter(w => {
+        const wt = (w.warType || '').toLowerCase();
+        return (wt === 'cwl' || !w.opponent?.name) && w.endTime;
+      }).forEach(w => {
         // Estrae stagione da endTime: "20250315T000000.000Z" → "2025-03"
         const s = w.endTime.slice(0, 4) + '-' + w.endTime.slice(4, 6);
         if (!apiSeasonMap[s]) apiSeasonMap[s] = { wins: 0, losses: 0, draws: 0, totalStars: 0, totalDestr: 0, warCount: 0 };
