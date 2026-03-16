@@ -236,7 +236,10 @@
                                 <span id="assign-live-season"></span>
                             </div>
                         </div>
-                        <button class="btn-secondary btn-sm" onclick="loadAssignLive()">🔄 Aggiorna live</button>
+                        <div style="display:flex;gap:0.5rem">
+                            <button class="btn-secondary btn-sm" onclick="loadAssignLive()">🔄 Aggiorna live</button>
+                            <button id="save-live-season-btn" class="btn-primary btn-sm admin-only" style="display:none" onclick="saveCwlSeasonLive()">💾 Salva Stagione</button>
+                        </div>
                     </div>
 
                     <div id="assign-month-selector" class="card" style="margin-bottom:1rem">
@@ -247,14 +250,12 @@
                             </label>
                             <button class="btn-primary btn-sm" onclick="loadAssignMonth()">Carica</button>
                             <span id="assign-load-status"></span>
+                            <button id="open-bonus-modal" class="btn-secondary btn-sm admin-only" style="display:none;margin-left:auto">📋 Criteri Bonus</button>
                         </div>
                     </div>
 
                     <div id="assign-content"></div>
 
-                    <div class="admin-only" style="display:none;margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
-                        <button id="open-bonus-modal" class="btn-secondary btn-sm">⚙️ Criteri automatici avanzati</button>
-                    </div>
                 </div>
 
                 <!-- ── STORICO ASSEGNAZIONI ── -->
@@ -384,13 +385,12 @@
 <div id="bonus-modal-overlay" class="modal-overlay" style="display:none" onclick="closeBonusModalIfOutside(event)">
   <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="bm-title">
     <div class="modal-header">
-      <h2 id="bm-title">🏆 Bonus CWL</h2>
+      <h2 id="bm-title">🎯 Criteri & Bonus CWL</h2>
       <button class="modal-close" onclick="closeBonusModal()" aria-label="Chiudi">✕</button>
     </div>
 
     <div class="modal-tabs">
       <button class="modal-tab active" data-bm-tab="criteria" onclick="switchBmTab('criteria', this)">📋 Criteri</button>
-      <button class="modal-tab" data-bm-tab="history" onclick="switchBmTab('history', this)">📅 Storico</button>
     </div>
 
     <!-- TAB: CRITERI -->
@@ -451,27 +451,6 @@
       </div>
     </div>
 
-    <!-- TAB: STORICO -->
-    <div id="bm-tab-history" class="modal-tab-content" style="display:none">
-      <div class="toggle-group" style="margin-bottom:0.75rem">
-        <button id="bm-view-month" class="toggle-btn active" onclick="switchHistoryView('month')">📅 Per Mese</button>
-        <button id="bm-view-overview" class="toggle-btn" onclick="switchHistoryView('overview')">📊 Panoramica</button>
-      </div>
-      <div id="bm-history-month">
-        <div class="form-row" style="margin-bottom:0.75rem">
-          <label class="form-label-inline">Mese <input type="month" id="bm-history-season" class="form-input-sm"></label>
-          <button class="btn-primary btn-sm" onclick="loadBonusHistory()">📂 Carica</button>
-        </div>
-        <div id="bm-history-results"></div>
-      </div>
-      <div id="bm-history-overview" style="display:none">
-        <div class="form-row" style="margin-bottom:0.5rem">
-          <span style="font-size:0.84rem;color:var(--text-3)">Tutti i giocatori per bonus totali ricevuti</span>
-          <button class="btn-secondary btn-sm" onclick="loadBonusOverview()">🔄 Aggiorna</button>
-        </div>
-        <div id="bm-overview-results"></div>
-      </div>
-    </div>
 
   </div>
 </div>

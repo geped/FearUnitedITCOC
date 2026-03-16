@@ -227,6 +227,32 @@ function thImg(level) {
     </div>`;
 }
 
+// Vertical variant: image with level shown below (used in CWL sections)
+function thImgV(level) {
+  if (!level) return '<span class="th-unknown">?</span>';
+  const n = String(level).padStart(2, "0");
+  return `<div class="th-cell-v">
+    <img src="th/level_${n}.png" alt="TH${level}" class="th-img">
+    <span class="th-label-v">TH${level}</span>
+  </div>`;
+}
+
+// Ex-player placeholder (player left the clan)
+function thImgOut() {
+  return `<div class="th-cell-v">
+    <img src="th/playerout.png" alt="Ex" class="th-img th-img-out">
+    <span class="th-label-v" style="color:var(--red)">EX</span>
+  </div>`;
+}
+
+// Resolve TH for bonus contexts: use thImgV if in clan, thImgOut if ex, ? if unknown
+function thImgBonus(playerName, isExPlayer) {
+  const member = _assignMembersMap[playerName?.toLowerCase()];
+  if (member?.th_level) return thImgV(member.th_level);
+  if (isExPlayer) return thImgOut();
+  return '<span class="th-unknown">?</span>';
+}
+
 function renderMembers(members) {
   const tbody = document.querySelector("#members-table tbody");
   tbody.innerHTML = "";
@@ -368,7 +394,7 @@ function renderCwlTable(history, live) {
       // Pillole mesi bonus
       const bonusPills = h.bonus_months.length
         ? h.bonus_months.sort().map(s => `<span class="bo-pill">${s}</span>`).join('')
-        : '<span style="color:#3a5070;font-size:0.78rem">—</span>';
+        : '<span style="color:var(--text-3);font-size:0.78rem">—</span>';
 
       return `<tr class="${statusCls}">
         <td class="stat-cell">${i + 1}</td>
@@ -519,6 +545,54 @@ async function loadAssignLive() {
   }
 }
 
+// ── SALVA STAGIONE CWL LIVE ────────────────────────────────────────────────────
+async function saveCwlSeasonLive() {
+  if (!cwlLiveData?.length) {
+    const status = document.getElementById('cwl-status');
+    if (status) status.textContent = '⚠ Nessun dato live disponibile.';
+    return;
+  }
+  const seasonEl = document.getElementById('assign-live-season');
+  const season = seasonEl?.textContent?.replace(/\s*—\s*Stagione\s*/i, '').trim()
+    || new Date().toISOString().slice(0, 7);
+
+  const btn = document.getElementById('save-live-season-btn');
+  const status = document.getElementById('cwl-status');
+  if (btn) { btn.disabled = true; btn.textContent = '💾 Salvataggio…'; }
+  if (status) status.textContent = 'Salvataggio stagione…';
+
+  const rows = cwlLiveData.map(p => {
+    const req = Math.max(p.attacks_required || 1, 1);
+    const made = p.attacks_made || 0;
+    const stars = p.stars || 0;
+    const destr = p.destruction || 0;
+    const bonusScore = Math.round((stars / req) * 40 + (destr / Math.max(made, 1)) * 0.2 + (made / req) * 20);
+    return {
+      player_name:      p.name,
+      season,
+      participated:     true,
+      stars,
+      destruction:      parseFloat(destr.toFixed(2)),
+      attacks_made:     made,
+      attacks_required: p.attacks_required || 0,
+      bonus_score:      bonusScore,
+      bonus_assigned:   false,
+      still_in_clan:    true,
+      is_secondary:     false
+    };
+  });
+
+  const { error } = await db.from('cwl_history').upsert(rows, { onConflict: 'player_name,season' });
+  if (btn) { btn.disabled = false; btn.textContent = '💾 Salva Stagione'; }
+  if (error) {
+    if (status) status.textContent = '✗ Errore: ' + error.message;
+  } else {
+    if (status) status.textContent = `✓ Stagione ${season} salvata — ${rows.length} giocatori. Ora assegna i bonus.`;
+    // Reload the assign content to reflect saved data
+    await loadAssignMonth(season);
+  }
+}
+
 async function loadAssignMonth(overrideSeason) {
   const season = overrideSeason || document.getElementById('assign-season-pick')?.value;
   if (!season) {
@@ -558,7 +632,7 @@ function renderAssignContent(players, season, isLive) {
         <div class="assign-bonus-grid">`;
       bonusPlayers.forEach(p => {
         const member = _assignMembersMap[p.player_name?.toLowerCase()];
-        const thHtml = member?.th_level ? thImg(member.th_level) : '<span class="th-unknown">?</span>';
+        const thHtml = thImgBonus(p.player_name, !p.still_in_clan);
         const tag = member?.tag || '—';
         const avgD = p.attacks_made > 0 ? (p.destruction / p.attacks_made).toFixed(1) + '%' : '—';
         html += `<div class="assign-bonus-card">
@@ -613,7 +687,8 @@ function renderAssignContent(players, season, isLive) {
   list.forEach(p => {
     const name = isLive ? p.name : p.player_name;
     const member = _assignMembersMap[name?.toLowerCase()];
-    const thHtml = member?.th_level ? thImg(member.th_level) : '<span class="th-unknown">?</span>';
+    const isEx = !isLive && !p.still_in_clan;
+    const thHtml = thImgBonus(name, isEx);
     const tag = member?.tag ? `<br><span class="tag-cell">${member.tag}</span>` : '';
     const hasBonus = !isLive && p.bonus_assigned;
     const participated = isLive || p.participated;
@@ -817,7 +892,7 @@ function renderStoricoTable(data) {
   function buildRows(rows, isEx) {
     return rows.map(p => {
       const member = _assignMembersMap[p.player_name.toLowerCase()];
-      const thHtml = member?.th_level ? thImg(member.th_level) : '<span class="th-unknown">?</span>';
+      const thHtml = thImgBonus(p.player_name, isEx);
       const tag = member?.tag || '—';
       const nameCls = isEx ? 'member-name storico-ex-name' : 'member-name';
       const avgD = p.best_attacks_made > 0
@@ -832,7 +907,7 @@ function renderStoricoTable(data) {
             const lbl = new Date(+y, +mo-1, 1).toLocaleDateString('it-IT', { month: 'short', year: '2-digit' });
             return `<span class="bo-pill">${lbl}</span>`;
           }).join('') + (p.bonus_months.length > 5 ? `<span class="bo-pill" style="opacity:0.6">+${p.bonus_months.length - 5}</span>` : '')
-        : '<span style="color:#3a5070;font-size:0.78rem">—</span>';
+        : '<span style="color:var(--text-3);font-size:0.78rem">—</span>';
       return `<tr>
         <td>${thHtml}</td>
         <td class="tag-cell">${tag}</td>
@@ -841,7 +916,7 @@ function renderStoricoTable(data) {
         <td class="stat-cell hide-xs">${avgD}</td>
         <td class="stat-cell hide-xs">${atk}</td>
         <td class="stat-cell hide-sm"><strong>${p.best_score || '—'}</strong></td>
-        <td class="stat-cell"><strong style="color:#f0a500">${p.bonus_months.length}</strong></td>
+        <td class="stat-cell"><strong style="color:var(--gold)">${p.bonus_months.length}</strong></td>
         <td style="min-width:150px;padding:0.4rem 0.6rem">${pills}</td>
       </tr>`;
     }).join('');
@@ -878,20 +953,28 @@ async function loadHallOfFame() {
   if (!div) return;
   div.innerHTML = '<p class="wl-loading">Caricamento…</p>';
 
+  await loadMembersMap();
+
   const { data, error } = await db.from('cwl_history')
     .select('player_name, season, still_in_clan, bonus_score')
     .eq('bonus_assigned', true)
     .order('season', { ascending: true });
 
-  if (error) { div.innerHTML = `<p style="color:#ff6b6b">Errore: ${error.message}</p>`; return; }
+  if (error) { div.innerHTML = `<p style="color:var(--red)">Errore: ${error.message}</p>`; return; }
   if (!data?.length) { div.innerHTML = '<p class="wl-loading">Nessun bonus trovato.</p>'; return; }
 
   // Raggruppa per player
   const map = {};
   for (const r of data) {
-    if (!map[r.player_name]) map[r.player_name] = { months: [], inClan: r.still_in_clan };
+    if (!map[r.player_name]) map[r.player_name] = { months: [], inClan: false };
     map[r.player_name].months.push(r.season);
-    if (r.still_in_clan) map[r.player_name].inClan = true;
+  }
+
+  // Verifica membership ATTUALE dalla memberMap (più accurata del flag stored)
+  for (const name of Object.keys(map)) {
+    map[name].inClan = !!_assignMembersMap[name.toLowerCase()];
+    const member = _assignMembersMap[name.toLowerCase()];
+    if (member?.tag) map[name].tag = member.tag;
   }
 
   const players = Object.entries(map)
@@ -900,8 +983,8 @@ async function loadHallOfFame() {
   const maxBonus = players[0]?.[1]?.months.length || 1;
   const totalBonus = data.length;
 
-  let html = `<p style="margin:0 0 1rem;font-size:0.84rem;color:#7a9ab8">
-    <strong>${players.length}</strong> giocatori · <strong>${totalBonus}</strong> bonus totali assegnati
+  let html = `<p style="margin:0 0 1rem;font-size:0.84rem;color:var(--text-3)">
+    <strong style="color:var(--text)">${players.length}</strong> giocatori · <strong style="color:var(--gold)">${totalBonus}</strong> bonus totali assegnati
   </p>`;
 
   // Podio top 3
@@ -913,7 +996,9 @@ async function loadHallOfFame() {
     const medals = ['🥇', '🥈', '🥉'];
     podiumOrder.forEach(i => {
       const [name, info] = podiumData[i];
+      const thH = thImgBonus(name, !info.inClan);
       html += `<div class="hof-podium-item ${heights[i]}">
+        <div class="hof-podium-th" style="margin-bottom:0.3rem">${thH}</div>
         <div class="hof-medal">${medals[i]}</div>
         <div class="hof-podium-name">${name}</div>
         <div class="hof-podium-count">${info.months.length}</div>
@@ -927,10 +1012,12 @@ async function loadHallOfFame() {
   html += `<div class="table-wrap" style="margin-top:1rem">
     <table>
       <thead><tr>
-        <th style="width:46px">#</th>
+        <th style="width:40px">#</th>
+        <th style="width:40px">TH</th>
         <th>Giocatore</th>
-        <th style="text-align:center;width:56px">🏆</th>
-        <th style="min-width:110px">Progressione</th>
+        <th style="width:80px">Tag</th>
+        <th style="text-align:center;width:50px">🏆</th>
+        <th style="min-width:100px">Progressione</th>
         <th>Mesi ricevuti</th>
         <th style="text-align:center;width:56px">Clan</th>
       </tr></thead>
@@ -948,11 +1035,16 @@ async function loadHallOfFame() {
     const clanBadge = info.inClan
       ? '<span class="cwl-yes" style="font-size:0.8rem">✓</span>'
       : '<span class="cwl-no" style="font-size:0.8rem">Ex</span>';
+    const thH = thImgBonus(name, !info.inClan);
+    const tag = info.tag ? `<span class="tag-cell" style="font-size:0.72rem">${info.tag}</span>` : '—';
+    const rowCls = info.inClan ? '' : 'hof-ex-row';
 
-    html += `<tr>
+    html += `<tr class="${rowCls}">
       <td class="stat-cell">${medal}</td>
+      <td>${thH}</td>
       <td class="member-name">${name}</td>
-      <td class="stat-cell"><strong style="color:#f0a500;font-size:1rem">${total}</strong></td>
+      <td>${tag}</td>
+      <td class="stat-cell"><strong style="color:var(--gold);font-size:1rem">${total}</strong></td>
       <td><div class="bo-bar"><div class="bo-bar-fill" style="width:${barPct}%"></div></div></td>
       <td style="padding:0.4rem 0.6rem">${monthCards}</td>
       <td class="stat-cell">${clanBadge}</td>
@@ -1069,21 +1161,25 @@ async function loadManualMemberList() {
   // Pre-seleziona chi ha già il bonus nel DB
   alreadyBonus.forEach(n => bmManualSelected.add(n));
 
-  // Renderizza lista
+  // Renderizza lista con TH images
   const items = members.map(name => {
     const checked = alreadyBonus.has(name) ? 'checked' : '';
+    const member = _assignMembersMap[name.toLowerCase()];
+    const thH = member?.th_level ? thImgV(member.th_level) : '<span class="th-unknown" style="width:36px;text-align:center">?</span>';
+    const escapedName = name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     return `<label class="bm-manual-item">
-      <input type="checkbox" ${checked} onchange="toggleManualMember('${name.replace(/'/g, "\\'")}', this.checked)">
-      <span>${name}</span>
+      <input type="checkbox" ${checked} onchange="toggleManualMember('${escapedName}', this.checked)">
+      ${thH}
+      <span class="bm-item-name">${name}</span>
       ${alreadyBonus.has(name) ? '<span class="bm-already-tag">già assegnato</span>' : ''}
     </label>`;
   }).join('');
 
   listDiv.innerHTML = `
     <div class="bm-manual-list-wrap">${items}</div>
-    <div class="bm-footer" style="display:flex;margin-top:0.75rem">
-      <span style="font-size:0.87rem;color:#7a9ab8">Selezionati: <strong id="bm-manual-count">${bmManualSelected.size}</strong> / ${members.length}</span>
-      <button onclick="saveManualBonus('${season}')">💾 Salva Bonus Manuali</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid var(--border)">
+      <span style="font-size:0.84rem;color:var(--text-3)">Selezionati: <strong id="bm-manual-count" style="color:var(--gold)">${bmManualSelected.size}</strong> / ${members.length}</span>
+      <button class="btn-primary btn-sm" onclick="saveManualBonus('${season}')">💾 Salva Bonus Manuali</button>
     </div>`;
 }
 
@@ -1628,10 +1724,15 @@ async function loadWarLog() {
       div.innerHTML = `<p class="wl-err">⚠️ Servizio temporaneamente non disponibile (${r.status}). Riprova tra qualche secondo. <button class="btn-secondary btn-sm" onclick="loadWarLog()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
       return;
     }
-    // Mantieni solo war classiche: esclude CWL (warType cwl o opponent assente)
+    // Mantieni solo war classiche: esclude CWL (warType cwl, opponent assente, o stelle impossibili)
     const items = (data.items || []).filter(w => {
       const wt = (w.warType || '').toLowerCase();
-      return wt !== 'cwl' && w.opponent?.name;
+      if (wt === 'cwl') return false;
+      if (!w.opponent?.name) return false;
+      // Se le stelle superano il massimo possibile (teamSize * 3) è dati aggregati CWL
+      const maxStars = (w.teamSize || 50) * 3;
+      if ((w.clan?.stars || 0) > maxStars) return false;
+      return true;
     });
     if (!items.length) { div.innerHTML = '<p class="wl-loading">Nessuna war classica nel log.</p>'; return; }
 
@@ -1740,7 +1841,9 @@ async function loadCwlSeasons() {
     } else {
       (warData.items || []).filter(w => {
         const wt = (w.warType || '').toLowerCase();
-        return (wt === 'cwl' || !w.opponent?.name) && w.endTime;
+        const maxStars = (w.teamSize || 50) * 3;
+        const isAggregated = (w.clan?.stars || 0) > maxStars;
+        return (wt === 'cwl' || !w.opponent?.name || isAggregated) && w.endTime;
       }).forEach(w => {
         // Estrae stagione da endTime: "20250315T000000.000Z" → "2025-03"
         const s = w.endTime.slice(0, 4) + '-' + w.endTime.slice(4, 6);
