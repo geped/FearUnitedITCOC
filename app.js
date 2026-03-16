@@ -482,18 +482,24 @@ function isCurrentMember(name) {
 
 async function loadMembersMap() {
   _assignMembersMap = {};
+
+  // 1) Carica PRIMA da Supabase — veloce e sempre disponibile (ha th_level, tag, ecc.)
+  const { data: sbData } = await db.from('members').select('*');
+  if (sbData) sbData.forEach(m => { _assignMembersMap[m.name.toLowerCase()] = m; });
+
+  // 2) Prova a refreshare dai dati live CoC API (con timeout 6s per non bloccare)
   try {
-    const r = await fetch('/api/clan-members');
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 6000);
+    const r = await fetch('/api/clan-members', { signal: ctrl.signal });
+    clearTimeout(tid);
     if (r.ok) {
       const j = await r.json();
+      // Dati API più freschi: sovrascrivono quelli Supabase
       (j.items || []).forEach(m => { _assignMembersMap[m.name.toLowerCase()] = m; });
-      await loadPlayerAliases();
-      return;
     }
-  } catch (_) {}
-  // Fallback: Supabase members table
-  const { data } = await db.from('members').select('*');
-  if (data) data.forEach(m => { _assignMembersMap[m.name.toLowerCase()] = m; });
+  } catch (_) {} // timeout o proxy offline → usiamo dati Supabase
+
   await loadPlayerAliases();
 }
 
@@ -1155,23 +1161,22 @@ async function loadManualMemberList() {
   listDiv.innerHTML = '<p style="color:#5a7a98;font-size:0.85rem">Caricamento membri…</p>';
   bmManualSelected.clear();
 
-  // Prova a caricare dalla API CoC (membri attuali del clan)
+  // Carica da Supabase prima (veloce), poi prova API live con timeout
   let members = [];
+  const { data: sbMembers } = await db.from('members').select('name').order('name');
+  if (sbMembers) members = sbMembers.map(r => r.name).filter(Boolean);
+
   try {
-    const r = await fetch('/api/clan-members');
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 6000);
+    const r = await fetch('/api/clan-members', { signal: ctrl.signal });
+    clearTimeout(tid);
     if (r.ok) {
       const j = await r.json();
-      members = (j.items || []).map(m => m.name).sort((a, b) => a.localeCompare(b));
+      const apiNames = (j.items || []).map(m => m.name).sort((a, b) => a.localeCompare(b));
+      if (apiNames.length) members = apiNames; // API dati più freschi
     }
   } catch (_) {}
-
-  // Fallback: usa la tabella 'members' di Supabase (tutti i membri attuali del clan)
-  if (!members.length) {
-    const { data } = await db.from('members').select('name').order('name');
-    if (data) {
-      members = data.map(r => r.name).filter(Boolean);
-    }
-  }
 
   // Fallback finale: prende i nomi unici dalla panoramica storica
   if (!members.length) {
