@@ -247,7 +247,7 @@ function thImgOut() {
 
 // Resolve TH for bonus contexts: use thImgV if in clan, thImgOut if ex, ? if unknown
 function thImgBonus(playerName, isExPlayer) {
-  const member = _assignMembersMap[playerName?.toLowerCase()];
+  const member = resolveMember(playerName);
   if (member?.th_level) return thImgV(member.th_level);
   if (isExPlayer) return thImgOut();
   return '<span class="th-unknown">?</span>';
@@ -446,6 +446,39 @@ function switchCwlTab(tab, btn) {
 // ── ASSEGNA BONUS ─────────────────────────────────────────────────────────────
 
 let _assignMembersMap = {};  // name.toLowerCase() → {th_level, tag, name, ...}
+let _playerAliases   = {};  // alias.toLowerCase() → {alias, coc_name, tag, th_level}
+
+// Carica alias da Supabase (tabella player_aliases)
+async function loadPlayerAliases() {
+  _playerAliases = {};
+  try {
+    const { data } = await db.from('player_aliases').select('*');
+    (data || []).forEach(a => { _playerAliases[a.alias.toLowerCase()] = a; });
+  } catch (_) {} // tabella potrebbe non esistere ancora
+}
+
+// Risolve un nome player → membro (controlla memberMap diretta + aliases)
+function resolveMember(name) {
+  if (!name) return null;
+  const key = name.toLowerCase();
+  const direct = _assignMembersMap[key];
+  if (direct) return direct;
+  const alias = _playerAliases[key];
+  if (alias?.coc_name) {
+    const byCoc = _assignMembersMap[alias.coc_name.toLowerCase()];
+    if (byCoc) return byCoc;
+    if (alias.tag || alias.th_level) return { th_level: alias.th_level, tag: alias.tag, name: alias.coc_name };
+  }
+  return null;
+}
+
+// True se il player è ATTUALMENTE nel clan (via directo o alias)
+function isCurrentMember(name) {
+  if (!name) return false;
+  if (_assignMembersMap[name.toLowerCase()]) return true;
+  const a = _playerAliases[name.toLowerCase()];
+  return !!(a?.coc_name && _assignMembersMap[a.coc_name.toLowerCase()]);
+}
 
 async function loadMembersMap() {
   _assignMembersMap = {};
@@ -454,12 +487,14 @@ async function loadMembersMap() {
     if (r.ok) {
       const j = await r.json();
       (j.items || []).forEach(m => { _assignMembersMap[m.name.toLowerCase()] = m; });
+      await loadPlayerAliases();
       return;
     }
   } catch (_) {}
   // Fallback: Supabase members table
   const { data } = await db.from('members').select('*');
   if (data) data.forEach(m => { _assignMembersMap[m.name.toLowerCase()] = m; });
+  await loadPlayerAliases();
 }
 
 async function loadAssignBonus() {
@@ -970,10 +1005,10 @@ async function loadHallOfFame() {
     map[r.player_name].months.push(r.season);
   }
 
-  // Verifica membership ATTUALE dalla memberMap (più accurata del flag stored)
+  // Verifica membership ATTUALE (usa alias se nome storico ≠ nome CoC)
   for (const name of Object.keys(map)) {
-    map[name].inClan = !!_assignMembersMap[name.toLowerCase()];
-    const member = _assignMembersMap[name.toLowerCase()];
+    map[name].inClan = isCurrentMember(name);
+    const member = resolveMember(name);
     if (member?.tag) map[name].tag = member.tag;
   }
 
@@ -1227,6 +1262,102 @@ async function saveManualBonus(season) {
   }
 }
 
+
+// ── GESTIONE ALIAS PLAYER ─────────────────────────────────────────────────────
+
+async function loadAliasManager() {
+  const div = document.getElementById('bm-alias-content');
+  if (!div) return;
+  div.innerHTML = '<p style="font-size:0.84rem;color:var(--text-3)">Caricamento…</p>';
+
+  await loadMembersMap(); // ensure maps are fresh
+
+  const { data: historyPlayers } = await db.from('cwl_history').select('player_name');
+  if (!historyPlayers?.length) {
+    div.innerHTML = '<p style="font-size:0.84rem;color:var(--text-3)">Nessun giocatore nello storico.</p>';
+    return;
+  }
+
+  const uniqueNames = [...new Set(historyPlayers.map(r => r.player_name))].sort((a,b) => a.localeCompare(b));
+  const currentMembers = Object.values(_assignMembersMap).sort((a,b) => (a.name||'').localeCompare(b.name||''));
+
+  const rows = uniqueNames.map(name => {
+    const resolved = resolveMember(name);
+    const alias = _playerAliases[name.toLowerCase()];
+    const inClan = isCurrentMember(name);
+    const statusIcon = resolved ? (inClan ? '✓' : '⚠') : '✗';
+    const statusCls  = resolved ? (inClan ? 'cwl-yes' : '') : 'cwl-no';
+    const selectedCoc = alias?.coc_name || '';
+    const escapedName = name.replace(/"/g, '&quot;');
+
+    return `<tr>
+      <td><span class="member-name">${name}</span></td>
+      <td style="text-align:center"><span class="${statusCls}" style="font-size:0.8rem">${statusIcon}</span></td>
+      <td>
+        <select class="admin-select alias-select" data-alias="${escapedName}" style="font-size:0.8rem;width:100%">
+          <option value="">— nessun alias —</option>
+          ${currentMembers.map(m => `<option value="${m.name.replace(/"/g,'&quot;')}" ${selectedCoc === m.name ? 'selected' : ''}>${m.name}${m.th_level ? ` (TH${m.th_level})` : ''}</option>`).join('')}
+        </select>
+      </td>
+    </tr>`;
+  }).join('');
+
+  div.innerHTML = `
+    <p style="font-size:0.76rem;color:var(--text-3);margin-bottom:0.6rem">
+      ✓ in clan · ⚠ trovato via alias · ✗ non trovato — imposta l'alias per collegarlo al player CoC corretto.
+    </p>
+    <div class="table-wrap" style="max-height:340px;overflow-y:auto">
+      <table>
+        <thead><tr>
+          <th>Nome storico</th>
+          <th style="width:40px;text-align:center">Stato</th>
+          <th>Collega a giocatore CoC</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div style="display:flex;justify-content:flex-end;align-items:center;gap:0.5rem;margin-top:0.75rem;padding-top:0.5rem;border-top:1px solid var(--border)">
+      <span id="alias-save-msg" style="font-size:0.82rem;color:var(--text-3)"></span>
+      <button class="btn-secondary btn-sm" onclick="loadAliasManager()">🔄 Ricarica</button>
+      <button class="btn-primary btn-sm" onclick="saveAliases()">💾 Salva Alias</button>
+    </div>`;
+}
+
+async function saveAliases() {
+  const selects = document.querySelectorAll('.alias-select');
+  const toUpsert = [];
+  const toDelete = [];
+
+  selects.forEach(sel => {
+    const alias = sel.dataset.alias;
+    if (!alias) return;
+    const cocName = sel.value;
+    if (cocName) {
+      const member = resolveMember(cocName) || _assignMembersMap[cocName.toLowerCase()];
+      toUpsert.push({ alias, coc_name: cocName, tag: member?.tag || null, th_level: member?.th_level || null });
+    } else {
+      // Remove alias only if one exists
+      if (_playerAliases[alias.toLowerCase()]) toDelete.push(alias);
+    }
+  });
+
+  const msg = document.getElementById('alias-save-msg');
+  if (msg) msg.textContent = 'Salvataggio…';
+
+  try {
+    if (toUpsert.length) {
+      const { error } = await db.from('player_aliases').upsert(toUpsert, { onConflict: 'alias' });
+      if (error) throw error;
+    }
+    for (const alias of toDelete) {
+      await db.from('player_aliases').delete().eq('alias', alias);
+    }
+    await loadPlayerAliases();
+    if (msg) { msg.style.color = 'var(--green)'; msg.textContent = `✓ ${toUpsert.length} alias salvati.`; }
+  } catch (err) {
+    if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Errore: ' + (err.message || 'verifica che la tabella player_aliases esista.'); }
+  }
+}
 
 async function applyBonusCriteria() {
   const season  = document.getElementById('bm-season').value;
@@ -1714,7 +1845,10 @@ async function loadWarLog() {
   const div = document.getElementById('wl-classic-results');
   div.innerHTML = '<p class="wl-loading">Caricamento war log…</p>';
   try {
-    const r = await fetch('/api/war-log');
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 10000);
+    const r = await fetch('/api/war-log', { signal: ctrl.signal });
+    clearTimeout(tid);
     const data = await r.json();
     if (data.reason === 'accessDenied') {
       div.innerHTML = '<p class="wl-err">⚠️ War log privato. Vai nelle impostazioni clan su CoC → Informazioni clan → imposta il Registro di guerra su "Pubblico".</p>';
@@ -1776,7 +1910,10 @@ async function loadWarLog() {
         </table>
       </div>`;
   } catch(e) {
-    div.innerHTML = `<p class="wl-err">⚠️ Servizio non raggiungibile. Il proxy potrebbe essere in riavvio (attendi 30s). <button class="btn-secondary btn-sm" onclick="loadWarLog()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
+    const msg = e.name === 'AbortError'
+      ? '⏳ Il proxy è in avvio (cold start Render). Attendi ~30s e riprova.'
+      : '⚠️ Servizio non raggiungibile.';
+    div.innerHTML = `<p class="wl-err">${msg} <button class="btn-secondary btn-sm" onclick="loadWarLog()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
   }
 }
 
@@ -1832,7 +1969,10 @@ async function loadCwlSeasons() {
   let apiSeasonMap = {};
   let warLogError = null;
   try {
-    const r = await fetch('/api/war-log');
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 10000); // 10s timeout (cold start proxy)
+    const r = await fetch('/api/war-log', { signal: ctrl.signal });
+    clearTimeout(tid);
     const warData = await r.json();
     if (warData.reason === 'accessDenied') {
       warLogError = 'accessDenied';
@@ -1857,7 +1997,7 @@ async function loadCwlSeasons() {
         ws.totalDestr += w.clan?.destructionPercentage || 0;
       });
     }
-  } catch (e) { warLogError = 'network'; }
+  } catch (e) { warLogError = e.name === 'AbortError' ? 'timeout' : 'network'; }
 
   // Merge: tutte le stagioni trovate da DB o API
   const allKeys = new Set([...Object.keys(dbMap), ...Object.keys(apiSeasonMap)]);
@@ -1889,8 +2029,10 @@ function renderCwlSeasons(seasons, warLogError) {
     let msg = '';
     if (warLogError === 'accessDenied') {
       msg = '<p class="wl-err">⚠️ War log privato. Vai nelle impostazioni clan su CoC → imposta il Registro di guerra su "Pubblico".</p>';
+    } else if (warLogError === 'timeout') {
+      msg = `<p class="wl-err">⏳ Il proxy è in avvio (cold start Render). Attendi ~30 secondi e riprova. <button class="btn-secondary btn-sm" onclick="loadCwlSeasons()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
     } else if (warLogError) {
-      msg = `<p class="wl-err">⚠️ Servizio API temporaneamente non disponibile. <button class="btn-secondary btn-sm" onclick="loadCwlSeasons()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
+      msg = `<p class="wl-err">⚠️ Servizio API non disponibile. <button class="btn-secondary btn-sm" onclick="loadCwlSeasons()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
     } else {
       msg = '<div class="cwl-empty"><span style="font-size:2rem">⚔️</span><p>Nessuna stagione CWL trovata nel war log.</p><p style="font-size:0.83rem;color:#5a7a98">Le stagioni appariranno automaticamente man mano che vengono giocate.</p></div>';
     }
