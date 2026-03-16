@@ -503,8 +503,16 @@ async function loadMembersMap() {
     clearTimeout(tid);
     if (r.ok) {
       const j = await r.json();
-      // Dati API più freschi: sovrascrivono quelli Supabase
-      (j.items || []).forEach(m => { _assignMembersMap[m.name.toLowerCase()] = m; });
+      // Mergia dati API (più freschi) con quelli Supabase, preservando th_level
+      // (l'API CoC usa townHallLevel, Supabase usa th_level)
+      (j.items || []).forEach(m => {
+        const existing = _assignMembersMap[m.name.toLowerCase()] || {};
+        _assignMembersMap[m.name.toLowerCase()] = {
+          ...existing,
+          ...m,
+          th_level: m.townHallLevel || existing.th_level,
+        };
+      });
     }
   } catch (_) {} // timeout o proxy offline → usiamo dati Supabase
 
