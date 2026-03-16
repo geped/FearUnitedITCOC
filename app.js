@@ -218,11 +218,16 @@ async function loadMembers() {
   renderMembers(data || []);
 }
 
+// Ritorna il percorso immagine TH — usa webp (più leggero) per livelli 1-18, png per 19+
+function thImgSrc(level) {
+  const n = String(level).padStart(2, "0");
+  return level <= 18 ? `th/webp/level_${n}.webp` : `th/level_${n}.png`;
+}
+
 function thImg(level) {
   if (!level) return '<span class="th-unknown">?</span>';
-  const n = String(level).padStart(2, "0");
   return `<div class="th-cell">
-        <img src="th/level_${n}.png" alt="TH${level}" class="th-img">
+        <img src="${thImgSrc(level)}" alt="TH${level}" class="th-img">
         <span class="th-label">TH${level}</span>
     </div>`;
 }
@@ -230,9 +235,8 @@ function thImg(level) {
 // Vertical variant: image with level shown below (used in CWL sections)
 function thImgV(level) {
   if (!level) return '<span class="th-unknown">?</span>';
-  const n = String(level).padStart(2, "0");
   return `<div class="th-cell-v">
-    <img src="th/level_${n}.png" alt="TH${level}" class="th-img">
+    <img src="${thImgSrc(level)}" alt="TH${level}" class="th-img">
     <span class="th-label-v">TH${level}</span>
   </div>`;
 }
@@ -240,7 +244,7 @@ function thImgV(level) {
 // Ex-player placeholder (player left the clan)
 function thImgOut() {
   return `<div class="th-cell-v">
-    <img src="th/playerout.png" alt="Ex" class="th-img th-img-out">
+    <img src="th/webp/playerout.webp" alt="Ex" class="th-img th-img-out">
     <span class="th-label-v" style="color:var(--red)">EX</span>
   </div>`;
 }
@@ -1986,21 +1990,29 @@ async function loadWarLog() {
                    : w.result === 'lose' ? '<span class="wl-lose">Persa ✗</span>'
                    : '<span class="wl-draw">Patta =</span>';
 
-      const isCwl = w.warType === 'cwl';
-      const type  = isCwl ? '<span class="wl-badge-cwl">CWL</span>' : '<span class="wl-badge-classic">War</span>';
-
-      const stars     = `${w.clan?.stars ?? 0} — ${w.opponent?.stars ?? 0}`;
+      const stars     = `${w.clan?.stars ?? 0} ⭐ — ⭐ ${w.opponent?.stars ?? 0}`;
       const destrClan = w.clan?.destructionPercentage?.toFixed(1) ?? '0.0';
       const destrOpp  = w.opponent?.destructionPercentage?.toFixed(1) ?? '0.0';
-      const opp       = w.opponent?.name ?? 'Sconosciuto';
       const size      = w.teamSize ?? '?';
+
+      // Clan badge + nome + livello
+      const clanBadge  = w.clan?.badgeUrls?.small
+        ? `<img src="${w.clan.badgeUrls.small}" alt="" class="wl-clan-badge">`  : '🛡️';
+      const oppBadge   = w.opponent?.badgeUrls?.small
+        ? `<img src="${w.opponent.badgeUrls.small}" alt="" class="wl-clan-badge">` : '🛡️';
+      const clanLv  = w.clan?.clanLevel     ? `<span class="wl-clan-lv">Lv ${w.clan.clanLevel}</span>`     : '';
+      const oppLv   = w.opponent?.clanLevel ? `<span class="wl-clan-lv">Lv ${w.opponent.clanLevel}</span>` : '';
+      const oppName = w.opponent?.name ?? 'Sconosciuto';
+
+      const ourClan = `<div class="wl-clan-cell">${clanBadge}<span>${w.clan?.name ?? 'Noi'}${clanLv}</span></div>`;
+      const oppClan = `<div class="wl-clan-cell">${oppBadge}<span>${oppName}${oppLv}</span></div>`;
 
       return `<tr>
         <td class="stat-cell">${date}</td>
-        <td class="stat-cell">${type}</td>
         <td>${result}</td>
-        <td>${opp}</td>
-        <td class="stat-cell">${size} vs ${size}</td>
+        <td>${ourClan}</td>
+        <td class="stat-cell" style="text-align:center">vs<br><span style="font-size:0.72rem;color:var(--text-3)">${size}v${size}</span></td>
+        <td>${oppClan}</td>
         <td class="stat-cell">${stars}</td>
         <td class="stat-cell">${destrClan}% — ${destrOpp}%</td>
       </tr>`;
@@ -2010,8 +2022,8 @@ async function loadWarLog() {
       <div class="table-wrap" style="margin-top:0.75rem">
         <table>
           <thead><tr>
-            <th>Data</th><th>Tipo</th><th>Risultato</th><th>Avversario</th>
-            <th>Dimensione</th><th>⭐ Noi — Loro</th><th>💥 Noi — Loro</th>
+            <th>Data</th><th>Risultato</th><th>Noi</th><th style="text-align:center">—</th>
+            <th>Avversario</th><th>⭐ Noi — Loro</th><th>💥 Noi — Loro</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
@@ -2057,10 +2069,22 @@ function seasonLabel(season) {
   return `Stagione di ${MONTH_IT[+m] || season} ${y}`;
 }
 
+// Aggiorna il messaggio di stato nella barra di caricamento CWL
+function _cwlStatus(msg, isError) {
+  const el = document.getElementById('cwl-api-loading');
+  if (el) {
+    el.textContent = msg;
+    el.style.color = isError ? 'var(--red)' : 'var(--text-3)';
+  }
+}
+
 // ── Carica e renderizza ──────────────────────────────────────────────────────
 async function loadCwlSeasons() {
   const div = document.getElementById('cwl-seasons-list');
-  div.innerHTML = '<p class="wl-loading">Caricamento cronologia…</p>';
+  div.innerHTML = `<div id="cwl-api-loading" class="cwl-loading-bar">
+    <span class="cwl-loading-spinner">⏳</span>
+    <span id="cwl-load-msg">Connessione a Supabase…</span>
+  </div>`;
 
   // 1) Carica subito dati da DB (cwl_seasons) — mostra immediatamente ciò che abbiamo
   const dbMap = {};
@@ -2070,9 +2094,15 @@ async function loadCwlSeasons() {
       .from('cwl_seasons')
       .select('*')
       .order('season', { ascending: false });
-    if (dbErr?.code === '42P01') { cwlSeasonsTableMissing = true; } // relation does not exist
+    if (dbErr?.code === '42P01') {
+      cwlSeasonsTableMissing = true;
+    } else if (dbErr) {
+      _cwlStatus(`⚠ Supabase: ${dbErr.message}`, true);
+    }
     (dbSeasons || []).forEach(s => { dbMap[s.season] = s; });
-  } catch (_) {}
+  } catch (e) {
+    _cwlStatus(`⚠ Errore Supabase: ${e.message}`, true);
+  }
 
   // Se abbiamo dati DB, mostrarli subito senza aspettare il proxy
   if (Object.keys(dbMap).length > 0) {
@@ -2086,17 +2116,33 @@ async function loadCwlSeasons() {
     renderCwlSeasons(quickMerged, null);
     // Aggiorna label per indicare che si sta ancora caricando API
     div.insertAdjacentHTML('afterbegin',
-      '<p id="cwl-api-loading" style="font-size:0.78rem;color:var(--text-3);margin-bottom:0.5rem">⏳ Aggiornamento dati dal proxy CoC…</p>');
+      `<div id="cwl-api-loading" class="cwl-loading-bar">
+        <span class="cwl-loading-spinner">⏳</span>
+        <span id="cwl-load-msg">Connessione al proxy CoC (può richiedere fino a 30s)…</span>
+        <span id="cwl-load-timer" style="margin-left:0.5rem;font-variant-numeric:tabular-nums"></span>
+       </div>`);
+    // Avvia timer visibile
+    let elapsed = 0;
+    const timerEl = document.getElementById('cwl-load-timer');
+    const timerInterval = setInterval(() => {
+      elapsed++;
+      if (timerEl) timerEl.textContent = `${elapsed}s`;
+    }, 1000);
+    window._cwlLoadTimer = timerInterval;
+  } else {
+    _cwlStatus('⏳ Nessun dato in DB — connessione al proxy CoC…', false);
   }
 
-  // 2) Tenta API war-log con timeout (10s) — aggiorna la vista se risponde
+  // 2) Tenta API war-log con timeout (15s) — aggiorna la vista se risponde
   let apiSeasonMap = {};
   let warLogError = null;
   try {
     const ctrl = new AbortController();
-    const tid = setTimeout(() => ctrl.abort(), 10000); // 10s timeout (cold start proxy)
+    const tid = setTimeout(() => ctrl.abort(), 15000); // 15s timeout
+    _cwlStatus && _cwlStatus('⏳ Richiesta war-log inviata…', false);
     const r = await fetch('/api/war-log', { signal: ctrl.signal });
     clearTimeout(tid);
+    if (window._cwlLoadTimer) { clearInterval(window._cwlLoadTimer); window._cwlLoadTimer = null; }
     const warData = await r.json();
     if (warData.reason === 'accessDenied') {
       warLogError = 'accessDenied';
@@ -2121,7 +2167,10 @@ async function loadCwlSeasons() {
         ws.totalDestr += w.clan?.destructionPercentage || 0;
       });
     }
-  } catch (e) { warLogError = e.name === 'AbortError' ? 'timeout' : 'network'; }
+  } catch (e) {
+    if (window._cwlLoadTimer) { clearInterval(window._cwlLoadTimer); window._cwlLoadTimer = null; }
+    warLogError = e.name === 'AbortError' ? 'timeout' : `network: ${e.message}`;
+  }
 
   // Rimuovi indicatore di caricamento API
   document.getElementById('cwl-api-loading')?.remove();
@@ -2175,9 +2224,9 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
     } else if (warLogError === 'accessDenied') {
       msg = '<p class="wl-err">⚠️ War log privato. Vai nelle impostazioni clan su CoC → imposta il Registro di guerra su "Pubblico".</p>';
     } else if (warLogError === 'timeout') {
-      msg = `<p class="wl-err">⏳ Il proxy è in avvio (cold start Render). Attendi ~30 secondi e riprova. <button class="btn-secondary btn-sm" onclick="loadCwlSeasons()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
+      msg = `<p class="wl-err">⏳ Timeout (15s): il proxy Render è in avvio (cold start). Attendi ~30s e riprova. <button class="btn-secondary btn-sm" onclick="loadCwlSeasons()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
     } else if (warLogError) {
-      msg = `<p class="wl-err">⚠️ Servizio API non disponibile. <button class="btn-secondary btn-sm" onclick="loadCwlSeasons()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
+      msg = `<p class="wl-err">⚠️ Errore API: <code style="font-size:0.8em;background:var(--bg-1);padding:0.1em 0.3em;border-radius:3px">${warLogError}</code> <button class="btn-secondary btn-sm" onclick="loadCwlSeasons()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
     } else {
       msg = '<div class="cwl-empty"><span style="font-size:2rem">⚔️</span><p>Nessuna stagione CWL trovata nel war log.</p><p style="font-size:0.83rem;color:#5a7a98">Le stagioni appariranno automaticamente man mano che vengono giocate.</p></div>';
     }

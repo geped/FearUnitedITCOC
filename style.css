@@ -1274,6 +1274,51 @@ tbody tr:last-child td { border-bottom: none; }
     background: rgba(41,128,185,0.12); color: #5a9ec8; border: 1px solid rgba(41,128,185,0.25);
 }
 
+/* Clan badge + nome nella tabella war */
+.wl-clan-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+}
+.wl-clan-cell span {
+    font-size: 0.82rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 130px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+.wl-clan-badge {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+.wl-clan-lv {
+    font-size: 0.65rem;
+    color: var(--text-3);
+    font-family: 'IBM Plex Mono', monospace;
+}
+
+/* Barra di caricamento CWL cronologia */
+.cwl-loading-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    color: var(--text-3);
+    padding: 0.5rem 0;
+    margin-bottom: 0.5rem;
+}
+.cwl-loading-spinner {
+    animation: spin 1.5s linear infinite;
+    display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .stat-cell {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 0.8rem;
