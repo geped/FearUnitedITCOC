@@ -480,6 +480,14 @@ function isCurrentMember(name) {
   return !!(a?.coc_name && _assignMembersMap[a.coc_name.toLowerCase()]);
 }
 
+// Ritorna il nome canonico (coc_name dall'alias se esiste, altrimenti il nome originale)
+// Usato per unificare righe duplicate in Storico/HoF quando un player cambia nome
+function getCanonicalName(name) {
+  if (!name) return name;
+  const a = _playerAliases[name.toLowerCase()];
+  return a?.coc_name || name;
+}
+
 async function loadMembersMap() {
   _assignMembersMap = {};
 
@@ -843,10 +851,10 @@ async function loadStorico() {
 
   await loadMembersMap();
 
-  // Aggrega per giocatore
+  // Aggrega per giocatore usando il nome CANONICO (merge alias: "Geped" + "Geped™" → un'unica riga)
   const playerMap = {};
   history.forEach(h => {
-    const key = h.player_name;
+    const key = getCanonicalName(h.player_name); // usa nome CoC se esiste alias
     if (!playerMap[key]) {
       playerMap[key] = {
         player_name: key,
@@ -874,7 +882,10 @@ async function loadStorico() {
       }
     }
     if ((h.bonus_score || 0) > p.best_score) p.best_score = h.bonus_score || 0;
-    if (h.bonus_assigned && h.season) p.bonus_months.push(h.season);
+    if (h.bonus_assigned && h.season) {
+      // Evita duplicati di mese se stesso player con nome diverso
+      if (!p.bonus_months.includes(h.season)) p.bonus_months.push(h.season);
+    }
   });
 
   _storicoData = Object.values(playerMap);
@@ -1004,11 +1015,12 @@ async function loadHallOfFame() {
   if (error) { div.innerHTML = `<p style="color:var(--red)">Errore: ${error.message}</p>`; return; }
   if (!data?.length) { div.innerHTML = '<p class="wl-loading">Nessun bonus trovato.</p>'; return; }
 
-  // Raggruppa per player
+  // Raggruppa per player usando nome CANONICO (merge "Geped" + "Geped™" → una sola riga)
   const map = {};
   for (const r of data) {
-    if (!map[r.player_name]) map[r.player_name] = { months: [], inClan: false };
-    map[r.player_name].months.push(r.season);
+    const key = getCanonicalName(r.player_name);
+    if (!map[key]) map[key] = { months: [], inClan: false };
+    if (!map[key].months.includes(r.season)) map[key].months.push(r.season);
   }
 
   // Verifica membership ATTUALE (usa alias se nome storico ≠ nome CoC)
@@ -1277,9 +1289,12 @@ async function loadAliasManager() {
 
   await loadMembersMap(); // ensure maps are fresh
 
+  const nMembers = Object.keys(_assignMembersMap).length;
+  const nAliases = Object.keys(_playerAliases).length;
+
   const { data: historyPlayers } = await db.from('cwl_history').select('player_name');
   if (!historyPlayers?.length) {
-    div.innerHTML = '<p style="font-size:0.84rem;color:var(--text-3)">Nessun giocatore nello storico.</p>';
+    div.innerHTML = `<p style="font-size:0.84rem;color:var(--text-3)">Nessun giocatore nello storico. (Membri caricati: ${nMembers}, Alias: ${nAliases})</p>`;
     return;
   }
 
@@ -1310,6 +1325,10 @@ async function loadAliasManager() {
   div.innerHTML = `
     <p style="font-size:0.76rem;color:var(--text-3);margin-bottom:0.6rem">
       ✓ in clan · ⚠ trovato via alias · ✗ non trovato — imposta l'alias per collegarlo al player CoC corretto.
+    </p>
+    <p style="font-size:0.75rem;color:var(--text-3);margin-bottom:0.6rem">
+      Membri CoC caricati: <strong style="color:var(--text)">${nMembers}</strong> &nbsp;·&nbsp;
+      Alias attivi: <strong style="color:var(--gold)">${nAliases}</strong>
     </p>
     <div class="table-wrap" style="max-height:340px;overflow-y:auto">
       <table>
@@ -1960,7 +1979,7 @@ async function loadCwlSeasons() {
   const div = document.getElementById('cwl-seasons-list');
   div.innerHTML = '<p class="wl-loading">Caricamento cronologia…</p>';
 
-  // Prova a caricare dati supplementari (posizione, lega) da DB — silenzioso se tabella assente
+  // 1) Carica subito dati da DB (cwl_seasons) — mostra immediatamente ciò che abbiamo
   const dbMap = {};
   try {
     const { data: dbSeasons } = await db
@@ -1970,7 +1989,22 @@ async function loadCwlSeasons() {
     (dbSeasons || []).forEach(s => { dbMap[s.season] = s; });
   } catch (_) {}
 
-  // Carica dati CWL dal war log API (raggruppati per stagione usando endTime)
+  // Se abbiamo dati DB, mostrarli subito senza aspettare il proxy
+  if (Object.keys(dbMap).length > 0) {
+    const quickMerged = Object.keys(dbMap).map(s => {
+      const d = dbMap[s];
+      return { season: s, league: d.league||null, position: d.position||null,
+               stars: d.stars??null, destruction: d.destruction??null,
+               attacks: d.attacks??null, wins: null, losses: null, warCount: null, fromApiOnly: false };
+    });
+    quickMerged.sort((a, b) => b.season.localeCompare(a.season));
+    renderCwlSeasons(quickMerged, null);
+    // Aggiorna label per indicare che si sta ancora caricando API
+    div.insertAdjacentHTML('afterbegin',
+      '<p id="cwl-api-loading" style="font-size:0.78rem;color:var(--text-3);margin-bottom:0.5rem">⏳ Aggiornamento dati dal proxy CoC…</p>');
+  }
+
+  // 2) Tenta API war-log con timeout (10s) — aggiorna la vista se risponde
   let apiSeasonMap = {};
   let warLogError = null;
   try {
@@ -2003,6 +2037,9 @@ async function loadCwlSeasons() {
       });
     }
   } catch (e) { warLogError = e.name === 'AbortError' ? 'timeout' : 'network'; }
+
+  // Rimuovi indicatore di caricamento API
+  document.getElementById('cwl-api-loading')?.remove();
 
   // Merge: tutte le stagioni trovate da DB o API
   const allKeys = new Set([...Object.keys(dbMap), ...Object.keys(apiSeasonMap)]);
