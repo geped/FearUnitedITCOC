@@ -218,16 +218,22 @@ async function loadMembers() {
   renderMembers(data || []);
 }
 
-// Ritorna il percorso immagine TH — usa webp (più leggero) per livelli 1-18, png per 19+
+// Ritorna il percorso immagine TH — usa webp (th/) per livelli 1-18, png per 19+
 function thImgSrc(level) {
   const n = String(level).padStart(2, "0");
-  return level <= 18 ? `th/webp/level_${n}.webp` : `th/level_${n}.png`;
+  return level <= 18 ? `th/level_${n}.webp` : `th/level_${n}.png`;
+}
+
+// Fallback png se webp non carica (chiamata da onerror inline)
+function thImgFallback(el, level) {
+  el.onerror = null;
+  el.src = `th/level_${String(level).padStart(2,"0")}.png`;
 }
 
 function thImg(level) {
   if (!level) return '<span class="th-unknown">?</span>';
   return `<div class="th-cell">
-        <img src="${thImgSrc(level)}" alt="TH${level}" class="th-img">
+        <img src="${thImgSrc(level)}" alt="TH${level}" class="th-img" onerror="thImgFallback(this,${level})">
         <span class="th-label">TH${level}</span>
     </div>`;
 }
@@ -236,7 +242,7 @@ function thImg(level) {
 function thImgV(level) {
   if (!level) return '<span class="th-unknown">?</span>';
   return `<div class="th-cell-v">
-    <img src="${thImgSrc(level)}" alt="TH${level}" class="th-img">
+    <img src="${thImgSrc(level)}" alt="TH${level}" class="th-img" onerror="thImgFallback(this,${level})">
     <span class="th-label-v">TH${level}</span>
   </div>`;
 }
@@ -244,7 +250,7 @@ function thImgV(level) {
 // Ex-player placeholder (player left the clan)
 function thImgOut() {
   return `<div class="th-cell-v">
-    <img src="th/webp/playerout.webp" alt="Ex" class="th-img th-img-out">
+    <img src="th/playerout.webp" alt="Ex" class="th-img th-img-out" onerror="this.onerror=null;this.src='th/playerout.png'">
     <span class="th-label-v" style="color:var(--red)">EX</span>
   </div>`;
 }
