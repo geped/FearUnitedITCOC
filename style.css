@@ -1607,3 +1607,47 @@ tbody tr:last-child td { border-bottom: none; }
 .bm-manual-item .bm-item-name { font-size: 0.85rem; color: var(--text); flex: 1; }
 .bm-already-tag { font-size: 0.7rem; background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(201,169,98,0.3); border-radius: 2px; padding: 0.05rem 0.3rem; margin-left: auto; }
 .bm-manual-list-wrap { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+
+/* Ex-player section in Assegna Bonus */
+.assign-ex-section {
+    margin-top: 1rem;
+    border-top: 1px solid rgba(239, 83, 80, 0.25);
+    padding-top: 0.75rem;
+}
+.assign-ex-title {
+    font-size: 0.85rem;
+    color: var(--red);
+    margin: 0 0 0.5rem;
+    opacity: 0.85;
+    font-weight: 600;
+}
+.assign-ex-row td { color: var(--red) !important; opacity: 0.75; }
+.assign-ex-row .member-name { color: var(--red) !important; }
+
+/* Badge "2°" per secondi account nella tabella */
+.assign-sec-badge {
+    font-size: 0.6rem;
+    color: #7aaccc;
+    background: rgba(91, 157, 224, 0.12);
+    border: 1px solid rgba(91, 157, 224, 0.25);
+    border-radius: 3px;
+    padding: 0.05rem 0.3rem;
+    margin-left: 0.3rem;
+    vertical-align: middle;
+}
+
+/* SQL hint block in CWL seasons */
+.sql-hint {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem 1rem;
+    text-align: left;
+    color: var(--text-2);
+    white-space: pre;
+    overflow-x: auto;
+    margin: 0.75rem auto 0;
+    max-width: 520px;
+}

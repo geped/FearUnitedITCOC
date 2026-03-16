@@ -689,7 +689,7 @@ function renderAssignContent(players, season, isLive) {
         <div class="assign-bonus-grid">`;
       bonusPlayers.forEach(p => {
         const member = _assignMembersMap[p.player_name?.toLowerCase()];
-        const thHtml = thImgBonus(p.player_name, !p.still_in_clan);
+        const thHtml = thImgBonus(p.player_name, !isCurrentMember(p.player_name));
         const tag = member?.tag || '—';
         const avgD = p.attacks_made > 0 ? (p.destruction / p.attacks_made).toFixed(1) + '%' : '—';
         html += `<div class="assign-bonus-card">
@@ -713,9 +713,60 @@ function renderAssignContent(players, season, isLive) {
     }
   }
 
-  // ── Tabella tutti i giocatori ─────────────────────────────────────────────
-  const list = isLive ? players : players.filter(p => !p.is_secondary);
+  // ── Suddividi giocatori in: attivi / secondari / ex ───────────────────────
+  const activePlayers    = [];
+  const secondaryPlayers = [];
+  const exPlayers        = [];
 
+  players.forEach(p => {
+    const name   = isLive ? p.name : p.player_name;
+    const inClan = isLive ? true : isCurrentMember(name);
+    const isSec  = !isLive && (p.is_secondary || false);
+    if (!inClan)     exPlayers.push(p);
+    else if (isSec)  secondaryPlayers.push(p);
+    else             activePlayers.push(p);
+  });
+
+  // ── Funzione helper per costruire righe tabella ────────────────────────────
+  function buildAssignRow(p, isSec) {
+    const name    = isLive ? p.name : p.player_name;
+    const member  = _assignMembersMap[name?.toLowerCase()];
+    const inClan  = isLive ? true : isCurrentMember(name);
+    const thHtml  = thImgBonus(name, !inClan);
+    const tag     = member?.tag ? `<br><span class="tag-cell">${member.tag}</span>` : '';
+    const hasBonus    = !isLive && p.bonus_assigned;
+    const participated = isLive || p.participated;
+    const atkMade = p.attacks_made ?? 0;
+    const atkReq  = p.attacks_required ?? 0;
+    const destr   = p.destruction || 0;
+    const avgD    = atkMade > 0 ? (destr / atkMade).toFixed(1) + '%' : '—';
+    const atk     = atkReq > 0 ? `${atkMade}/${atkReq}` : '—';
+    const score   = isLive ? '—' : (p.bonus_score ?? '—');
+    const stars   = p.stars ?? '—';
+    const participatedHtml = participated
+      ? '<span class="cwl-yes">✓ CWL</span>'
+      : '<span class="cwl-no">✗</span>';
+    const bonusIcon = hasBonus ? ' <span class="assign-bonus-icon">🏆</span>' : '';
+    const secBadge  = isSec ? ' <span class="assign-sec-badge">2°</span>' : '';
+    const qname = name.replace(/"/g, '&quot;');
+    return `<tr>
+      <td class="assign-chk-col stat-cell" style="display:none">
+        <input type="checkbox" class="assign-check" data-name="${qname}" ${hasBonus ? 'checked' : ''} style="accent-color:#f0a500;width:16px;height:16px">
+      </td>
+      <td class="assign-sec-col stat-cell" style="display:none">
+        <input type="checkbox" class="assign-secondary" data-name="${qname}" ${isSec ? 'checked' : ''} style="accent-color:#7aaccc;width:16px;height:16px" title="Secondo account">
+      </td>
+      <td>${thHtml}</td>
+      <td><span class="member-name">${name}${bonusIcon}${secBadge}</span>${tag}</td>
+      <td>${participatedHtml}</td>
+      <td class="stat-cell">${stars}</td>
+      <td class="stat-cell hide-xs">${avgD}</td>
+      <td class="stat-cell hide-xs">${atk}</td>
+      <td class="stat-cell hide-sm"><strong>${score}</strong></td>
+    </tr>`;
+  }
+
+  // ── Tabella principale (attivi + secondari) ────────────────────────────────
   html += `<div class="card" style="margin-top:0.25rem">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;flex-wrap:wrap;gap:0.5rem">
       <h3 class="card-title" style="margin:0">
@@ -730,7 +781,8 @@ function renderAssignContent(players, season, isLive) {
     <div class="table-wrap">
       <table id="assign-table">
         <thead><tr>
-          <th class="assign-chk-col" style="display:none;width:36px;text-align:center">✓</th>
+          <th class="assign-chk-col" style="display:none;width:36px;text-align:center" title="Assegna bonus">✓</th>
+          <th class="assign-sec-col" style="display:none;width:36px;text-align:center" title="Secondo account">2°</th>
           <th>TH</th>
           <th>Nome / Tag</th>
           <th>CWL</th>
@@ -741,41 +793,60 @@ function renderAssignContent(players, season, isLive) {
         </tr></thead>
         <tbody>`;
 
-  list.forEach(p => {
-    const name = isLive ? p.name : p.player_name;
-    const member = _assignMembersMap[name?.toLowerCase()];
-    const isEx = !isLive && !p.still_in_clan;
-    const thHtml = thImgBonus(name, isEx);
-    const tag = member?.tag ? `<br><span class="tag-cell">${member.tag}</span>` : '';
-    const hasBonus = !isLive && p.bonus_assigned;
-    const participated = isLive || p.participated;
-    const destr = isLive ? (p.destruction || 0) : (p.destruction || 0);
-    const atkMade = p.attacks_made ?? 0;
-    const atkReq = p.attacks_required ?? 0;
-    const avgD = atkMade > 0 ? (destr / atkMade).toFixed(1) + '%' : '—';
-    const atk = atkReq > 0 ? `${atkMade}/${atkReq}` : '—';
-    const score = isLive ? '—' : (p.bonus_score ?? '—');
-    const stars = isLive ? (p.stars ?? '—') : (p.stars ?? '—');
-    const participatedHtml = participated
-      ? '<span class="cwl-yes">✓ CWL</span>'
-      : '<span class="cwl-no">✗</span>';
-    const bonusIcon = hasBonus ? ' <span class="assign-bonus-icon">🏆</span>' : '';
+  activePlayers.forEach(p => { html += buildAssignRow(p, false); });
 
-    html += `<tr>
-      <td class="assign-chk-col stat-cell" style="display:none">
-        <input type="checkbox" class="assign-check" data-name="${name.replace(/"/g, '&quot;')}" ${hasBonus ? 'checked' : ''} style="accent-color:#f0a500;width:16px;height:16px">
-      </td>
-      <td>${thHtml}</td>
-      <td><span class="member-name">${name}${bonusIcon}</span>${tag}</td>
-      <td>${participatedHtml}</td>
-      <td class="stat-cell">${stars}</td>
-      <td class="stat-cell hide-xs">${avgD}</td>
-      <td class="stat-cell hide-xs">${atk}</td>
-      <td class="stat-cell hide-sm"><strong>${score}</strong></td>
-    </tr>`;
-  });
+  if (secondaryPlayers.length) {
+    html += `<tr class="cwl-section-row"><td colspan="9">— Account secondari (${secondaryPlayers.length})</td></tr>`;
+    secondaryPlayers.forEach(p => { html += buildAssignRow(p, true); });
+  }
 
   html += '</tbody></table></div></div>';
+
+  // ── Sezione Ex-player (non più nel clan) — solo storico ───────────────────
+  if (exPlayers.length && !isLive) {
+    html += `<div class="assign-ex-section">
+      <h4 class="assign-ex-title">🚪 Ex-player — non più nel clan (${exPlayers.length})</h4>
+      <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>TH</th>
+          <th>Nome / Tag</th>
+          <th>CWL</th>
+          <th>⭐ Stelle</th>
+          <th class="hide-xs">💥 Distruz.</th>
+          <th class="hide-xs">⚔ Attacchi</th>
+          <th class="hide-sm">Score</th>
+        </tr></thead>
+        <tbody>`;
+    exPlayers.forEach(p => {
+      const name    = p.player_name;
+      const thHtml  = thImgBonus(name, true);
+      const hasBonus    = p.bonus_assigned;
+      const participated = p.participated;
+      const atkMade = p.attacks_made ?? 0;
+      const atkReq  = p.attacks_required ?? 0;
+      const destr   = p.destruction || 0;
+      const avgD    = atkMade > 0 ? (destr / atkMade).toFixed(1) + '%' : '—';
+      const atk     = atkReq > 0 ? `${atkMade}/${atkReq}` : '—';
+      const score   = p.bonus_score ?? '—';
+      const stars   = p.stars ?? '—';
+      const participatedHtml = participated
+        ? '<span class="cwl-yes">✓ CWL</span>'
+        : '<span class="cwl-no">✗</span>';
+      const bonusIcon = hasBonus ? ' <span class="assign-bonus-icon">🏆</span>' : '';
+      html += `<tr class="assign-ex-row">
+        <td>${thHtml}</td>
+        <td><span class="member-name storico-ex-name">${name}${bonusIcon}</span></td>
+        <td>${participatedHtml}</td>
+        <td class="stat-cell">${stars}</td>
+        <td class="stat-cell hide-xs">${avgD}</td>
+        <td class="stat-cell hide-xs">${atk}</td>
+        <td class="stat-cell hide-sm"><strong>${score}</strong></td>
+      </tr>`;
+    });
+    html += '</tbody></table></div></div>';
+  }
+
   div.innerHTML = html;
 }
 
@@ -786,7 +857,7 @@ function toggleAssignEdit(cancel = false) {
   const isEditing = saveBtn?.style.display !== 'none';
   const turnOn = !cancel && !isEditing;
 
-  document.querySelectorAll('.assign-chk-col').forEach(el => {
+  document.querySelectorAll('.assign-chk-col, .assign-sec-col').forEach(el => {
     el.style.display = turnOn ? '' : 'none';
   });
   document.querySelectorAll('.assign-bonus-icon').forEach(el => {
@@ -803,16 +874,20 @@ async function saveAssignChanges(season) {
 
   const checks = document.querySelectorAll('.assign-check');
   const status = document.getElementById('cwl-status');
+  // Raccoglie stato "secondo account" per nome
+  const secMap = {};
+  document.querySelectorAll('.assign-secondary').forEach(cb => { secMap[cb.dataset.name] = cb.checked; });
   const rows = [];
   checks.forEach(cb => {
     rows.push({
       player_name: cb.dataset.name,
       season,
       bonus_assigned: cb.checked,
+      is_secondary:   secMap[cb.dataset.name] || false,
       participated: true,
       stars: 0, destruction: 0.0,
       attacks_made: 0, attacks_required: 0,
-      bonus_score: 0, still_in_clan: true, is_secondary: false
+      bonus_score: 0, still_in_clan: true
     });
   });
 
@@ -1989,11 +2064,13 @@ async function loadCwlSeasons() {
 
   // 1) Carica subito dati da DB (cwl_seasons) — mostra immediatamente ciò che abbiamo
   const dbMap = {};
+  let cwlSeasonsTableMissing = false;
   try {
-    const { data: dbSeasons } = await db
+    const { data: dbSeasons, error: dbErr } = await db
       .from('cwl_seasons')
       .select('*')
       .order('season', { ascending: false });
+    if (dbErr?.code === '42P01') { cwlSeasonsTableMissing = true; } // relation does not exist
     (dbSeasons || []).forEach(s => { dbMap[s.season] = s; });
   } catch (_) {}
 
@@ -2069,15 +2146,33 @@ async function loadCwlSeasons() {
     });
   });
   merged.sort((a, b) => b.season.localeCompare(a.season));
-  renderCwlSeasons(merged, warLogError);
+  renderCwlSeasons(merged, warLogError, cwlSeasonsTableMissing);
 }
 
-function renderCwlSeasons(seasons, warLogError) {
+function renderCwlSeasons(seasons, warLogError, tablesMissing) {
   const div = document.getElementById('cwl-seasons-list');
 
   if (!seasons.length) {
     let msg = '';
-    if (warLogError === 'accessDenied') {
+    if (tablesMissing) {
+      msg = `<div class="cwl-empty">
+        <span style="font-size:2rem">🗄️</span>
+        <p style="color:var(--gold)">Tabella <code>cwl_seasons</code> non trovata su Supabase.</p>
+        <p style="font-size:0.83rem;color:#5a7a98">Crea la tabella nel SQL Editor di Supabase:</p>
+        <pre class="sql-hint">CREATE TABLE IF NOT EXISTS cwl_seasons (
+  season TEXT PRIMARY KEY,
+  league TEXT,
+  position INTEGER,
+  stars INTEGER,
+  destruction NUMERIC(6,2),
+  attacks INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE cwl_seasons ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "cwl_seasons_read"  ON cwl_seasons FOR SELECT USING (true);
+CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING (true) WITH CHECK (true);</pre>
+      </div>`;
+    } else if (warLogError === 'accessDenied') {
       msg = '<p class="wl-err">⚠️ War log privato. Vai nelle impostazioni clan su CoC → imposta il Registro di guerra su "Pubblico".</p>';
     } else if (warLogError === 'timeout') {
       msg = `<p class="wl-err">⏳ Il proxy è in avvio (cold start Render). Attendi ~30 secondi e riprova. <button class="btn-secondary btn-sm" onclick="loadCwlSeasons()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
