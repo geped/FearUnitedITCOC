@@ -2127,9 +2127,10 @@ async function loadCwlSeasons() {
     if (el) el.textContent = `${elapsed}s`;
   }, 1000);
 
-  // Lancia in parallelo: Supabase (storico) + cwl-stats (stagione corrente) + clan-info (banner)
-  const [dbResult, cwlResult, clanResult] = await Promise.allSettled([
+  // Lancia in parallelo: Supabase + war-log (storico CWL) + cwl-stats (stagione corrente) + clan-info (banner)
+  const [dbResult, warLogResult, cwlResult, clanResult] = await Promise.allSettled([
     db.from('cwl_seasons').select('*').order('season', { ascending: false }),
+    fetch('/api/war-log').then(r => r.ok ? r.json() : null),
     fetch('/api/cwl-stats').then(r => r.ok ? r.json() : null),
     fetch('/api/clan-info').then(r => r.ok ? r.json() : null)
   ]);
@@ -2137,15 +2138,15 @@ async function loadCwlSeasons() {
   clearInterval(timerInterval);
   document.getElementById('cwl-api-loading')?.remove();
 
-  // ── Banner lega corrente (da clan-info o da cwl-stats) ────────────────────
-  const clanInfo   = clanResult.status === 'fulfilled' ? clanResult.value : null;
-  const cwlData    = cwlResult.status  === 'fulfilled' ? cwlResult.value  : null;
+  // ── Banner lega corrente ──────────────────────────────────────────────────
+  const clanInfo       = clanResult.status === 'fulfilled' ? clanResult.value : null;
+  const cwlData        = cwlResult.status  === 'fulfilled' ? cwlResult.value  : null;
   const leagueEnBanner = cwlData?.leagueNameEn || clanInfo?.warLeague?.name || null;
   const leagueItBanner = leagueEnBanner ? (LEAGUE_EN_TO_IT[leagueEnBanner] || leagueEnBanner) : null;
   const banner = document.getElementById('cwl-current-league-banner');
   if (banner && leagueItBanner) {
-    const color = LEAGUE_COLOR[leagueItBanner] || 'var(--gold)';
-    const icon  = LEAGUE_ICON[leagueItBanner] || '🏆';
+    const color  = LEAGUE_COLOR[leagueItBanner] || 'var(--gold)';
+    const icon   = LEAGUE_ICON[leagueItBanner]  || '🏆';
     const isLive = cwlData && cwlData.state !== 'notInWar' && cwlData.state !== 'ended';
     banner.innerHTML = `
       <span class="cwl-banner-label">Lega attuale</span>
@@ -2155,46 +2156,76 @@ async function loadCwlSeasons() {
     banner.style.display = 'flex';
   }
 
-  // ── Dati Supabase ─────────────────────────────────────────────────────────
+  // ── Dati Supabase (posizione + lega salvate automaticamente) ──────────────
   const dbRaw = dbResult.status === 'fulfilled' ? dbResult.value : { data: null, error: null };
   const dbMap = {};
   let cwlSeasonsTableMissing = false;
-  if (dbRaw.error?.code === '42P01') {
-    cwlSeasonsTableMissing = true;
-  }
+  if (dbRaw.error?.code === '42P01') cwlSeasonsTableMissing = true;
   (dbRaw.data || []).forEach(s => { dbMap[s.season] = s; });
 
-  // ── Stagione corrente da cwl-stats ────────────────────────────────────────
-  // Il proxy auto-salva su Supabase quando state==='ended', quindi dopo
-  // la CWL i dati saranno già nel DB. Usiamo cwlData per la stagione LIVE.
-  let liveSeasonKey = null;
+  // ── War-log: aggrega guerre CWL per stagione (stelle + distruzione) ───────
+  const warSeasonMap = {};
+  const warLogData = warLogResult.status === 'fulfilled' ? warLogResult.value : null;
+  if (warLogData && !warLogData.reason) {
+    (warLogData.items || []).filter(w => {
+      const wt = (w.warType || '').toLowerCase();
+      const maxStars = (w.teamSize || 50) * 3;
+      const isAggregated = (w.clan?.stars || 0) > maxStars;
+      return (wt === 'cwl' || !w.opponent?.name || isAggregated) && w.endTime;
+    }).forEach(w => {
+      // Estrae stagione da endTime: "20250315T000000.000Z" → "2025-03"
+      const s = w.endTime.slice(0, 4) + '-' + w.endTime.slice(4, 6);
+      if (!warSeasonMap[s]) warSeasonMap[s] = { wins: 0, losses: 0, draws: 0, totalStars: 0, totalDestr: 0, warCount: 0 };
+      const ws = warSeasonMap[s];
+      ws.warCount++;
+      if (w.result === 'win') ws.wins++;
+      else if (w.result === 'lose') ws.losses++;
+      else ws.draws++;
+      ws.totalStars += w.clan?.stars || 0;
+      ws.totalDestr += w.clan?.destructionPercentage || 0;
+    });
+  }
+
+  // ── Stagione corrente/live da cwl-stats ───────────────────────────────────
   if (cwlData && cwlData.state !== 'notInWar' && cwlData.season) {
-    liveSeasonKey = cwlData.season; // es. "2025-03"
+    const key      = cwlData.season;
     const ourGroup = (cwlData.groupStandings || []).find(c => c.tag === '#2J2VLPP9R');
-    // Sovrascrive/integra il dbMap per la stagione corrente con dati live
-    dbMap[liveSeasonKey] = {
-      season:      liveSeasonKey,
-      league:      cwlData.leagueNameIt || dbMap[liveSeasonKey]?.league || null,
-      position:    cwlData.ourPosition  || dbMap[liveSeasonKey]?.position || null,
-      stars:       ourGroup?.stars      ?? dbMap[liveSeasonKey]?.stars    ?? null,
-      destruction: ourGroup ? parseFloat((ourGroup.totalDestr / Math.max(ourGroup.warCount,1)).toFixed(2)) : (dbMap[liveSeasonKey]?.destruction ?? null),
-      attacks:     dbMap[liveSeasonKey]?.attacks ?? null,
-      isLive:      cwlData.state !== 'ended',
-      groupStandings: cwlData.groupStandings || null
+    dbMap[key] = {
+      season:         key,
+      league:         cwlData.leagueNameIt          || dbMap[key]?.league      || null,
+      position:       cwlData.ourPosition            || dbMap[key]?.position    || null,
+      stars:          ourGroup?.stars                ?? dbMap[key]?.stars       ?? warSeasonMap[key]?.totalStars ?? null,
+      destruction:    ourGroup?.warCount
+                        ? parseFloat((ourGroup.totalDestr / ourGroup.warCount).toFixed(2))
+                        : (dbMap[key]?.destruction ?? null),
+      attacks:        dbMap[key]?.attacks            ?? null,
+      wins:           warSeasonMap[key]?.wins        ?? null,
+      losses:         warSeasonMap[key]?.losses      ?? null,
+      isLive:         cwlData.state !== 'ended',
+      groupStandings: cwlData.groupStandings         || null
     };
   }
 
-  // ── Merge finale ──────────────────────────────────────────────────────────
-  const merged = Object.values(dbMap).map(d => ({
-    season:         d.season,
-    league:         d.league         || null,
-    position:       d.position       || null,
-    stars:          d.stars          ?? null,
-    destruction:    d.destruction    ?? null,
-    attacks:        d.attacks        ?? null,
-    isLive:         d.isLive         || false,
-    groupStandings: d.groupStandings || null
-  }));
+  // ── Merge: unifica DB + war-log ───────────────────────────────────────────
+  // Il war-log aggiunge stagioni non ancora in DB (stelle/distruz. da API)
+  const allSeasons = new Set([...Object.keys(dbMap), ...Object.keys(warSeasonMap)]);
+  const merged = [];
+  allSeasons.forEach(s => {
+    const d  = dbMap[s]       || {};
+    const wl = warSeasonMap[s] || {};
+    merged.push({
+      season:         s,
+      league:         d.league      || null,
+      position:       d.position    || null,
+      stars:          d.stars       ?? (wl.warCount ? wl.totalStars : null),
+      destruction:    d.destruction ?? (wl.warCount ? parseFloat((wl.totalDestr / wl.warCount).toFixed(2)) : null),
+      attacks:        d.attacks     ?? null,
+      wins:           d.wins        ?? wl.wins    ?? null,
+      losses:         d.losses      ?? wl.losses  ?? null,
+      isLive:         d.isLive      || false,
+      groupStandings: d.groupStandings || null
+    });
+  });
   merged.sort((a, b) => b.season.localeCompare(a.season));
 
   renderCwlSeasons(merged, cwlSeasonsTableMissing);
@@ -2271,6 +2302,10 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
         </div>`;
       }
 
+      const wldHtml = (s.wins != null)
+        ? `<div class="cwl-wld"><span class="cwl-wld-v">${s.wins}V</span><span class="cwl-wld-s">${s.losses}S</span>${s.draws ? `<span class="cwl-wld-p">${s.draws}P</span>` : ''}</div>`
+        : '';
+
       html += `
       <div class="cwl-season-card" data-season="${s.season}" style="border-left-color:${leagueColor}">
         <div class="cwl-card-left">
@@ -2279,6 +2314,7 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
             <span class="cwl-league-icon">${icon}</span>
             <span class="cwl-league-name" style="color:${leagueColor}">${league || '<span style="color:var(--text-3);font-style:italic">—</span>'}</span>
           </div>
+          ${wldHtml}
         </div>
         <div class="cwl-card-mid">
           ${pos
