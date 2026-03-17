@@ -208,68 +208,6 @@
                     </div>
                 </div>
 
-                <!-- ── MODAL: Aggiungi / Modifica Stagione CWL ── -->
-                <div id="cwl-season-modal" class="cwl-modal-overlay" style="display:none" onclick="if(event.target===this)closeCwlModal()">
-                    <div class="cwl-modal-box" id="cwl-season-form">
-                        <div class="cwl-modal-header">
-                            <span id="cwl-modal-title" class="cwl-modal-title">➕ Aggiungi Stagione</span>
-                            <button class="cwl-modal-close" onclick="closeCwlModal()" title="Chiudi">✕</button>
-                        </div>
-                        <div class="cwl-modal-body">
-                            <div class="form-group">
-                                <label class="form-label">Stagione (mese)</label>
-                                <input type="month" id="cs-season" class="form-input">
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Lega CWL</label>
-                                <select id="cs-league" class="form-input">
-                                    <option value="">— seleziona —</option>
-                                    <option>Bronzo III</option><option>Bronzo II</option><option>Bronzo I</option>
-                                    <option>Argento III</option><option>Argento II</option><option>Argento I</option>
-                                    <option>Oro III</option><option>Oro II</option><option>Oro I</option>
-                                    <option>Cristallo III</option><option>Cristallo II</option><option>Cristallo I</option>
-                                    <option>Maestro III</option><option>Maestro II</option><option>Maestro I</option>
-                                    <option>Campione III</option><option>Campione II</option><option>Campione I</option>
-                                    <option>Titano III</option><option>Titano II</option><option>Titano I</option>
-                                    <option>Leggenda</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Posizione finale (1–8)</label>
-                                <select id="cs-position" class="form-input">
-                                    <option value="">— seleziona —</option>
-                                    <option value="1">1° — Primo</option>
-                                    <option value="2">2° — Secondo</option>
-                                    <option value="3">3° — Terzo</option>
-                                    <option value="4">4° — Quarto</option>
-                                    <option value="5">5° — Quinto</option>
-                                    <option value="6">6° — Sesto</option>
-                                    <option value="7">7° — Settimo</option>
-                                    <option value="8">8° — Ottavo</option>
-                                </select>
-                            </div>
-                            <div class="form-row-2">
-                                <div class="form-group">
-                                    <label class="form-label">Stelle totali</label>
-                                    <input type="number" id="cs-stars" class="form-input" placeholder="es. 420" min="0">
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label">Distruzione (%)</label>
-                                    <input type="number" id="cs-destruction" class="form-input" placeholder="es. 85.3" min="0" max="100" step="0.1">
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label class="form-label">Attacchi totali</label>
-                                <input type="number" id="cs-attacks" class="form-input" placeholder="es. 49" min="0">
-                            </div>
-                            <p id="cs-msg" style="font-size:0.82rem;min-height:1.2em;margin-top:0.25rem"></p>
-                        </div>
-                        <div class="cwl-modal-footer">
-                            <button class="btn-secondary btn-sm" onclick="closeCwlModal()">Annulla</button>
-                            <button class="btn-primary" onclick="saveCwlSeason()">💾 Salva</button>
-                        </div>
-                    </div>
-                </div>
             </section>
 
 

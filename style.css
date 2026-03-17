@@ -1495,6 +1495,66 @@ tbody tr:last-child td { border-bottom: none; }
     letter-spacing: 0.4px;
 }
 
+/* Live badge piccolo nelle card */
+.cwl-live-badge-sm {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #4caf50;
+    background: rgba(76,175,80,0.1);
+    border: 1px solid rgba(76,175,80,0.3);
+    border-radius: 3px;
+    padding: 0.05rem 0.35rem;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+    animation: pulse-green 2s infinite;
+}
+@keyframes pulse-green {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+.cwl-live-dot-sm {
+    width: 6px; height: 6px;
+    background: #4caf50;
+    border-radius: 50%;
+    display: inline-block;
+    animation: pulse-green 1.5s infinite;
+}
+
+/* Classifica gruppo CWL (card stagione live) */
+.cwl-group-standings {
+    width: 100%;
+    margin-top: 0.75rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--border);
+    flex-basis: 100%;
+}
+.cwl-group-title {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-3);
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+}
+.cwl-group-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.18rem 0.35rem;
+    border-radius: 2px;
+    font-size: 0.78rem;
+}
+.cwl-group-row--us {
+    background: rgba(201,169,98,0.1);
+    border: 1px solid rgba(201,169,98,0.2);
+    border-radius: 3px;
+}
+.cwl-group-rank { font-size: 0.85rem; min-width: 1.5rem; }
+.cwl-group-name { flex: 1; color: var(--text-2); }
+.cwl-group-row--us .cwl-group-name { color: var(--gold); }
+.cwl-group-stars { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--text-2); }
+.cwl-group-destr { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--text-3); }
+
 /* Banner lega corrente */
 .cwl-current-banner {
     display: flex;

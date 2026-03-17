@@ -2115,145 +2115,97 @@ async function loadCwlSeasons() {
   const div = document.getElementById('cwl-seasons-list');
   div.innerHTML = `<div id="cwl-api-loading" class="cwl-loading-bar">
     <span class="cwl-loading-spinner">⏳</span>
-    <span id="cwl-load-msg">Connessione a Supabase…</span>
+    <span id="cwl-load-msg">Connessione…</span>
+    <span id="cwl-load-timer" style="margin-left:0.5rem;font-variant-numeric:tabular-nums"></span>
   </div>`;
 
-  // Fetch clan info in parallelo (lega corrente)
-  fetch('/api/clan-info').then(r => r.ok ? r.json() : null).then(info => {
-    if (!info?.warLeague) return;
-    const leagueEn = info.warLeague.name || '';
-    const leagueIt = LEAGUE_EN_TO_IT[leagueEn] || leagueEn;
-    const color = LEAGUE_COLOR[leagueIt] || 'var(--gold)';
-    const icon  = LEAGUE_ICON[leagueIt] || '🏆';
-    const banner = document.getElementById('cwl-current-league-banner');
-    if (banner) {
-      banner.innerHTML = `<span class="cwl-banner-label">Lega attuale</span>
-        <span class="cwl-banner-league" style="color:${color}">${icon} ${leagueIt}</span>`;
-      banner.style.borderColor = color;
-      banner.style.display = 'flex';
-    }
-  }).catch(() => {});
+  // Timer visibile
+  let elapsed = 0;
+  const timerInterval = setInterval(() => {
+    elapsed++;
+    const el = document.getElementById('cwl-load-timer');
+    if (el) el.textContent = `${elapsed}s`;
+  }, 1000);
 
-  // 1) Carica subito dati da DB (cwl_seasons) — mostra immediatamente ciò che abbiamo
-  const dbMap = {};
-  let cwlSeasonsTableMissing = false;
-  try {
-    const { data: dbSeasons, error: dbErr } = await db
-      .from('cwl_seasons')
-      .select('*')
-      .order('season', { ascending: false });
-    if (dbErr?.code === '42P01') {
-      cwlSeasonsTableMissing = true;
-    } else if (dbErr) {
-      _cwlStatus(`⚠ Supabase: ${dbErr.message}`, true);
-    }
-    (dbSeasons || []).forEach(s => { dbMap[s.season] = s; });
-  } catch (e) {
-    _cwlStatus(`⚠ Errore Supabase: ${e.message}`, true);
-  }
+  // Lancia in parallelo: Supabase (storico) + cwl-stats (stagione corrente) + clan-info (banner)
+  const [dbResult, cwlResult, clanResult] = await Promise.allSettled([
+    db.from('cwl_seasons').select('*').order('season', { ascending: false }),
+    fetch('/api/cwl-stats').then(r => r.ok ? r.json() : null),
+    fetch('/api/clan-info').then(r => r.ok ? r.json() : null)
+  ]);
 
-  // Se abbiamo dati DB, mostrarli subito senza aspettare il proxy
-  if (Object.keys(dbMap).length > 0) {
-    const quickMerged = Object.keys(dbMap).map(s => {
-      const d = dbMap[s];
-      return { season: s, league: d.league||null, position: d.position||null,
-               stars: d.stars??null, destruction: d.destruction??null,
-               attacks: d.attacks??null, wins: null, losses: null, warCount: null, fromApiOnly: false };
-    });
-    quickMerged.sort((a, b) => b.season.localeCompare(a.season));
-    renderCwlSeasons(quickMerged, null);
-    // Aggiorna label per indicare che si sta ancora caricando API
-    div.insertAdjacentHTML('afterbegin',
-      `<div id="cwl-api-loading" class="cwl-loading-bar">
-        <span class="cwl-loading-spinner">⏳</span>
-        <span id="cwl-load-msg">Connessione al proxy CoC (può richiedere fino a 30s)…</span>
-        <span id="cwl-load-timer" style="margin-left:0.5rem;font-variant-numeric:tabular-nums"></span>
-       </div>`);
-    // Avvia timer visibile
-    let elapsed = 0;
-    const timerEl = document.getElementById('cwl-load-timer');
-    const timerInterval = setInterval(() => {
-      elapsed++;
-      if (timerEl) timerEl.textContent = `${elapsed}s`;
-    }, 1000);
-    window._cwlLoadTimer = timerInterval;
-  } else {
-    _cwlStatus('⏳ Nessun dato in DB — connessione al proxy CoC…', false);
-  }
-
-  // 2) Tenta API war-log con timeout (15s) — aggiorna la vista se risponde
-  let apiSeasonMap = {};
-  let warLogError = null;
-  try {
-    const ctrl = new AbortController();
-    const tid = setTimeout(() => ctrl.abort(), 15000); // 15s timeout
-    _cwlStatus && _cwlStatus('⏳ Richiesta war-log inviata…', false);
-    const r = await fetch('/api/war-log', { signal: ctrl.signal });
-    clearTimeout(tid);
-    if (window._cwlLoadTimer) { clearInterval(window._cwlLoadTimer); window._cwlLoadTimer = null; }
-    const warData = await r.json();
-    if (warData.reason === 'accessDenied') {
-      warLogError = 'accessDenied';
-    } else if (!r.ok) {
-      warLogError = `server_${r.status}`;
-    } else {
-      (warData.items || []).filter(w => {
-        const wt = (w.warType || '').toLowerCase();
-        const maxStars = (w.teamSize || 50) * 3;
-        const isAggregated = (w.clan?.stars || 0) > maxStars;
-        return (wt === 'cwl' || !w.opponent?.name || isAggregated) && w.endTime;
-      }).forEach(w => {
-        // Estrae stagione da endTime: "20250315T000000.000Z" → "2025-03"
-        const s = w.endTime.slice(0, 4) + '-' + w.endTime.slice(4, 6);
-        if (!apiSeasonMap[s]) apiSeasonMap[s] = { wins: 0, losses: 0, draws: 0, totalStars: 0, totalDestr: 0, warCount: 0 };
-        const ws = apiSeasonMap[s];
-        ws.warCount++;
-        if (w.result === 'win') ws.wins++;
-        else if (w.result === 'lose') ws.losses++;
-        else ws.draws++;
-        ws.totalStars += w.clan?.stars || 0;
-        ws.totalDestr += w.clan?.destructionPercentage || 0;
-      });
-    }
-  } catch (e) {
-    if (window._cwlLoadTimer) { clearInterval(window._cwlLoadTimer); window._cwlLoadTimer = null; }
-    warLogError = e.name === 'AbortError' ? 'timeout' : `network: ${e.message}`;
-  }
-
-  // Rimuovi indicatore di caricamento API
+  clearInterval(timerInterval);
   document.getElementById('cwl-api-loading')?.remove();
 
-  // Merge: tutte le stagioni trovate da DB o API
-  const allKeys = new Set([...Object.keys(dbMap), ...Object.keys(apiSeasonMap)]);
-  const merged = [];
-  allKeys.forEach(s => {
-    const d = dbMap[s] || {};
-    const a = apiSeasonMap[s] || {};
-    merged.push({
-      season:      s,
-      league:      d.league || null,
-      position:    d.position || null,
-      stars:       d.stars ?? (a.warCount ? a.totalStars : null),
-      destruction: d.destruction ?? (a.warCount ? parseFloat((a.totalDestr / a.warCount).toFixed(1)) : null),
-      attacks:     d.attacks ?? null,
-      wins:        a.wins || null,
-      losses:      a.losses || null,
-      warCount:    a.warCount || null,
-      fromApiOnly: !d.league && !!a.warCount
-    });
-  });
+  // ── Banner lega corrente (da clan-info o da cwl-stats) ────────────────────
+  const clanInfo   = clanResult.status === 'fulfilled' ? clanResult.value : null;
+  const cwlData    = cwlResult.status  === 'fulfilled' ? cwlResult.value  : null;
+  const leagueEnBanner = cwlData?.leagueNameEn || clanInfo?.warLeague?.name || null;
+  const leagueItBanner = leagueEnBanner ? (LEAGUE_EN_TO_IT[leagueEnBanner] || leagueEnBanner) : null;
+  const banner = document.getElementById('cwl-current-league-banner');
+  if (banner && leagueItBanner) {
+    const color = LEAGUE_COLOR[leagueItBanner] || 'var(--gold)';
+    const icon  = LEAGUE_ICON[leagueItBanner] || '🏆';
+    const isLive = cwlData && cwlData.state !== 'notInWar' && cwlData.state !== 'ended';
+    banner.innerHTML = `
+      <span class="cwl-banner-label">Lega attuale</span>
+      <span class="cwl-banner-league" style="color:${color}">${icon} ${leagueItBanner}</span>
+      ${isLive ? '<span class="cwl-live-dot-sm"></span><span style="font-size:0.72rem;color:#4caf50;font-weight:700">CWL IN CORSO</span>' : ''}`;
+    banner.style.borderColor = color;
+    banner.style.display = 'flex';
+  }
+
+  // ── Dati Supabase ─────────────────────────────────────────────────────────
+  const dbRaw = dbResult.status === 'fulfilled' ? dbResult.value : { data: null, error: null };
+  const dbMap = {};
+  let cwlSeasonsTableMissing = false;
+  if (dbRaw.error?.code === '42P01') {
+    cwlSeasonsTableMissing = true;
+  }
+  (dbRaw.data || []).forEach(s => { dbMap[s.season] = s; });
+
+  // ── Stagione corrente da cwl-stats ────────────────────────────────────────
+  // Il proxy auto-salva su Supabase quando state==='ended', quindi dopo
+  // la CWL i dati saranno già nel DB. Usiamo cwlData per la stagione LIVE.
+  let liveSeasonKey = null;
+  if (cwlData && cwlData.state !== 'notInWar' && cwlData.season) {
+    liveSeasonKey = cwlData.season; // es. "2025-03"
+    const ourGroup = (cwlData.groupStandings || []).find(c => c.tag === '#2J2VLPP9R');
+    // Sovrascrive/integra il dbMap per la stagione corrente con dati live
+    dbMap[liveSeasonKey] = {
+      season:      liveSeasonKey,
+      league:      cwlData.leagueNameIt || dbMap[liveSeasonKey]?.league || null,
+      position:    cwlData.ourPosition  || dbMap[liveSeasonKey]?.position || null,
+      stars:       ourGroup?.stars      ?? dbMap[liveSeasonKey]?.stars    ?? null,
+      destruction: ourGroup ? parseFloat((ourGroup.totalDestr / Math.max(ourGroup.warCount,1)).toFixed(2)) : (dbMap[liveSeasonKey]?.destruction ?? null),
+      attacks:     dbMap[liveSeasonKey]?.attacks ?? null,
+      isLive:      cwlData.state !== 'ended',
+      groupStandings: cwlData.groupStandings || null
+    };
+  }
+
+  // ── Merge finale ──────────────────────────────────────────────────────────
+  const merged = Object.values(dbMap).map(d => ({
+    season:         d.season,
+    league:         d.league         || null,
+    position:       d.position       || null,
+    stars:          d.stars          ?? null,
+    destruction:    d.destruction    ?? null,
+    attacks:        d.attacks        ?? null,
+    isLive:         d.isLive         || false,
+    groupStandings: d.groupStandings || null
+  }));
   merged.sort((a, b) => b.season.localeCompare(a.season));
-  renderCwlSeasons(merged, warLogError, cwlSeasonsTableMissing);
+
+  renderCwlSeasons(merged, cwlSeasonsTableMissing);
 }
 
-function renderCwlSeasons(seasons, warLogError, tablesMissing) {
-  const canEdit = window._canEdit;
+function renderCwlSeasons(seasons, tablesMissing) {
   const div = document.getElementById('cwl-seasons-list');
 
   if (!seasons.length) {
-    let msg = '';
     if (tablesMissing) {
-      msg = `<div class="cwl-empty">
+      div.innerHTML = `<div class="cwl-empty">
         <span style="font-size:2rem">🗄️</span>
         <p style="color:var(--gold)">Tabella <code>cwl_seasons</code> non trovata su Supabase.</p>
         <p style="font-size:0.83rem;color:#5a7a98">Crea la tabella nel SQL Editor di Supabase:</p>
@@ -2270,16 +2222,9 @@ ALTER TABLE cwl_seasons ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "cwl_seasons_read"  ON cwl_seasons FOR SELECT USING (true);
 CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING (true) WITH CHECK (true);</pre>
       </div>`;
-    } else if (warLogError === 'accessDenied') {
-      msg = '<p class="wl-err">⚠️ War log privato. Vai nelle impostazioni clan su CoC → imposta il Registro di guerra su "Pubblico".</p>';
-    } else if (warLogError === 'timeout') {
-      msg = `<p class="wl-err">⏳ Timeout (15s): il proxy Render è in avvio (cold start). Attendi ~30s e riprova. <button class="btn-secondary btn-sm" onclick="loadCwlSeasons()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
-    } else if (warLogError) {
-      msg = `<p class="wl-err">⚠️ Errore API: <code style="font-size:0.8em;background:var(--bg-1);padding:0.1em 0.3em;border-radius:3px">${warLogError}</code> <button class="btn-secondary btn-sm" onclick="loadCwlSeasons()" style="margin-left:0.5rem">🔄 Riprova</button></p>`;
     } else {
-      msg = '<div class="cwl-empty"><span style="font-size:2rem">⚔️</span><p>Nessuna stagione CWL trovata nel war log.</p><p style="font-size:0.83rem;color:#5a7a98">Le stagioni appariranno automaticamente man mano che vengono giocate.</p></div>';
+      div.innerHTML = '<div class="cwl-empty"><span style="font-size:2rem">⚔️</span><p>Nessuna stagione CWL registrata.</p><p style="font-size:0.83rem;color:#5a7a98">I dati vengono salvati automaticamente al termine di ogni CWL.</p></div>';
     }
-    div.innerHTML = msg;
     return;
   }
 
@@ -2293,57 +2238,54 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
 
   let html = '';
   Object.keys(byYear).sort((a,b) => b - a).forEach(year => {
-    html += `<div class="cwl-year-group">
-      <div class="cwl-year-label">${year}</div>`;
+    html += `<div class="cwl-year-group"><div class="cwl-year-label">${year}</div>`;
     byYear[year].forEach(s => {
-      const pos        = s.position ? +s.position : null;
-      const posLabel   = pos ? (POS_LABELS[pos] || `${pos}°`) : null;
-      const posColor   = pos ? (POS_COLORS[pos] || '#5a7a98') : '#5a7a98';
-      const posMedal   = pos ? (POS_MEDALS[pos] || `${pos}°`) : null;
-      const league     = s.league || null;
-      const icon       = league ? (LEAGUE_ICON[league] || '🏅') : '⚔️';
-      const leagueColor= league ? (LEAGUE_COLOR[league] || 'var(--gold)') : 'var(--border)';
-      const stars      = s.stars != null ? s.stars : null;
-      const destr      = s.destruction != null ? (+s.destruction).toFixed(1) : null;
-      const attacks    = s.attacks != null ? s.attacks : null;
+      const pos         = s.position ? +s.position : null;
+      const posLabel    = pos ? (POS_LABELS[pos] || `${pos}°`) : null;
+      const posColor    = pos ? (POS_COLORS[pos] || '#5a7a98') : '#5a7a98';
+      const posMedal    = pos ? (POS_MEDALS[pos] || `${pos}°`) : null;
+      const league      = s.league || null;
+      const icon        = league ? (LEAGUE_ICON[league] || '🏅') : '⚔️';
+      const leagueColor = league ? (LEAGUE_COLOR[league] || 'var(--gold)') : 'var(--border)';
+      const stars       = s.stars != null ? s.stars : null;
+      const destr       = s.destruction != null ? (+s.destruction).toFixed(1) : null;
+      const attacks     = s.attacks != null ? s.attacks : null;
+      const liveBadge   = s.isLive
+        ? `<span class="cwl-live-badge-sm">🟢 LIVE</span>` : '';
 
-      // W/L/D da API warlog
-      const hasWld = s.wins != null;
-      const wldHtml = hasWld
-        ? `<div class="cwl-wld">
-            <span class="cwl-wld-v">${s.wins}V</span>
-            <span class="cwl-wld-s">${s.losses}S</span>
-            ${s.draws ? `<span class="cwl-wld-p">${s.draws}P</span>` : ''}
-           </div>`
-        : '';
-
-      const apiOnlyBadge = s.fromApiOnly
-        ? `<span class="cwl-api-badge">via API</span>` : '';
-
-      const editBtn = canEdit && !s.fromApiOnly
-        ? `<button class="cwl-card-edit-btn" onclick="editCwlSeason('${s.season}','${(s.league||'').replace(/'/g,"\\'")}',${pos||''},${s.stars ?? ''},${s.destruction ?? ''},${s.attacks ?? ''})" title="Modifica stagione">✏️</button>` : '';
-      const addBtn = canEdit && s.fromApiOnly
-        ? `<button class="cwl-card-edit-btn cwl-card-add-btn" onclick="prefillCwlSeason('${s.season}')" title="Aggiungi dati stagione">➕</button>` : '';
+      // Classifica gruppo (se disponibile — stagione live)
+      let groupHtml = '';
+      if (s.groupStandings?.length) {
+        groupHtml = `<div class="cwl-group-standings">
+          <div class="cwl-group-title">Classifica gruppo</div>
+          ${s.groupStandings.map((c, i) => {
+            const isMyClan = c.tag === '#2J2VLPP9R';
+            const rankMedal = ['🥇','🥈','🥉'][i] || `${i+1}.`;
+            return `<div class="cwl-group-row${isMyClan ? ' cwl-group-row--us' : ''}">
+              <span class="cwl-group-rank">${rankMedal}</span>
+              <span class="cwl-group-name">${isMyClan ? `<strong>${c.name}</strong>` : c.name}</span>
+              <span class="cwl-group-stars">⭐ ${c.stars}</span>
+              <span class="cwl-group-destr">💥 ${c.warCount ? (c.totalDestr/c.warCount).toFixed(0) : 0}%</span>
+            </div>`;
+          }).join('')}
+        </div>`;
+      }
 
       html += `
       <div class="cwl-season-card" data-season="${s.season}" style="border-left-color:${leagueColor}">
-        <!-- Sinistra: mese + lega -->
         <div class="cwl-card-left">
-          <div class="cwl-card-month">${seasonLabel(s.season)}${apiOnlyBadge}</div>
+          <div class="cwl-card-month">${seasonLabel(s.season)} ${liveBadge}</div>
           <div class="cwl-card-league">
             <span class="cwl-league-icon">${icon}</span>
-            <span class="cwl-league-name" style="color:${leagueColor}">${league || '<span style="color:var(--text-3);font-style:italic">Non registrata</span>'}</span>
+            <span class="cwl-league-name" style="color:${leagueColor}">${league || '<span style="color:var(--text-3);font-style:italic">—</span>'}</span>
           </div>
-          ${wldHtml}
         </div>
-        <!-- Centro: posizione -->
         <div class="cwl-card-mid">
           ${pos
             ? `<div class="cwl-pos-medal">${posMedal}</div>
                <div class="cwl-pos-badge" style="color:${posColor}">${posLabel}</div>`
-            : `<div class="cwl-pos-unknown">—</div><div class="cwl-pos-sub">pos. sconosciuta</div>`}
+            : `<div class="cwl-pos-unknown">—</div><div class="cwl-pos-sub">in attesa</div>`}
         </div>
-        <!-- Destra: statistiche -->
         <div class="cwl-card-right">
           <div class="cwl-card-stats">
             <div class="cwl-stat-item">
@@ -2357,85 +2299,12 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
             ${attacks != null ? `<div class="cwl-stat-item"><span class="cwl-stat-val">⚔️ ${attacks}</span><span class="cwl-stat-lbl">Attacchi</span></div>` : ''}
           </div>
         </div>
-        ${editBtn}${addBtn}
+        ${groupHtml}
       </div>`;
     });
     html += '</div>';
   });
 
   div.innerHTML = html;
-}
-
-// Apre il modal CWL season
-function openCwlModal(title) {
-  document.getElementById('cwl-modal-title').textContent = title;
-  document.getElementById('cs-msg').textContent = '';
-  document.getElementById('cwl-season-modal').style.display = 'flex';
-  document.getElementById('cs-season').focus();
-}
-function closeCwlModal() {
-  document.getElementById('cwl-season-modal').style.display = 'none';
-}
-
-// Pre-compila form per nuova stagione da API (solo stagione pre-impostata)
-function prefillCwlSeason(season) {
-  document.getElementById('cs-season').value = season;
-  document.getElementById('cs-league').value = '';
-  document.getElementById('cs-position').value = '';
-  document.getElementById('cs-stars').value = '';
-  document.getElementById('cs-destruction').value = '';
-  document.getElementById('cs-attacks').value = '';
-  openCwlModal('➕ Aggiungi Stagione ' + season);
-}
-
-// ── Salva stagione (nuova o aggiornamento) ────────────────────────────────────
-async function saveCwlSeason() {
-  const season      = document.getElementById('cs-season').value;
-  const league      = document.getElementById('cs-league').value;
-  const position    = +document.getElementById('cs-position').value;
-  const stars       = document.getElementById('cs-stars').value ? +document.getElementById('cs-stars').value : null;
-  const destruction = document.getElementById('cs-destruction').value ? +document.getElementById('cs-destruction').value : null;
-  const attacks     = document.getElementById('cs-attacks').value ? +document.getElementById('cs-attacks').value : null;
-  const msg         = document.getElementById('cs-msg');
-
-  if (!season || !league || !position) {
-    msg.textContent = '⚠️ Stagione, Lega e Posizione sono obbligatori.';
-    msg.style.color = '#f0a500';
-    return;
-  }
-
-  msg.textContent = 'Salvataggio…';
-  msg.style.color = '#5a7a98';
-
-  const { error } = await db.from('cwl_seasons').upsert(
-    { season, league, position, stars, destruction, attacks },
-    { onConflict: 'season' }
-  );
-
-  if (error) {
-    msg.textContent = '✗ ' + error.message;
-    msg.style.color = '#ef5350';
-  } else {
-    msg.textContent = '✅ Stagione salvata!';
-    msg.style.color = '#4caf50';
-    setTimeout(() => {
-      closeCwlModal();
-      loadCwlSeasons();
-    }, 700);
-  }
-}
-
-// Pre-compila form per modifica
-function editCwlSeason(season, league, position, stars, destruction, attacks) {
-  document.getElementById('cs-season').value = season;
-  const sel = document.getElementById('cs-league');
-  for (let i = 0; i < sel.options.length; i++) {
-    if (sel.options[i].value === league) { sel.selectedIndex = i; break; }
-  }
-  document.getElementById('cs-position').value    = position || '';
-  document.getElementById('cs-stars').value       = stars !== null && stars !== undefined ? stars : '';
-  document.getElementById('cs-destruction').value = destruction !== null && destruction !== undefined ? destruction : '';
-  document.getElementById('cs-attacks').value     = attacks !== null && attacks !== undefined ? attacks : '';
-  openCwlModal('✏️ Modifica Stagione ' + season);
 }
 
