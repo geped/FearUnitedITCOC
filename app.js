@@ -2164,6 +2164,8 @@ async function loadCwlSeasons() {
   (dbRaw.data || []).forEach(s => { dbMap[s.season] = s; });
 
   // ── War-log: aggrega guerre CWL per stagione (stelle + distruzione) ───────
+  // NOTA: destruction nel gioco = sum(war.destructionPercentage) × teamSize
+  // Esempio: 638.9 × 15 = 9583 (il valore mostrato nel gioco CoC)
   const warSeasonMap = {};
   const warLogData = warLogResult.status === 'fulfilled' ? warLogResult.value : null;
   if (warLogData && !warLogData.reason) {
@@ -2175,9 +2177,10 @@ async function loadCwlSeasons() {
     }).forEach(w => {
       // Estrae stagione da endTime: "20250315T000000.000Z" → "2025-03"
       const s = w.endTime.slice(0, 4) + '-' + w.endTime.slice(4, 6);
-      if (!warSeasonMap[s]) warSeasonMap[s] = { wins: 0, losses: 0, draws: 0, totalStars: 0, totalDestr: 0, warCount: 0 };
+      if (!warSeasonMap[s]) warSeasonMap[s] = { wins: 0, losses: 0, draws: 0, totalStars: 0, totalDestr: 0, teamSize: 0, warCount: 0 };
       const ws = warSeasonMap[s];
       ws.warCount++;
+      ws.teamSize = ws.teamSize || w.teamSize || 15; // cattura teamSize (costante per tutta la stagione)
       if (w.result === 'win') ws.wins++;
       else if (w.result === 'lose') ws.losses++;
       else ws.draws++;
@@ -2195,8 +2198,9 @@ async function loadCwlSeasons() {
       league:         cwlData.leagueNameIt          || dbMap[key]?.league      || null,
       position:       cwlData.ourPosition            || dbMap[key]?.position    || null,
       stars:          ourGroup?.stars                ?? dbMap[key]?.stars       ?? warSeasonMap[key]?.totalStars ?? null,
+      // destruction live = totalDestr × teamSize (stesso formato del gioco)
       destruction:    ourGroup?.warCount
-                        ? parseFloat((ourGroup.totalDestr / ourGroup.warCount).toFixed(2))
+                        ? Math.round(ourGroup.totalDestr * (cwlData.teamSize || 15))
                         : (dbMap[key]?.destruction ?? null),
       attacks:        dbMap[key]?.attacks            ?? null,
       wins:           warSeasonMap[key]?.wins        ?? null,
@@ -2218,7 +2222,8 @@ async function loadCwlSeasons() {
       league:         d.league      || null,
       position:       d.position    || null,
       stars:          d.stars       ?? (wl.warCount ? wl.totalStars : null),
-      destruction:    d.destruction ?? (wl.warCount ? parseFloat((wl.totalDestr / wl.warCount).toFixed(2)) : null),
+      // destruction = totalDestr × teamSize  (come mostrato nel gioco CoC, non una percentuale)
+      destruction:    d.destruction ?? (wl.warCount ? Math.round(wl.totalDestr * (wl.teamSize || 15)) : null),
       attacks:        d.attacks     ?? null,
       wins:           d.wins        ?? wl.wins    ?? null,
       losses:         d.losses      ?? wl.losses  ?? null,
@@ -2279,7 +2284,8 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
       const icon        = league ? (LEAGUE_ICON[league] || '🏅') : '⚔️';
       const leagueColor = league ? (LEAGUE_COLOR[league] || 'var(--gold)') : 'var(--border)';
       const stars       = s.stars != null ? s.stars : null;
-      const destr       = s.destruction != null ? (+s.destruction).toFixed(1) : null;
+      // destruction è un numero intero (come nel gioco CoC), non una percentuale
+      const destr       = s.destruction != null ? Math.round(+s.destruction) : null;
       const attacks     = s.attacks != null ? s.attacks : null;
       const liveBadge   = s.isLive
         ? `<span class="cwl-live-badge-sm">🟢 LIVE</span>` : '';
@@ -2329,7 +2335,7 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
               <span class="cwl-stat-lbl">Stelle</span>
             </div>
             <div class="cwl-stat-item">
-              <span class="cwl-stat-val">${destr != null ? '💥 '+destr+'%' : '—'}</span>
+              <span class="cwl-stat-val">${destr != null ? '💥 '+destr : '—'}</span>
               <span class="cwl-stat-lbl">Distruz.</span>
             </div>
             ${attacks != null ? `<div class="cwl-stat-item"><span class="cwl-stat-val">⚔️ ${attacks}</span><span class="cwl-stat-lbl">Attacchi</span></div>` : ''}

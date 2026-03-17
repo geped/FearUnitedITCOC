@@ -90,7 +90,7 @@ async function getCwlStats() {
     // Inizializza classifica gruppo (tutti e 8 i clan)
     const groupMap = {};
     (lg.clans || []).forEach(c => {
-        groupMap[c.tag] = { tag: c.tag, name: c.name, stars: 0, totalDestr: 0, warCount: 0 };
+        groupMap[c.tag] = { tag: c.tag, name: c.name, stars: 0, totalDestr: 0, warCount: 0, teamSize: 0 };
     });
 
     // 3. Fetch tutte le guerre in parallelo
@@ -116,6 +116,7 @@ async function getCwlStats() {
                 groupMap[side.tag].stars      += side.stars || 0;
                 groupMap[side.tag].totalDestr += side.destructionPercentage || 0;
                 groupMap[side.tag].warCount++;
+                groupMap[side.tag].teamSize    = groupMap[side.tag].teamSize || war.teamSize || 15;
             }
         }
 
@@ -149,7 +150,9 @@ async function getCwlStats() {
 
     // 5. Auto-salva su Supabase quando CWL terminata con tutti i round
     if (lg.state === 'ended' && ourPosition && ourGroup?.warCount >= 7 && lg.season) {
-        const avgDestr = parseFloat((ourGroup.totalDestr / ourGroup.warCount).toFixed(2));
+        // destruction = totalDestr × teamSize  (formato CoC, numero intero)
+        const teamSize   = ourGroup.teamSize || 15;
+        const gameDestr  = Math.round(ourGroup.totalDestr * teamSize);
         try {
             await supabase().from('cwl_seasons').upsert(
                 {
@@ -157,7 +160,7 @@ async function getCwlStats() {
                     league:      leagueNameIt,
                     position:    ourPosition,
                     stars:       ourGroup.stars,
-                    destruction: avgDestr
+                    destruction: gameDestr
                 },
                 { onConflict: 'season' }
             );
@@ -170,6 +173,7 @@ async function getCwlStats() {
         leagueNameEn,
         leagueNameIt,
         ourPosition,
+        teamSize:      (groupMap[COC_CLAN_TAG_RAW]?.teamSize) || 15,
         groupStandings,
         players
     };
