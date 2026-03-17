@@ -94,6 +94,13 @@ async function getCwlStats() {
     });
 
     // 3. Fetch tutte le guerre in parallelo
+    // Mappa warTag → roundNumber (1-7)
+    const warTagToRound = {};
+    (lg.rounds || []).forEach((round, idx) => {
+        (round.warTags || []).filter(t => t !== '#0').forEach(wt => {
+            warTagToRound[wt] = idx + 1;
+        });
+    });
     const warTags = (lg.rounds || []).flatMap(r => r.warTags || []).filter(t => t !== '#0');
     const warResults = await Promise.all(warTags.map(async wt => {
         const r = await fetch(
@@ -105,7 +112,11 @@ async function getCwlStats() {
         return w.state === 'notInWar' ? null : w;
     }));
 
-    for (const war of warResults) {
+    const roundsData = [];
+
+    for (let i = 0; i < warTags.length; i++) {
+        const wt  = warTags[i];
+        const war = warResults[i];
         if (!war) continue;
         const isEnded = war.state === 'warEnded' || war.state === 'ended';
 
@@ -134,7 +145,61 @@ async function getCwlStats() {
                 stats[m.tag].attacks_made++;
             });
         });
+
+        // Raccoglie dati per turno (roundsData)
+        const theirSide = war.clan?.tag === COC_CLAN_TAG_RAW ? war.opponent : war.clan;
+        let result = 'ongoing';
+        if (isEnded) {
+            const os = ourSide.stars || 0, ts = theirSide?.stars || 0;
+            if (os > ts) result = 'win';
+            else if (os < ts) result = 'lose';
+            else if ((ourSide.destructionPercentage||0) > (theirSide?.destructionPercentage||0)) result = 'win';
+            else if ((ourSide.destructionPercentage||0) < (theirSide?.destructionPercentage||0)) result = 'lose';
+            else result = 'draw';
+        } else if (war.state === 'preparation') {
+            result = 'preparation';
+        }
+        // Mappa tag difensori → nome+TH per lookup negli attacchi
+        const defenderMap = {};
+        (theirSide?.members || []).forEach(m => {
+            defenderMap[m.tag] = { name: m.name, thLevel: m.townHallLevel };
+        });
+        // Anche i nostri membri sono possibili difensori (attacchi ricevuti)
+        (ourSide.members || []).forEach(m => {
+            defenderMap[m.tag] = { name: m.name, thLevel: m.townHallLevel };
+        });
+        const ourMembers = (ourSide.members || []).map(m => ({
+            tag: m.tag, name: m.name, thLevel: m.townHallLevel,
+            attacks: (m.attacks || []).map(a => ({
+                defenderTag: a.defenderTag, stars: a.stars,
+                destruction: a.destructionPercentage, order: a.order
+            }))
+        }));
+        roundsData.push({
+            roundNumber:      warTagToRound[wt] || (roundsData.length + 1),
+            state:            war.state,
+            endTime:          war.endTime,
+            teamSize:         war.teamSize || 15,
+            attacksPerMember: war.attacksPerMember || 1,
+            result,
+            clan: {
+                tag: ourSide.tag, name: ourSide.name, badgeUrls: ourSide.badgeUrls,
+                stars: ourSide.stars || 0,
+                destruction: +(ourSide.destructionPercentage || 0).toFixed(2),
+                attacksUsed: ourMembers.reduce((s, m) => s + m.attacks.length, 0),
+                members: ourMembers
+            },
+            opponent: {
+                tag: theirSide?.tag, name: theirSide?.name || 'Sconosciuto',
+                badgeUrls: theirSide?.badgeUrls,
+                stars: theirSide?.stars || 0,
+                destruction: +(theirSide?.destructionPercentage || 0).toFixed(2),
+                attacksUsed: (theirSide?.members || []).reduce((s, m) => s + (m.attacks?.length || 0), 0)
+            },
+            defenderMap
+        });
     }
+    roundsData.sort((a, b) => (a.roundNumber || 0) - (b.roundNumber || 0));
 
     // 4. Calcola classifica finale (stelle desc → distruzione desc)
     const groupStandings = Object.values(groupMap).sort((a, b) =>
@@ -175,7 +240,8 @@ async function getCwlStats() {
         ourPosition,
         teamSize:      (groupMap[COC_CLAN_TAG_RAW]?.teamSize) || 15,
         groupStandings,
-        players
+        players,
+        roundsData
     };
 }
 

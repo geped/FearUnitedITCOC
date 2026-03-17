@@ -2068,31 +2068,30 @@ const LEAGUE_EN_TO_IT = {
   'Legend League':'Leggenda'
 };
 
-// Icone trofeo CWL — immagini ufficiali CoC (fonte: Fandom CoC wiki, stile in-game)
-// Titan e Legend non hanno varianti CWL-era su Fandom, usano CDN CoC come fallback
+// Icone trofeo CWL — immagini locali (scaricate da Fandom CoC wiki, stile in-game)
 const LEAGUE_BADGE = {
-  'Bronzo III':   'https://static.wikia.nocookie.net/clashofclans/images/c/c2/WarBronzeIII.png/revision/latest?cb=20181024140226',
-  'Bronzo II':    'https://static.wikia.nocookie.net/clashofclans/images/b/b9/WarBronzeII.png/revision/latest?cb=20181024140226',
-  'Bronzo I':     'https://static.wikia.nocookie.net/clashofclans/images/b/b1/WarBronzeI.png/revision/latest?cb=20181024140226',
-  'Argento III':  'https://static.wikia.nocookie.net/clashofclans/images/d/d5/WarSilverIII.png/revision/latest?cb=20181024140226',
-  'Argento II':   'https://static.wikia.nocookie.net/clashofclans/images/e/e6/WarSilverII.png/revision/latest?cb=20181024140226',
-  'Argento I':    'https://static.wikia.nocookie.net/clashofclans/images/c/c3/WarSilverI.png/revision/latest?cb=20181024140226',
-  'Oro III':      'https://static.wikia.nocookie.net/clashofclans/images/4/42/WarGoldIII.png/revision/latest?cb=20181024140227',
-  'Oro II':       'https://static.wikia.nocookie.net/clashofclans/images/f/f2/WarGoldII.png/revision/latest?cb=20181024140227',
-  'Oro I':        'https://static.wikia.nocookie.net/clashofclans/images/2/2f/WarGoldI.png/revision/latest?cb=20181024140227',
-  'Cristallo III':'https://static.wikia.nocookie.net/clashofclans/images/c/c9/WarCrystalIII.png/revision/latest?cb=20181024140227',
-  'Cristallo II': 'https://static.wikia.nocookie.net/clashofclans/images/5/5a/WarCrystalII.png/revision/latest?cb=20181024140227',
-  'Cristallo I':  'https://static.wikia.nocookie.net/clashofclans/images/8/8a/WarCrystalI.png/revision/latest?cb=20181024140227',
-  'Maestro III':  'https://static.wikia.nocookie.net/clashofclans/images/3/39/WarMasterIII.png/revision/latest?cb=20181024140227',
-  'Maestro II':   'https://static.wikia.nocookie.net/clashofclans/images/8/81/WarMasterII.png/revision/latest?cb=20181024140227',
-  'Maestro I':    'https://static.wikia.nocookie.net/clashofclans/images/5/53/WarMasterI.png/revision/latest?cb=20181024140227',
-  'Campione III': 'https://static.wikia.nocookie.net/clashofclans/images/d/d2/WarChampionIII.png/revision/latest?cb=20181024140228',
-  'Campione II':  'https://static.wikia.nocookie.net/clashofclans/images/b/bd/WarChampionII.png/revision/latest?cb=20181024140228',
-  'Campione I':   'https://static.wikia.nocookie.net/clashofclans/images/e/e3/WarChampionI.png/revision/latest?cb=20181024140228',
-  'Titano III':   'https://api-assets.clashofclans.com/warleagues/64/48000018.png',
-  'Titano II':    'https://api-assets.clashofclans.com/warleagues/64/48000019.png',
-  'Titano I':     'https://api-assets.clashofclans.com/warleagues/64/48000020.png',
-  'Leggenda':     'https://api-assets.clashofclans.com/warleagues/64/48000021.png',
+  'Bronzo III':   '/leagues/BronzoIII.png',
+  'Bronzo II':    '/leagues/BronzoII.png',
+  'Bronzo I':     '/leagues/BronzoI.png',
+  'Argento III':  '/leagues/ArgentoIII.png',
+  'Argento II':   '/leagues/ArgentoII.png',
+  'Argento I':    '/leagues/ArgentoI.png',
+  'Oro III':      '/leagues/OroIII.png',
+  'Oro II':       '/leagues/OroII.png',
+  'Oro I':        '/leagues/OroI.png',
+  'Cristallo III':'/leagues/CristalloIII.png',
+  'Cristallo II': '/leagues/CristalloII.png',
+  'Cristallo I':  '/leagues/CristalloI.png',
+  'Maestro III':  '/leagues/MaestroIII.png',
+  'Maestro II':   '/leagues/MaestroII.png',
+  'Maestro I':    '/leagues/MaestroI.png',
+  'Campione III': '/leagues/CampioneIII.png',
+  'Campione II':  '/leagues/CampioneII.png',
+  'Campione I':   '/leagues/CampioneI.png',
+  'Titano III':   '/leagues/TitanoIII.png',
+  'Titano II':    '/leagues/TitanoII.png',
+  'Titano I':     '/leagues/TitanoI.png',
+  'Leggenda':     '/leagues/Leggenda.png',
 };
 // Fallback emoji (usato se img non carica)
 const LEAGUE_ICON = {
@@ -2197,6 +2196,7 @@ async function loadCwlSeasons() {
   // NOTA: destruction nel gioco = sum(war.destructionPercentage) × teamSize
   // Esempio: 638.9 × 15 = 9583 (il valore mostrato nel gioco CoC)
   const warSeasonMap = {};
+  const warSeasonRoundsMap = {}; // season → array di round (per il modal dettaglio)
   const warLogData = warLogResult.status === 'fulfilled' ? warLogResult.value : null;
   if (warLogData && !warLogData.reason) {
     (warLogData.items || []).filter(w => {
@@ -2210,12 +2210,38 @@ async function loadCwlSeasons() {
       if (!warSeasonMap[s]) warSeasonMap[s] = { wins: 0, losses: 0, draws: 0, totalStars: 0, totalDestr: 0, teamSize: 0, warCount: 0 };
       const ws = warSeasonMap[s];
       ws.warCount++;
-      ws.teamSize = ws.teamSize || w.teamSize || 15; // cattura teamSize (costante per tutta la stagione)
+      ws.teamSize = ws.teamSize || w.teamSize || 15;
       if (w.result === 'win') ws.wins++;
       else if (w.result === 'lose') ws.losses++;
       else ws.draws++;
       ws.totalStars += w.clan?.stars || 0;
       ws.totalDestr += w.clan?.destructionPercentage || 0;
+      // Accumula dati per-turno (usati nel modal dettaglio stagione)
+      if (!warSeasonRoundsMap[s]) warSeasonRoundsMap[s] = [];
+      warSeasonRoundsMap[s].push({
+        endTime:          w.endTime,
+        result:           w.result,
+        teamSize:         w.teamSize || 15,
+        attacksPerMember: w.attacksPerMember || 1,
+        clan: {
+          stars:       w.clan?.stars || 0,
+          destruction: +(w.clan?.destructionPercentage || 0).toFixed(2),
+          attacksUsed: w.clan?.attacks || 0
+        },
+        opponent: {
+          name:        w.opponent?.name || 'Sconosciuto',
+          tag:         w.opponent?.tag,
+          badgeUrls:   w.opponent?.badgeUrls,
+          stars:       w.opponent?.stars || 0,
+          destruction: +(w.opponent?.destructionPercentage || 0).toFixed(2),
+          attacksUsed: w.opponent?.attacks || 0
+        }
+      });
+    });
+    // Ordina i turni di ogni stagione in ordine cronologico
+    Object.keys(warSeasonRoundsMap).forEach(s => {
+      warSeasonRoundsMap[s].sort((a, b) => a.endTime.localeCompare(b.endTime));
+      warSeasonRoundsMap[s].forEach((r, i) => { r.roundNumber = i + 1; });
     });
   }
 
@@ -2236,12 +2262,17 @@ async function loadCwlSeasons() {
       wins:           warSeasonMap[key]?.wins        ?? null,
       losses:         warSeasonMap[key]?.losses      ?? null,
       isLive:         cwlData.state !== 'ended',
-      groupStandings: cwlData.groupStandings         || null
+      groupStandings: cwlData.groupStandings         || null,
+      roundsData:     cwlData.roundsData             || null
     };
+    // Sostituisce i dati war-log per la stagione live con quelli più dettagliati da cwl-stats
+    if (cwlData.roundsData?.length) warSeasonRoundsMap[key] = cwlData.roundsData;
   }
 
+  // Salva globalmente per accesso dal modal dettaglio stagione
+  window._cwlSeasonRoundsMap = warSeasonRoundsMap;
+
   // ── Merge: unifica DB + war-log ───────────────────────────────────────────
-  // Il war-log aggiunge stagioni non ancora in DB (stelle/distruz. da API)
   const allSeasons = new Set([...Object.keys(dbMap), ...Object.keys(warSeasonMap)]);
   const merged = [];
   allSeasons.forEach(s => {
@@ -2252,17 +2283,18 @@ async function loadCwlSeasons() {
       league:         d.league      || null,
       position:       d.position    || null,
       stars:          d.stars       ?? (wl.warCount ? wl.totalStars : null),
-      // destruction = totalDestr × teamSize  (come mostrato nel gioco CoC, non una percentuale)
       destruction:    d.destruction ?? (wl.warCount ? Math.round(wl.totalDestr * (wl.teamSize || 15)) : null),
       attacks:        d.attacks     ?? null,
       wins:           d.wins        ?? wl.wins    ?? null,
       losses:         d.losses      ?? wl.losses  ?? null,
       isLive:         d.isLive      || false,
-      groupStandings: d.groupStandings || null
+      groupStandings: d.groupStandings || null,
+      hasRounds:      !!(warSeasonRoundsMap[s]?.length)
     });
   });
   merged.sort((a, b) => b.season.localeCompare(a.season));
 
+  window._cwlMergedSeasons = merged;
   renderCwlSeasons(merged, cwlSeasonsTableMissing);
 }
 
@@ -2339,7 +2371,7 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
       }
 
       html += `
-      <div class="cwl-season-card" data-season="${s.season}" style="border-left-color:${leagueColor}">
+      <div class="cwl-season-card${s.hasRounds ? ' cwl-season-card--clickable' : ''}" data-season="${s.season}" style="border-left-color:${leagueColor}"${s.hasRounds ? ` onclick="openCwlSeasonDetail('${s.season}')" title="Clicca per vedere i turni"` : ''}>
         <div class="cwl-card-left">
           <div class="cwl-card-month">${seasonLabel(s.season)} ${liveBadge}</div>
           <div class="cwl-card-league">
@@ -2369,11 +2401,206 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
           </div>
         </div>
         ${groupHtml}
+        ${s.hasRounds ? `<div class="cwl-card-detail-hint">⚔ Vedi turni →</div>` : ''}
       </div>`;
     });
     html += '</div>';
   });
 
   div.innerHTML = html;
+}
+
+// ── Modal Dettaglio Stagione CWL ──────────────────────────────────────────────
+
+function openCwlSeasonDetail(season) {
+  const rounds = (window._cwlSeasonRoundsMap || {})[season] || [];
+  if (!rounds.length) return;
+
+  // Recupera la season card per gruppoStandings e meta info
+  const card = document.querySelector(`.cwl-season-card[data-season="${season}"]`);
+  const league   = card?.dataset?.league  || null;
+  const position = card?.dataset?.pos     || null;
+
+  // Cerca groupStandings dalla stagione (se live)
+  let groupStandings = null;
+  const allMerged = window._cwlMergedSeasons || [];
+  const seasonObj  = allMerged.find(s => s.season === season);
+  if (seasonObj?.groupStandings) groupStandings = seasonObj.groupStandings;
+
+  _renderCwlDetailModal(season, rounds, groupStandings, seasonObj);
+}
+
+function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
+  // Rimuove modal esistente
+  document.getElementById('cwl-detail-modal')?.remove();
+
+  const league   = seasonObj?.league   || null;
+  const position = seasonObj?.position || null;
+  const isLive   = seasonObj?.isLive   || false;
+  const badgeUrl = league ? (LEAGUE_BADGE[league] || null) : null;
+  const leagueColor = league ? (LEAGUE_COLOR[league] || 'var(--gold)') : 'var(--gold)';
+  const posMedal = position ? (POS_MEDALS[+position] || `${position}°`) : null;
+  const posLabel = position ? (POS_LABELS[+position]  || `${position}°`) : null;
+
+  // ── Group Standings ──
+  let standingsHtml = '';
+  if (groupStandings?.length) {
+    standingsHtml = `
+    <div class="cdm-standings">
+      <div class="cdm-section-title">Classifica gruppo</div>
+      <div class="cdm-standings-list">
+        ${groupStandings.map((c, i) => {
+          const isUs = c.tag === '#2J2VLPP9R';
+          const medal = ['🥇','🥈','🥉'][i] || `${i+1}.`;
+          const clBadge = c.badgeUrls?.small ? `<img src="${c.badgeUrls.small}" class="cdm-clan-badge" alt="">` : '<span class="cdm-clan-badge-ph">🛡️</span>';
+          return `<div class="cdm-standing-row${isUs ? ' cdm-standing-row--us' : ''}">
+            <span class="cdm-rank">${medal}</span>
+            ${clBadge}
+            <span class="cdm-clan-name${isUs ? ' cdm-clan-name--us' : ''}">${c.name}</span>
+            <span class="cdm-clan-stars">⭐ ${c.stars}</span>
+            <span class="cdm-clan-destr">💥 ${c.warCount ? (c.totalDestr/c.warCount).toFixed(1)+'%' : '—'}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  // ── Round Tabs ──
+  const RESULT_ICON = { win:'🟢', lose:'🔴', draw:'🟡', ongoing:'🔵', preparation:'⚪' };
+  const roundTabsHtml = rounds.map((r, i) => {
+    const icon = RESULT_ICON[r.result] || '⚪';
+    return `<button class="cdm-round-tab${i === 0 ? ' active' : ''}" onclick="_cwlSelectRound(${i})" id="cdm-tab-${i}">${icon} T${r.roundNumber || i+1}</button>`;
+  }).join('');
+
+  // ── Singolo turno HTML ──
+  function renderRound(r, idx) {
+    const RESULT_LABEL = { win:'VITTORIA', lose:'SCONFITTA', draw:'PAREGGIO', ongoing:'IN CORSO', preparation:'PREPARAZIONE' };
+    const RESULT_CLASS = { win:'cdm-result--win', lose:'cdm-result--lose', draw:'cdm-result--draw', ongoing:'cdm-result--ongoing', preparation:'cdm-result--prep' };
+    const resLabel = RESULT_LABEL[r.result] || '';
+    const resClass = RESULT_CLASS[r.result] || '';
+    const oppBadge = r.opponent?.badgeUrls?.small
+      ? `<img src="${r.opponent.badgeUrls.small}" class="cdm-war-badge" alt="">`
+      : '<span class="cdm-war-badge-ph">🛡️</span>';
+    const ourBadge = r.clan?.badgeUrls?.small
+      ? `<img src="${r.clan.badgeUrls.small}" class="cdm-war-badge" alt="">`
+      : '<span class="cdm-war-badge-ph">🛡️</span>';
+
+    // Tabella attacchi (solo se dati dettagliati disponibili)
+    let attacksHtml = '';
+    if (r.clan?.members?.length) {
+      const defMap = r.defenderMap || {};
+      // TH icon helper
+      const thImg = (lv) => lv ? `<img src="/th/level_${lv}.png" class="cdm-th-icon" alt="TH${lv}" onerror="this.style.display='none'">` : '';
+      const attackRows = r.clan.members.flatMap(m =>
+        m.attacks.map(a => {
+          const def = defMap[a.defenderTag] || { name: a.defenderTag, thLevel: null };
+          const stars = '⭐'.repeat(a.stars) + '☆'.repeat(3 - a.stars);
+          return `<tr>
+            <td class="cdm-atk-player">${thImg(m.thLevel)}<span>${m.name}</span></td>
+            <td class="cdm-atk-arrow">→</td>
+            <td class="cdm-atk-player">${thImg(def.thLevel)}<span>${def.name}</span></td>
+            <td class="cdm-atk-stars">${stars}</td>
+            <td class="cdm-atk-destr">${a.destruction.toFixed(1)}%</td>
+          </tr>`;
+        })
+      );
+      // Attacchi mancati
+      r.clan.members.forEach(m => {
+        const missing = (r.attacksPerMember || 1) - m.attacks.length;
+        for (let x = 0; x < missing; x++) {
+          attackRows.push(`<tr class="cdm-atk-missed">
+            <td class="cdm-atk-player">${thImg(m.thLevel)}<span>${m.name}</span></td>
+            <td class="cdm-atk-arrow">→</td>
+            <td class="cdm-atk-player"><span style="color:var(--text-3)">—</span></td>
+            <td colspan="2" style="color:var(--text-3);font-size:0.8rem">non attaccato</td>
+          </tr>`);
+        }
+      });
+      if (attackRows.length) {
+        attacksHtml = `
+        <div class="cdm-attacks-section">
+          <div class="cdm-section-title">Attacchi Fear United IT</div>
+          <div class="cdm-attacks-scroll">
+            <table class="cdm-attacks-table">
+              <thead><tr>
+                <th>Attaccante</th><th></th><th>Difensore</th><th>⭐</th><th>💥</th>
+              </tr></thead>
+              <tbody>${attackRows.join('')}</tbody>
+            </table>
+          </div>
+        </div>`;
+      }
+    }
+
+    return `<div class="cdm-round-panel" id="cdm-round-${idx}">
+      <div class="cdm-war-header">
+        <div class="cdm-war-side cdm-war-side--us">
+          ${ourBadge}
+          <div class="cdm-war-clan-name">Fear United IT</div>
+          <div class="cdm-war-stars">⭐ ${r.clan?.stars ?? '—'}</div>
+          <div class="cdm-war-destr">💥 ${r.clan?.destruction != null ? r.clan.destruction.toFixed(1)+'%' : '—'}</div>
+          <div class="cdm-war-attacks">⚔ ${r.clan?.attacksUsed ?? '—'}/${(r.teamSize||15) * (r.attacksPerMember||1)}</div>
+        </div>
+        <div class="cdm-war-vs">
+          <div class="cdm-war-result ${resClass}">${resLabel}</div>
+          <div class="cdm-war-vs-label">VS</div>
+        </div>
+        <div class="cdm-war-side cdm-war-side--opp">
+          ${oppBadge}
+          <div class="cdm-war-clan-name">${r.opponent?.name || '—'}</div>
+          <div class="cdm-war-stars">⭐ ${r.opponent?.stars ?? '—'}</div>
+          <div class="cdm-war-destr">💥 ${r.opponent?.destruction != null ? r.opponent.destruction.toFixed(1)+'%' : '—'}</div>
+          <div class="cdm-war-attacks">⚔ ${r.opponent?.attacksUsed ?? '—'}/${(r.teamSize||15) * (r.attacksPerMember||1)}</div>
+        </div>
+      </div>
+      ${attacksHtml}
+    </div>`;
+  }
+
+  const roundPanelsHtml = rounds.map((r, i) =>
+    `<div style="display:${i===0?'block':'none'}" id="cdm-rpanel-${i}">${renderRound(r, i)}</div>`
+  ).join('');
+
+  const leagueBadgeHtml = badgeUrl
+    ? `<img src="${badgeUrl}" class="cdm-header-badge" alt="${league||''}">`
+    : '';
+
+  const modal = document.createElement('div');
+  modal.id = 'cwl-detail-modal';
+  modal.className = 'cdm-overlay';
+  modal.innerHTML = `
+    <div class="cdm-box" onclick="event.stopPropagation()">
+      <div class="cdm-header">
+        <div class="cdm-header-left">
+          ${leagueBadgeHtml}
+          <div>
+            <div class="cdm-header-season">${seasonLabel(season)}${isLive ? ' <span class="cwl-live-badge-sm">🟢 LIVE</span>' : ''}</div>
+            ${league ? `<div class="cdm-header-league" style="color:${leagueColor}">${league}</div>` : ''}
+            ${posMedal ? `<div class="cdm-header-pos">${posMedal} ${posLabel}</div>` : ''}
+          </div>
+        </div>
+        <button class="cdm-close" onclick="closeCwlSeasonDetail()">✕</button>
+      </div>
+      ${standingsHtml}
+      <div class="cdm-section-title" style="margin-top:1rem">Turni</div>
+      <div class="cdm-round-tabs">${roundTabsHtml}</div>
+      <div class="cdm-round-content">${roundPanelsHtml}</div>
+    </div>`;
+
+  modal.addEventListener('click', closeCwlSeasonDetail);
+  document.body.appendChild(modal);
+  requestAnimationFrame(() => modal.classList.add('cdm-overlay--visible'));
+}
+
+function _cwlSelectRound(idx) {
+  document.querySelectorAll('.cdm-round-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+  document.querySelectorAll('[id^="cdm-rpanel-"]').forEach((p, i) => { p.style.display = i === idx ? 'block' : 'none'; });
+}
+
+function closeCwlSeasonDetail() {
+  const modal = document.getElementById('cwl-detail-modal');
+  if (!modal) return;
+  modal.classList.remove('cdm-overlay--visible');
+  modal.addEventListener('transitionend', () => modal.remove(), { once: true });
 }
 
