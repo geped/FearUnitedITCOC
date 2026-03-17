@@ -2442,6 +2442,24 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
   const posMedal = position ? (POS_MEDALS[+position] || `${position}°`) : null;
   const posLabel = position ? (POS_LABELS[+position]  || `${position}°`) : null;
 
+  // ── Normalizza sempre a 7 slot (turni 1-7) ──
+  // Per stagioni live: padda i round mancanti con placeholder "Da giocare"
+  // Per stagioni storiche (dati aggregati war-log): mostra round disponibili as-is
+  const hasDetailedData = rounds.some(r => r.defenderMap != null || r.clan?.members?.length);
+  const TOTAL_ROUNDS = 7;
+  let roundSlots;
+  if (isLive || hasDetailedData) {
+    // Stagione live o con dati dettagliati: forza 7 slot
+    roundSlots = [];
+    for (let i = 1; i <= TOTAL_ROUNDS; i++) {
+      const found = rounds.find(r => (r.roundNumber || 0) === i);
+      roundSlots.push(found || { roundNumber: i, upcoming: true });
+    }
+  } else {
+    // Stagione storica da war-log: mostra i dati disponibili (max 7)
+    roundSlots = rounds.slice(0, TOTAL_ROUNDS);
+  }
+
   // ── Group Standings ──
   let standingsHtml = '';
   if (groupStandings?.length) {
@@ -2466,14 +2484,26 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
   }
 
   // ── Round Tabs ──
-  const RESULT_ICON = { win:'🟢', lose:'🔴', draw:'🟡', ongoing:'🔵', preparation:'⚪' };
-  const roundTabsHtml = rounds.map((r, i) => {
-    const icon = RESULT_ICON[r.result] || '⚪';
-    return `<button class="cdm-round-tab${i === 0 ? ' active' : ''}" onclick="_cwlSelectRound(${i})" id="cdm-tab-${i}">${icon} T${r.roundNumber || i+1}</button>`;
+  const RESULT_ICON = { win:'🟢', lose:'🔴', draw:'🟡', ongoing:'🔵', preparation:'⚪', upcoming:'⬜' };
+  const roundTabsHtml = roundSlots.map((r, i) => {
+    const icon = r.upcoming ? '⬜' : (RESULT_ICON[r.result] || '⚪');
+    const tabClass = `cdm-round-tab${i === 0 ? ' active' : ''}${r.upcoming ? ' cdm-round-tab--upcoming' : ''}`;
+    return `<button class="${tabClass}" onclick="_cwlSelectRound(${i})" id="cdm-tab-${i}">${icon} T${r.roundNumber || i+1}</button>`;
   }).join('');
 
   // ── Singolo turno HTML ──
   function renderRound(r, idx) {
+    // Placeholder per round non ancora disputati
+    if (r.upcoming) {
+      return `<div class="cdm-round-panel cdm-round-upcoming" id="cdm-round-${idx}">
+        <div class="cdm-upcoming-msg">
+          <div class="cdm-upcoming-icon">⚔</div>
+          <div class="cdm-upcoming-label">Turno ${r.roundNumber} — Da giocare</div>
+          <div class="cdm-upcoming-sub">Questo turno non è ancora stato disputato</div>
+        </div>
+      </div>`;
+    }
+
     const RESULT_LABEL = { win:'VITTORIA', lose:'SCONFITTA', draw:'PAREGGIO', ongoing:'IN CORSO', preparation:'PREPARAZIONE' };
     const RESULT_CLASS = { win:'cdm-result--win', lose:'cdm-result--lose', draw:'cdm-result--draw', ongoing:'cdm-result--ongoing', preparation:'cdm-result--prep' };
     const resLabel = RESULT_LABEL[r.result] || '';
@@ -2485,27 +2515,27 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
       ? `<img src="${r.clan.badgeUrls.small}" class="cdm-war-badge" alt="">`
       : '<span class="cdm-war-badge-ph">🛡️</span>';
 
+    const fmtDestr = (v) => v != null ? v.toFixed(1) + '%' : '—';
+    const totalAtks = (r.teamSize || 15) * (r.attacksPerMember || 1);
+
     // Tabella attacchi (solo se dati dettagliati disponibili)
     let attacksHtml = '';
     if (r.clan?.members?.length) {
       const defMap = r.defenderMap || {};
-      // TH icon helper
       const thImg = (lv) => lv ? `<img src="/th/level_${lv}.png" class="cdm-th-icon" alt="TH${lv}" onerror="this.style.display='none'">` : '';
-      const attackRows = r.clan.members.flatMap(m =>
-        m.attacks.map(a => {
+      const attackRows = [];
+      r.clan.members.forEach(m => {
+        m.attacks.forEach(a => {
           const def = defMap[a.defenderTag] || { name: a.defenderTag, thLevel: null };
           const stars = '⭐'.repeat(a.stars) + '☆'.repeat(3 - a.stars);
-          return `<tr>
+          attackRows.push(`<tr>
             <td class="cdm-atk-player">${thImg(m.thLevel)}<span>${m.name}</span></td>
             <td class="cdm-atk-arrow">→</td>
             <td class="cdm-atk-player">${thImg(def.thLevel)}<span>${def.name}</span></td>
             <td class="cdm-atk-stars">${stars}</td>
             <td class="cdm-atk-destr">${a.destruction.toFixed(1)}%</td>
-          </tr>`;
-        })
-      );
-      // Attacchi mancati
-      r.clan.members.forEach(m => {
+          </tr>`);
+        });
         const missing = (r.attacksPerMember || 1) - m.attacks.length;
         for (let x = 0; x < missing; x++) {
           attackRows.push(`<tr class="cdm-atk-missed">
@@ -2538,8 +2568,8 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
           ${ourBadge}
           <div class="cdm-war-clan-name">Fear United IT</div>
           <div class="cdm-war-stars">⭐ ${r.clan?.stars ?? '—'}</div>
-          <div class="cdm-war-destr">💥 ${r.clan?.destruction != null ? r.clan.destruction.toFixed(1)+'%' : '—'}</div>
-          <div class="cdm-war-attacks">⚔ ${r.clan?.attacksUsed ?? '—'}/${(r.teamSize||15) * (r.attacksPerMember||1)}</div>
+          <div class="cdm-war-destr">💥 ${fmtDestr(r.clan?.destruction)}</div>
+          <div class="cdm-war-attacks">⚔ ${r.clan?.attacksUsed ?? '—'}/${totalAtks}</div>
         </div>
         <div class="cdm-war-vs">
           <div class="cdm-war-result ${resClass}">${resLabel}</div>
@@ -2549,15 +2579,15 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
           ${oppBadge}
           <div class="cdm-war-clan-name">${r.opponent?.name || '—'}</div>
           <div class="cdm-war-stars">⭐ ${r.opponent?.stars ?? '—'}</div>
-          <div class="cdm-war-destr">💥 ${r.opponent?.destruction != null ? r.opponent.destruction.toFixed(1)+'%' : '—'}</div>
-          <div class="cdm-war-attacks">⚔ ${r.opponent?.attacksUsed ?? '—'}/${(r.teamSize||15) * (r.attacksPerMember||1)}</div>
+          <div class="cdm-war-destr">💥 ${fmtDestr(r.opponent?.destruction)}</div>
+          <div class="cdm-war-attacks">⚔ ${r.opponent?.attacksUsed ?? '—'}/${totalAtks}</div>
         </div>
       </div>
       ${attacksHtml}
     </div>`;
   }
 
-  const roundPanelsHtml = rounds.map((r, i) =>
+  const roundPanelsHtml = roundSlots.map((r, i) =>
     `<div style="display:${i===0?'block':'none'}" id="cdm-rpanel-${i}">${renderRound(r, i)}</div>`
   ).join('');
 
