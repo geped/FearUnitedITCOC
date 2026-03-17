@@ -1446,8 +1446,153 @@ tbody tr:last-child td { border-bottom: none; }
     cursor: pointer;
     transition: color 0.15s, border-color 0.15s;
     flex-shrink: 0;
+    position: absolute;
+    top: 0.6rem;
+    right: 0.6rem;
 }
 .cwl-card-edit-btn:hover { color: var(--gold); border-color: var(--gold); }
+.cwl-card-add-btn { color: #5b9de0; border-color: rgba(91,157,224,0.35); }
+.cwl-card-add-btn:hover { color: #7aaccc; border-color: #7aaccc; }
+
+/* W/L/D badges */
+.cwl-wld { display: flex; gap: 0.35rem; margin-top: 0.3rem; font-size: 0.76rem; font-weight: 700; }
+.cwl-wld-v { color: #4caf50; }
+.cwl-wld-s { color: #ef5350; }
+.cwl-wld-p { color: var(--text-3); }
+
+/* "via API" badge */
+.cwl-api-badge {
+    font-size: 0.6rem;
+    background: rgba(91,157,224,0.1);
+    color: #7aaccc;
+    border: 1px solid rgba(91,157,224,0.22);
+    border-radius: 2px;
+    padding: 0.02rem 0.3rem;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+    font-weight: 600;
+}
+
+/* Posizione */
+.cwl-pos-medal { font-size: 1.6rem; line-height: 1; }
+.cwl-pos-unknown { font-size: 1.4rem; color: var(--text-3); line-height: 1; }
+.cwl-pos-sub { font-size: 0.65rem; color: var(--text-3); margin-top: 0.15rem; }
+
+/* Statistiche card */
+.cwl-card-stats { display: flex; gap: 0.85rem; flex-wrap: wrap; }
+.cwl-stat-item { display: flex; flex-direction: column; align-items: center; gap: 0.05rem; }
+.cwl-stat-val {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.83rem;
+    font-weight: 700;
+    color: var(--text);
+    white-space: nowrap;
+}
+.cwl-stat-lbl {
+    font-size: 0.6rem;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+/* Banner lega corrente */
+.cwl-current-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: var(--bg-1);
+    border: 1px solid var(--gold);
+    border-left-width: 4px;
+    border-radius: var(--radius);
+    padding: 0.6rem 1rem;
+    margin-bottom: 1rem;
+}
+.cwl-banner-label {
+    font-size: 0.7rem;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: 600;
+}
+.cwl-banner-league {
+    font-family: 'Lilita One', cursive;
+    font-size: 1.05rem;
+    font-weight: 700;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   CWL SEASON MODAL
+   ───────────────────────────────────────────────────────────── */
+.cwl-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.72);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    backdrop-filter: blur(2px);
+}
+.cwl-modal-box {
+    background: var(--bg-2);
+    border: 1px solid var(--border-2);
+    border-top: 3px solid var(--gold);
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 420px;
+    max-height: 90vh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+.cwl-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.9rem 1.1rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+.cwl-modal-title {
+    font-family: 'Lilita One', cursive;
+    font-size: 0.95rem;
+    color: var(--gold);
+}
+.cwl-modal-close {
+    background: none;
+    border: none;
+    color: var(--text-3);
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 0.2rem 0.4rem;
+    border-radius: var(--radius-sm);
+    transition: color 0.15s;
+}
+.cwl-modal-close:hover { color: var(--text); }
+.cwl-modal-body { padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.75rem; }
+.cwl-modal-footer {
+    padding: 0.75rem 1.1rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+.form-group { display: flex; flex-direction: column; gap: 0.3rem; }
+.form-label { font-size: 0.78rem; color: var(--text-2); font-weight: 600; }
+.form-input {
+    background: var(--bg-1);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 0.88rem;
+    padding: 0.45rem 0.65rem;
+    width: 100%;
+    transition: border-color 0.15s;
+    appearance: auto;
+}
+.form-input:focus { outline: none; border-color: var(--gold); }
+.form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 
 /* ─────────────────────────────────────────────────────────────
    BONUS CWL — ASSIGN SECTION

@@ -2054,15 +2054,40 @@ const POS_LABELS = ['', '1° Primo', '2° Secondo', '3° Terzo', '4° Quarto',
                     '5° Quinto', '6° Sesto', '7° Settimo', '8° Ottavo'];
 const POS_COLORS = ['', '#f0a500','#c0cce8','#e07040','#7aaccc',
                     '#7a9ab8','#7a9ab8','#5a7a98','#5a7a98'];
+const POS_MEDALS = ['', '🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣'];
 
-// Mappa lega → emoji medaglia
+// Mappa nome lega inglese (API) → italiano (UI)
+const LEAGUE_EN_TO_IT = {
+  'Bronze League III':'Bronzo III','Bronze League II':'Bronzo II','Bronze League I':'Bronzo I',
+  'Silver League III':'Argento III','Silver League II':'Argento II','Silver League I':'Argento I',
+  'Gold League III':'Oro III','Gold League II':'Oro II','Gold League I':'Oro I',
+  'Crystal League III':'Cristallo III','Crystal League II':'Cristallo II','Crystal League I':'Cristallo I',
+  'Master League III':'Maestro III','Master League II':'Maestro II','Master League I':'Maestro I',
+  'Champion League III':'Campione III','Champion League II':'Campione II','Champion League I':'Campione I',
+  'Titan League III':'Titano III','Titan League II':'Titano II','Titan League I':'Titano I',
+  'Legend League':'Leggenda'
+};
+
+// Mappa lega → emoji + colore bordo
 const LEAGUE_ICON = {
-  'Cristallo I': '🔮', 'Cristallo II': '🔮', 'Cristallo III': '🔮',
-  'Oro I': '🥇', 'Oro II': '🥇', 'Oro III': '🥇',
-  'Maestro I': '🏅', 'Maestro II': '🏅', 'Maestro III': '🏅',
-  'Campione I': '🏆', 'Campione II': '🏆', 'Campione III': '🏆',
-  'Titano I': '💎', 'Titano II': '💎', 'Titano III': '💎',
-  'Leggenda': '👑'
+  'Bronzo III':'🥉','Bronzo II':'🥉','Bronzo I':'🥉',
+  'Argento III':'🔘','Argento II':'🔘','Argento I':'🔘',
+  'Oro III':'🥇','Oro II':'🥇','Oro I':'🥇',
+  'Cristallo III':'🔮','Cristallo II':'🔮','Cristallo I':'🔮',
+  'Maestro III':'🏅','Maestro II':'🏅','Maestro I':'🏅',
+  'Campione III':'🏆','Campione II':'🏆','Campione I':'🏆',
+  'Titano III':'💎','Titano II':'💎','Titano I':'💎',
+  'Leggenda':'👑'
+};
+const LEAGUE_COLOR = {
+  'Bronzo III':'#cd7f32','Bronzo II':'#cd7f32','Bronzo I':'#cd7f32',
+  'Argento III':'#a8b8c8','Argento II':'#a8b8c8','Argento I':'#a8b8c8',
+  'Oro III':'#f0a500','Oro II':'#f0a500','Oro I':'#f0a500',
+  'Cristallo III':'#5b9de0','Cristallo II':'#5b9de0','Cristallo I':'#7aaccc',
+  'Maestro III':'#9b59b6','Maestro II':'#9b59b6','Maestro I':'#b07ccc',
+  'Campione III':'#e74c3c','Campione II':'#e74c3c','Campione I':'#ff6060',
+  'Titano III':'#ff8c00','Titano II':'#ff8c00','Titano I':'#ffaa00',
+  'Leggenda':'#f0d060'
 };
 
 // Nomi mesi in italiano
@@ -2092,6 +2117,22 @@ async function loadCwlSeasons() {
     <span class="cwl-loading-spinner">⏳</span>
     <span id="cwl-load-msg">Connessione a Supabase…</span>
   </div>`;
+
+  // Fetch clan info in parallelo (lega corrente)
+  fetch('/api/clan-info').then(r => r.ok ? r.json() : null).then(info => {
+    if (!info?.warLeague) return;
+    const leagueEn = info.warLeague.name || '';
+    const leagueIt = LEAGUE_EN_TO_IT[leagueEn] || leagueEn;
+    const color = LEAGUE_COLOR[leagueIt] || 'var(--gold)';
+    const icon  = LEAGUE_ICON[leagueIt] || '🏆';
+    const banner = document.getElementById('cwl-current-league-banner');
+    if (banner) {
+      banner.innerHTML = `<span class="cwl-banner-label">Lega attuale</span>
+        <span class="cwl-banner-league" style="color:${color}">${icon} ${leagueIt}</span>`;
+      banner.style.borderColor = color;
+      banner.style.display = 'flex';
+    }
+  }).catch(() => {});
 
   // 1) Carica subito dati da DB (cwl_seasons) — mostra immediatamente ciò che abbiamo
   const dbMap = {};
@@ -2255,45 +2296,68 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
     html += `<div class="cwl-year-group">
       <div class="cwl-year-label">${year}</div>`;
     byYear[year].forEach(s => {
-      const pos      = s.position ? +s.position : null;
-      const posLabel = pos ? (POS_LABELS[pos] || `${pos}°`) : null;
-      const posColor = pos ? (POS_COLORS[pos] || '#5a7a98') : '#5a7a98';
-      const icon     = s.league ? (LEAGUE_ICON[s.league] || '🏅') : '⚔️';
-      const stars    = s.stars   != null ? s.stars   : '—';
-      const destr    = s.destruction != null ? (+s.destruction).toFixed(0) : '—';
+      const pos        = s.position ? +s.position : null;
+      const posLabel   = pos ? (POS_LABELS[pos] || `${pos}°`) : null;
+      const posColor   = pos ? (POS_COLORS[pos] || '#5a7a98') : '#5a7a98';
+      const posMedal   = pos ? (POS_MEDALS[pos] || `${pos}°`) : null;
+      const league     = s.league || null;
+      const icon       = league ? (LEAGUE_ICON[league] || '🏅') : '⚔️';
+      const leagueColor= league ? (LEAGUE_COLOR[league] || 'var(--gold)') : 'var(--border)';
+      const stars      = s.stars != null ? s.stars : null;
+      const destr      = s.destruction != null ? (+s.destruction).toFixed(1) : null;
+      const attacks    = s.attacks != null ? s.attacks : null;
 
-      // Record W/L/D da API
-      const wld = (s.wins != null)
-        ? `<span style="color:#4caf50;font-weight:700">${s.wins}V</span> <span style="color:#ef5350;font-weight:700">${s.losses}S</span>${s.draws ? ` <span style="color:#5a7a98">${s.draws}P</span>` : ''}`
+      // W/L/D da API warlog
+      const hasWld = s.wins != null;
+      const wldHtml = hasWld
+        ? `<div class="cwl-wld">
+            <span class="cwl-wld-v">${s.wins}V</span>
+            <span class="cwl-wld-s">${s.losses}S</span>
+            ${s.draws ? `<span class="cwl-wld-p">${s.draws}P</span>` : ''}
+           </div>`
         : '';
 
-      // Badge "solo API" - dati parziali da war log
       const apiOnlyBadge = s.fromApiOnly
-        ? `<span style="font-size:0.65rem;background:rgba(91,157,224,0.12);color:#7aaccc;border:1px solid rgba(91,157,224,0.25);border-radius:3px;padding:0.05rem 0.35rem;margin-left:0.4rem">via API</span>`
-        : '';
+        ? `<span class="cwl-api-badge">via API</span>` : '';
+
+      const editBtn = canEdit && !s.fromApiOnly
+        ? `<button class="cwl-card-edit-btn" onclick="editCwlSeason('${s.season}','${(s.league||'').replace(/'/g,"\\'")}',${pos||''},${s.stars ?? ''},${s.destruction ?? ''},${s.attacks ?? ''})" title="Modifica stagione">✏️</button>` : '';
+      const addBtn = canEdit && s.fromApiOnly
+        ? `<button class="cwl-card-edit-btn cwl-card-add-btn" onclick="prefillCwlSeason('${s.season}')" title="Aggiungi dati stagione">➕</button>` : '';
 
       html += `
-      <div class="cwl-season-card" data-season="${s.season}">
+      <div class="cwl-season-card" data-season="${s.season}" style="border-left-color:${leagueColor}">
+        <!-- Sinistra: mese + lega -->
         <div class="cwl-card-left">
           <div class="cwl-card-month">${seasonLabel(s.season)}${apiOnlyBadge}</div>
           <div class="cwl-card-league">
             <span class="cwl-league-icon">${icon}</span>
-            <span class="cwl-league-name">${s.league || 'Lega non registrata'}</span>
+            <span class="cwl-league-name" style="color:${leagueColor}">${league || '<span style="color:var(--text-3);font-style:italic">Non registrata</span>'}</span>
           </div>
-          ${wld ? `<div style="margin-top:0.25rem;font-size:0.78rem">${wld}</div>` : ''}
+          ${wldHtml}
         </div>
+        <!-- Centro: posizione -->
         <div class="cwl-card-mid">
-          <div class="cwl-pos-badge" style="color:${posColor}">${posLabel || '—'}</div>
-          <div class="cwl-league-sub">${s.league ? `Lega ${s.league}` : 'Dati parziali'}</div>
+          ${pos
+            ? `<div class="cwl-pos-medal">${posMedal}</div>
+               <div class="cwl-pos-badge" style="color:${posColor}">${posLabel}</div>`
+            : `<div class="cwl-pos-unknown">—</div><div class="cwl-pos-sub">pos. sconosciuta</div>`}
         </div>
+        <!-- Destra: statistiche -->
         <div class="cwl-card-right">
           <div class="cwl-card-stats">
-            <div><span class="cwl-card-stat-val">⭐ ${stars}</span><span class="cwl-card-stat-label">Stelle</span></div>
-            <div><span class="cwl-card-stat-val">💥 ${destr}%</span><span class="cwl-card-stat-label">Distruz.</span></div>
+            <div class="cwl-stat-item">
+              <span class="cwl-stat-val">${stars != null ? '⭐ '+stars : '—'}</span>
+              <span class="cwl-stat-lbl">Stelle</span>
+            </div>
+            <div class="cwl-stat-item">
+              <span class="cwl-stat-val">${destr != null ? '💥 '+destr+'%' : '—'}</span>
+              <span class="cwl-stat-lbl">Distruz.</span>
+            </div>
+            ${attacks != null ? `<div class="cwl-stat-item"><span class="cwl-stat-val">⚔️ ${attacks}</span><span class="cwl-stat-lbl">Attacchi</span></div>` : ''}
           </div>
         </div>
-        ${canEdit && !s.fromApiOnly ? `<button class="cwl-card-edit-btn" onclick="editCwlSeason('${s.season}','${(s.league||'').replace(/'/g,"\\'")}',${pos||''},${s.stars ?? ''},${s.destruction ?? ''},${s.attacks ?? ''})" title="Modifica">✏️</button>` : ''}
-        ${canEdit && s.fromApiOnly ? `<button class="cwl-card-edit-btn" onclick="prefillCwlSeason('${s.season}')" title="Aggiungi dati">➕</button>` : ''}
+        ${editBtn}${addBtn}
       </div>`;
     });
     html += '</div>';
@@ -2302,10 +2366,26 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
   div.innerHTML = html;
 }
 
-// Pre-compila form per nuova stagione da API
+// Apre il modal CWL season
+function openCwlModal(title) {
+  document.getElementById('cwl-modal-title').textContent = title;
+  document.getElementById('cs-msg').textContent = '';
+  document.getElementById('cwl-season-modal').style.display = 'flex';
+  document.getElementById('cs-season').focus();
+}
+function closeCwlModal() {
+  document.getElementById('cwl-season-modal').style.display = 'none';
+}
+
+// Pre-compila form per nuova stagione da API (solo stagione pre-impostata)
 function prefillCwlSeason(season) {
   document.getElementById('cs-season').value = season;
-  document.getElementById('cwl-season-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('cs-league').value = '';
+  document.getElementById('cs-position').value = '';
+  document.getElementById('cs-stars').value = '';
+  document.getElementById('cs-destruction').value = '';
+  document.getElementById('cs-attacks').value = '';
+  openCwlModal('➕ Aggiungi Stagione ' + season);
 }
 
 // ── Salva stagione (nuova o aggiornamento) ────────────────────────────────────
@@ -2338,14 +2418,10 @@ async function saveCwlSeason() {
   } else {
     msg.textContent = '✅ Stagione salvata!';
     msg.style.color = '#4caf50';
-    // Svuota form (eccetto lega) e aggiorna lista
-    document.getElementById('cs-season').value = '';
-    document.getElementById('cs-position').value = '';
-    document.getElementById('cs-stars').value = '';
-    document.getElementById('cs-destruction').value = '';
-    document.getElementById('cs-attacks').value = '';
-    setTimeout(() => { msg.textContent = ''; }, 3000);
-    loadCwlSeasons();
+    setTimeout(() => {
+      closeCwlModal();
+      loadCwlSeasons();
+    }, 700);
   }
 }
 
@@ -2360,7 +2436,6 @@ function editCwlSeason(season, league, position, stars, destruction, attacks) {
   document.getElementById('cs-stars').value       = stars !== null && stars !== undefined ? stars : '';
   document.getElementById('cs-destruction').value = destruction !== null && destruction !== undefined ? destruction : '';
   document.getElementById('cs-attacks').value     = attacks !== null && attacks !== undefined ? attacks : '';
-  // Scrolla al form
-  document.getElementById('cwl-season-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  openCwlModal('✏️ Modifica Stagione ' + season);
 }
 

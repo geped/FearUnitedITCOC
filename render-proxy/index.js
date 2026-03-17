@@ -159,6 +159,27 @@ app.get('/war-log', authMiddleware, async (_req, res) => {
     }
 });
 
+app.get('/clan-info', authMiddleware, async (_req, res) => {
+    try {
+        const r = await fetch(
+            `https://api.clashofclans.com/v1/clans/${COC_CLAN_TAG}`,
+            { headers: cocHeaders() }
+        );
+        const data = await r.json();
+        if (!r.ok) return res.status(r.status).json({ error: data.reason || 'CoC API error' });
+        res.json({
+            name: data.name,
+            tag: data.tag,
+            badgeUrls: data.badgeUrls,
+            clanLevel: data.clanLevel,
+            warLeague: data.warLeague || null,
+            members: data.members
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/clan-members', authMiddleware, async (_req, res) => {
     try {
         const r = await fetch(
