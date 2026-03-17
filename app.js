@@ -2173,11 +2173,16 @@ async function loadCwlSeasons() {
   const banner = document.getElementById('cwl-current-league-banner');
   if (banner && leagueItBanner) {
     const color  = LEAGUE_COLOR[leagueItBanner] || 'var(--gold)';
-    const badgeUrl = LEAGUE_BADGE[leagueItBanner] || null;
+    // Usa warLeague.id dall'API CoC per costruire l'URL badge direttamente (più affidabile della mappatura per nome)
+    const warLeagueId = clanInfo?.warLeague?.id || null;
+    const badgeUrl = warLeagueId
+      ? `https://api-assets.clashofclans.com/warleagues/64/${warLeagueId}.png`
+      : (LEAGUE_BADGE[leagueItBanner] || null);
     const isLive = cwlData && cwlData.state !== 'notInWar' && cwlData.state !== 'ended';
+    const fallbackIcon = LEAGUE_ICON[leagueItBanner] || '🏆';
     const bannerImg = badgeUrl
-      ? `<img src="${badgeUrl}" class="cwl-league-img" alt="${leagueItBanner}" onerror="this.style.display='none'">`
-      : '';
+      ? `<img src="${badgeUrl}" class="cwl-league-img" alt="${leagueItBanner}" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='')"><span class="cwl-league-fallback" style="display:none;font-size:1.4rem">${fallbackIcon}</span>`
+      : `<span style="font-size:1.4rem">${fallbackIcon}</span>`;
     banner.innerHTML = `
       <span class="cwl-banner-label">Lega attuale</span>
       <span class="cwl-banner-league" style="color:${color}">${bannerImg} ${leagueItBanner}</span>
@@ -2249,7 +2254,8 @@ async function loadCwlSeasons() {
     const wl = warSeasonMap[s] || {};
     merged.push({
       season:         s,
-      league:         d.league      || null,
+      // Se la stagione non è in Supabase (solo war-log), usa la lega corrente come fallback
+      league:         d.league      || (Object.keys(d).length === 0 && leagueItBanner ? leagueItBanner : null),
       position:       d.position    || null,
       stars:          d.stars       ?? (wl.warCount ? wl.totalStars : null),
       // destruction = totalDestr × teamSize  (come mostrato nel gioco CoC, non una percentuale)
@@ -2343,7 +2349,9 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
         <div class="cwl-card-left">
           <div class="cwl-card-month">${seasonLabel(s.season)} ${liveBadge}</div>
           <div class="cwl-card-league">
-            ${badgeUrl ? `<img src="${badgeUrl}" class="cwl-league-img" alt="${league}" onerror="this.style.display='none'">` : ''}
+            ${badgeUrl
+              ? `<img src="${badgeUrl}" class="cwl-league-img" alt="${league}" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='')"><span style="display:none;font-size:1.1rem">${LEAGUE_ICON[league] || '🏆'}</span>`
+              : (league ? `<span style="font-size:1.1rem">${LEAGUE_ICON[league] || '🏆'}</span>` : '')}
             <span class="cwl-league-name" style="color:${leagueColor}">${league || '<span style="color:var(--text-3);font-style:italic">—</span>'}</span>
           </div>
         </div>
