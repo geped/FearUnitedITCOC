@@ -223,7 +223,7 @@ app.get('/cwl-live', authMiddleware, async (_req, res) => {
 app.get('/war-log', authMiddleware, async (_req, res) => {
     try {
         const r = await fetch(
-            `https://api.clashofclans.com/v1/clans/${COC_CLAN_TAG}/warlog?limit=30`,
+            `https://api.clashofclans.com/v1/clans/${COC_CLAN_TAG}/warlog?limit=100`,
             { headers: cocHeaders() }
         );
         const data = await r.json();

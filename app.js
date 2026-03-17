@@ -2308,10 +2308,6 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
         </div>`;
       }
 
-      const wldHtml = (s.wins != null)
-        ? `<div class="cwl-wld"><span class="cwl-wld-v">${s.wins}V</span><span class="cwl-wld-s">${s.losses}S</span>${s.draws ? `<span class="cwl-wld-p">${s.draws}P</span>` : ''}</div>`
-        : '';
-
       html += `
       <div class="cwl-season-card" data-season="${s.season}" style="border-left-color:${leagueColor}">
         <div class="cwl-card-left">
@@ -2320,7 +2316,6 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
             <span class="cwl-league-icon">${icon}</span>
             <span class="cwl-league-name" style="color:${leagueColor}">${league || '<span style="color:var(--text-3);font-style:italic">—</span>'}</span>
           </div>
-          ${wldHtml}
         </div>
         <div class="cwl-card-mid">
           ${pos
