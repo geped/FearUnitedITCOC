@@ -2077,7 +2077,8 @@ function seasonLabel(season) {
 
 // Aggiorna il messaggio di stato nella barra di caricamento CWL
 function _cwlStatus(msg, isError) {
-  const el = document.getElementById('cwl-api-loading');
+  const msgEl = document.getElementById('cwl-load-msg');
+  const el = msgEl || document.getElementById('cwl-api-loading');
   if (el) {
     el.textContent = msg;
     el.style.color = isError ? 'var(--red)' : 'var(--text-3)';
@@ -2205,6 +2206,7 @@ async function loadCwlSeasons() {
 }
 
 function renderCwlSeasons(seasons, warLogError, tablesMissing) {
+  const canEdit = window._canEdit;
   const div = document.getElementById('cwl-seasons-list');
 
   if (!seasons.length) {
