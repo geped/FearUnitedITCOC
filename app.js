@@ -2254,8 +2254,7 @@ async function loadCwlSeasons() {
     const wl = warSeasonMap[s] || {};
     merged.push({
       season:         s,
-      // Se la stagione non è in Supabase (solo war-log), usa la lega corrente come fallback
-      league:         d.league      || (Object.keys(d).length === 0 && leagueItBanner ? leagueItBanner : null),
+      league:         d.league      || null,
       position:       d.position    || null,
       stars:          d.stars       ?? (wl.warCount ? wl.totalStars : null),
       // destruction = totalDestr × teamSize  (come mostrato nel gioco CoC, non una percentuale)

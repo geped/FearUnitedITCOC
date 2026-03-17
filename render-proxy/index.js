@@ -242,12 +242,18 @@ app.get('/clan-info', authMiddleware, async (_req, res) => {
         );
         const data = await r.json();
         if (!r.ok) return res.status(r.status).json({ error: data.reason || 'CoC API error' });
+
+        // Arricchisce warLeague con iconUrl costruito dall'ID (formato ufficiale CoC CDN)
+        const warLeague = data.warLeague
+            ? { ...data.warLeague, iconUrl: `https://api-assets.clashofclans.com/warleagues/64/${data.warLeague.id}.png` }
+            : null;
+
         res.json({
             name: data.name,
             tag: data.tag,
             badgeUrls: data.badgeUrls,
             clanLevel: data.clanLevel,
-            warLeague: data.warLeague || null,
+            warLeague,
             members: data.members
         });
     } catch (err) {
