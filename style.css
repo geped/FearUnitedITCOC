@@ -1397,6 +1397,8 @@ tbody tr:last-child td { border-bottom: none; }
     color: var(--text-2);
 }
 .cwl-league-icon { font-size: 1rem; }
+.cwl-league-img { width: 28px; height: 28px; object-fit: contain; vertical-align: middle; margin-right: 4px; }
+.cwl-banner-league .cwl-league-img { width: 36px; height: 36px; }
 .cwl-league-name { font-weight: 600; }
 
 .cwl-card-mid { text-align: center; min-width: 80px; }

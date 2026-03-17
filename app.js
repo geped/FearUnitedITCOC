@@ -2069,6 +2069,33 @@ const LEAGUE_EN_TO_IT = {
 };
 
 // Mappa lega → emoji + colore bordo
+// Badge ufficiali CoC (CDN pubblico, non serve autenticazione)
+// URL: https://api-assets.clashofclans.com/warleagues/64/{leagueId}.png
+const LEAGUE_BADGE = {
+  'Bronzo III':   'https://api-assets.clashofclans.com/warleagues/64/48000000.png',
+  'Bronzo II':    'https://api-assets.clashofclans.com/warleagues/64/48000001.png',
+  'Bronzo I':     'https://api-assets.clashofclans.com/warleagues/64/48000002.png',
+  'Argento III':  'https://api-assets.clashofclans.com/warleagues/64/48000003.png',
+  'Argento II':   'https://api-assets.clashofclans.com/warleagues/64/48000004.png',
+  'Argento I':    'https://api-assets.clashofclans.com/warleagues/64/48000005.png',
+  'Oro III':      'https://api-assets.clashofclans.com/warleagues/64/48000006.png',
+  'Oro II':       'https://api-assets.clashofclans.com/warleagues/64/48000007.png',
+  'Oro I':        'https://api-assets.clashofclans.com/warleagues/64/48000008.png',
+  'Cristallo III':'https://api-assets.clashofclans.com/warleagues/64/48000009.png',
+  'Cristallo II': 'https://api-assets.clashofclans.com/warleagues/64/48000010.png',
+  'Cristallo I':  'https://api-assets.clashofclans.com/warleagues/64/48000011.png',
+  'Maestro III':  'https://api-assets.clashofclans.com/warleagues/64/48000012.png',
+  'Maestro II':   'https://api-assets.clashofclans.com/warleagues/64/48000013.png',
+  'Maestro I':    'https://api-assets.clashofclans.com/warleagues/64/48000014.png',
+  'Campione III': 'https://api-assets.clashofclans.com/warleagues/64/48000015.png',
+  'Campione II':  'https://api-assets.clashofclans.com/warleagues/64/48000016.png',
+  'Campione I':   'https://api-assets.clashofclans.com/warleagues/64/48000017.png',
+  'Titano III':   'https://api-assets.clashofclans.com/warleagues/64/48000018.png',
+  'Titano II':    'https://api-assets.clashofclans.com/warleagues/64/48000019.png',
+  'Titano I':     'https://api-assets.clashofclans.com/warleagues/64/48000020.png',
+  'Leggenda':     'https://api-assets.clashofclans.com/warleagues/64/48000021.png',
+};
+// Fallback emoji (usato se img non carica)
 const LEAGUE_ICON = {
   'Bronzo III':'🥉','Bronzo II':'🥉','Bronzo I':'🥉',
   'Argento III':'🔘','Argento II':'🔘','Argento I':'🔘',
@@ -2146,11 +2173,14 @@ async function loadCwlSeasons() {
   const banner = document.getElementById('cwl-current-league-banner');
   if (banner && leagueItBanner) {
     const color  = LEAGUE_COLOR[leagueItBanner] || 'var(--gold)';
-    const icon   = LEAGUE_ICON[leagueItBanner]  || '🏆';
+    const badgeUrl = LEAGUE_BADGE[leagueItBanner] || null;
     const isLive = cwlData && cwlData.state !== 'notInWar' && cwlData.state !== 'ended';
+    const bannerImg = badgeUrl
+      ? `<img src="${badgeUrl}" class="cwl-league-img" alt="${leagueItBanner}" onerror="this.style.display='none'">`
+      : '';
     banner.innerHTML = `
       <span class="cwl-banner-label">Lega attuale</span>
-      <span class="cwl-banner-league" style="color:${color}">${icon} ${leagueItBanner}</span>
+      <span class="cwl-banner-league" style="color:${color}">${bannerImg} ${leagueItBanner}</span>
       ${isLive ? '<span class="cwl-live-dot-sm"></span><span style="font-size:0.72rem;color:#4caf50;font-weight:700">CWL IN CORSO</span>' : ''}`;
     banner.style.borderColor = color;
     banner.style.display = 'flex';
@@ -2281,7 +2311,7 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
       const posColor    = pos ? (POS_COLORS[pos] || '#5a7a98') : '#5a7a98';
       const posMedal    = pos ? (POS_MEDALS[pos] || `${pos}°`) : null;
       const league      = s.league || null;
-      const icon        = league ? (LEAGUE_ICON[league] || '🏅') : '⚔️';
+      const badgeUrl    = league ? (LEAGUE_BADGE[league] || null) : null;
       const leagueColor = league ? (LEAGUE_COLOR[league] || 'var(--gold)') : 'var(--border)';
       const stars       = s.stars != null ? s.stars : null;
       // destruction è un numero intero (come nel gioco CoC), non una percentuale
@@ -2313,7 +2343,7 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
         <div class="cwl-card-left">
           <div class="cwl-card-month">${seasonLabel(s.season)} ${liveBadge}</div>
           <div class="cwl-card-league">
-            <span class="cwl-league-icon">${icon}</span>
+            ${badgeUrl ? `<img src="${badgeUrl}" class="cwl-league-img" alt="${league}" onerror="this.style.display='none'">` : ''}
             <span class="cwl-league-name" style="color:${leagueColor}">${league || '<span style="color:var(--text-3);font-style:italic">—</span>'}</span>
           </div>
         </div>
