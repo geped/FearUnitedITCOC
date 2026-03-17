@@ -2068,28 +2068,27 @@ const LEAGUE_EN_TO_IT = {
   'Legend League':'Leggenda'
 };
 
-// Mappa lega → emoji + colore bordo
-// Badge ufficiali CoC (CDN pubblico, non serve autenticazione)
-// URL: https://api-assets.clashofclans.com/warleagues/64/{leagueId}.png
+// Icone trofeo CWL — immagini ufficiali CoC (fonte: Fandom CoC wiki, stile in-game)
+// Titan e Legend non hanno varianti CWL-era su Fandom, usano CDN CoC come fallback
 const LEAGUE_BADGE = {
-  'Bronzo III':   'https://api-assets.clashofclans.com/warleagues/64/48000000.png',
-  'Bronzo II':    'https://api-assets.clashofclans.com/warleagues/64/48000001.png',
-  'Bronzo I':     'https://api-assets.clashofclans.com/warleagues/64/48000002.png',
-  'Argento III':  'https://api-assets.clashofclans.com/warleagues/64/48000003.png',
-  'Argento II':   'https://api-assets.clashofclans.com/warleagues/64/48000004.png',
-  'Argento I':    'https://api-assets.clashofclans.com/warleagues/64/48000005.png',
-  'Oro III':      'https://api-assets.clashofclans.com/warleagues/64/48000006.png',
-  'Oro II':       'https://api-assets.clashofclans.com/warleagues/64/48000007.png',
-  'Oro I':        'https://api-assets.clashofclans.com/warleagues/64/48000008.png',
-  'Cristallo III':'https://api-assets.clashofclans.com/warleagues/64/48000009.png',
-  'Cristallo II': 'https://api-assets.clashofclans.com/warleagues/64/48000010.png',
-  'Cristallo I':  'https://api-assets.clashofclans.com/warleagues/64/48000011.png',
-  'Maestro III':  'https://api-assets.clashofclans.com/warleagues/64/48000012.png',
-  'Maestro II':   'https://api-assets.clashofclans.com/warleagues/64/48000013.png',
-  'Maestro I':    'https://api-assets.clashofclans.com/warleagues/64/48000014.png',
-  'Campione III': 'https://api-assets.clashofclans.com/warleagues/64/48000015.png',
-  'Campione II':  'https://api-assets.clashofclans.com/warleagues/64/48000016.png',
-  'Campione I':   'https://api-assets.clashofclans.com/warleagues/64/48000017.png',
+  'Bronzo III':   'https://static.wikia.nocookie.net/clashofclans/images/c/c2/WarBronzeIII.png/revision/latest?cb=20181024140226',
+  'Bronzo II':    'https://static.wikia.nocookie.net/clashofclans/images/b/b9/WarBronzeII.png/revision/latest?cb=20181024140226',
+  'Bronzo I':     'https://static.wikia.nocookie.net/clashofclans/images/b/b1/WarBronzeI.png/revision/latest?cb=20181024140226',
+  'Argento III':  'https://static.wikia.nocookie.net/clashofclans/images/d/d5/WarSilverIII.png/revision/latest?cb=20181024140226',
+  'Argento II':   'https://static.wikia.nocookie.net/clashofclans/images/e/e6/WarSilverII.png/revision/latest?cb=20181024140226',
+  'Argento I':    'https://static.wikia.nocookie.net/clashofclans/images/c/c3/WarSilverI.png/revision/latest?cb=20181024140226',
+  'Oro III':      'https://static.wikia.nocookie.net/clashofclans/images/4/42/WarGoldIII.png/revision/latest?cb=20181024140227',
+  'Oro II':       'https://static.wikia.nocookie.net/clashofclans/images/f/f2/WarGoldII.png/revision/latest?cb=20181024140227',
+  'Oro I':        'https://static.wikia.nocookie.net/clashofclans/images/2/2f/WarGoldI.png/revision/latest?cb=20181024140227',
+  'Cristallo III':'https://static.wikia.nocookie.net/clashofclans/images/c/c9/WarCrystalIII.png/revision/latest?cb=20181024140227',
+  'Cristallo II': 'https://static.wikia.nocookie.net/clashofclans/images/5/5a/WarCrystalII.png/revision/latest?cb=20181024140227',
+  'Cristallo I':  'https://static.wikia.nocookie.net/clashofclans/images/8/8a/WarCrystalI.png/revision/latest?cb=20181024140227',
+  'Maestro III':  'https://static.wikia.nocookie.net/clashofclans/images/3/39/WarMasterIII.png/revision/latest?cb=20181024140227',
+  'Maestro II':   'https://static.wikia.nocookie.net/clashofclans/images/8/81/WarMasterII.png/revision/latest?cb=20181024140227',
+  'Maestro I':    'https://static.wikia.nocookie.net/clashofclans/images/5/53/WarMasterI.png/revision/latest?cb=20181024140227',
+  'Campione III': 'https://static.wikia.nocookie.net/clashofclans/images/d/d2/WarChampionIII.png/revision/latest?cb=20181024140228',
+  'Campione II':  'https://static.wikia.nocookie.net/clashofclans/images/b/bd/WarChampionII.png/revision/latest?cb=20181024140228',
+  'Campione I':   'https://static.wikia.nocookie.net/clashofclans/images/e/e3/WarChampionI.png/revision/latest?cb=20181024140228',
   'Titano III':   'https://api-assets.clashofclans.com/warleagues/64/48000018.png',
   'Titano II':    'https://api-assets.clashofclans.com/warleagues/64/48000019.png',
   'Titano I':     'https://api-assets.clashofclans.com/warleagues/64/48000020.png',
@@ -2172,12 +2171,8 @@ async function loadCwlSeasons() {
   const leagueItBanner = leagueEnBanner ? (LEAGUE_EN_TO_IT[leagueEnBanner] || leagueEnBanner) : null;
   const banner = document.getElementById('cwl-current-league-banner');
   if (banner && leagueItBanner) {
-    const color  = LEAGUE_COLOR[leagueItBanner] || 'var(--gold)';
-    // Usa warLeague.id dall'API CoC per costruire l'URL badge direttamente (più affidabile della mappatura per nome)
-    const warLeagueId = clanInfo?.warLeague?.id || null;
-    const badgeUrl = warLeagueId
-      ? `https://api-assets.clashofclans.com/warleagues/64/${warLeagueId}.png`
-      : (LEAGUE_BADGE[leagueItBanner] || null);
+    const color    = LEAGUE_COLOR[leagueItBanner] || 'var(--gold)';
+    const badgeUrl = LEAGUE_BADGE[leagueItBanner] || null;
     const isLive = cwlData && cwlData.state !== 'notInWar' && cwlData.state !== 'ended';
     const fallbackIcon = LEAGUE_ICON[leagueItBanner] || '🏆';
     const bannerImg = badgeUrl
