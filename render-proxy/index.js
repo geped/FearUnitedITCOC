@@ -400,13 +400,12 @@ app.get('/debug-league', authMiddleware, async (req, res) => {
         const data = await r.json();
         if (!r.ok) return res.status(r.status).json({ error: data.reason });
         // Ritorna i primi 3 membri con tutti i campi legati a league
-        const sample = (data.items || []).slice(0, 3).map(m => ({
+        const sample = (data.items || []).slice(0, 5).map(m => ({
             name: m.name,
             trophies: m.trophies,
             league: m.league,
-            rankedLeague: m.rankedLeague,
+            leagueTier: m.leagueTier,
             builderBaseLeague: m.builderBaseLeague,
-            // dump chiavi sconosciute legate a league
             allLeagueKeys: Object.keys(m).filter(k => k.toLowerCase().includes('league'))
         }));
         res.json({ sample });
