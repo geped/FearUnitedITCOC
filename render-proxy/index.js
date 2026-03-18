@@ -388,6 +388,33 @@ app.post('/verify-player-token', authMiddleware, async (req, res) => {
     }
 });
 
+// Endpoint debug temporaneo — mostra campi league raw dal primo membro
+app.get('/debug-league', authMiddleware, async (req, res) => {
+    try {
+        const clanTag = parseClanTag(req.query.clanTag);
+        if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });
+        const r = await fetch(
+            `https://api.clashofclans.com/v1/clans/${encodeTag(clanTag)}/members`,
+            { headers: cocHeaders() }
+        );
+        const data = await r.json();
+        if (!r.ok) return res.status(r.status).json({ error: data.reason });
+        // Ritorna i primi 3 membri con tutti i campi legati a league
+        const sample = (data.items || []).slice(0, 3).map(m => ({
+            name: m.name,
+            trophies: m.trophies,
+            league: m.league,
+            rankedLeague: m.rankedLeague,
+            builderBaseLeague: m.builderBaseLeague,
+            // dump chiavi sconosciute legate a league
+            allLeagueKeys: Object.keys(m).filter(k => k.toLowerCase().includes('league'))
+        }));
+        res.json({ sample });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/clan-members', authMiddleware, async (req, res) => {
     try {
         const clanTag = parseClanTag(req.query.clanTag);
