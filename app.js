@@ -2506,55 +2506,71 @@ function openClassicWarDetail(idx) {
     : '<span class="cdm-war-badge-ph">🛡️</span>';
 
   const size = w.teamSize ?? '?';
+  const atkPerMember = 2; // war classica sempre 2 attacchi
 
-  // Costruisce tabella squadra
-  function buildTeamTable(members, totalSlots) {
-    if (!members?.length) return '<p style="color:var(--text-3);font-size:0.82rem;padding:0.5rem 0">Dati non disponibili</p>';
+  // Mappa tag → {name, pos} da entrambe le squadre
+  const defMap = {};
+  [...(w.clan?.members || []), ...(w.opponent?.members || [])].forEach(m => {
+    defMap[m.tag] = { name: m.name, pos: m.mapPosition };
+  });
 
-    const sorted = [...members].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
-    const rows = sorted.map(m => {
-      const thN = String(m.townhallLevel ?? 1).padStart(2, '0');
-      const thSrc = (m.townhallLevel ?? 1) <= 18
-        ? `th/level_${thN}.webp` : `th/level_${thN}.png`;
-      const thFallback = `onerror="this.onerror=null;this.src='th/level_${thN}.png'"`;
-
-      const attacks = m.attacks || [];
-      const totalStars = attacks.reduce((s, a) => s + (a.stars ?? 0), 0);
-      const maxDestr   = attacks.length ? Math.max(...attacks.map(a => a.destructionPercentage ?? 0)) : null;
-      const atkMade    = attacks.length;
-      const atkAvail   = w.attacksPerMember ?? 1;
-
-      const starsHtml = attacks.length
-        ? `<span class="wdm-stars">${'⭐'.repeat(totalStars)}${'<span class="wdm-star-empty">☆</span>'.repeat(Math.max(0, atkAvail * 3 - totalStars))}</span>`
-        : '<span style="color:var(--text-3)">—</span>';
-
-      const destrHtml = maxDestr !== null
-        ? `<span class="wdm-destr">${maxDestr.toFixed(1)}%</span>`
-        : '<span style="color:var(--text-3)">—</span>';
-
-      const atkHtml = `<span class="wdm-atk">${atkMade}/${atkAvail}</span>`;
-      const pos = m.mapPosition ?? '—';
-
-      return `<tr>
-        <td class="wdm-pos">${pos}</td>
-        <td class="wdm-th"><img src="${thSrc}" ${thFallback} class="wdm-th-img" alt="TH${m.townhallLevel ?? '?'}"></td>
-        <td class="wdm-name">${m.name ?? '—'}</td>
-        <td class="wdm-stars-cell">${starsHtml}</td>
-        <td>${destrHtml}</td>
-        <td>${atkHtml}</td>
-      </tr>`;
-    }).join('');
-
-    return `<table class="wdm-table">
-      <thead><tr>
-        <th>#</th><th>TH</th><th>Nome</th><th>⭐</th><th>💥%</th><th>Att.</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>`;
+  function starsRow(stars, maxStars) {
+    return '★'.repeat(stars) + '☆'.repeat(Math.max(0, maxStars - stars));
   }
 
-  const ourTable  = buildTeamTable(w.clan?.members,     size);
-  const oppTable  = buildTeamTable(w.opponent?.members, size);
+  function buildTeamCards(members) {
+    if (!members?.length) return '<p class="wdm-no-data">Dati non disponibili per questa war</p>';
+
+    const sorted = [...members].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+    return sorted.map(m => {
+      const thN = String(m.townhallLevel ?? 1).padStart(2, '0');
+      const thSrc = (m.townhallLevel ?? 1) <= 18 ? `th/level_${thN}.webp` : `th/level_${thN}.png`;
+      const thFb  = `onerror="this.onerror=null;this.src='th/level_${thN}.png'"`;
+
+      const attacks = [...(m.attacks || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const totalStars = attacks.reduce((s, a) => s + (a.stars ?? 0), 0);
+      const maxPossible = atkPerMember * 3;
+
+      // righe attacchi
+      const atkRows = Array.from({ length: atkPerMember }, (_, i) => {
+        const a = attacks[i];
+        if (!a) {
+          return `<div class="wdm-atk-row">
+            <span class="wdm-atk-label">Attacco ${i + 1}</span>
+            <span class="wdm-atk-unused">Non utilizzato</span>
+          </div>`;
+        }
+        const def = defMap[a.defenderTag];
+        const defLabel = def ? `${def.pos}. ${def.name}` : a.defenderTag ?? '?';
+        const destr = (a.destructionPercentage ?? 0).toFixed(0);
+        const stars = a.stars ?? 0;
+        const starsHtml = `<span class="wdm-star-row wdm-star-row--${stars > 0 ? 'hit' : 'miss'}">${starsRow(stars, 3)}</span>`;
+        return `<div class="wdm-atk-row">
+          <span class="wdm-atk-label">Attacco ${i + 1}</span>
+          <span class="wdm-atk-target">${defLabel}</span>
+          <span class="wdm-atk-pct">${destr}%</span>
+          ${starsHtml}
+        </div>`;
+      }).join('');
+
+      const totalStarsHtml = `<span class="wdm-total-stars wdm-total-stars--${totalStars >= 5 ? 'great' : totalStars >= 3 ? 'good' : 'low'}">${totalStars}★</span>`;
+
+      return `<div class="wdm-member-card">
+        <div class="wdm-member-header">
+          <span class="wdm-pos">${m.mapPosition ?? '—'}.</span>
+          <img src="${thSrc}" ${thFb} class="wdm-th-img" alt="TH${m.townhallLevel ?? '?'}">
+          <span class="wdm-name">${m.name ?? '—'}</span>
+          ${totalStarsHtml}
+        </div>
+        <div class="wdm-atk-list">${atkRows}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // Tab attivo
+  let activeTab = 'us';
+  const ourCards = buildTeamCards(w.clan?.members);
+  const oppCards = buildTeamCards(w.opponent?.members);
 
   const modal = document.createElement('div');
   modal.id = 'classic-war-detail-modal';
@@ -2565,7 +2581,7 @@ function openClassicWarDetail(idx) {
         <div class="cdm-header-left">
           <div>
             <div class="cdm-header-season">War Classica — ${fmtDate}</div>
-            <div class="cdm-header-league">${size}v${size}</div>
+            <div class="cdm-header-league" style="color:var(--text-3)">${size}v${size}</div>
           </div>
         </div>
         <button class="cdm-close" onclick="closeClassicWarDetail()">✕</button>
@@ -2591,26 +2607,29 @@ function openClassicWarDetail(idx) {
         </div>
       </div>
 
-      <!-- Due squadre -->
-      <div class="wdm-teams">
-        <div class="wdm-team">
-          <div class="cdm-section-title wdm-team-title">
-            ${clanBadge} La Nostra Squadra
-          </div>
-          <div class="wdm-table-wrap">${ourTable}</div>
-        </div>
-        <div class="wdm-team">
-          <div class="cdm-section-title wdm-team-title">
-            ${oppBadge} ${w.opponent?.name ?? 'Avversario'}
-          </div>
-          <div class="wdm-table-wrap">${oppTable}</div>
-        </div>
+      <!-- Tab squadra -->
+      <div class="wdm-tab-bar">
+        <button class="wdm-tab active" id="wdm-tab-us" onclick="_wdmTab('us')">
+          ${clanBadge} La Nostra Squadra
+        </button>
+        <button class="wdm-tab" id="wdm-tab-opp" onclick="_wdmTab('opp')">
+          ${oppBadge} ${w.opponent?.name ?? 'Avversario'}
+        </button>
       </div>
+      <div id="wdm-panel-us" class="wdm-panel">${ourCards}</div>
+      <div id="wdm-panel-opp" class="wdm-panel" style="display:none">${oppCards}</div>
     </div>`;
 
   modal.addEventListener('click', closeClassicWarDetail);
   document.body.appendChild(modal);
   requestAnimationFrame(() => modal.classList.add('cdm-overlay--visible'));
+}
+
+function _wdmTab(tab) {
+  document.getElementById('wdm-panel-us').style.display  = tab === 'us'  ? 'block' : 'none';
+  document.getElementById('wdm-panel-opp').style.display = tab === 'opp' ? 'block' : 'none';
+  document.getElementById('wdm-tab-us').classList.toggle('active',  tab === 'us');
+  document.getElementById('wdm-tab-opp').classList.toggle('active', tab === 'opp');
 }
 
 function closeClassicWarDetail() {

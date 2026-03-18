@@ -1720,75 +1720,106 @@ tbody tr:last-child td { border-bottom: none; }
 
 .btn-war-detail {
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 0.7rem;
-  font-weight: 700;
+  font-size: 0.7rem; font-weight: 700;
   padding: 0.25rem 0.6rem;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-2);
-  background: transparent;
-  color: var(--text-2);
-  cursor: pointer;
-  white-space: nowrap;
+  background: transparent; color: var(--text-2);
+  cursor: pointer; white-space: nowrap;
   transition: border-color 0.15s, color 0.15s;
 }
 .btn-war-detail:hover { border-color: var(--gold); color: var(--gold); }
 
-/* Modal più largo per le due squadre */
-.wdm-box { max-width: 860px !important; }
+/* Modal */
+.wdm-box { max-width: 560px !important; }
+@media (max-width: 640px) { .wdm-box { max-width: 100% !important; } }
 
-/* Due squadre affiancate */
-.wdm-teams {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.25rem;
-  margin-top: 1rem;
+/* Tab squadra */
+.wdm-tab-bar {
+  display: flex; gap: 0.5rem;
+  margin: 0.75rem 0 0.75rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5rem;
 }
-@media (max-width: 640px) {
-  .wdm-teams { grid-template-columns: 1fr; }
-  .wdm-box { max-width: 100% !important; }
+.wdm-tab {
+  display: flex; align-items: center; gap: 0.35rem;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.8rem; font-weight: 600;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  border: 1px solid transparent;
+  background: transparent; color: var(--text-3);
+  cursor: pointer; transition: color 0.15s, border-color 0.15s;
 }
+.wdm-tab img, .wdm-tab .cdm-war-badge-ph { width: 16px; height: 16px; }
+.wdm-tab.active { color: var(--text); border-color: var(--border); border-bottom-color: var(--bg-2); background: var(--bg-2); }
 
-.wdm-team-title {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 0.5rem !important;
+/* Card membro */
+.wdm-panel { max-height: 480px; overflow-y: auto; }
+.wdm-member-card {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.5rem;
+  overflow: hidden;
 }
-.wdm-team-title img,
-.wdm-team-title .cdm-war-badge-ph { width: 18px; height: 18px; }
-
-.wdm-table-wrap { overflow-x: auto; }
-
-.wdm-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.8rem;
-}
-.wdm-table th {
-  text-align: left;
-  padding: 0.3rem 0.4rem;
-  color: var(--text-3);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+.wdm-member-header {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255,255,255,0.03);
   border-bottom: 1px solid var(--border);
 }
-.wdm-table td {
-  padding: 0.28rem 0.4rem;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-  vertical-align: middle;
+.wdm-pos {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.78rem; color: var(--text-3);
+  min-width: 22px;
 }
+.wdm-th-img { width: 28px; height: 28px; object-fit: contain; flex-shrink: 0; }
+.wdm-name {
+  font-weight: 700; font-size: 0.88rem;
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wdm-total-stars {
+  font-family: 'Lilita One', cursive;
+  font-size: 0.9rem; margin-left: auto; flex-shrink: 0;
+}
+.wdm-total-stars--great { color: var(--gold); }
+.wdm-total-stars--good  { color: var(--text-2); }
+.wdm-total-stars--low   { color: var(--text-3); }
 
-.wdm-pos  { color: var(--text-3); font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; width: 28px; }
-.wdm-th   { width: 32px; }
-.wdm-th-img { width: 26px; height: 26px; object-fit: contain; }
-.wdm-name { font-weight: 600; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wdm-stars-cell { white-space: nowrap; }
-.wdm-stars { font-size: 0.78rem; }
-.wdm-star-empty { opacity: 0.25; }
-.wdm-destr { font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; color: var(--text-2); }
-.wdm-atk   { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-3); }
+/* Righe attacco */
+.wdm-atk-list { padding: 0.25rem 0; }
+.wdm-atk-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.8rem;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.wdm-atk-row:last-child { border-bottom: none; }
+.wdm-atk-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.68rem; color: var(--text-3);
+  min-width: 66px; flex-shrink: 0;
+}
+.wdm-atk-target {
+  flex: 1; color: var(--text); font-weight: 500;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wdm-atk-pct {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.78rem; color: var(--text-2);
+  min-width: 42px; text-align: right; flex-shrink: 0;
+}
+.wdm-star-row { font-size: 0.85rem; letter-spacing: 1px; flex-shrink: 0; }
+.wdm-star-row--hit { color: var(--gold); }
+.wdm-star-row--miss { color: var(--text-3); }
+.wdm-atk-unused {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.75rem; color: #c8a020; font-style: italic;
+}
+.wdm-no-data {
+  color: var(--text-3); font-size: 0.82rem;
+  padding: 1rem 0; text-align: center;
+}
 
 /* ─────────────────────────────────────────────────────────────
    WAR LOG — STATUS / BADGES
