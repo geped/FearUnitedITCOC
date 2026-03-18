@@ -3,7 +3,7 @@ const { createClient } = require('@supabase/supabase-js');
 const COC_CLAN_TAG = '#2J2VLPP9R';
 
 const COC_ROLE_MAP = {
-    leader:   'co-capo',
+    leader:   'capo',
     coLeader: 'co-capo',
     admin:    'anziano',   // nell'API CoC "admin" = Anziano (Elder)
     member:   'membro',
@@ -17,7 +17,7 @@ function normalizeTag(raw) {
 module.exports = async (req, res) => {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    const { playerTag: rawTag, apiToken, password } = req.body || {};
+    const { playerTag: rawTag, apiToken, password, email: realEmail } = req.body || {};
 
     if (!rawTag || !apiToken || !password) {
         return res.status(400).json({ error: 'Tag giocatore, chiave API e password sono obbligatori.' });
@@ -87,6 +87,7 @@ module.exports = async (req, res) => {
             role: appRole,
             username,
             coc_tag: playerTag,
+            ...(realEmail ? { email: realEmail } : {}),
         }
     });
 

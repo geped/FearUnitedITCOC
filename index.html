@@ -21,12 +21,13 @@
             <h1>Fear United</h1>
             <p class="login-sub">CWL Manager</p>
         </div>
-        <div id="login-error" class="msg-box msg-error" style="display:none"></div>
+        <div id="login-error" style="display:none"></div>
 
+        <!-- ── ACCEDI ── -->
         <form id="login-form">
             <div class="input-wrap">
                 <span class="input-icon">👤</span>
-                <input type="text" id="email" placeholder="Email o nome utente" required autocomplete="username">
+                <input type="text" id="email" placeholder="Nome utente o tag" required autocomplete="username">
             </div>
             <div class="input-wrap">
                 <span class="input-icon">🔒</span>
@@ -34,40 +35,19 @@
             </div>
             <button type="submit" class="btn-primary btn-full">Accedi</button>
         </form>
-        <button id="show-signup" class="link-btn">Non hai un account? Registrati</button>
+        <div id="login-links" class="login-links">
+            <button id="show-signup" class="link-btn">Non hai un account? Registrati</button>
+            <button id="show-recovery" class="link-btn">Password dimenticata?</button>
+        </div>
 
-        <!-- ── SEZIONE REGISTRAZIONE ── -->
+        <!-- ── REGISTRAZIONE CoC ── -->
         <div id="signup-section" style="display:none">
-
-            <!-- Toggle metodo registrazione -->
-            <div class="login-method-toggle">
-                <button type="button" class="method-btn active" id="method-email-btn" onclick="switchSignupMethod('email')">
-                    📧 Email
-                </button>
-                <button type="button" class="method-btn" id="method-coc-btn" onclick="switchSignupMethod('coc')">
-                    ⚔️ Chiave API CoC
-                </button>
+            <div class="login-section-title">⚔️ Registrazione con Chiave API CoC</div>
+            <div class="coc-hint-box">
+                <span class="coc-hint-icon">💡</span>
+                <span>Nel gioco: <strong>Impostazioni → Altre impostazioni → Chiave API → Mostra</strong></span>
             </div>
-
-            <!-- Form Email (standard) -->
-            <form id="signup-form">
-                <div class="input-wrap">
-                    <span class="input-icon">📧</span>
-                    <input type="email" id="signup-email" placeholder="Email" required>
-                </div>
-                <div class="input-wrap">
-                    <span class="input-icon">🔒</span>
-                    <input type="password" id="signup-password" placeholder="Password (min 6 caratteri)" required>
-                </div>
-                <button type="submit" class="btn-primary btn-full">Crea Account</button>
-            </form>
-
-            <!-- Form Chiave API CoC -->
-            <form id="signup-coc-form" style="display:none">
-                <div class="coc-hint-box">
-                    <span class="coc-hint-icon">💡</span>
-                    <span>Nel gioco: <strong>Impostazioni → Altre impostazioni → Chiave API → Mostra</strong></span>
-                </div>
+            <form id="signup-coc-form">
                 <div class="input-wrap">
                     <span class="input-icon">🎮</span>
                     <input type="text" id="coc-reg-tag" placeholder="Tag giocatore (es. #2J2ABC)" autocomplete="off" spellcheck="false">
@@ -80,11 +60,28 @@
                     <span class="input-icon">🔒</span>
                     <input type="password" id="coc-reg-password" placeholder="Scegli una password (min 6 caratteri)" autocomplete="new-password">
                 </div>
+                <div class="input-wrap">
+                    <span class="input-icon">📧</span>
+                    <input type="email" id="coc-reg-email" placeholder="Email (facoltativa, per recupero password)" autocomplete="email">
+                </div>
                 <button type="submit" class="btn-primary btn-full">⚔️ Verifica &amp; Registrati</button>
             </form>
-
         </div>
-        <button id="show-login" class="link-btn" style="display:none">Hai già un account? Accedi</button>
+
+        <!-- ── RECUPERO PASSWORD ── -->
+        <div id="recovery-section" style="display:none">
+            <div class="login-section-title">🔑 Recupero Password</div>
+            <p class="login-hint-text">Inserisci l'email associata al tuo account per ricevere il link di recupero.</p>
+            <form id="recovery-form">
+                <div class="input-wrap">
+                    <span class="input-icon">📧</span>
+                    <input type="email" id="recovery-email" placeholder="La tua email" required autocomplete="email">
+                </div>
+                <button type="submit" class="btn-primary btn-full">📨 Invia link di recupero</button>
+            </form>
+        </div>
+
+        <button id="show-login" class="link-btn" style="display:none">← Torna al login</button>
     </div>
 </div>
 
@@ -379,7 +376,8 @@
                             <thead>
                                 <tr>
                                     <th>Nome</th>
-                                    <th class="hide-sm">Email / Login ID</th>
+                                    <th class="hide-sm">Tag CoC / Login</th>
+                                    <th class="hide-md">Email</th>
                                     <th>Ruolo</th>
                                     <th class="hide-xs">Dal</th>
                                     <th>Azioni</th>

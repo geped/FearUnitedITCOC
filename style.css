@@ -141,33 +141,33 @@ body {
 }
 .link-btn:hover { color: var(--gold); }
 
-/* ── Toggle metodo registrazione ── */
-.login-method-toggle {
+/* ── Link azioni sotto il form login ── */
+.login-links {
     display: flex;
-    gap: 0;
-    margin-bottom: 0.9rem;
-    border: 1px solid var(--border-2);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
+    justify-content: space-between;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.2rem;
 }
-.method-btn {
-    flex: 1;
-    padding: 0.55rem 0.5rem;
-    background: var(--bg);
-    border: none;
-    color: var(--text-3);
-    font-size: 0.82rem;
-    font-family: inherit;
-    cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-    font-weight: 500;
-}
-.method-btn:not(:last-child) { border-right: 1px solid var(--border-2); }
-.method-btn.active {
-    background: var(--gold-dim);
+
+/* ── Titolo sezione (registrazione / recupero) ── */
+.login-section-title {
+    font-size: 0.88rem;
+    font-weight: 600;
     color: var(--gold);
+    letter-spacing: 0.5px;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
 }
-.method-btn:hover:not(.active) { color: var(--text); background: var(--bg-2); }
+
+/* ── Testo hint recupero ── */
+.login-hint-text {
+    font-size: 0.82rem;
+    color: var(--text-3);
+    margin-bottom: 0.75rem;
+    line-height: 1.5;
+}
 
 /* ── Hint box CoC ── */
 .coc-hint-box {
@@ -180,7 +180,7 @@ body {
     padding: 0.55rem 0.75rem;
     font-size: 0.8rem;
     color: var(--text-3);
-    margin-bottom: 0.1rem;
+    margin-bottom: 0.55rem;
     line-height: 1.4;
 }
 .coc-hint-box strong { color: var(--text-2); }
@@ -1280,10 +1280,15 @@ tbody tr:last-child td { border-bottom: none; }
 }
 
 /* Role badges in table */
-.role-leader { color: var(--gold); font-weight: 700; }
+.role-leader   { color: var(--gold); font-weight: 700; }
+.role-capo     { color: #e8b84b; font-weight: 600; }
 .role-coleader { color: #d4a843; }
-.role-elder { color: var(--text-2); }
-.role-member { color: var(--text-3); }
+.role-elder    { color: var(--text-2); }
+.role-member   { color: var(--text-3); }
+
+/* ── Admin panel ── */
+.admin-actions-cell { display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center; }
+.user-no-email { color: var(--text-3); font-size: 0.8rem; }
 
 /* ─────────────────────────────────────────────────────────────
    SYNC STATUS

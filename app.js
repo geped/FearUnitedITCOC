@@ -54,46 +54,20 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
 });
 
 
-document.getElementById("signup-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const { error } = await db.auth.signUp({
-    email: document.getElementById("signup-email").value,
-    password: document.getElementById("signup-password").value,
-  });
-  if (error) showLoginError(error.message);
-  else
-    showLoginError(
-      "Controlla la tua email per confermare la registrazione.",
-      "info",
-    );
-});
+// ── Navigazione sezioni login ─────────────────────────────────────────────────
 
-document.getElementById("show-signup").addEventListener("click", () => {
-  document.getElementById("login-form").style.display = "none";
-  document.getElementById("show-signup").style.display = "none";
-  document.getElementById("signup-section").style.display = "block";
-  document.getElementById("show-login").style.display = "block";
-  document.getElementById("login-error").style.display = "none";
-});
-
-document.getElementById("show-login").addEventListener("click", () => {
-  document.getElementById("signup-section").style.display = "none";
-  document.getElementById("show-login").style.display = "none";
-  document.getElementById("login-form").style.display = "flex";
-  document.getElementById("show-signup").style.display = "block";
-  document.getElementById("login-error").style.display = "none";
-});
-
-// ── Toggle metodo registrazione ──────────────────────────────────────────────
-
-function switchSignupMethod(method) {
-  const isEmail = method === 'email';
-  document.getElementById('signup-form').style.display      = isEmail ? 'flex' : 'none';
-  document.getElementById('signup-coc-form').style.display  = isEmail ? 'none' : 'flex';
-  document.getElementById('method-email-btn').classList.toggle('active', isEmail);
-  document.getElementById('method-coc-btn').classList.toggle('active', !isEmail);
-  document.getElementById('login-error').style.display = 'none';
+function showSection(section) {
+  document.getElementById('login-form').style.display        = section === 'login'    ? 'flex'  : 'none';
+  document.getElementById('login-links').style.display       = section === 'login'    ? 'flex'  : 'none';
+  document.getElementById('signup-section').style.display    = section === 'signup'   ? 'block' : 'none';
+  document.getElementById('recovery-section').style.display  = section === 'recovery' ? 'block' : 'none';
+  document.getElementById('show-login').style.display        = section !== 'login'    ? 'block' : 'none';
+  document.getElementById('login-error').style.display       = 'none';
 }
+
+document.getElementById('show-signup').addEventListener('click',   () => showSection('signup'));
+document.getElementById('show-recovery').addEventListener('click', () => showSection('recovery'));
+document.getElementById('show-login').addEventListener('click',    () => showSection('login'));
 
 // ── Registrazione tramite chiave API CoC ─────────────────────────────────────
 
@@ -103,9 +77,10 @@ document.getElementById("signup-coc-form").addEventListener("submit", async (e) 
   const playerTag = document.getElementById("coc-reg-tag").value.trim();
   const apiToken  = document.getElementById("coc-reg-token").value.trim();
   const password  = document.getElementById("coc-reg-password").value;
+  const email     = document.getElementById("coc-reg-email").value.trim();
 
   if (!playerTag || !apiToken || !password) {
-    showLoginError("Compila tutti i campi.");
+    showLoginError("Tag, chiave API e password sono obbligatori.");
     return;
   }
 
@@ -117,7 +92,7 @@ document.getElementById("signup-coc-form").addEventListener("submit", async (e) 
     const res = await fetch("/api/register-with-coc", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ playerTag, apiToken, password }),
+      body: JSON.stringify({ playerTag, apiToken, password, email: email || undefined }),
     });
     const data = await res.json();
 
@@ -126,7 +101,6 @@ document.getElementById("signup-coc-form").addEventListener("submit", async (e) 
       return;
     }
 
-    // Registrazione riuscita: auto-login
     showLoginError(`Benvenuto, ${data.username}! Accesso in corso…`, "info");
 
     const { error: loginError } = await db.auth.signInWithPassword({
@@ -142,6 +116,31 @@ document.getElementById("signup-coc-form").addEventListener("submit", async (e) 
   } finally {
     submitBtn.disabled = false;
     submitBtn.textContent = "⚔️ Verifica & Registrati";
+  }
+});
+
+// ── Recupero password ─────────────────────────────────────────────────────────
+
+document.getElementById("recovery-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = document.getElementById("recovery-email").value.trim();
+  if (!email) return;
+
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Invio in corso…";
+
+  const { error } = await db.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin,
+  });
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = "📨 Invia link di recupero";
+
+  if (error) {
+    showLoginError(error.message);
+  } else {
+    showLoginError("📨 Email inviata! Controlla la tua casella di posta.", "info");
   }
 });
 
@@ -161,12 +160,13 @@ function showLogin() {
   document.getElementById("app").style.display = "none";
 }
 
-// Costanti ruoli
+// Costanti ruoli (ordine crescente di privilegio)
 const ROLES = [
   { value: 'utente',  label: 'Utente',   cls: 'role-utente' },
   { value: 'membro',  label: 'Membro',   cls: 'role-member' },
   { value: 'anziano', label: 'Anziano',  cls: 'role-elder' },
   { value: 'co-capo', label: 'Co-Capo', cls: 'role-coleader' },
+  { value: 'capo',    label: 'Capo',     cls: 'role-capo' },
   { value: 'admin',   label: 'Admin',    cls: 'role-leader' },
 ];
 const ROLE_LABELS = Object.fromEntries(ROLES.map(r => [r.value, r]));
@@ -174,9 +174,6 @@ const ROLE_LABELS = Object.fromEntries(ROLES.map(r => [r.value, r]));
 async function showApp(sessionUser) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
-  document.getElementById('user-email').textContent = sessionUser.email;
-  const topbarEmailEl = document.getElementById('topbar-email');
-  if (topbarEmailEl) topbarEmailEl.textContent = sessionUser.email;
 
   // Recupera i dati utente aggiornati dal server (evita metadata stale)
   let user = sessionUser;
@@ -187,8 +184,13 @@ async function showApp(sessionUser) {
 
   const role = user.user_metadata?.role || 'utente';
   const isAdmin   = role === 'admin';
-  const isCoCapo  = role === 'co-capo';
-  const canEdit   = isAdmin || isCoCapo;  // può modificare bonus
+  const canEdit   = ['admin', 'capo', 'co-capo'].includes(role);  // può modificare bonus
+
+  // Mostra nome in-game nella sidebar (invece dell'email interna)
+  const displayName = user.user_metadata?.username || user.email?.replace('@fearunited.internal','') || user.email;
+  document.getElementById('user-email').textContent = displayName;
+  const topbarEmailEl = document.getElementById('topbar-email');
+  if (topbarEmailEl) topbarEmailEl.textContent = displayName;
 
   // Badge ruolo in header
   const badge = document.getElementById('user-role-badge');
@@ -198,10 +200,9 @@ async function showApp(sessionUser) {
     badge.className = `badge ${roleInfo.cls}`;
     badge.style.display = 'inline';
   }
-  // Solo admin+co-capo vedono pannello bonus / pulsanti di modifica
+  // capo/co-capo/admin vedono pulsanti di modifica bonus
   // (gli elementi tab admin sono esclusi perché gestiti sotto separatamente)
   document.querySelectorAll('.admin-only').forEach(el => {
-    // Salta i tab/nav che portano alla sezione admin: gestiti a parte
     if (el.dataset.tab === 'admin') return;
     const tag = el.tagName.toLowerCase();
     el.style.display = canEdit
@@ -210,7 +211,7 @@ async function showApp(sessionUser) {
       : 'none';
   });
 
-  // Solo admin vede tab "Gestione Utenti" — deve venire DOPO il loop admin-only
+  // Solo admin vede tab "Gestione Utenti"
   document.querySelectorAll('[data-tab="admin"]').forEach(el => {
     el.style.display = isAdmin
       ? (el.classList.contains('bnav-btn') ? 'flex' : 'inline-block')
@@ -1884,41 +1885,54 @@ async function loadUsers() {
   msg.style.display = 'none';
   tbody.innerHTML = '';
 
+  const ROLE_ORDER = ['admin','capo','co-capo','anziano','membro','utente'];
   users.sort((a, b) => {
-    const rOrder = ['admin','co-capo','anziano','membro','utente'];
-    const ra = rOrder.indexOf(a.user_metadata?.role || 'utente');
-    const rb = rOrder.indexOf(b.user_metadata?.role || 'utente');
+    const ra = ROLE_ORDER.indexOf(a.user_metadata?.role || 'utente');
+    const rb = ROLE_ORDER.indexOf(b.user_metadata?.role || 'utente');
     return ra - rb;
   });
+
+  const myDisplayName = document.getElementById('user-email').textContent;
 
   users.forEach(u => {
     const role      = u.user_metadata?.role || 'utente';
     const username  = u.user_metadata?.username || '';
+    const cocTag    = u.user_metadata?.coc_tag || '';
     const roleInfo  = ROLE_LABELS[role] || ROLE_LABELS['utente'];
     const isInternal = u.email?.endsWith('@fearunited.internal');
-    // Login ID: per utenti interni mostra il nome utente (senza @fearunited.internal)
-    const loginId   = isInternal
-      ? (u.email.replace('@fearunited.internal', ''))
-      : (u.email || '—');
-    const displayInfo = isInternal
-      ? `<span class="login-id-tag" title="Usa questo come nome utente al login">${loginId}</span>`
-      : `<span style="font-size:0.8rem;color:#5a7a98">${u.email}</span>`;
+    const loginId   = isInternal ? u.email.replace('@fearunited.internal', '') : (u.email || '—');
+    const realEmail = !isInternal && u.email ? u.email : (u.email !== u.email ? '' : '');
+
+    // Colonna Tag/Login
+    const tagCell = cocTag
+      ? `<span class="login-id-tag" title="Tag CoC">${cocTag}</span>`
+      : `<span class="login-id-tag" title="Nome utente login">${loginId}</span>`;
+
+    // Colonna Email
+    const emailCell = isInternal
+      ? `<span class="user-no-email" title="Nessuna email impostata">—</span>`
+      : `<span style="font-size:0.8rem;color:#7ab8d4">${u.email}</span>`;
+
     const created   = new Date(u.created_at).toLocaleDateString('it-IT');
-    const isMe      = u.email === document.getElementById('user-email').textContent;
+    const isMe      = (username || loginId) === myDisplayName;
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td class="member-name">${username || loginId}</td>
-      <td>${displayInfo}</td>
+      <td>${tagCell}</td>
+      <td class="hide-md">${emailCell}</td>
       <td>
         <select class="admin-role-sel" onchange="changeRole('${u.id}', this)" ${isMe ? 'disabled' : ''}>
           ${ROLES.map(r => `<option value="${r.value}" ${r.value === role ? 'selected' : ''}>${r.label}</option>`).join('')}
         </select>
       </td>
       <td class="date-cell">${created}</td>
-      <td style="display:flex;gap:0.4rem;flex-wrap:wrap">
-        <button class="admin-save-btn" onclick="saveRole('${u.id}', this)">💾 Salva</button>
-        ${!isMe ? `<button class="btn-danger" onclick="deleteUser('${u.id}')">🗑 Elimina</button>` : '<span style="font-size:0.75rem;color:#5a7a98">(tu)</span>'}
+      <td class="admin-actions-cell">
+        ${!isMe ? `
+          <button class="admin-save-btn" onclick="saveRole('${u.id}', this)">💾 Salva</button>
+          <button class="btn-secondary btn-sm" onclick="resetUserPassword('${u.id}', '${(username || loginId).replace(/'/g,"\\'")}')">🔑 Password</button>
+          <button class="btn-danger" onclick="deleteUser('${u.id}', '${(username || loginId).replace(/'/g,"\\'")}')">🗑</button>
+        ` : '<span style="font-size:0.75rem;color:#5a7a98">(tu)</span>'}
       </td>`;
 
     tbody.appendChild(tr);
@@ -1992,8 +2006,22 @@ async function saveRole(userId, btn) {
   }
 }
 
-async function deleteUser(userId) {
-  if (!confirm('Eliminare questo utente? Questa azione è irreversibile.')) return;
+async function resetUserPassword(userId, username) {
+  const newPassword = prompt(`Nuova password per "${username}" (min 6 caratteri):`);
+  if (!newPassword) return;
+  if (newPassword.length < 6) { alert('Password troppo corta (min 6 caratteri).'); return; }
+
+  const res = await fetch('/api/admin/users', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, newPassword }),
+  });
+  if (res.ok) showAdminMsg(`✅ Password di "${username}" aggiornata.`);
+  else { const e = await res.json().catch(() => ({})); showAdminMsg('✗ ' + (e.error || 'Errore reset.'), 'error'); }
+}
+
+async function deleteUser(userId, username) {
+  if (!confirm(`Eliminare l'utente "${username}"? Questa azione è irreversibile.`)) return;
   const res = await fetch('/api/admin/users', {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },

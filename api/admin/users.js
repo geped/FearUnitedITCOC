@@ -34,13 +34,20 @@ module.exports = async (req, res) => {
         return res.status(201).json({ ok: true, user: data.user });
     }
 
-    // PUT — aggiorna ruolo (e opzionalmente username)
+    // PUT — aggiorna ruolo, username e/o password
     if (req.method === 'PUT') {
-        const { userId, role, username } = req.body;
+        const { userId, role, username, newPassword } = req.body;
+        const updates = {};
         const meta = {};
         if (role !== undefined) meta.role = role;
         if (username !== undefined) meta.username = username;
-        const { error } = await supabase.auth.admin.updateUserById(userId, { user_metadata: meta });
+        if (Object.keys(meta).length) updates.user_metadata = meta;
+        if (newPassword) {
+            if (newPassword.length < 6) return res.status(400).json({ error: 'Password min 6 caratteri.' });
+            updates.password = newPassword;
+        }
+        if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nessun campo da aggiornare.' });
+        const { error } = await supabase.auth.admin.updateUserById(userId, updates);
         if (error) return res.status(500).json({ error: error.message });
         return res.status(200).json({ ok: true });
     }
