@@ -572,9 +572,9 @@ function renderMembers(members) {
     // Lega individuale giocatore
     const leagueItName = m.league_name ? (LEAGUE_EN_TO_IT[m.league_name] || m.league_name) : null;
     const leagueBadgeFile = m.league_name ? LEAGUE_BADGE_MAP[m.league_name] : null;
-    const leagueImgSrc = leagueBadgeFile ? `leagues/${leagueBadgeFile}.png` : (m.league_icon_url || null);
+    const leagueImgSrc = leagueBadgeFile ? `leagues/${leagueBadgeFile}.png` : null;
     const leagueHtml = leagueImgSrc
-      ? `<img src="${leagueImgSrc}" class="league-badge-sm" alt="${leagueItName || ''}" title="${leagueItName || ''}" loading="lazy">`
+      ? `<img src="${leagueImgSrc}" class="league-badge-sm" alt="${leagueItName || ''}" title="${leagueItName || ''}" loading="lazy" onerror="this.outerHTML='<span class=\\'no-league-badge\\'>—</span>'">`
       : '<span class="no-league-badge">—</span>';
 
     // Badge SVG per giocatori nuovi (< 7 giorni)
