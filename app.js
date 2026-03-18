@@ -227,8 +227,25 @@ function updateClanUI() {
 let _clanDetailsLoaded = false;
 let _clanDetailsOpen   = false;
 
-// Mappa nome lega inglese → file badge in /leagues/
-// Leghe CWL guerra (clan warLeague) — nomi storici
+// Mappa prefisso lega (da API leagueTier.name es. "Electro League 31") → nome italiano
+// Il formato API è: "[Prefisso] [numero]"
+const LEAGUE_TIER_PREFIX_IT = {
+  'Skeleton League':    'Scheletro',
+  'Barbarian League':   'Barbaro',
+  'Archer League':      'Arciere',
+  'Wizard League':      'Mago',
+  'Valkyrie League':    'Valchiria',
+  'Witch League':       'Strega',
+  'Golem League':       'Golem',
+  'P.E.K.K.A League':  'P.E.K.K.A.',
+  'Electro Titan League':'Elettro Titano',
+  'Dragon League':      'Drago',
+  'Electro Dragon League':'Elettro Drago',
+  'Electro League':     'Elettro',
+  'Legend League':      'Leggenda',
+};
+
+// Mappa nome lega CWL guerra (clan warLeague) → file badge in /leagues/
 const LEAGUE_BADGE_MAP = {
   'Bronze League III': 'BronzoIII', 'Bronze League II': 'BronzoII', 'Bronze League I': 'BronzoI',
   'Silver League III': 'ArgentoIII', 'Silver League II': 'ArgentoII', 'Silver League I': 'ArgentoI',
@@ -238,25 +255,18 @@ const LEAGUE_BADGE_MAP = {
   'Champion League III':'CampioneIII','Champion League II':'CampioneII','Champion League I':'CampioneI',
   'Titan League III':  'TitanoIII',  'Titan League II':  'TitanoII',  'Titan League I':  'TitanoI',
   'Legend League':     'LeggendaV2',
-  // Nuove leghe Ranked Battles (ottobre 2025)
-  'Skeleton League I':      'Skeleton',     'Skeleton League II':      'Skeleton',     'Skeleton League III':      'Skeleton',
-  'Barbarian League I':     'Barbarian',    'Barbarian League II':     'Barbarian',    'Barbarian League III':     'Barbarian',
-  'Archer League I':        'Archer',       'Archer League II':        'Archer',       'Archer League III':        'Archer',
-  'Wizard League I':        'Wizard',       'Wizard League II':        'Wizard',       'Wizard League III':        'Wizard',
-  'Valkyrie League I':      'Valkyrie',     'Valkyrie League II':      'Valkyrie',     'Valkyrie League III':      'Valkyrie',
-  'Witch League I':         'Witch',        'Witch League II':         'Witch',        'Witch League III':         'Witch',
-  'Golem League I':         'Golem',        'Golem League II':         'Golem',        'Golem League III':         'Golem',
-  'P.E.K.K.A League I':    'PEKKA',        'P.E.K.K.A League II':    'PEKKA',        'P.E.K.K.A League III':    'PEKKA',
-  'Electro Titan League I': 'ElettroTitano','Electro Titan League II': 'ElettroTitano','Electro Titan League III': 'ElettroTitano',
-  'Dragon League I':        'Drago',        'Dragon League II':        'Drago',        'Dragon League III':        'Drago',
-  'Electro Dragon League I':'ElectroDrago', 'Electro Dragon League II':'ElectroDrago', 'Electro Dragon League III':'ElectroDrago',
-  // Fallback per nomi senza suffisso (API potrebbe restituire senza I/II/III)
-  'Skeleton League': 'Skeleton', 'Barbarian League': 'Barbarian', 'Archer League': 'Archer',
-  'Wizard League':   'Wizard',   'Valkyrie League':  'Valkyrie',  'Witch League':  'Witch',
-  'Golem League':    'Golem',    'P.E.K.K.A League': 'PEKKA',
-  'Electro Titan League': 'ElettroTitano', 'Dragon League': 'Drago',
-  'Electro Dragon League': 'ElectroDrago',
 };
+
+// Converte leagueTier.name (es. "Electro League 31") in nome italiano (es. "Elettro #31")
+function leagueTierNameIt(name) {
+  if (!name) return null;
+  const m = name.match(/^(.+?)\s+(\d+)$/);
+  if (m) {
+    const itPrefix = LEAGUE_TIER_PREFIX_IT[m[1]] || m[1];
+    return `${itPrefix} #${m[2]}`;
+  }
+  return LEAGUE_TIER_PREFIX_IT[name] || name;
+}
 
 const CLAN_TYPE_LABELS = { open: 'Aperto', inviteOnly: 'Su invito', closed: 'Chiuso' };
 
@@ -569,12 +579,10 @@ function renderMembers(members) {
     const isNew = Math.floor((now - joinDate) / 86400000) < 7;
     const role = cocRole(m.role);
 
-    // Lega individuale giocatore
-    const leagueItName = m.league_name ? (LEAGUE_EN_TO_IT[m.league_name] || m.league_name) : null;
-    const leagueBadgeFile = m.league_name ? LEAGUE_BADGE_MAP[m.league_name] : null;
-    const leagueImgSrc = leagueBadgeFile ? `leagues/${leagueBadgeFile}.png` : null;
-    const leagueHtml = leagueImgSrc
-      ? `<img src="${leagueImgSrc}" class="league-badge-sm" alt="${leagueItName || ''}" title="${leagueItName || ''}" loading="lazy" onerror="this.outerHTML='<span class=\\'no-league-badge\\'>—</span>'">`
+    // Lega individuale giocatore (leagueTier dal DB = campo leagueTier CoC API)
+    const leagueItName = leagueTierNameIt(m.league_name);
+    const leagueHtml = m.league_icon_url
+      ? `<img src="${m.league_icon_url}" class="league-badge-sm" alt="${leagueItName || ''}" title="${leagueItName || ''}" loading="lazy" onerror="this.outerHTML='<span class=\\'no-league-badge\\'>—</span>'">`
       : '<span class="no-league-badge">—</span>';
 
     // Badge SVG per giocatori nuovi (< 7 giorni)

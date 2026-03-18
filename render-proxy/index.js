@@ -44,8 +44,8 @@ async function syncMembers(clanTagRaw) {
         donations_received: m.donationsReceived ?? null,
         exp_level: m.expLevel ?? null,
         clan_rank: m.clanRank ?? null,
-        league_name: m.league?.name ?? null,
-        league_icon_url: m.league?.iconUrls?.small ?? null
+        league_name: m.leagueTier?.name ?? null,
+        league_icon_url: m.leagueTier?.iconUrls?.small ?? null
     }));
     const { error } = await supabase().from('members').upsert(members, { onConflict: 'tag' });
     if (error) throw new Error(error.message);
