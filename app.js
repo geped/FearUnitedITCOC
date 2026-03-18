@@ -38,8 +38,10 @@ db.auth.onAuthStateChange((_event, session) => {
 function resolveLoginEmail(input) {
   const s = input.trim();
   if (s.includes('@')) return s;
-  // Stessa normalizzazione usata in api/admin/users.js
-  return s.toLowerCase().replace(/[^a-z0-9]/g, '_') + '@fearunited.internal';
+  // Tag CoC (inizia con #): strip # e usa cocboard.internal
+  if (s.startsWith('#')) return s.slice(1).toLowerCase() + '@cocboard.internal';
+  // Username manuale: normalizza e usa cocboard.internal
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '_') + '@cocboard.internal';
 }
 
 document.getElementById("login-form").addEventListener("submit", async (e) => {
@@ -47,12 +49,15 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
   try {
     const rawInput = document.getElementById("email").value;
     const email    = resolveLoginEmail(rawInput);
-    const { error } = await db.auth.signInWithPassword({
-      email,
-      password: document.getElementById("password").value,
-    });
+    const pwd = document.getElementById("password").value;
+    let { error } = await db.auth.signInWithPassword({ email, password: pwd });
     if (error) {
-      // Messaggio più chiaro per utenti senza email reale
+      // Fallback: prova fearunited.internal per account legacy
+      const fallback = email.replace('@cocboard.internal', '@fearunited.internal');
+      if (fallback !== email) {
+        const r2 = await db.auth.signInWithPassword({ email: fallback, password: pwd });
+        if (!r2.error) return; // onAuthStateChange gestirà il resto
+      }
       const msg = error.message.includes('Invalid login')
         ? 'Credenziali errate. Controlla il nome utente e la password.'
         : error.message;
@@ -182,7 +187,6 @@ function updateClanUI() {
     if (url) {
       el.src = url;
       el.style.display = 'inline-block';
-      // Nascondi l'icona emoji fallback accanto
       const fallback = el.nextElementSibling;
       if (fallback && (fallback.classList.contains('nav-icon--fallback') ||
                        fallback.classList.contains('sidebar-brand-icon--fallback') ||
@@ -194,10 +198,138 @@ function updateClanUI() {
     }
   });
 
+  // Badge nell'header del tab clan
+  const headerBadge = document.getElementById('clan-header-badge');
+  const headerFallback = document.getElementById('clan-header-badge-fallback');
+  if (headerBadge && headerFallback) {
+    if (url) {
+      headerBadge.src = url;
+      headerBadge.style.display = 'block';
+      headerFallback.style.display = 'none';
+    } else {
+      headerBadge.style.display = 'none';
+      headerFallback.style.display = 'flex';
+    }
+  }
+
+  // Tag clan nell'header
+  const tagEl = document.getElementById('clan-header-tag');
+  if (tagEl) tagEl.textContent = window._userClanTag || '';
+
   // Nome clan ovunque
   document.querySelectorAll('.clan-name-dyn').forEach(el => {
     el.textContent = name;
   });
+}
+
+// ── PANNELLO DETTAGLI CLAN (espandibile) ──────────────────────────────────────
+
+let _clanDetailsLoaded = false;
+let _clanDetailsOpen   = false;
+
+// Mappa nome lega inglese → file badge in /leagues/
+const LEAGUE_BADGE_MAP = {
+  'Bronze League III': 'BronzoIII', 'Bronze League II': 'BronzoII', 'Bronze League I': 'BronzoI',
+  'Silver League III': 'ArgentoIII', 'Silver League II': 'ArgentoII', 'Silver League I': 'ArgentoI',
+  'Gold League III':   'OroIII',     'Gold League II':   'OroII',     'Gold League I':   'OroI',
+  'Crystal League III':'CristalloIII','Crystal League II':'CristalloII','Crystal League I':'CristalloI',
+  'Master League III': 'MaestroIII', 'Master League II': 'MaestroII', 'Master League I': 'MaestroI',
+  'Champion League III':'CampioneIII','Champion League II':'CampioneII','Champion League I':'CampioneI',
+  'Titan League III':  'TitanoIII',  'Titan League II':  'TitanoII',  'Titan League I':  'TitanoI',
+  'Legend League':     'Leggenda',
+};
+
+const CLAN_TYPE_LABELS = { open: 'Aperto', inviteOnly: 'Su invito', closed: 'Chiuso' };
+
+// SVG inline per le info clan (piccoli, 16x16)
+const SVG_TROPHY = `<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M7 3H4v5c0 1.5.8 2.8 2 3.6V13H4v2h16v-2h-2v-1.4c1.2-.8 2-2.1 2-3.6V3h-3V1H7v2zm10 5c0 1.7-1.3 3-3 3h-4c-1.7 0-3-1.3-3-3V5h10v3zm-5 8v3H9v2h6v-2h-3v-3h-1v1z"/></svg>`;
+const SVG_PIN    = `<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>`;
+const SVG_SPEECH = `<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>`;
+const SVG_GLOBE  = `<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>`;
+const SVG_SHIELD = `<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>`;
+const SVG_LOCK   = `<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>`;
+const SVG_UNLOCK = `<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M12 13c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6-5h-1V6c0-2.76-2.24-5-5-5-2.28 0-4.27 1.54-4.84 3.75l1.94.49C9.42 3.86 10.63 3 12 3c1.65 0 3 1.35 3 3v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10z"/></svg>`;
+const SVG_MAIL   = `<svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>`;
+
+function toggleClanDetails() {
+  const panel   = document.getElementById('clan-details-panel');
+  const chevron = document.getElementById('clan-details-chevron');
+  const toggle  = document.getElementById('clan-details-toggle');
+  if (!panel) return;
+
+  _clanDetailsOpen = !_clanDetailsOpen;
+  panel.classList.toggle('clan-details-panel--open', _clanDetailsOpen);
+  if (chevron) chevron.style.transform = _clanDetailsOpen ? 'rotate(180deg)' : 'rotate(0deg)';
+  if (toggle)  toggle.classList.toggle('open', _clanDetailsOpen);
+
+  if (_clanDetailsOpen && !_clanDetailsLoaded) {
+    loadClanDetails();
+  }
+}
+
+async function loadClanDetails() {
+  const div = document.getElementById('clan-details-content');
+  if (!div || !window._userClanTag) return;
+
+  try {
+    const r = await fetch(`/api/clan-info${clanQ()}`);
+    if (!r.ok) throw new Error('non disponibile');
+    const info = await r.json();
+    _clanDetailsLoaded = true;
+    renderClanDetails(info, div);
+  } catch (_) {
+    div.innerHTML = '<span style="color:var(--text-3);font-size:0.78rem">Informazioni clan non disponibili.</span>';
+  }
+}
+
+function renderClanDetails(info, div) {
+  if (!div || !info) return;
+
+  // War League — nome in italiano
+  const leagueNameEn    = info.warLeague?.name || null;
+  const leagueNameIt    = leagueNameEn ? (LEAGUE_EN_TO_IT[leagueNameEn] || leagueNameEn) : null;
+  const leagueBadgeFile = leagueNameEn ? LEAGUE_BADGE_MAP[leagueNameEn] : null;
+  const leagueHtml = leagueNameIt
+    ? `<div class="clan-detail-item">
+        ${leagueBadgeFile ? `<img src="leagues/${leagueBadgeFile}.png" alt="${leagueNameIt}" class="clan-detail-league-badge">` : SVG_TROPHY}
+        <span>${leagueNameIt}</span>
+       </div>`
+    : '';
+
+  // Tipo accesso
+  const typeKey   = info.type || 'open';
+  const typeLabel = CLAN_TYPE_LABELS[typeKey] || typeKey;
+  const typeSvg   = typeKey === 'closed' ? SVG_LOCK : typeKey === 'inviteOnly' ? SVG_MAIL : SVG_UNLOCK;
+  const typeHtml  = `<div class="clan-detail-item">${typeSvg}<span>${typeLabel}</span></div>`;
+
+  // Trofei richiesti
+  const trophiesHtml = info.requiredTrophies != null
+    ? `<div class="clan-detail-item">${SVG_TROPHY}<span>${info.requiredTrophies.toLocaleString('it-IT')} trofei req.</span></div>`
+    : '';
+
+  // Sede/Luogo
+  const locationHtml = info.location?.name
+    ? `<div class="clan-detail-item">${SVG_PIN}<span>${info.location.name}</span></div>`
+    : '';
+
+  // Lingua
+  const langHtml = info.chatLanguage?.name
+    ? `<div class="clan-detail-item">${SVG_SPEECH}<span>${info.chatLanguage.name}</span></div>`
+    : '';
+
+  // Punti clan (globale)
+  const pointsHtml = info.clanPoints != null
+    ? `<div class="clan-detail-item">${SVG_GLOBE}<span>${info.clanPoints.toLocaleString('it-IT')} pt</span></div>`
+    : '';
+
+  // Livello clan
+  const levelHtml = info.clanLevel != null
+    ? `<div class="clan-detail-item">${SVG_SHIELD}<span>Lv ${info.clanLevel}</span></div>`
+    : '';
+
+  div.innerHTML = `<div class="clan-detail-grid">
+    ${leagueHtml}${locationHtml}${langHtml}${typeHtml}${trophiesHtml}${pointsHtml}${levelHtml}
+  </div>`;
 }
 
 function showNoClanScreen(username) {
@@ -239,14 +371,20 @@ async function showApp(sessionUser) {
   window._clanName     = user.user_metadata?.coc_clan_name || '';
   window._clanBadgeUrl = user.user_metadata?.coc_clan_badge_url || null;
 
-  // Se l'utente non è in nessun clan, mostra schermata dedicata
-  if (!window._userClanTag && role !== 'admin') {
-    showNoClanScreen(user.user_metadata?.username || '');
-    return;
+  // Se l'utente non è in nessun clan
+  if (!window._userClanTag) {
+    if (!isAdmin) {
+      showNoClanScreen(user.user_metadata?.username || '');
+      return;
+    }
+    // Admin senza clan: nasconde le tab clan, va direttamente a Gestione Utenti
+    ['members', 'warlog', 'cwl'].forEach(tab => {
+      document.querySelectorAll(`[data-tab="${tab}"]`).forEach(el => el.style.display = 'none');
+    });
   }
 
   // Mostra nome in-game nella sidebar
-  const displayName = user.user_metadata?.username || user.email?.replace('@fearunited.internal','') || user.email;
+  const displayName = user.user_metadata?.username || user.email?.replace(/@(fearunited|cocboard)\.internal$/, '') || user.email;
   document.getElementById('user-email').textContent = displayName;
   const topbarEmailEl = document.getElementById('topbar-email');
   if (topbarEmailEl) topbarEmailEl.textContent = displayName;
@@ -288,7 +426,11 @@ async function showApp(sessionUser) {
   window._userRole = role;
   window._canEdit  = canEdit;  // usato da renderCwlSeasons per pulsante ✏️
 
-  loadMembers();
+  if (!window._userClanTag && isAdmin) {
+    activateTab('admin');
+  } else {
+    loadMembers();
+  }
 }
 
 
@@ -407,36 +549,69 @@ function renderMembers(members) {
     const joinDate = m.first_seen ? new Date(m.first_seen) : now;
     const isNew = Math.floor((now - joinDate) / 86400000) < 7;
     const role = cocRole(m.role);
+
+    // Lega individuale giocatore
+    const leagueItName = m.league_name ? (LEAGUE_EN_TO_IT[m.league_name] || m.league_name) : null;
+    const leagueImgSrc = m.league_icon_url || (m.league_name && LEAGUE_BADGE_MAP[m.league_name] ? `leagues/${LEAGUE_BADGE_MAP[m.league_name]}.png` : null);
+    const leagueHtml = leagueImgSrc
+      ? `<img src="${leagueImgSrc}" class="league-badge-sm" alt="${leagueItName || ''}" title="${leagueItName || ''}" loading="lazy">`
+      : '<span class="no-league-badge">—</span>';
+
+    // Badge SVG per giocatori nuovi (< 7 giorni)
+    const newBadge = isNew
+      ? `<svg class="new-player-badge" viewBox="0 0 38 13" xmlns="http://www.w3.org/2000/svg" aria-label="Nuovo membro"><rect x="0.5" y="0.5" width="37" height="12" rx="2.5" fill="rgba(39,174,96,0.15)" stroke="rgba(39,174,96,0.45)"/><text x="19" y="9.5" text-anchor="middle" font-size="7" font-weight="700" fill="#27AE60" font-family="IBM Plex Mono,monospace" letter-spacing="0.6">NUOVO</text></svg>`
+      : '';
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
-            <td class="th-col">${thImg(m.th_level)}</td>
-            <td>
-                <span class="member-name">${m.name}</span>
-                ${isNew ? '<span class="new-badge">NUOVO</span>' : ""}
-                <br><span class="tag-cell">${m.tag}</span>
-            </td>
-            <td><span class="role-badge ${role.cls}">${role.label}</span></td>
-            <td class="stat-cell">${m.trophies ?? '—'}</td>
-            <td class="stat-cell hide-sm">${m.donations ?? '—'} / ${m.donations_received ?? '—'}</td>
-            <td class="stat-cell hide-sm">${m.clan_rank ?? '—'}</td>
-            <td class="date-cell hide-md">${joinDate.toLocaleDateString('it-IT')}</td>
-        `;
+      <td class="col-league">${leagueHtml}</td>
+      <td class="col-th-cell">${thImgV(m.th_level)}</td>
+      <td class="col-member">
+        <div class="member-name-wrap">
+          <span class="member-name">${m.name}</span>${newBadge}
+        </div>
+        <span class="member-tag">${m.tag}<span class="member-role-inline ${role.cls}">${role.label}</span></span>
+      </td>
+      <td class="stat-cell col-trophies">${m.trophies ?? '—'}</td>
+      <td class="stat-cell col-extra">${m.donations ?? '—'} / ${m.donations_received ?? '—'}</td>
+      <td class="stat-cell col-extra">${m.clan_rank ?? '—'}</td>
+      <td class="col-expand-btn"><button class="btn-expand" onclick="toggleMemberExpand(this)" aria-label="Espandi" aria-expanded="false">+</button></td>
+    `;
+
+    const trExtra = document.createElement("tr");
+    trExtra.className = "tr-member-extra";
+    trExtra.innerHTML = `
+      <td colspan="99" class="td-extra-content">
+        <span class="extra-kv"><span class="extra-k">Don.</span>${m.donations ?? '—'}&nbsp;/&nbsp;Ric.&nbsp;${m.donations_received ?? '—'}</span>
+        <span class="extra-sep">·</span>
+        <span class="extra-kv"><span class="extra-k">#</span>${m.clan_rank ?? '—'}</span>
+      </td>
+    `;
+
     tbody.appendChild(tr);
+    tbody.appendChild(trExtra);
   });
 
-  // Aggiorna stat cards
-  const leaders = members.filter(m => m.role === 'leader' || m.role === 'coLeader').length;
-  const thLevels = members.map(m => m.th_level).filter(Boolean);
-  const avgTh = thLevels.length ? (thLevels.reduce((a,b)=>a+b,0)/thLevels.length).toFixed(1) : '—';
-  const newCount = members.filter(m => {
-    if (!m.first_seen) return false;
-    return Math.floor((new Date() - new Date(m.first_seen)) / 86400000) < 7;
-  }).length;
+  // Aggiorna stat cards compatte (nella sezione Dettagli clan)
+  const leaders   = members.filter(m => m.role === 'leader').length;
+  const coleaders = members.filter(m => m.role === 'coLeader').length;
+  const thLevels  = members.map(m => m.th_level).filter(Boolean);
+  const avgTh     = thLevels.length ? (thLevels.reduce((a,b)=>a+b,0)/thLevels.length).toFixed(1) : '—';
   const s = id => document.getElementById(id);
-  if (s('stat-total'))   s('stat-total').textContent   = members.length;
-  if (s('stat-leaders')) s('stat-leaders').textContent = leaders;
-  if (s('stat-avg-th'))  s('stat-avg-th').textContent  = avgTh;
-  if (s('stat-new'))     s('stat-new').textContent     = newCount;
+  if (s('stat-total'))     s('stat-total').textContent     = members.length;
+  if (s('stat-leaders'))   s('stat-leaders').textContent   = leaders;
+  if (s('stat-coleaders')) s('stat-coleaders').textContent = coleaders;
+  if (s('stat-avg-th'))    s('stat-avg-th').textContent    = avgTh;
+}
+
+// Espande/comprime la riga extra (mobile) nella tabella membri
+function toggleMemberExpand(btn) {
+  const tr   = btn.closest('tr');
+  const next = tr.nextElementSibling;
+  if (!next || !next.classList.contains('tr-member-extra')) return;
+  const isOpen = next.classList.toggle('visible');
+  btn.textContent = isOpen ? '−' : '+';
+  btn.setAttribute('aria-expanded', isOpen);
 }
 
 
@@ -459,10 +634,12 @@ document.getElementById("sync-btn").addEventListener("click", async () => {
 let cwlLiveData = null;
 
 async function loadCwlHistory() {
-  const { data } = await db
+  const q = db
     .from('cwl_history')
     .select('player_name, still_in_clan, is_secondary, participated, stars, destruction, attacks_made, attacks_required, bonus_score, bonus_assigned, season')
     .order('bonus_score', { ascending: false });
+  if (window._userClanTag) q.eq('clan_tag', window._userClanTag);
+  const { data } = await q;
   return data || [];
 }
 
@@ -584,13 +761,30 @@ function switchCwlTab(tab, btn) {
 let _assignMembersMap = {};  // name.toLowerCase() → {th_level, tag, name, ...}
 let _playerAliases   = {};  // alias.toLowerCase() → {alias, coc_name, tag, th_level}
 
-// Carica alias da Supabase (tabella player_aliases)
+// Carica alias da Supabase (tabella player_aliases) — filtrati per clan
 async function loadPlayerAliases() {
   _playerAliases = {};
   try {
-    const { data } = await db.from('player_aliases').select('*');
+    const q = db.from('player_aliases').select('*');
+    if (window._userClanTag) q.eq('clan_tag', window._userClanTag);
+    const { data } = await q;
     (data || []).forEach(a => { _playerAliases[a.alias.toLowerCase()] = a; });
   } catch (_) {} // tabella potrebbe non esistere ancora
+}
+
+// Calcola info scadenza ex-player (retention 6 mesi dall'ultima stagione attiva)
+function calcExpiryInfo(lastActiveSeason) {
+  const RETENTION = 6;
+  if (!lastActiveSeason) return { expiresSeason: '—', mesiRimasti: 0, scaduto: true };
+  const [ly, lm] = lastActiveSeason.split('-').map(Number);
+  const expYear  = ly + Math.floor((lm - 1 + RETENTION) / 12);
+  const expMonth = ((lm - 1 + RETENTION) % 12) + 1;
+  const expiresSeason = `${expYear}-${String(expMonth).padStart(2, '0')}`;
+  const now = new Date();
+  const nowYear = now.getFullYear(), nowMonth = now.getMonth() + 1;
+  const nowSeason = `${nowYear}-${String(nowMonth).padStart(2, '0')}`;
+  const mesiRimasti = (expYear - nowYear) * 12 + (expMonth - nowMonth);
+  return { expiresSeason, mesiRimasti: Math.max(0, mesiRimasti), scaduto: nowSeason > expiresSeason };
 }
 
 // Risolve un nome player → membro (controlla memberMap diretta + aliases)
@@ -709,10 +903,9 @@ async function loadAssignBonus() {
 }
 
 async function loadAssignMostRecent() {
-  const { data } = await db.from('cwl_history')
-    .select('season')
-    .order('season', { ascending: false })
-    .limit(1);
+  const qRecent = db.from('cwl_history').select('season').order('season', { ascending: false }).limit(1);
+  if (window._userClanTag) qRecent.eq('clan_tag', window._userClanTag);
+  const { data } = await qRecent;
   if (data?.[0]?.season) {
     const pick = document.getElementById('assign-season-pick');
     if (pick) pick.value = data[0].season;
@@ -763,6 +956,7 @@ async function saveCwlSeasonLive() {
     const destr = p.destruction || 0;
     const bonusScore = Math.round((stars / req) * 40 + (destr / Math.max(made, 1)) * 0.2 + (made / req) * 20);
     return {
+      clan_tag:         window._userClanTag || null,
       player_name:      p.name,
       season,
       participated:     true,
@@ -777,7 +971,7 @@ async function saveCwlSeasonLive() {
     };
   });
 
-  const { error } = await db.from('cwl_history').upsert(rows, { onConflict: 'player_name,season' });
+  const { error } = await db.from('cwl_history').upsert(rows, { onConflict: 'player_name,season,clan_tag' });
   if (btn) { btn.disabled = false; btn.textContent = '💾 Salva Stagione'; }
   if (error) {
     if (status) status.textContent = '✗ Errore: ' + error.message;
@@ -798,17 +992,33 @@ async function loadAssignMonth(overrideSeason) {
   const statusEl = document.getElementById('assign-load-status');
   if (statusEl) statusEl.textContent = 'Caricamento…';
 
-  const { data: history } = await db.from('cwl_history')
-    .select('*')
-    .eq('season', season)
-    .order('bonus_score', { ascending: false });
+  const qMonth = db.from('cwl_history').select('*').eq('season', season).order('bonus_score', { ascending: false });
+  if (window._userClanTag) qMonth.eq('clan_tag', window._userClanTag);
+  const { data: history } = await qMonth;
 
   await loadMembersMap();
+
+  // Carica l'ultima stagione attiva per ciascun ex-player (per mostrare scadenza in rosso)
+  const expiryMap = {}; // playerName → lastActiveSeason
+  const exNames = (history || []).filter(h => !isCurrentMember(h.player_name)).map(h => h.player_name);
+  if (exNames.length && window._userClanTag) {
+    const qExp = db.from('cwl_history')
+      .select('player_name, season')
+      .eq('clan_tag', window._userClanTag)
+      .eq('still_in_clan', true)
+      .in('player_name', exNames)
+      .order('season', { ascending: false });
+    const { data: expData } = await qExp;
+    (expData || []).forEach(r => {
+      if (!expiryMap[r.player_name]) expiryMap[r.player_name] = r.season;
+    });
+  }
+
   if (statusEl) statusEl.textContent = '';
-  renderAssignContent(history || [], season, false);
+  renderAssignContent(history || [], season, false, expiryMap);
 }
 
-function renderAssignContent(players, season, isLive) {
+function renderAssignContent(players, season, isLive, expiryMap = {}) {
   const div = document.getElementById('assign-content');
   if (!div) return;
   const canEdit = window._canEdit;
@@ -944,6 +1154,9 @@ function renderAssignContent(players, season, isLive) {
   if (exPlayers.length && !isLive) {
     html += `<div class="assign-ex-section">
       <h4 class="assign-ex-title">🚪 Ex-player — non più nel clan (${exPlayers.length})</h4>
+      <p style="font-size:0.78rem;color:var(--text-3);margin:-0.25rem 0 0.75rem">
+        I dati degli ex-player vengono eliminati automaticamente dopo <strong style="color:#ef5350">6 mesi</strong> dall'ultima stagione attiva.
+      </p>
       <div class="table-wrap">
       <table>
         <thead><tr>
@@ -954,6 +1167,7 @@ function renderAssignContent(players, season, isLive) {
           <th class="hide-xs">💥 Distruz.</th>
           <th class="hide-xs">⚔ Attacchi</th>
           <th class="hide-sm">Score</th>
+          <th>Scadenza</th>
         </tr></thead>
         <tbody>`;
     exPlayers.forEach(p => {
@@ -972,6 +1186,13 @@ function renderAssignContent(players, season, isLive) {
         ? '<span class="cwl-yes">✓ CWL</span>'
         : '<span class="cwl-no">✗</span>';
       const bonusIcon = hasBonus ? ' <span class="assign-bonus-icon">🏆</span>' : '';
+      // Badge scadenza
+      const exp = calcExpiryInfo(expiryMap[name] || null);
+      const expBadge = exp.scaduto
+        ? `<span style="color:#ef5350;font-size:0.75rem;font-weight:700">⚠ Scaduto</span>`
+        : exp.mesiRimasti <= 2
+          ? `<span style="color:#ef5350;font-size:0.75rem;font-weight:600">🗑 ${exp.mesiRimasti} mes${exp.mesiRimasti === 1 ? 'e' : 'i'}</span>`
+          : `<span style="color:#ef5350;font-size:0.75rem">🗑 ${exp.expiresSeason}</span>`;
       html += `<tr class="assign-ex-row">
         <td>${thHtml}</td>
         <td><span class="member-name storico-ex-name">${name}${bonusIcon}</span></td>
@@ -980,6 +1201,7 @@ function renderAssignContent(players, season, isLive) {
         <td class="stat-cell hide-xs">${avgD}</td>
         <td class="stat-cell hide-xs">${atk}</td>
         <td class="stat-cell hide-sm"><strong>${score}</strong></td>
+        <td class="stat-cell">${expBadge}</td>
       </tr>`;
     });
     html += '</tbody></table></div></div>';
@@ -1018,7 +1240,8 @@ async function saveAssignChanges(season) {
   const rows = [];
   checks.forEach(cb => {
     rows.push({
-      player_name: cb.dataset.name,
+      clan_tag:       window._userClanTag || null,
+      player_name:    cb.dataset.name,
       season,
       bonus_assigned: cb.checked,
       is_secondary:   secMap[cb.dataset.name] || false,
@@ -1035,7 +1258,7 @@ async function saveAssignChanges(season) {
   }
 
   const { error } = await db.from('cwl_history')
-    .upsert(rows, { onConflict: 'player_name,season' });
+    .upsert(rows, { onConflict: 'player_name,season,clan_tag' });
 
   if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Salva'; }
 
@@ -1059,9 +1282,9 @@ async function loadStorico() {
   if (!div) return;
   div.innerHTML = '<p class="wl-loading">Caricamento storico…</p>';
 
-  const { data: history, error } = await db.from('cwl_history')
-    .select('*')
-    .order('season', { ascending: false });
+  const qStorico = db.from('cwl_history').select('*').order('season', { ascending: false });
+  if (window._userClanTag) qStorico.eq('clan_tag', window._userClanTag);
+  const { data: history, error } = await qStorico;
 
   if (error || !history?.length) {
     div.innerHTML = error
@@ -1087,11 +1310,15 @@ async function loadStorico() {
         best_attacks_required: 0,
         best_score: 0,
         bonus_months: [],
-        total_seasons: 0
+        total_seasons: 0,
+        lastActiveSeason: null,  // ultima stagione con still_in_clan=true
       };
     }
     const p = playerMap[key];
-    if (h.still_in_clan) p.still_in_clan = true;
+    if (h.still_in_clan) {
+      p.still_in_clan = true;
+      if (!p.lastActiveSeason || h.season > p.lastActiveSeason) p.lastActiveSeason = h.season;
+    }
     if (h.is_secondary) p.is_secondary = true;
     p.total_seasons++;
     if ((h.stars || 0) >= p.best_stars) {
@@ -1181,10 +1408,20 @@ function renderStoricoTable(data) {
             return `<span class="bo-pill">${lbl}</span>`;
           }).join('') + (p.bonus_months.length > 5 ? `<span class="bo-pill" style="opacity:0.6">+${p.bonus_months.length - 5}</span>` : '')
         : '<span style="color:var(--text-3);font-size:0.78rem">—</span>';
+      // Badge scadenza per ex-player
+      let expCell = '';
+      if (isEx) {
+        const exp = calcExpiryInfo(p.lastActiveSeason);
+        expCell = exp.scaduto
+          ? `<br><span style="color:#ef5350;font-size:0.72rem;font-weight:700">⚠ Dati scaduti — eliminazione imminente</span>`
+          : exp.mesiRimasti <= 2
+            ? `<br><span style="color:#ef5350;font-size:0.72rem;font-weight:600">🗑 Eliminazione tra ${exp.mesiRimasti} mes${exp.mesiRimasti === 1 ? 'e' : 'i'}</span>`
+            : `<br><span style="color:#ef5350;font-size:0.72rem">🗑 Eliminaz. ${exp.expiresSeason}</span>`;
+      }
       return `<tr>
         <td>${thHtml}</td>
         <td class="tag-cell">${tag}</td>
-        <td><span class="${nameCls}">${p.player_name}</span></td>
+        <td><span class="${nameCls}">${p.player_name}</span>${expCell}</td>
         <td class="stat-cell">${p.best_stars || '—'}</td>
         <td class="stat-cell hide-xs">${avgD}</td>
         <td class="stat-cell hide-xs">${atk}</td>
@@ -1228,10 +1465,12 @@ async function loadHallOfFame() {
 
   await loadMembersMap();
 
-  const { data, error } = await db.from('cwl_history')
+  const qHof = db.from('cwl_history')
     .select('player_name, season, still_in_clan, bonus_score')
     .eq('bonus_assigned', true)
     .order('season', { ascending: true });
+  if (window._userClanTag) qHof.eq('clan_tag', window._userClanTag);
+  const { data, error } = await qHof;
 
   if (error) { div.innerHTML = `<p style="color:var(--red)">Errore: ${error.message}</p>`; return; }
   if (!data?.length) { div.innerHTML = '<p class="wl-loading">Nessun bonus trovato.</p>'; return; }
@@ -1396,7 +1635,9 @@ async function loadManualMemberList() {
 
   // Carica da Supabase prima (veloce), poi prova API live con timeout
   let members = [];
-  const { data: sbMembers } = await db.from('members').select('name').order('name');
+  const sbMQ = db.from('members').select('name').order('name');
+  if (window._userClanTag) sbMQ.eq('clan_tag', window._userClanTag);
+  const { data: sbMembers } = await sbMQ;
   if (sbMembers) members = sbMembers.map(r => r.name).filter(Boolean);
 
   try {
@@ -1413,7 +1654,9 @@ async function loadManualMemberList() {
 
   // Fallback finale: prende i nomi unici dalla panoramica storica
   if (!members.length) {
-    const { data } = await db.from('cwl_history').select('player_name');
+    const qFallback = db.from('cwl_history').select('player_name');
+    if (window._userClanTag) qFallback.eq('clan_tag', window._userClanTag);
+    const { data } = await qFallback;
     if (data) {
       members = [...new Set(data.map(r => r.player_name))].sort((a, b) => a.localeCompare(b));
     }
@@ -1425,10 +1668,9 @@ async function loadManualMemberList() {
   }
 
   // Controlla chi ha già ricevuto il bonus in questa stagione
-  const { data: existing } = await db.from('cwl_history')
-    .select('player_name')
-    .eq('season', season)
-    .eq('bonus_assigned', true);
+  const qExisting = db.from('cwl_history').select('player_name').eq('season', season).eq('bonus_assigned', true);
+  if (window._userClanTag) qExisting.eq('clan_tag', window._userClanTag);
+  const { data: existing } = await qExisting;
   const alreadyBonus = new Set((existing || []).map(r => r.player_name));
 
   // Pre-seleziona chi ha già il bonus nel DB
@@ -1472,6 +1714,7 @@ async function saveManualBonus(season) {
   if (btn) { btn.disabled = true; btn.textContent = '💾 Salvataggio…'; }
 
   const rows = [...bmManualSelected].map(name => ({
+    clan_tag:         window._userClanTag || null,
     player_name:      name,
     season,
     participated:     true,
@@ -1486,7 +1729,7 @@ async function saveManualBonus(season) {
   }));
 
   const { error } = await db.from('cwl_history')
-    .upsert(rows, { onConflict: 'player_name,season' });
+    .upsert(rows, { onConflict: 'player_name,season,clan_tag' });
 
   if (btn) { btn.disabled = false; btn.textContent = '💾 Salva Bonus Manuali'; }
 
@@ -1513,7 +1756,9 @@ async function loadAliasManager() {
   const nMembers = Object.keys(_assignMembersMap).length;
   const nAliases = Object.keys(_playerAliases).length;
 
-  const { data: historyPlayers } = await db.from('cwl_history').select('player_name');
+  const qAlias = db.from('cwl_history').select('player_name');
+  if (window._userClanTag) qAlias.eq('clan_tag', window._userClanTag);
+  const { data: historyPlayers } = await qAlias;
   if (!historyPlayers?.length) {
     div.innerHTML = `<p style="font-size:0.84rem;color:var(--text-3)">Nessun giocatore nello storico. (Membri caricati: ${nMembers}, Alias: ${nAliases})</p>`;
     return;
@@ -1631,10 +1876,9 @@ async function applyBonusCriteria() {
   document.getElementById('bm-footer').style.display = 'none';
 
   // Carica dati storici per season
-  const { data: history, error } = await db.from('cwl_history')
-    .select('*')
-    .eq('season', season)
-    .eq('is_secondary', false);
+  const qCrit = db.from('cwl_history').select('*').eq('season', season).eq('is_secondary', false);
+  if (window._userClanTag) qCrit.eq('clan_tag', window._userClanTag);
+  const { data: history, error } = await qCrit;
 
   if (error || !history?.length) {
     msg.textContent = '⚠ Nessun dato per questa stagione. Prima carica lo storico o i dati live dalla tab CWL.';
@@ -1648,11 +1892,13 @@ async function applyBonusCriteria() {
     const pastDate = new Date();
     pastDate.setMonth(pastDate.getMonth() - recentMonths);
     const fromSeason = pastDate.toISOString().slice(0, 7);
-    const { data: recentData } = await db.from('cwl_history')
+    const qRecent2 = db.from('cwl_history')
       .select('player_name, season')
       .eq('bonus_assigned', true)
       .gte('season', fromSeason)
       .neq('season', season);
+    if (window._userClanTag) qRecent2.eq('clan_tag', window._userClanTag);
+    const { data: recentData } = await qRecent2;
     if (recentData) recentData.forEach(r => recentBonusNames.add(r.player_name));
   }
 
@@ -1765,6 +2011,7 @@ async function saveBonusFromModal() {
   btn.textContent = 'Salvataggio…';
 
   const upsertData = bmCandidates.map(c => ({
+    clan_tag:         window._userClanTag || null,
     player_name:      c.player_name,
     season,
     participated:     c.participated ?? false,
@@ -1778,7 +2025,7 @@ async function saveBonusFromModal() {
     is_secondary:     false
   }));
 
-  const { error } = await db.from('cwl_history').upsert(upsertData, { onConflict: 'player_name,season' });
+  const { error } = await db.from('cwl_history').upsert(upsertData, { onConflict: 'player_name,season,clan_tag' });
   btn.textContent = '💾 Salva Assegnazione';
   if (error) { msg.textContent = '✗ ' + error.message; return; }
 
@@ -1797,11 +2044,13 @@ async function loadBonusHistory() {
 
   div.innerHTML = '<p style="color:#5a7a98;padding:1rem 0">Caricamento…</p>';
 
-  const { data, error } = await db.from('cwl_history')
+  const qBonusHist = db.from('cwl_history')
     .select('*')
     .eq('season', season)
     .eq('bonus_assigned', true)
     .order('bonus_score', { ascending: false });
+  if (window._userClanTag) qBonusHist.eq('clan_tag', window._userClanTag);
+  const { data, error } = await qBonusHist;
 
   if (error) { div.innerHTML = '<p style="color:#ff6b6b">Errore: ' + error.message + '</p>'; return; }
   if (!data?.length) {
@@ -1851,10 +2100,12 @@ async function loadBonusOverview() {
   const div = document.getElementById('bm-overview-results');
   div.innerHTML = '<p style="color:#5a7a98;padding:0.75rem 0">Caricamento…</p>';
 
-  const { data, error } = await db.from('cwl_history')
+  const qOverview = db.from('cwl_history')
     .select('player_name, season, still_in_clan')
     .eq('bonus_assigned', true)
     .order('season', { ascending: true });
+  if (window._userClanTag) qOverview.eq('clan_tag', window._userClanTag);
+  const { data, error } = await qOverview;
 
   if (error) { div.innerHTML = '<p style="color:#ff6b6b">Errore: ' + error.message + '</p>'; return; }
   if (!data?.length) { div.innerHTML = '<p style="color:#5a7a98;padding:0.75rem 0">Nessun bonus trovato.</p>'; return; }
@@ -1965,19 +2216,19 @@ async function loadUsers() {
     const username  = u.user_metadata?.username || '';
     const cocTag    = u.user_metadata?.coc_tag || '';
     const roleInfo  = ROLE_LABELS[role] || ROLE_LABELS['utente'];
-    const isInternal = u.email?.endsWith('@fearunited.internal');
-    const loginId   = isInternal ? u.email.replace('@fearunited.internal', '') : (u.email || '—');
-    const realEmail = !isInternal && u.email ? u.email : (u.email !== u.email ? '' : '');
+    const isInternal = u.email?.endsWith('@fearunited.internal') || u.email?.endsWith('@cocboard.internal');
+    const loginId   = isInternal ? u.email.replace(/@(fearunited|cocboard)\.internal$/, '') : (u.email || '—');
+    const recoveryEmail = u.user_metadata?.email || '';
 
     // Colonna Tag/Login
     const tagCell = cocTag
       ? `<span class="login-id-tag" title="Tag CoC">${cocTag}</span>`
       : `<span class="login-id-tag" title="Nome utente login">${loginId}</span>`;
 
-    // Colonna Email
-    const emailCell = isInternal
-      ? `<span class="user-no-email" title="Nessuna email impostata">—</span>`
-      : `<span style="font-size:0.8rem;color:#7ab8d4">${u.email}</span>`;
+    // Colonna Email (mostra email di recupero dai metadata)
+    const emailCell = recoveryEmail
+      ? `<span style="font-size:0.8rem;color:#7ab8d4">${recoveryEmail}</span>`
+      : `<span class="user-no-email" title="Nessuna email impostata">—</span>`;
 
     const created   = new Date(u.created_at).toLocaleDateString('it-IT');
     const isMe      = (username || loginId) === myDisplayName;

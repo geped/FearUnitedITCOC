@@ -170,58 +170,93 @@
 
             <!-- ── TAB: CLAN ─────────────────────────────────────────── -->
             <section id="tab-members" class="tab-content">
-                <div class="page-header">
-                    <div>
-                        <h2>🏠 Clan</h2>
-                        <p class="page-sub">Membri attuali di <span class="clan-name-dyn">—</span></p>
+
+                <!-- ── Header clan ── -->
+                <div class="clan-page-header">
+                    <div class="clan-identity">
+                        <img id="clan-header-badge" class="clan-header-badge" src="" alt="" style="display:none">
+                        <div class="clan-header-badge-fallback" id="clan-header-badge-fallback">
+                            <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M20 3L5 9v11c0 9 6.5 17.4 15 19.5C29.5 37.4 36 29 36 20V9L20 3z" fill="var(--bg-3)" stroke="var(--gold)" stroke-width="1.5"/>
+                                <path d="M20 3L5 9v11c0 9 6.5 17.4 15 19.5C29.5 37.4 36 29 36 20V9L20 3z" fill="var(--gold-glow)"/>
+                            </svg>
+                        </div>
+                        <div class="clan-identity-text">
+                            <h2 class="clan-identity-name clan-name-dyn">—</h2>
+                            <span class="clan-identity-tag mono" id="clan-header-tag">—</span>
+                        </div>
                     </div>
-                    <button id="sync-btn" class="btn-primary btn-sm">🔄 Sincronizza</button>
+                    <button id="sync-btn" class="btn-primary btn-sm clan-sync-btn">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" style="flex-shrink:0">
+                            <path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                        </svg>
+                        Sincronizza
+                    </button>
                 </div>
                 <div id="sync-status" class="status-bar"></div>
 
-                <div class="stat-cards" id="clan-stats">
-                    <div class="stat-card">
-                        <div class="stat-icon">👥</div>
-                        <div class="stat-body">
-                            <div class="stat-val" id="stat-total">—</div>
-                            <div class="stat-label">Membri</div>
+                <!-- ── Pannello espandibile dettagli clan (include stats compatte) ── -->
+                <div class="clan-details-toggle" id="clan-details-toggle" onclick="toggleClanDetails()">
+                    <span class="clan-details-toggle-label">Dettagli clan</span>
+                    <svg class="clan-details-chevron" id="clan-details-chevron" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                        <path d="M7 10l5 5 5-5z"/>
+                    </svg>
+                </div>
+                <div class="clan-details-panel" id="clan-details-panel">
+                    <div class="clan-panel-body">
+                        <!-- Statistiche compatte (aggiornate da renderMembers) -->
+                        <div class="clan-compact-stats">
+                            <!-- Membri totali -->
+                            <div class="cs-stat">
+                                <svg class="cs-icon" viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                                    <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 13.17 10.33 12 8 12zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C23 13.17 18.33 12 16 12z"/>
+                                </svg>
+                                <span class="cs-val" id="stat-total">—</span>
+                                <span class="cs-lbl">Membri</span>
+                            </div>
+                            <div class="cs-divider"></div>
+                            <!-- Capo + Co-Capo con icone distinte -->
+                            <div class="cs-stat">
+                                <svg class="cs-icon cs-icon--leader" viewBox="0 0 24 24" fill="currentColor" width="14" height="14" title="Capo">
+                                    <path d="M5 16L3 6l5.5 4L12 4l3.5 6L21 6l-2 10H5zm0 2v2h14v-2H5z"/>
+                                </svg>
+                                <span class="cs-val" id="stat-leaders">—</span>
+                                <svg class="cs-icon cs-icon--coleader" viewBox="0 0 24 24" fill="currentColor" width="12" height="12" title="Co-Capo" style="margin-left:0.3rem">
+                                    <path d="M5 16L3 6l5.5 4L12 4l3.5 6L21 6l-2 10H5zm0 2v2h14v-2H5z"/>
+                                </svg>
+                                <span class="cs-val" id="stat-coleaders">—</span>
+                                <span class="cs-lbl">C / CC</span>
+                            </div>
+                            <div class="cs-divider"></div>
+                            <!-- TH Medio -->
+                            <div class="cs-stat">
+                                <svg class="cs-icon" viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                                    <path d="M6 2v3H3v4l2 1v12h14V10l2-1V5h-3V2h-2v3h-2V2h-2v3h-2V2H6zm1 5h10v11H7V7zm3 2v4h4V9h-4z"/>
+                                </svg>
+                                <span class="cs-val" id="stat-avg-th">—</span>
+                                <span class="cs-lbl">TH Medio</span>
+                            </div>
                         </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">🏆</div>
-                        <div class="stat-body">
-                            <div class="stat-val" id="stat-leaders">—</div>
-                            <div class="stat-label">Capi / Co-Capi</div>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">⚔️</div>
-                        <div class="stat-body">
-                            <div class="stat-val" id="stat-avg-th">—</div>
-                            <div class="stat-label">TH Medio</div>
-                        </div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-icon">🆕</div>
-                        <div class="stat-body">
-                            <div class="stat-val" id="stat-new">—</div>
-                            <div class="stat-label">Nuovi (7gg)</div>
+                        <!-- Dettagli clan (popolato da loadClanDetails) -->
+                        <div id="clan-details-content">
+                            <span style="color:var(--text-3);font-size:0.78rem;padding:0.5rem 0.9rem;display:block">Caricamento...</span>
                         </div>
                     </div>
                 </div>
 
+                <!-- ── Tabella membri ── -->
                 <div class="card">
                     <div class="table-wrap">
                         <table id="members-table">
                             <thead>
                                 <tr>
-                                    <th>TH</th>
-                                    <th>Nome / Tag</th>
-                                    <th>Ruolo</th>
-                                    <th class="hide-xs">Trofei</th>
-                                    <th class="hide-sm">Don. / Ric.</th>
-                                    <th class="hide-sm">#</th>
-                                    <th class="hide-md">Dal</th>
+                                    <th class="col-league">Lega</th>
+                                    <th class="col-th-hdr">TH</th>
+                                    <th>Nome / Tag · Ruolo</th>
+                                    <th>Trofei</th>
+                                    <th class="col-extra">Don. / Ric.</th>
+                                    <th class="col-extra">#</th>
+                                    <th class="col-expand-btn"></th>
                                 </tr>
                             </thead>
                             <tbody></tbody>

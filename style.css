@@ -509,9 +509,15 @@ body {
     .hamburger { display: flex; }
     .bottom-nav { display: flex; }
     .topbar-email { display: none; }
-    .app-main { padding: 1rem; padding-bottom: calc(var(--bnav-h) + 1rem); }
-    .app-topbar { padding: 0 1rem; }
+    .app-main { padding: 0.75rem 0.75rem; padding-bottom: calc(var(--bnav-h) + 0.75rem); }
+    .app-topbar { padding: 0 0.75rem; }
     .topbar-right .user-info { display: none; }
+    /* Clan header compatto su mobile */
+    .clan-page-header { margin-bottom: 0.75rem; }
+    .clan-identity-name { font-size: 1.1rem; }
+    /* Dettagli clan compatto */
+    .clan-compact-stats { gap: 0.45rem; padding: 0.4rem 0.75rem; }
+    .cs-val { font-size: 0.82rem; }
 }
 
 @media (min-width: 769px) {
@@ -642,7 +648,183 @@ h3 { font-size: 1.05rem; }
 }
 
 /* ─────────────────────────────────────────────────────────────
-   STAT CARDS
+   CLAN PAGE HEADER
+   ───────────────────────────────────────────────────────────── */
+.clan-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.1rem;
+    flex-wrap: wrap;
+}
+.clan-identity {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+}
+.clan-header-badge {
+    width: 44px;
+    height: 44px;
+    object-fit: contain;
+    flex-shrink: 0;
+    filter: drop-shadow(0 0 6px rgba(201,169,98,0.25));
+}
+.clan-header-badge-fallback {
+    width: 44px;
+    height: 44px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.clan-identity-text { min-width: 0; }
+.clan-identity-name {
+    font-family: 'Lilita One', cursive;
+    font-size: 1.3rem;
+    color: var(--gold);
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.clan-identity-tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-3);
+    letter-spacing: 0.5px;
+}
+.clan-sync-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   CLAN DETAILS PANEL
+   ───────────────────────────────────────────────────────────── */
+.clan-details-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.4rem 0.75rem;
+    margin-bottom: 0;
+    cursor: pointer;
+    user-select: none;
+    transition: border-color 0.15s, border-radius 0.15s;
+}
+.clan-details-toggle:hover { border-color: var(--border-2); }
+.clan-details-toggle.open {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-color: transparent;
+}
+.clan-details-toggle-label {
+    font-size: 0.78rem;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.clan-details-chevron {
+    color: var(--text-3);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+.clan-details-panel {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.2s ease;
+    opacity: 0;
+    margin-bottom: 0;
+}
+.clan-details-panel--open {
+    max-height: 420px;
+    opacity: 1;
+    margin-bottom: 0.85rem;
+}
+
+/* ── Contenitore visivo del pannello ── */
+.clan-panel-body {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 var(--radius) var(--radius);
+    overflow: hidden;
+}
+
+/* ── Statistiche compatte dentro il pannello ── */
+.clan-compact-stats {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.9rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+.cs-stat {
+    display: flex;
+    align-items: center;
+    gap: 0.22rem;
+}
+.cs-icon {
+    color: var(--gold);
+    flex-shrink: 0;
+    opacity: 0.85;
+}
+.cs-icon--leader   { color: var(--gold); }
+.cs-icon--coleader { color: #9a7830; opacity: 1; }
+.cs-val {
+    font-family: 'Lilita One', cursive;
+    font-size: 0.92rem;
+    color: var(--text);
+    line-height: 1;
+}
+.cs-lbl {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.56rem;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    align-self: flex-end;
+    padding-bottom: 1px;
+    margin-left: 0.1rem;
+}
+.cs-divider {
+    width: 1px;
+    height: 14px;
+    background: var(--border-2);
+    flex-shrink: 0;
+}
+
+.clan-detail-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.2rem;
+    padding: 0.55rem 0.9rem;
+}
+.clan-detail-item {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    color: var(--text-2);
+}
+.clan-detail-item svg { color: var(--gold); flex-shrink: 0; opacity: 0.85; }
+.clan-detail-league-badge {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   STAT CARDS (usate in sezioni CWL — non più nella tab Clan)
    ───────────────────────────────────────────────────────────── */
 .stat-cards {
     display: grid;
@@ -718,7 +900,139 @@ tbody tr:last-child td { border-bottom: none; }
 @media (min-width: 640px)  { .hide-sm { display: table-cell; } }
 @media (min-width: 900px)  { .hide-md { display: table-cell; } }
 
-/* TH image in table */
+/* ── Colonne tabella membri ── */
+
+/* Lega individuale */
+.col-league {
+    text-align: center;
+    padding-left: 0.4rem !important;
+    padding-right: 0.3rem !important;
+    width: 26px;
+    white-space: nowrap;
+}
+.league-badge-sm {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    display: block;
+    margin: 0 auto;
+}
+.no-league-badge {
+    color: var(--text-3);
+    font-size: 0.7rem;
+    display: block;
+    text-align: center;
+}
+
+/* TH colonna con immagine + nome sotto (thImgV) */
+.col-th-hdr, .col-th-cell {
+    text-align: center;
+    padding-left: 0.4rem !important;
+    padding-right: 0.4rem !important;
+    width: 42px;
+}
+#members-table .th-cell-v {
+    align-items: center;
+    min-width: 30px;
+}
+#members-table .th-cell-v .th-img {
+    width: 28px;
+    height: 28px;
+}
+#members-table .th-label-v {
+    font-size: 0.55rem;
+    letter-spacing: 0.3px;
+}
+
+/* Cella nome / tag / ruolo combinata */
+.col-member { min-width: 100px; }
+.member-name-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+    line-height: 1.25;
+}
+.member-role-inline {
+    font-size: 0.64rem;
+    font-weight: 700;
+    font-family: 'IBM Plex Mono', monospace;
+    margin-left: 0.25rem;
+    opacity: 0.9;
+}
+.new-player-badge {
+    display: inline-block;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+/* Trofei */
+.col-trophies { white-space: nowrap; }
+
+/* Colonne extra — nascoste su mobile, visibili su desktop */
+.col-extra { display: none; }
+@media (min-width: 640px) { .col-extra { display: table-cell; } }
+
+/* Pulsante espandi riga — visibile solo su mobile */
+.col-expand-btn {
+    display: table-cell;
+    padding: 0.3rem 0.4rem !important;
+    width: 28px;
+}
+@media (min-width: 640px) { .col-expand-btn { display: none; } }
+
+.btn-expand {
+    background: var(--bg-3);
+    border: 1px solid var(--border-2);
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    color: var(--text-3);
+    font-size: 0.88rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 700;
+    transition: background 0.15s, color 0.15s;
+    padding: 0;
+    flex-shrink: 0;
+}
+.btn-expand:hover { background: var(--bg-2); color: var(--gold); }
+.btn-expand[aria-expanded="true"] {
+    background: var(--gold-dim);
+    color: var(--gold);
+    border-color: rgba(201,169,98,0.3);
+}
+
+/* Riga extra espansa (solo mobile) */
+.tr-member-extra { display: none; }
+.tr-member-extra.visible { display: table-row; }
+@media (min-width: 640px) { .tr-member-extra { display: none !important; } }
+
+.td-extra-content {
+    padding: 0.35rem 0.75rem 0.45rem !important;
+    background: var(--bg-2);
+    font-size: 0.76rem;
+    color: var(--text-2);
+    font-family: 'IBM Plex Mono', monospace;
+    border-top: 1px dashed var(--border);
+}
+.extra-k {
+    color: var(--text-3);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    margin-right: 0.18rem;
+}
+.extra-sep {
+    color: var(--text-3);
+    margin: 0 0.45rem;
+}
+.extra-kv { display: inline; }
+
+/* TH image in table (generic) */
 .th-img { width: 32px; height: 32px; object-fit: contain; }
 .th-cell { display: flex; align-items: center; gap: 0.4rem; }
 .th-lvl {
@@ -726,6 +1040,14 @@ tbody tr:last-child td { border-bottom: none; }
     font-size: 0.72rem;
     font-weight: 700;
     color: var(--gold);
+}
+
+/* Mobile table compact */
+@media (max-width: 640px) {
+    #members-table td { padding: 0.45rem 0.45rem; }
+    .member-name { font-size: 0.82rem; }
+    .member-tag  { font-size: 0.62rem; }
+    .stat-cell   { font-size: 0.75rem; }
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -1362,9 +1684,13 @@ tbody tr:last-child td { border-bottom: none; }
 .member-name { font-weight: 600; color: var(--text); font-size: 0.88rem; }
 .member-tag {
     font-family: 'IBM Plex Mono', monospace;
-    font-size: 0.68rem;
+    font-size: 0.66rem;
     color: var(--text-3);
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+    margin-top: 1px;
 }
 
 /* Role badges in table */
