@@ -283,7 +283,10 @@
                 <div id="wl-classic">
                     <div class="toolbar">
                         <span class="toolbar-label">Ultime war classiche del clan</span>
-                        <button class="btn-primary btn-sm" onclick="loadWarLog()">🔄 Carica</button>
+                        <div style="display:flex;gap:0.5rem;align-items:center">
+                            <button class="btn-secondary btn-sm" id="btn-save-war" onclick="saveCurrentWar()">💾 Salva War</button>
+                            <button class="btn-primary btn-sm" onclick="loadWarLog()">🔄 Carica</button>
+                        </div>
                     </div>
                     <div id="wl-classic-results"></div>
                 </div>

@@ -2485,11 +2485,24 @@ document.querySelectorAll('.tab-btn[data-tab="warlog"]').forEach(btn => {
 
 // ── DETTAGLIO WAR CLASSICA ────────────────────────────────────────────────────
 
-function openClassicWarDetail(idx) {
+async function openClassicWarDetail(idx) {
   const w = (window._warLogItems || [])[idx];
   if (!w) return;
 
   document.getElementById('classic-war-detail-modal')?.remove();
+
+  // Cerca dati completi in Supabase (classic_wars)
+  let enriched = null;
+  if (w.endTime && window._userClanTag) {
+    try {
+      const { data } = await db.from('classic_wars')
+        .select('*')
+        .eq('clan_tag', window._userClanTag)
+        .eq('end_time', w.endTime)
+        .maybeSingle();
+      if (data) enriched = data;
+    } catch (_) {}
+  }
 
   const fmtDate = w.endTime ? new Date(
     w.endTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6')
@@ -2505,8 +2518,12 @@ function openClassicWarDetail(idx) {
     ? `<img src="${w.opponent.badgeUrls.small}" class="cdm-war-badge" alt="">`
     : '<span class="cdm-war-badge-ph">🛡️</span>';
 
-  const size = w.teamSize ?? '?';
-  const atkPerMember = 2; // war classica sempre 2 attacchi
+  const size = (enriched?.team_size ?? w.teamSize) ?? '?';
+  const atkPerMember = enriched?.atk_per_member ?? 2;
+
+  // Usa dati Supabase (enriched) se disponibili, altrimenti war log (w)
+  const ourMembers = enriched?.our_members ?? w.clan?.members ?? null;
+  const oppMembers = enriched?.opp_members ?? w.opponent?.members ?? null;
 
   // Mappa tag → {name, pos} da entrambe le squadre
   const defMap = {};
@@ -2569,8 +2586,8 @@ function openClassicWarDetail(idx) {
 
   // Tab attivo
   let activeTab = 'us';
-  const ourCards = buildTeamCards(w.clan?.members);
-  const oppCards = buildTeamCards(w.opponent?.members);
+  const ourCards = buildTeamCards(ourMembers);
+  const oppCards = buildTeamCards(oppMembers);
 
   const modal = document.createElement('div');
   modal.id = 'classic-war-detail-modal';
@@ -2637,6 +2654,30 @@ function closeClassicWarDetail() {
   if (!modal) return;
   modal.classList.remove('cdm-overlay--visible');
   modal.addEventListener('transitionend', () => modal.remove(), { once: true });
+}
+
+async function saveCurrentWar() {
+  const btn = document.getElementById('btn-save-war');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Salvataggio…'; }
+  try {
+    const r = await fetch(`/api/save-current-war${clanQ()}`, { method: 'POST' });
+    const data = await r.json();
+    if (data.skipped) {
+      const reason = data.reason === 'notInWar' || data.reason?.includes('state=')
+        ? 'Nessuna war conclusa da salvare al momento.'
+        : `Saltato: ${data.reason}`;
+      alert(reason);
+    } else if (data.saved) {
+      alert(`✅ War salvata! Risultato: ${data.result === 'win' ? 'Vittoria' : data.result === 'lose' ? 'Sconfitta' : 'Pareggio'}`);
+      loadWarLog();
+    } else {
+      alert(data.error || 'Errore sconosciuto');
+    }
+  } catch (e) {
+    alert('⚠️ Errore di rete. Riprova.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Salva War'; }
+  }
 }
 
 // ── CRONOLOGIA LEGHE CWL ─────────────────────────────────────────────────────

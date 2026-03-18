@@ -24,6 +24,73 @@ function cocHeaders() {
 
 // ── SYNC MEMBERS ────────────────────────────────────────────────────────────
 
+// ── SALVA WAR CONCLUSA ──────────────────────────────────────────────────────
+
+async function saveEndedWar(clanTagRaw) {
+    const clanTag = parseClanTag(clanTagRaw);
+    if (!clanTag) throw new Error('clan_tag obbligatorio.');
+
+    const r = await fetch(
+        `https://api.clashofclans.com/v1/clans/${encodeTag(clanTag)}/currentwar`,
+        { headers: cocHeaders() }
+    );
+    if (!r.ok) return { skipped: true, reason: `CoC API ${r.status}` };
+    const war = await r.json();
+
+    if (war.state !== 'warEnded') return { skipped: true, reason: `state=${war.state}` };
+    if ((war.warType || '').toLowerCase() === 'cwl') return { skipped: true, reason: 'cwl' };
+
+    const ourSide = war.clan;
+    const oppSide = war.opponent;
+
+    // Determina risultato
+    let result = 'tie';
+    if ((ourSide.stars || 0) > (oppSide.stars || 0)) result = 'win';
+    else if ((ourSide.stars || 0) < (oppSide.stars || 0)) result = 'lose';
+    else if ((ourSide.destructionPercentage || 0) > (oppSide.destructionPercentage || 0)) result = 'win';
+    else if ((ourSide.destructionPercentage || 0) < (oppSide.destructionPercentage || 0)) result = 'lose';
+
+    const row = {
+        clan_tag:       clanTag,
+        end_time:       war.endTime,
+        result,
+        team_size:      war.teamSize ?? null,
+        atk_per_member: war.attacksPerMember ?? 2,
+        our_tag:        ourSide.tag,
+        our_name:       ourSide.name,
+        our_badge:      ourSide.badgeUrls?.small ?? null,
+        our_stars:      ourSide.stars ?? 0,
+        our_destr:      +(ourSide.destructionPercentage ?? 0).toFixed(2),
+        opp_tag:        oppSide.tag,
+        opp_name:       oppSide.name,
+        opp_badge:      oppSide.badgeUrls?.small ?? null,
+        opp_stars:      oppSide.stars ?? 0,
+        opp_destr:      +(oppSide.destructionPercentage ?? 0).toFixed(2),
+        our_members:    (ourSide.members || []).map(m => ({
+            tag: m.tag, name: m.name,
+            townhallLevel: m.townhallLevel, mapPosition: m.mapPosition,
+            attacks: (m.attacks || []).map(a => ({
+                defenderTag: a.defenderTag, stars: a.stars,
+                destructionPercentage: a.destructionPercentage, order: a.order
+            }))
+        })),
+        opp_members:    (oppSide.members || []).map(m => ({
+            tag: m.tag, name: m.name,
+            townhallLevel: m.townhallLevel, mapPosition: m.mapPosition,
+            attacks: (m.attacks || []).map(a => ({
+                defenderTag: a.defenderTag, stars: a.stars,
+                destructionPercentage: a.destructionPercentage, order: a.order
+            }))
+        }))
+    };
+
+    const { error } = await supabase()
+        .from('classic_wars')
+        .upsert(row, { onConflict: 'clan_tag,end_time' });
+    if (error) throw new Error(error.message);
+    return { saved: true, endTime: war.endTime, result };
+}
+
 async function syncMembers(clanTagRaw) {
     const clanTag = parseClanTag(clanTagRaw);
     if (!clanTag) throw new Error('clan_tag obbligatorio per la sincronizzazione.');
@@ -288,8 +355,22 @@ app.post('/sync', authMiddleware, async (req, res) => {
     try {
         const clanTag = req.query.clanTag || req.body?.clanTag;
         if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });
-        const count = await syncMembers(clanTag);
-        res.json({ ok: true, synced: count });
+        const [count, warResult] = await Promise.all([
+            syncMembers(clanTag),
+            saveEndedWar(clanTag).catch(e => ({ error: e.message }))
+        ]);
+        res.json({ ok: true, synced: count, war: warResult });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/save-war', authMiddleware, async (req, res) => {
+    try {
+        const clanTag = req.query.clanTag || req.body?.clanTag;
+        if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });
+        const result = await saveEndedWar(clanTag);
+        res.json({ ok: true, ...result });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
