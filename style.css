@@ -1713,6 +1713,84 @@ tbody tr:last-child td { border-bottom: none; }
 }
 
 /* ─────────────────────────────────────────────────────────────
+   WAR LOG — DETTAGLIO WAR CLASSICA (modal)
+   ───────────────────────────────────────────────────────────── */
+.wl-row-clickable { cursor: pointer; }
+.wl-row-clickable:hover td { background: rgba(255,255,255,0.03); }
+
+.btn-war-detail {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-2);
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, color 0.15s;
+}
+.btn-war-detail:hover { border-color: var(--gold); color: var(--gold); }
+
+/* Modal più largo per le due squadre */
+.wdm-box { max-width: 860px !important; }
+
+/* Due squadre affiancate */
+.wdm-teams {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+@media (max-width: 640px) {
+  .wdm-teams { grid-template-columns: 1fr; }
+  .wdm-box { max-width: 100% !important; }
+}
+
+.wdm-team-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem !important;
+}
+.wdm-team-title img,
+.wdm-team-title .cdm-war-badge-ph { width: 18px; height: 18px; }
+
+.wdm-table-wrap { overflow-x: auto; }
+
+.wdm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.wdm-table th {
+  text-align: left;
+  padding: 0.3rem 0.4rem;
+  color: var(--text-3);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.wdm-table td {
+  padding: 0.28rem 0.4rem;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  vertical-align: middle;
+}
+
+.wdm-pos  { color: var(--text-3); font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; width: 28px; }
+.wdm-th   { width: 32px; }
+.wdm-th-img { width: 26px; height: 26px; object-fit: contain; }
+.wdm-name { font-weight: 600; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wdm-stars-cell { white-space: nowrap; }
+.wdm-stars { font-size: 0.78rem; }
+.wdm-star-empty { opacity: 0.25; }
+.wdm-destr { font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; color: var(--text-2); }
+.wdm-atk   { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-3); }
+
+/* ─────────────────────────────────────────────────────────────
    WAR LOG — STATUS / BADGES
    ───────────────────────────────────────────────────────────── */
 .wl-err {

@@ -2421,7 +2421,9 @@ async function loadWarLog() {
     });
     if (!items.length) { div.innerHTML = '<p class="wl-loading">Nessuna war classica nel log.</p>'; return; }
 
-    const rows = items.map(w => {
+    window._warLogItems = items;
+
+    const rows = items.map((w, idx) => {
       const date = w.endTime ? new Date(
         w.endTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6')
       ).toLocaleDateString('it-IT', { day:'2-digit', month:'short', year:'2-digit' }) : '—';
@@ -2435,7 +2437,6 @@ async function loadWarLog() {
       const destrOpp  = w.opponent?.destructionPercentage?.toFixed(1) ?? '0.0';
       const size      = w.teamSize ?? '?';
 
-      // Clan badge + nome + livello
       const clanBadge  = w.clan?.badgeUrls?.small
         ? `<img src="${w.clan.badgeUrls.small}" alt="" class="wl-clan-badge">`  : '🛡️';
       const oppBadge   = w.opponent?.badgeUrls?.small
@@ -2447,7 +2448,7 @@ async function loadWarLog() {
       const ourClan = `<div class="wl-clan-cell">${clanBadge}<span>${w.clan?.name ?? 'Noi'}${clanLv}</span></div>`;
       const oppClan = `<div class="wl-clan-cell">${oppBadge}<span>${oppName}${oppLv}</span></div>`;
 
-      return `<tr>
+      return `<tr class="wl-row-clickable" onclick="openClassicWarDetail(${idx})">
         <td class="stat-cell">${date}</td>
         <td>${result}</td>
         <td>${ourClan}</td>
@@ -2455,6 +2456,7 @@ async function loadWarLog() {
         <td>${oppClan}</td>
         <td class="stat-cell">${stars}</td>
         <td class="stat-cell">${destrClan}% — ${destrOpp}%</td>
+        <td class="stat-cell"><button class="btn-war-detail">Dettagli</button></td>
       </tr>`;
     }).join('');
 
@@ -2463,7 +2465,7 @@ async function loadWarLog() {
         <table>
           <thead><tr>
             <th>Data</th><th>Risultato</th><th>Noi</th><th style="text-align:center">—</th>
-            <th>Avversario</th><th>⭐ Noi — Loro</th><th>💥 Noi — Loro</th>
+            <th>Avversario</th><th>⭐ Noi — Loro</th><th>💥 Noi — Loro</th><th></th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
@@ -2480,6 +2482,143 @@ async function loadWarLog() {
 document.querySelectorAll('.tab-btn[data-tab="warlog"]').forEach(btn => {
   btn.addEventListener('click', () => setTimeout(loadWarLog, 100));
 });
+
+// ── DETTAGLIO WAR CLASSICA ────────────────────────────────────────────────────
+
+function openClassicWarDetail(idx) {
+  const w = (window._warLogItems || [])[idx];
+  if (!w) return;
+
+  document.getElementById('classic-war-detail-modal')?.remove();
+
+  const fmtDate = w.endTime ? new Date(
+    w.endTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6')
+  ).toLocaleDateString('it-IT', { day:'2-digit', month:'long', year:'numeric' }) : '—';
+
+  const resClass = w.result === 'win' ? 'cdm-result--win' : w.result === 'lose' ? 'cdm-result--lose' : 'cdm-result--draw';
+  const resLabel = w.result === 'win' ? 'VITTORIA' : w.result === 'lose' ? 'SCONFITTA' : 'PAREGGIO';
+
+  const clanBadge = w.clan?.badgeUrls?.small
+    ? `<img src="${w.clan.badgeUrls.small}" class="cdm-war-badge" alt="">`
+    : '<span class="cdm-war-badge-ph">🛡️</span>';
+  const oppBadge = w.opponent?.badgeUrls?.small
+    ? `<img src="${w.opponent.badgeUrls.small}" class="cdm-war-badge" alt="">`
+    : '<span class="cdm-war-badge-ph">🛡️</span>';
+
+  const size = w.teamSize ?? '?';
+
+  // Costruisce tabella squadra
+  function buildTeamTable(members, totalSlots) {
+    if (!members?.length) return '<p style="color:var(--text-3);font-size:0.82rem;padding:0.5rem 0">Dati non disponibili</p>';
+
+    const sorted = [...members].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+    const rows = sorted.map(m => {
+      const thN = String(m.townhallLevel ?? 1).padStart(2, '0');
+      const thSrc = (m.townhallLevel ?? 1) <= 18
+        ? `th/level_${thN}.webp` : `th/level_${thN}.png`;
+      const thFallback = `onerror="this.onerror=null;this.src='th/level_${thN}.png'"`;
+
+      const attacks = m.attacks || [];
+      const totalStars = attacks.reduce((s, a) => s + (a.stars ?? 0), 0);
+      const maxDestr   = attacks.length ? Math.max(...attacks.map(a => a.destructionPercentage ?? 0)) : null;
+      const atkMade    = attacks.length;
+      const atkAvail   = w.attacksPerMember ?? 1;
+
+      const starsHtml = attacks.length
+        ? `<span class="wdm-stars">${'⭐'.repeat(totalStars)}${'<span class="wdm-star-empty">☆</span>'.repeat(Math.max(0, atkAvail * 3 - totalStars))}</span>`
+        : '<span style="color:var(--text-3)">—</span>';
+
+      const destrHtml = maxDestr !== null
+        ? `<span class="wdm-destr">${maxDestr.toFixed(1)}%</span>`
+        : '<span style="color:var(--text-3)">—</span>';
+
+      const atkHtml = `<span class="wdm-atk">${atkMade}/${atkAvail}</span>`;
+      const pos = m.mapPosition ?? '—';
+
+      return `<tr>
+        <td class="wdm-pos">${pos}</td>
+        <td class="wdm-th"><img src="${thSrc}" ${thFallback} class="wdm-th-img" alt="TH${m.townhallLevel ?? '?'}"></td>
+        <td class="wdm-name">${m.name ?? '—'}</td>
+        <td class="wdm-stars-cell">${starsHtml}</td>
+        <td>${destrHtml}</td>
+        <td>${atkHtml}</td>
+      </tr>`;
+    }).join('');
+
+    return `<table class="wdm-table">
+      <thead><tr>
+        <th>#</th><th>TH</th><th>Nome</th><th>⭐</th><th>💥%</th><th>Att.</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }
+
+  const ourTable  = buildTeamTable(w.clan?.members,     size);
+  const oppTable  = buildTeamTable(w.opponent?.members, size);
+
+  const modal = document.createElement('div');
+  modal.id = 'classic-war-detail-modal';
+  modal.className = 'cdm-overlay';
+  modal.innerHTML = `
+    <div class="cdm-box wdm-box" onclick="event.stopPropagation()">
+      <div class="cdm-header">
+        <div class="cdm-header-left">
+          <div>
+            <div class="cdm-header-season">War Classica — ${fmtDate}</div>
+            <div class="cdm-header-league">${size}v${size}</div>
+          </div>
+        </div>
+        <button class="cdm-close" onclick="closeClassicWarDetail()">✕</button>
+      </div>
+
+      <!-- VS Header -->
+      <div class="cdm-war-header">
+        <div class="cdm-war-side cdm-war-side--us">
+          ${clanBadge}
+          <div class="cdm-war-clan-name">${w.clan?.name ?? 'Noi'}</div>
+          <div class="cdm-war-stars">⭐ ${w.clan?.stars ?? 0}</div>
+          <div class="cdm-war-destr">💥 ${(w.clan?.destructionPercentage ?? 0).toFixed(1)}%</div>
+        </div>
+        <div class="cdm-war-vs">
+          <div class="cdm-war-result ${resClass}">${resLabel}</div>
+          <div class="cdm-war-vs-label">VS</div>
+        </div>
+        <div class="cdm-war-side cdm-war-side--opp">
+          ${oppBadge}
+          <div class="cdm-war-clan-name">${w.opponent?.name ?? 'Avversario'}</div>
+          <div class="cdm-war-stars">⭐ ${w.opponent?.stars ?? 0}</div>
+          <div class="cdm-war-destr">💥 ${(w.opponent?.destructionPercentage ?? 0).toFixed(1)}%</div>
+        </div>
+      </div>
+
+      <!-- Due squadre -->
+      <div class="wdm-teams">
+        <div class="wdm-team">
+          <div class="cdm-section-title wdm-team-title">
+            ${clanBadge} La Nostra Squadra
+          </div>
+          <div class="wdm-table-wrap">${ourTable}</div>
+        </div>
+        <div class="wdm-team">
+          <div class="cdm-section-title wdm-team-title">
+            ${oppBadge} ${w.opponent?.name ?? 'Avversario'}
+          </div>
+          <div class="wdm-table-wrap">${oppTable}</div>
+        </div>
+      </div>
+    </div>`;
+
+  modal.addEventListener('click', closeClassicWarDetail);
+  document.body.appendChild(modal);
+  requestAnimationFrame(() => modal.classList.add('cdm-overlay--visible'));
+}
+
+function closeClassicWarDetail() {
+  const modal = document.getElementById('classic-war-detail-modal');
+  if (!modal) return;
+  modal.classList.remove('cdm-overlay--visible');
+  modal.addEventListener('transitionend', () => modal.remove(), { once: true });
+}
 
 // ── CRONOLOGIA LEGHE CWL ─────────────────────────────────────────────────────
 
