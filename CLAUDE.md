@@ -1,4 +1,4 @@
-# FearUnitedCoC — CLAUDE.md
+# CoCBoard — CLAUDE.md
 
 ## Panoramica Progetto
 
