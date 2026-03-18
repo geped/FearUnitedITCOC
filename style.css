@@ -186,6 +186,94 @@ body {
 .coc-hint-box strong { color: var(--text-2); }
 .coc-hint-icon { font-size: 1rem; flex-shrink: 0; }
 
+/* ── Badge clan (sidebar + tab) ── */
+.sidebar-clan-badge {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+    flex-shrink: 0;
+    border-radius: 2px;
+}
+.tab-clan-badge {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+    vertical-align: middle;
+    margin-right: 2px;
+    border-radius: 1px;
+}
+
+/* ── Schermata Nessun Clan ── */
+#no-clan-screen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background:
+        radial-gradient(ellipse 70% 50% at 50% 0%, rgba(201,169,98,0.06) 0%, transparent 70%),
+        var(--bg);
+}
+.no-clan-box {
+    width: 100%;
+    max-width: 480px;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 2.5rem 2rem;
+    text-align: center;
+}
+.no-clan-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+.no-clan-box h2 {
+    font-family: 'Lilita One', cursive;
+    font-size: 1.4rem;
+    color: var(--gold);
+    margin-bottom: 0.75rem;
+}
+.no-clan-box p {
+    font-size: 0.9rem;
+    color: var(--text-3);
+    margin-bottom: 0.5rem;
+    line-height: 1.6;
+}
+.no-clan-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin: 1.5rem 0 0.5rem;
+    text-align: left;
+}
+.no-clan-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.65rem 0.85rem;
+    font-size: 0.85rem;
+    color: var(--text-2);
+    line-height: 1.5;
+}
+.no-clan-num {
+    background: var(--gold-dim);
+    color: var(--gold);
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
 /* ─────────────────────────────────────────────────────────────
    APP LAYOUT — SIDEBAR + BODY
    ───────────────────────────────────────────────────────────── */

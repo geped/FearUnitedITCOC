@@ -1,6 +1,16 @@
-const COC_CLAN_TAG = "%232J2VLPP9R";
-
 const db = window.sb;
+
+// Clan dell'utente loggato — impostati in showApp() dopo il login
+window._userClanTag    = null;  // es. '#2J2VLPP9R'
+window._clanName       = '';
+window._clanBadgeUrl   = null;
+
+// Restituisce '?clanTag=XXXX' da aggiungere alle fetch API
+function clanQ() {
+  return window._userClanTag
+    ? `?clanTag=${encodeURIComponent(window._userClanTag)}`
+    : '';
+}
 
 // Mappatura ruoli CoC API → etichette italiane
 // Nota: nell'API CoC "admin" = Anziano (Elder), NON admin app
@@ -158,6 +168,44 @@ function showLoginError(msg, type = "error") {
 function showLogin() {
   document.getElementById("login-screen").style.display = "flex";
   document.getElementById("app").style.display = "none";
+  document.getElementById("no-clan-screen").style.display = "none";
+}
+
+function updateClanUI() {
+  const url  = window._clanBadgeUrl;
+  const name = window._clanName || 'Il tuo Clan';
+
+  // Badge in tutti gli elementi .tab-clan-badge e #sidebar-clan-badge
+  ['sidebar-clan-badge', 'tab-clan-badge', 'bnav-clan-badge'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (url) {
+      el.src = url;
+      el.style.display = 'inline-block';
+      // Nascondi l'icona emoji fallback accanto
+      const fallback = el.nextElementSibling;
+      if (fallback && (fallback.classList.contains('nav-icon--fallback') ||
+                       fallback.classList.contains('sidebar-brand-icon--fallback') ||
+                       fallback.classList.contains('bnav-icon--fallback'))) {
+        fallback.style.display = 'none';
+      }
+    } else {
+      el.style.display = 'none';
+    }
+  });
+
+  // Nome clan ovunque
+  document.querySelectorAll('.clan-name-dyn').forEach(el => {
+    el.textContent = name;
+  });
+}
+
+function showNoClanScreen(username) {
+  document.getElementById("login-screen").style.display = "none";
+  document.getElementById("app").style.display = "none";
+  document.getElementById("no-clan-screen").style.display = "flex";
+  const nameEl = document.getElementById("no-clan-username");
+  if (nameEl) nameEl.textContent = username ? `, ${username}` : '';
 }
 
 // Costanti ruoli (ordine crescente di privilegio)
@@ -184,13 +232,27 @@ async function showApp(sessionUser) {
 
   const role = user.user_metadata?.role || 'utente';
   const isAdmin   = role === 'admin';
-  const canEdit   = ['admin', 'capo', 'co-capo'].includes(role);  // può modificare bonus
+  const canEdit   = ['admin', 'capo', 'co-capo'].includes(role);
 
-  // Mostra nome in-game nella sidebar (invece dell'email interna)
+  // Imposta info clan dell'utente
+  window._userClanTag  = user.user_metadata?.coc_clan_tag  || null;
+  window._clanName     = user.user_metadata?.coc_clan_name || '';
+  window._clanBadgeUrl = user.user_metadata?.coc_clan_badge_url || null;
+
+  // Se l'utente non è in nessun clan, mostra schermata dedicata
+  if (!window._userClanTag && role !== 'admin') {
+    showNoClanScreen(user.user_metadata?.username || '');
+    return;
+  }
+
+  // Mostra nome in-game nella sidebar
   const displayName = user.user_metadata?.username || user.email?.replace('@fearunited.internal','') || user.email;
   document.getElementById('user-email').textContent = displayName;
   const topbarEmailEl = document.getElementById('topbar-email');
   if (topbarEmailEl) topbarEmailEl.textContent = displayName;
+
+  // Applica badge clan e nome in tutta la UI
+  updateClanUI();
 
   // Badge ruolo in header
   const badge = document.getElementById('user-role-badge');
@@ -276,7 +338,9 @@ function closeNav() {
 // ── MEMBRI ────────────────────────────────────────────────────────────────────
 
 async function loadMembers() {
-  const { data } = await db.from("members").select("*").order("name");
+  const query = db.from("members").select("*").order("name");
+  if (window._userClanTag) query.eq("clan_tag", window._userClanTag);
+  const { data } = await query;
   renderMembers(data || []);
 }
 
@@ -380,7 +444,7 @@ document.getElementById("sync-btn").addEventListener("click", async () => {
   const status = document.getElementById("sync-status");
   status.textContent = "Sincronizzazione in corso…";
   try {
-    const res = await fetch("/api/sync-members");
+    const res = await fetch(`/api/sync-members${clanQ()}`, { method: 'POST' });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Errore server");
     status.textContent = `✓ Sincronizzati ${data.synced} membri`;
@@ -564,14 +628,16 @@ async function loadMembersMap() {
   _assignMembersMap = {};
 
   // 1) Carica PRIMA da Supabase — veloce e sempre disponibile (ha th_level, tag, ecc.)
-  const { data: sbData } = await db.from('members').select('*');
+  const sbQ = db.from('members').select('*');
+  if (window._userClanTag) sbQ.eq('clan_tag', window._userClanTag);
+  const { data: sbData } = await sbQ;
   if (sbData) sbData.forEach(m => { _assignMembersMap[m.name.toLowerCase()] = m; });
 
   // 2) Prova a refreshare dai dati live CoC API (con timeout 6s per non bloccare)
   try {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 6000);
-    const r = await fetch('/api/clan-members', { signal: ctrl.signal });
+    const r = await fetch(`/api/clan-members${clanQ()}`, { signal: ctrl.signal });
     clearTimeout(tid);
     if (r.ok) {
       const j = await r.json();
@@ -597,7 +663,7 @@ async function loadAssignBonus() {
   status.textContent = 'Verifica CWL in corso…';
 
   try {
-    const res = await fetch('/api/cwl-stats');
+    const res = await fetch(`/api/cwl-stats${clanQ()}`);
     const data = await res.json();
 
     if (data.state !== 'notInWar' && data.players?.length) {
@@ -658,7 +724,7 @@ async function loadAssignLive() {
   const status = document.getElementById('cwl-status');
   if (status) status.textContent = 'Aggiornamento dati live…';
   try {
-    const res = await fetch('/api/cwl-stats');
+    const res = await fetch(`/api/cwl-stats${clanQ()}`);
     const data = await res.json();
     if (data.players?.length) {
       cwlLiveData = data.players;
@@ -1336,7 +1402,7 @@ async function loadManualMemberList() {
   try {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 6000);
-    const r = await fetch('/api/clan-members', { signal: ctrl.signal });
+    const r = await fetch(`/api/clan-members${clanQ()}`, { signal: ctrl.signal });
     clearTimeout(tid);
     if (r.ok) {
       const j = await r.json();
@@ -2053,7 +2119,7 @@ async function loadWarLog() {
   try {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 10000);
-    const r = await fetch('/api/war-log', { signal: ctrl.signal });
+    const r = await fetch(`/api/war-log${clanQ()}`, { signal: ctrl.signal });
     clearTimeout(tid);
     const data = await r.json();
     if (data.reason === 'accessDenied') {
@@ -2243,10 +2309,10 @@ async function loadCwlSeasons() {
 
   // Lancia in parallelo: Supabase + war-log (storico CWL) + cwl-stats (stagione corrente) + clan-info (banner)
   const [dbResult, warLogResult, cwlResult, clanResult] = await Promise.allSettled([
-    db.from('cwl_seasons').select('*').order('season', { ascending: false }),
-    fetch('/api/war-log').then(r => r.ok ? r.json() : null),
-    fetch('/api/cwl-stats').then(r => r.ok ? r.json() : null),
-    fetch('/api/clan-info').then(r => r.ok ? r.json() : null)
+    db.from('cwl_seasons').select('*').eq('clan_tag', window._userClanTag || '').order('season', { ascending: false }),
+    fetch(`/api/war-log${clanQ()}`).then(r => r.ok ? r.json() : null),
+    fetch(`/api/cwl-stats${clanQ()}`).then(r => r.ok ? r.json() : null),
+    fetch(`/api/clan-info${clanQ()}`).then(r => r.ok ? r.json() : null)
   ]);
 
   clearInterval(timerInterval);
@@ -2337,7 +2403,7 @@ async function loadCwlSeasons() {
   // ── Stagione corrente/live da cwl-stats ───────────────────────────────────
   if (cwlData && cwlData.state !== 'notInWar' && cwlData.season) {
     const key      = cwlData.season;
-    const ourGroup = (cwlData.groupStandings || []).find(c => c.tag === '#2J2VLPP9R');
+    const ourGroup = (cwlData.groupStandings || []).find(c => c.tag === window._userClanTag);
     dbMap[key] = {
       season:         key,
       league:         cwlData.leagueNameIt          || dbMap[key]?.league      || null,
@@ -2447,7 +2513,7 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
         groupHtml = `<div class="cwl-group-standings">
           <div class="cwl-group-title">Classifica gruppo</div>
           ${s.groupStandings.map((c, i) => {
-            const isMyClan = c.tag === '#2J2VLPP9R';
+            const isMyClan = c.tag === window._userClanTag;
             const rankMedal = ['🥇','🥈','🥉'][i] || `${i+1}.`;
             return `<div class="cwl-group-row${isMyClan ? ' cwl-group-row--us' : ''}">
               <span class="cwl-group-rank">${rankMedal}</span>
@@ -2557,7 +2623,7 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
       <div class="cdm-section-title">Classifica gruppo</div>
       <div class="cdm-standings-list">
         ${groupStandings.map((c, i) => {
-          const isUs = c.tag === '#2J2VLPP9R';
+          const isUs = c.tag === window._userClanTag;
           const medal = ['🥇','🥈','🥉'][i] || `${i+1}.`;
           const clBadge = c.badgeUrls?.small ? `<img src="${c.badgeUrls.small}" class="cdm-clan-badge" alt="">` : '<span class="cdm-clan-badge-ph">🛡️</span>';
           return `<div class="cdm-standing-row${isUs ? ' cdm-standing-row--us' : ''}">
@@ -2638,7 +2704,7 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
       if (attackRows.length) {
         attacksHtml = `
         <div class="cdm-attacks-section">
-          <div class="cdm-section-title">Attacchi Fear United IT</div>
+          <div class="cdm-section-title">Attacchi ${window._clanName || 'del tuo clan'}</div>
           <div class="cdm-attacks-scroll">
             <table class="cdm-attacks-table">
               <thead><tr>
@@ -2655,7 +2721,7 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
       <div class="cdm-war-header">
         <div class="cdm-war-side cdm-war-side--us">
           ${ourBadge}
-          <div class="cdm-war-clan-name">Fear United IT</div>
+          <div class="cdm-war-clan-name">${window._clanName || 'Il tuo Clan'}</div>
           <div class="cdm-war-stars">⭐ ${r.clan?.stars ?? '—'}</div>
           <div class="cdm-war-destr">💥 ${fmtDestr(r.clan?.destruction)}</div>
           <div class="cdm-war-attacks">⚔ ${r.clan?.attacksUsed ?? '—'}/${totalAtks}</div>

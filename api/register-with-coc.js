@@ -1,7 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
 
-const COC_CLAN_TAG = '#2J2VLPP9R';
-
 const COC_ROLE_MAP = {
     leader:   'capo',
     coLeader: 'co-capo',
@@ -46,7 +44,6 @@ module.exports = async (req, res) => {
             body: JSON.stringify({ playerTag, apiToken }),
         });
         const proxyData = await proxyRes.json();
-
         if (!proxyRes.ok) {
             return res.status(proxyRes.status).json({ error: proxyData.error || 'Verifica fallita.' });
         }
@@ -55,20 +52,22 @@ module.exports = async (req, res) => {
         return res.status(502).json({ error: 'Impossibile contattare il proxy. Riprova.' });
     }
 
-    // 2. Controlla che il giocatore sia nel clan Fear United IT
-    if (!player.clan || player.clan.tag !== COC_CLAN_TAG) {
-        return res.status(403).json({ error: 'Non sei membro di Fear United IT. Solo i membri del clan possono registrarsi.' });
-    }
-
-    // 3. Mappa il ruolo CoC → ruolo app
+    // 2. Determina ruolo in base alla posizione nel clan
     const appRole = COC_ROLE_MAP[player.role] || 'membro';
     const username = player.name;
 
-    // Email interna: tag senza # in lowercase
+    // 3. Info clan (null se il giocatore non è in nessun clan)
+    const clanTag     = player.clan?.tag  || null;
+    const clanName    = player.clan?.name || null;
+    const clanBadge   = player.clan?.badgeUrls?.medium
+                     || player.clan?.badgeUrls?.small
+                     || null;
+
+    // 4. Email interna: tag senza # in lowercase
     const emailBase = playerTag.replace('#', '').toLowerCase();
     const email = `${emailBase}@fearunited.internal`;
 
-    // 4. Crea l'utente su Supabase
+    // 5. Crea l'utente su Supabase
     const supabase = createClient(process.env.SUPABASE_URL, serviceKey, {
         auth: { autoRefreshToken: false, persistSession: false }
     });
@@ -76,7 +75,7 @@ module.exports = async (req, res) => {
     // Controlla se esiste già un account con questa email
     const { data: existing } = await supabase.auth.admin.listUsers({ perPage: 1000 });
     if (existing?.users?.some(u => u.email === email)) {
-        return res.status(409).json({ error: 'Questo tag è già associato a un account. Accedi con il tuo nome utente.' });
+        return res.status(409).json({ error: 'Questo tag è già associato a un account. Accedi con il tuo tag come nome utente.' });
     }
 
     const { data, error } = await supabase.auth.admin.createUser({
@@ -84,22 +83,26 @@ module.exports = async (req, res) => {
         password,
         email_confirm: true,
         user_metadata: {
-            role: appRole,
+            role:                appRole,
             username,
-            coc_tag: playerTag,
+            coc_tag:             playerTag,
+            coc_clan_tag:        clanTag,
+            coc_clan_name:       clanName,
+            coc_clan_badge_url:  clanBadge,
             ...(realEmail ? { email: realEmail } : {}),
         }
     });
 
-    if (error) {
-        return res.status(500).json({ error: error.message });
-    }
+    if (error) return res.status(500).json({ error: error.message });
 
     return res.status(201).json({
         ok: true,
         username,
         role: appRole,
-        coc_tag: playerTag,
+        coc_tag:    playerTag,
+        coc_clan_tag:   clanTag,
+        coc_clan_name:  clanName,
+        hasClan:        !!clanTag,
         email,
     });
 };

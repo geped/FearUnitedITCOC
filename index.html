@@ -85,22 +85,46 @@
     </div>
 </div>
 
+<!-- ─── NO CLAN SCREEN ────────────────────────────────────────────────────── -->
+<div id="no-clan-screen" style="display:none">
+    <div class="no-clan-box">
+        <div class="no-clan-icon">⚔️</div>
+        <h2>Nessun clan trovato<span id="no-clan-username"></span></h2>
+        <p>Il tuo account non è associato a nessun clan in Clash of Clans.</p>
+        <p>Per usare CoCBoard devi essere membro di un clan.</p>
+        <div class="no-clan-steps">
+            <div class="no-clan-step">
+                <span class="no-clan-num">1</span>
+                <span>Apri Clash of Clans e unisciti a un clan esistente, oppure creane uno nuovo.</span>
+            </div>
+            <div class="no-clan-step">
+                <span class="no-clan-num">2</span>
+                <span>Torna su CoCBoard e registrati di nuovo con la tua Chiave API.</span>
+            </div>
+        </div>
+        <button onclick="window.sb.auth.signOut()" class="btn-primary" style="margin-top:1.5rem">Esci</button>
+    </div>
+</div>
+
 <!-- ─── APP ───────────────────────────────────────────────────────────────── -->
 <div id="app" style="display:none">
 
     <!-- ─── SIDEBAR ─── -->
     <aside class="app-sidebar" id="sidebar">
         <div class="sidebar-brand">
-            <span class="sidebar-brand-icon">⚔️</span>
+            <img id="sidebar-clan-badge" class="sidebar-clan-badge" src="" alt="" style="display:none">
+            <span class="sidebar-brand-icon sidebar-brand-icon--fallback" id="sidebar-brand-icon-fallback">⚔️</span>
             <div class="sidebar-brand-text">
-                <h2>Fear United</h2>
-                <span>CWL Manager</span>
+                <h2>CoCBoard</h2>
+                <span class="clan-name-dyn">Il tuo Clan</span>
             </div>
         </div>
 
         <nav class="sidebar-nav">
             <button class="tab-btn active" data-tab="members" onclick="closeNav()">
-                <span class="nav-icon">🏠</span> Clan
+                <img id="tab-clan-badge" class="tab-clan-badge" src="" alt="" style="display:none">
+                <span class="nav-icon nav-icon--fallback">🏠</span>
+                <span class="clan-name-dyn">Clan</span>
             </button>
             <button class="tab-btn" data-tab="warlog" onclick="closeNav()">
                 <span class="nav-icon">⚔️</span> Registri Guerre
@@ -149,7 +173,7 @@
                 <div class="page-header">
                     <div>
                         <h2>🏠 Clan</h2>
-                        <p class="page-sub">Membri attuali di Fear United IT</p>
+                        <p class="page-sub">Membri attuali di <span class="clan-name-dyn">—</span></p>
                     </div>
                     <button id="sync-btn" class="btn-primary btn-sm">🔄 Sincronizza</button>
                 </div>
@@ -232,7 +256,7 @@
                 <!-- CRONOLOGIA LEGHE -->
                 <div id="wl-cwl" style="display:none">
                     <div class="toolbar">
-                        <span class="toolbar-label">📅 Cronologia Leghe — Fear United IT</span>
+                        <span class="toolbar-label">📅 Cronologia Leghe — <span class="clan-name-dyn">—</span></span>
                         <button class="btn-secondary btn-sm" onclick="loadCwlSeasons()">🔄 Aggiorna</button>
                     </div>
                     <!-- Banner lega corrente (popolato da JS) -->
@@ -396,8 +420,9 @@
     <!-- BOTTOM NAV (mobile only) -->
     <nav class="bottom-nav" id="bottom-nav">
         <button class="bnav-btn active" data-tab="members">
-            <span class="bnav-icon">🏠</span>
-            <span class="bnav-label">Clan</span>
+            <img id="bnav-clan-badge" class="tab-clan-badge" src="" alt="" style="display:none">
+            <span class="bnav-icon bnav-icon--fallback">🏠</span>
+            <span class="bnav-label clan-name-dyn">Clan</span>
         </button>
         <button class="bnav-btn" data-tab="warlog">
             <span class="bnav-icon">⚔️</span>

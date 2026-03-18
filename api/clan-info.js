@@ -2,8 +2,9 @@ module.exports = async (req, res) => {
     try {
         const proxyUrl = process.env.RENDER_PROXY_URL;
         if (!proxyUrl) return res.status(500).json({ error: 'RENDER_PROXY_URL non configurata.' });
-
-        const response = await fetch(`${proxyUrl}/clan-info`, {
+        const clanTag = req.query.clanTag;
+        if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });
+        const response = await fetch(`${proxyUrl}/clan-info?clanTag=${encodeURIComponent(clanTag)}`, {
             headers: { 'x-sync-key': process.env.SYNC_SECRET || '' }
         });
         const data = await response.json();

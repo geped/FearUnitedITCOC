@@ -4,8 +4,15 @@ const { createClient } = require('@supabase/supabase-js');
 const app = express();
 app.use(express.json());
 
-const COC_CLAN_TAG = '%232J2VLPP9R';
-const COC_CLAN_TAG_RAW = '#2J2VLPP9R';
+// Clan tag viene passato come parametro da ogni richiesta — nessun valore hardcoded
+
+// Normalizza e URL-encoda il clan tag ricevuto come parametro
+function parseClanTag(raw) {
+    if (!raw) return null;
+    const t = raw.trim().toUpperCase();
+    return t.startsWith('#') ? t : '#' + t;
+}
+function encodeTag(tag) { return encodeURIComponent(tag); }
 
 function supabase() {
     return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
@@ -17,9 +24,11 @@ function cocHeaders() {
 
 // ── SYNC MEMBERS ────────────────────────────────────────────────────────────
 
-async function syncMembers() {
+async function syncMembers(clanTagRaw) {
+    const clanTag = parseClanTag(clanTagRaw);
+    if (!clanTag) throw new Error('clan_tag obbligatorio per la sincronizzazione.');
     const res = await fetch(
-        `https://api.clashofclans.com/v1/clans/${COC_CLAN_TAG}/members`,
+        `https://api.clashofclans.com/v1/clans/${encodeTag(clanTag)}/members`,
         { headers: cocHeaders() }
     );
     if (!res.ok) throw new Error(`CoC API ${res.status}: ${await res.text()}`);
@@ -28,6 +37,7 @@ async function syncMembers() {
         tag: m.tag,
         name: m.name,
         role: m.role,
+        clan_tag: clanTag,
         th_level: m.townHallLevel ?? null,
         trophies: m.trophies ?? null,
         donations: m.donations ?? null,
@@ -55,7 +65,11 @@ const LEAGUE_EN_TO_IT = {
 
 // ── CWL LIVE STATS ──────────────────────────────────────────────────────────
 
-async function getCwlStats() {
+async function getCwlStats(clanTagRaw) {
+    const COC_CLAN_TAG_RAW = parseClanTag(clanTagRaw);
+    if (!COC_CLAN_TAG_RAW) throw new Error('clan_tag obbligatorio.');
+    const COC_CLAN_TAG = encodeTag(COC_CLAN_TAG_RAW);
+
     // 1. Leaguegroup + clan info in parallelo
     const [lgRes, clanRes] = await Promise.all([
         fetch(`https://api.clashofclans.com/v1/clans/${COC_CLAN_TAG}/currentwar/leaguegroup`, { headers: cocHeaders() }),
@@ -257,7 +271,7 @@ function authMiddleware(req, res, next) {
 
 // ── ROUTES ───────────────────────────────────────────────────────────────────
 
-app.get('/', (_req, res) => res.json({ ok: true, service: 'FearUnited CoC Proxy' }));
+app.get('/', (_req, res) => res.json({ ok: true, service: 'CoCBoard Proxy' }));
 
 app.get('/myip', async (_req, res) => {
     try {
@@ -268,28 +282,34 @@ app.get('/myip', async (_req, res) => {
     }
 });
 
-app.post('/sync', authMiddleware, async (_req, res) => {
+app.post('/sync', authMiddleware, async (req, res) => {
     try {
-        const count = await syncMembers();
+        const clanTag = req.query.clanTag || req.body?.clanTag;
+        if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });
+        const count = await syncMembers(clanTag);
         res.json({ ok: true, synced: count });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-app.get('/cwl-live', authMiddleware, async (_req, res) => {
+app.get('/cwl-live', authMiddleware, async (req, res) => {
     try {
-        const data = await getCwlStats();
+        const clanTag = req.query.clanTag;
+        if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });
+        const data = await getCwlStats(clanTag);
         res.json({ ok: true, ...data });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-app.get('/war-log', authMiddleware, async (_req, res) => {
+app.get('/war-log', authMiddleware, async (req, res) => {
     try {
+        const clanTag = parseClanTag(req.query.clanTag);
+        if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });
         const r = await fetch(
-            `https://api.clashofclans.com/v1/clans/${COC_CLAN_TAG}/warlog?limit=100`,
+            `https://api.clashofclans.com/v1/clans/${encodeTag(clanTag)}/warlog?limit=100`,
             { headers: cocHeaders() }
         );
         const data = await r.json();
@@ -300,15 +320,16 @@ app.get('/war-log', authMiddleware, async (_req, res) => {
     }
 });
 
-app.get('/clan-info', authMiddleware, async (_req, res) => {
+app.get('/clan-info', authMiddleware, async (req, res) => {
     try {
+        const clanTag = parseClanTag(req.query.clanTag);
+        if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });
         const r = await fetch(
-            `https://api.clashofclans.com/v1/clans/${COC_CLAN_TAG}`,
+            `https://api.clashofclans.com/v1/clans/${encodeTag(clanTag)}`,
             { headers: cocHeaders() }
         );
         const data = await r.json();
         if (!r.ok) return res.status(r.status).json({ error: data.reason || 'CoC API error' });
-
         res.json({
             name: data.name,
             tag: data.tag,
@@ -365,15 +386,17 @@ app.post('/verify-player-token', authMiddleware, async (req, res) => {
     }
 });
 
-app.get('/clan-members', authMiddleware, async (_req, res) => {
+app.get('/clan-members', authMiddleware, async (req, res) => {
     try {
+        const clanTag = parseClanTag(req.query.clanTag);
+        if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });
         const r = await fetch(
-            `https://api.clashofclans.com/v1/clans/${COC_CLAN_TAG}/members`,
+            `https://api.clashofclans.com/v1/clans/${encodeTag(clanTag)}/members`,
             { headers: cocHeaders() }
         );
         const data = await r.json();
         if (!r.ok) return res.status(r.status).json({ error: data.reason || 'CoC API error' });
-        const items = (data.items || []).map(m => ({ name: m.name, tag: m.tag, role: m.role }));
+        const items = (data.items || []).map(m => ({ name: m.name, tag: m.tag, role: m.role, townHallLevel: m.townHallLevel }));
         res.json({ items });
     } catch (err) {
         res.status(500).json({ error: err.message });
