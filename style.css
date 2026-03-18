@@ -141,6 +141,51 @@ body {
 }
 .link-btn:hover { color: var(--gold); }
 
+/* ── Toggle metodo registrazione ── */
+.login-method-toggle {
+    display: flex;
+    gap: 0;
+    margin-bottom: 0.9rem;
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+.method-btn {
+    flex: 1;
+    padding: 0.55rem 0.5rem;
+    background: var(--bg);
+    border: none;
+    color: var(--text-3);
+    font-size: 0.82rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    font-weight: 500;
+}
+.method-btn:not(:last-child) { border-right: 1px solid var(--border-2); }
+.method-btn.active {
+    background: var(--gold-dim);
+    color: var(--gold);
+}
+.method-btn:hover:not(.active) { color: var(--text); background: var(--bg-2); }
+
+/* ── Hint box CoC ── */
+.coc-hint-box {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--bg-2);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    padding: 0.55rem 0.75rem;
+    font-size: 0.8rem;
+    color: var(--text-3);
+    margin-bottom: 0.1rem;
+    line-height: 1.4;
+}
+.coc-hint-box strong { color: var(--text-2); }
+.coc-hint-icon { font-size: 1rem; flex-shrink: 0; }
+
 /* ─────────────────────────────────────────────────────────────
    APP LAYOUT — SIDEBAR + BODY
    ───────────────────────────────────────────────────────────── */

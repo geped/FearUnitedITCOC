@@ -71,17 +71,78 @@ document.getElementById("signup-form").addEventListener("submit", async (e) => {
 document.getElementById("show-signup").addEventListener("click", () => {
   document.getElementById("login-form").style.display = "none";
   document.getElementById("show-signup").style.display = "none";
-  document.getElementById("signup-form").style.display = "flex";
+  document.getElementById("signup-section").style.display = "block";
   document.getElementById("show-login").style.display = "block";
   document.getElementById("login-error").style.display = "none";
 });
 
 document.getElementById("show-login").addEventListener("click", () => {
-  document.getElementById("signup-form").style.display = "none";
+  document.getElementById("signup-section").style.display = "none";
   document.getElementById("show-login").style.display = "none";
   document.getElementById("login-form").style.display = "flex";
   document.getElementById("show-signup").style.display = "block";
   document.getElementById("login-error").style.display = "none";
+});
+
+// ── Toggle metodo registrazione ──────────────────────────────────────────────
+
+function switchSignupMethod(method) {
+  const isEmail = method === 'email';
+  document.getElementById('signup-form').style.display      = isEmail ? 'flex' : 'none';
+  document.getElementById('signup-coc-form').style.display  = isEmail ? 'none' : 'flex';
+  document.getElementById('method-email-btn').classList.toggle('active', isEmail);
+  document.getElementById('method-coc-btn').classList.toggle('active', !isEmail);
+  document.getElementById('login-error').style.display = 'none';
+}
+
+// ── Registrazione tramite chiave API CoC ─────────────────────────────────────
+
+document.getElementById("signup-coc-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const playerTag = document.getElementById("coc-reg-tag").value.trim();
+  const apiToken  = document.getElementById("coc-reg-token").value.trim();
+  const password  = document.getElementById("coc-reg-password").value;
+
+  if (!playerTag || !apiToken || !password) {
+    showLoginError("Compila tutti i campi.");
+    return;
+  }
+
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Verifica in corso…";
+
+  try {
+    const res = await fetch("/api/register-with-coc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playerTag, apiToken, password }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      showLoginError(data.error || "Errore durante la registrazione.");
+      return;
+    }
+
+    // Registrazione riuscita: auto-login
+    showLoginError(`Benvenuto, ${data.username}! Accesso in corso…`, "info");
+
+    const { error: loginError } = await db.auth.signInWithPassword({
+      email: data.email,
+      password,
+    });
+
+    if (loginError) {
+      showLoginError("Account creato. Accedi con il tuo tag come nome utente.");
+    }
+  } catch (err) {
+    showLoginError("Errore di connessione. Ricarica la pagina e riprova.");
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "⚔️ Verifica & Registrati";
+  }
 });
 
 document

@@ -36,17 +36,54 @@
         </form>
         <button id="show-signup" class="link-btn">Non hai un account? Registrati</button>
 
-        <form id="signup-form" style="display:none">
-            <div class="input-wrap">
-                <span class="input-icon">📧</span>
-                <input type="email" id="signup-email" placeholder="Email" required>
+        <!-- ── SEZIONE REGISTRAZIONE ── -->
+        <div id="signup-section" style="display:none">
+
+            <!-- Toggle metodo registrazione -->
+            <div class="login-method-toggle">
+                <button type="button" class="method-btn active" id="method-email-btn" onclick="switchSignupMethod('email')">
+                    📧 Email
+                </button>
+                <button type="button" class="method-btn" id="method-coc-btn" onclick="switchSignupMethod('coc')">
+                    ⚔️ Chiave API CoC
+                </button>
             </div>
-            <div class="input-wrap">
-                <span class="input-icon">🔒</span>
-                <input type="password" id="signup-password" placeholder="Password (min 6 caratteri)" required>
-            </div>
-            <button type="submit" class="btn-primary btn-full">Crea Account</button>
-        </form>
+
+            <!-- Form Email (standard) -->
+            <form id="signup-form">
+                <div class="input-wrap">
+                    <span class="input-icon">📧</span>
+                    <input type="email" id="signup-email" placeholder="Email" required>
+                </div>
+                <div class="input-wrap">
+                    <span class="input-icon">🔒</span>
+                    <input type="password" id="signup-password" placeholder="Password (min 6 caratteri)" required>
+                </div>
+                <button type="submit" class="btn-primary btn-full">Crea Account</button>
+            </form>
+
+            <!-- Form Chiave API CoC -->
+            <form id="signup-coc-form" style="display:none">
+                <div class="coc-hint-box">
+                    <span class="coc-hint-icon">💡</span>
+                    <span>Nel gioco: <strong>Impostazioni → Altre impostazioni → Chiave API → Mostra</strong></span>
+                </div>
+                <div class="input-wrap">
+                    <span class="input-icon">🎮</span>
+                    <input type="text" id="coc-reg-tag" placeholder="Tag giocatore (es. #2J2ABC)" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="input-wrap">
+                    <span class="input-icon">🔑</span>
+                    <input type="text" id="coc-reg-token" placeholder="Chiave API in-game" autocomplete="off" spellcheck="false">
+                </div>
+                <div class="input-wrap">
+                    <span class="input-icon">🔒</span>
+                    <input type="password" id="coc-reg-password" placeholder="Scegli una password (min 6 caratteri)" autocomplete="new-password">
+                </div>
+                <button type="submit" class="btn-primary btn-full">⚔️ Verifica &amp; Registrati</button>
+            </form>
+
+        </div>
         <button id="show-login" class="link-btn" style="display:none">Hai già un account? Accedi</button>
     </div>
 </div>

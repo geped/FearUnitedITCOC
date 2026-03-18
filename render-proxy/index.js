@@ -322,6 +322,49 @@ app.get('/clan-info', authMiddleware, async (_req, res) => {
     }
 });
 
+app.post('/verify-player-token', authMiddleware, async (req, res) => {
+    const { playerTag, apiToken } = req.body || {};
+    if (!playerTag || !apiToken) {
+        return res.status(400).json({ error: 'playerTag e apiToken obbligatori.' });
+    }
+
+    const tagEncoded = encodeURIComponent(playerTag);
+
+    // 1. Verifica il token in-game del giocatore
+    let verifyStatus;
+    try {
+        const vRes = await fetch(
+            `https://api.clashofclans.com/v1/players/${tagEncoded}/verifytoken`,
+            {
+                method: 'POST',
+                headers: { ...cocHeaders(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: apiToken }),
+            }
+        );
+        const vData = await vRes.json();
+        verifyStatus = vData.status;
+    } catch (err) {
+        return res.status(502).json({ error: 'Impossibile contattare la CoC API.' });
+    }
+
+    if (verifyStatus !== 'ok') {
+        return res.status(401).json({ error: 'Chiave API non valida. Verifica il token in-game e riprova.' });
+    }
+
+    // 2. Recupera le info del giocatore
+    try {
+        const pRes = await fetch(
+            `https://api.clashofclans.com/v1/players/${tagEncoded}`,
+            { headers: cocHeaders() }
+        );
+        if (!pRes.ok) throw new Error(`CoC API ${pRes.status}`);
+        const player = await pRes.json();
+        res.json({ ok: true, player });
+    } catch (err) {
+        res.status(502).json({ error: 'Impossibile recuperare le info del giocatore.' });
+    }
+});
+
 app.get('/clan-members', authMiddleware, async (_req, res) => {
     try {
         const r = await fetch(
