@@ -228,6 +228,7 @@ let _clanDetailsLoaded = false;
 let _clanDetailsOpen   = false;
 
 // Mappa nome lega inglese → file badge in /leagues/
+// Leghe CWL guerra (clan warLeague) — nomi storici
 const LEAGUE_BADGE_MAP = {
   'Bronze League III': 'BronzoIII', 'Bronze League II': 'BronzoII', 'Bronze League I': 'BronzoI',
   'Silver League III': 'ArgentoIII', 'Silver League II': 'ArgentoII', 'Silver League I': 'ArgentoI',
@@ -236,7 +237,25 @@ const LEAGUE_BADGE_MAP = {
   'Master League III': 'MaestroIII', 'Master League II': 'MaestroII', 'Master League I': 'MaestroI',
   'Champion League III':'CampioneIII','Champion League II':'CampioneII','Champion League I':'CampioneI',
   'Titan League III':  'TitanoIII',  'Titan League II':  'TitanoII',  'Titan League I':  'TitanoI',
-  'Legend League':     'Leggenda',
+  'Legend League':     'LeggendaV2',
+  // Nuove leghe Ranked Battles (ottobre 2025)
+  'Skeleton League I':      'Skeleton',     'Skeleton League II':      'Skeleton',     'Skeleton League III':      'Skeleton',
+  'Barbarian League I':     'Barbarian',    'Barbarian League II':     'Barbarian',    'Barbarian League III':     'Barbarian',
+  'Archer League I':        'Archer',       'Archer League II':        'Archer',       'Archer League III':        'Archer',
+  'Wizard League I':        'Wizard',       'Wizard League II':        'Wizard',       'Wizard League III':        'Wizard',
+  'Valkyrie League I':      'Valkyrie',     'Valkyrie League II':      'Valkyrie',     'Valkyrie League III':      'Valkyrie',
+  'Witch League I':         'Witch',        'Witch League II':         'Witch',        'Witch League III':         'Witch',
+  'Golem League I':         'Golem',        'Golem League II':         'Golem',        'Golem League III':         'Golem',
+  'P.E.K.K.A League I':    'PEKKA',        'P.E.K.K.A League II':    'PEKKA',        'P.E.K.K.A League III':    'PEKKA',
+  'Electro Titan League I': 'ElettroTitano','Electro Titan League II': 'ElettroTitano','Electro Titan League III': 'ElettroTitano',
+  'Dragon League I':        'Drago',        'Dragon League II':        'Drago',        'Dragon League III':        'Drago',
+  'Electro Dragon League I':'ElectroDrago', 'Electro Dragon League II':'ElectroDrago', 'Electro Dragon League III':'ElectroDrago',
+  // Fallback per nomi senza suffisso (API potrebbe restituire senza I/II/III)
+  'Skeleton League': 'Skeleton', 'Barbarian League': 'Barbarian', 'Archer League': 'Archer',
+  'Wizard League':   'Wizard',   'Valkyrie League':  'Valkyrie',  'Witch League':  'Witch',
+  'Golem League':    'Golem',    'P.E.K.K.A League': 'PEKKA',
+  'Electro Titan League': 'ElettroTitano', 'Dragon League': 'Drago',
+  'Electro Dragon League': 'ElectroDrago',
 };
 
 const CLAN_TYPE_LABELS = { open: 'Aperto', inviteOnly: 'Su invito', closed: 'Chiuso' };
@@ -552,7 +571,8 @@ function renderMembers(members) {
 
     // Lega individuale giocatore
     const leagueItName = m.league_name ? (LEAGUE_EN_TO_IT[m.league_name] || m.league_name) : null;
-    const leagueImgSrc = m.league_icon_url || (m.league_name && LEAGUE_BADGE_MAP[m.league_name] ? `leagues/${LEAGUE_BADGE_MAP[m.league_name]}.png` : null);
+    const leagueBadgeFile = m.league_name ? LEAGUE_BADGE_MAP[m.league_name] : null;
+    const leagueImgSrc = leagueBadgeFile ? `leagues/${leagueBadgeFile}.png` : (m.league_icon_url || null);
     const leagueHtml = leagueImgSrc
       ? `<img src="${leagueImgSrc}" class="league-badge-sm" alt="${leagueItName || ''}" title="${leagueItName || ''}" loading="lazy">`
       : '<span class="no-league-badge">—</span>';
@@ -2464,6 +2484,7 @@ const POS_MEDALS = ['', '🥇','🥈','🥉','4️⃣','5️⃣','6️⃣','7️
 
 // Mappa nome lega inglese (API) → italiano (UI)
 const LEAGUE_EN_TO_IT = {
+  // CWL war league (storiche)
   'Bronze League III':'Bronzo III','Bronze League II':'Bronzo II','Bronze League I':'Bronzo I',
   'Silver League III':'Argento III','Silver League II':'Argento II','Silver League I':'Argento I',
   'Gold League III':'Oro III','Gold League II':'Oro II','Gold League I':'Oro I',
@@ -2471,7 +2492,30 @@ const LEAGUE_EN_TO_IT = {
   'Master League III':'Maestro III','Master League II':'Maestro II','Master League I':'Maestro I',
   'Champion League III':'Campione III','Champion League II':'Campione II','Champion League I':'Campione I',
   'Titan League III':'Titano III','Titan League II':'Titano II','Titan League I':'Titano I',
-  'Legend League':'Leggenda'
+  'Legend League':'Leggenda',
+  // Nuove leghe Ranked Battles (ottobre 2025)
+  'Skeleton League I':'Scheletro I','Skeleton League II':'Scheletro II','Skeleton League III':'Scheletro III',
+  'Skeleton League':'Scheletro',
+  'Barbarian League I':'Barbaro I','Barbarian League II':'Barbaro II','Barbarian League III':'Barbaro III',
+  'Barbarian League':'Barbaro',
+  'Archer League I':'Arciera I','Archer League II':'Arciera II','Archer League III':'Arciera III',
+  'Archer League':'Arciera',
+  'Wizard League I':'Mago I','Wizard League II':'Mago II','Wizard League III':'Mago III',
+  'Wizard League':'Mago',
+  'Valkyrie League I':'Valchiria I','Valkyrie League II':'Valchiria II','Valkyrie League III':'Valchiria III',
+  'Valkyrie League':'Valchiria',
+  'Witch League I':'Strega I','Witch League II':'Strega II','Witch League III':'Strega III',
+  'Witch League':'Strega',
+  'Golem League I':'Golem I','Golem League II':'Golem II','Golem League III':'Golem III',
+  'Golem League':'Golem',
+  'P.E.K.K.A League I':'P.E.K.K.A I','P.E.K.K.A League II':'P.E.K.K.A II','P.E.K.K.A League III':'P.E.K.K.A III',
+  'P.E.K.K.A League':'P.E.K.K.A',
+  'Electro Titan League I':'Elettro Titano I','Electro Titan League II':'Elettro Titano II','Electro Titan League III':'Elettro Titano III',
+  'Electro Titan League':'Elettro Titano',
+  'Dragon League I':'Drago I','Dragon League II':'Drago II','Dragon League III':'Drago III',
+  'Dragon League':'Drago',
+  'Electro Dragon League I':'Elettro Drago I','Electro Dragon League II':'Elettro Drago II','Electro Dragon League III':'Elettro Drago III',
+  'Electro Dragon League':'Elettro Drago',
 };
 
 // Icone trofeo CWL — immagini locali (scaricate da Fandom CoC wiki, stile in-game)
