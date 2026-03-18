@@ -273,7 +273,7 @@ function authMiddleware(req, res, next) {
 
 // ── ROUTES ───────────────────────────────────────────────────────────────────
 
-app.get('/', (_req, res) => res.json({ ok: true, service: 'CoCBoard Proxy' }));
+app.get('/', (_req, res) => res.json({ ok: true, service: 'CoCBoard Proxy', version: 'leagueTier-2026-03-18' }));
 
 app.get('/myip', async (_req, res) => {
     try {
