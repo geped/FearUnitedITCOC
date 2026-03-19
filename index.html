@@ -123,17 +123,28 @@
         <nav class="sidebar-nav">
             <button class="tab-btn active" data-tab="members" onclick="closeNav()">
                 <img id="tab-clan-badge" class="tab-clan-badge" src="" alt="" style="display:none">
-                <span class="nav-icon nav-icon--fallback">🏠</span>
+                <svg class="nav-icon nav-icon--fallback" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
                 <span class="clan-name-dyn">Clan</span>
             </button>
             <button class="tab-btn" data-tab="warlog" onclick="closeNav()">
-                <span class="nav-icon">⚔️</span> Registri Guerre
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg>
+                Registri Guerre
             </button>
             <button class="tab-btn" data-tab="cwl" onclick="closeNav()">
-                <span class="nav-icon">🏆</span> Bonus CWL
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M19 3H5v10c0 4.42 3.58 8 8 8s8-3.58 8-8V3h-2zm0 10c0 3.31-2.69 6-6 6s-6-2.69-6-6V5h12v8zM7.5 9l1.09 2.26L11 12l-2.41.74L7.5 15l-1.09-2.26L4 12l2.41-.74L7.5 9zm9 0l1.09 2.26L20 12l-2.41.74L16.5 15l-1.09-2.26L13 12l2.41-.74L16.5 9z"/></svg>
+                Bonus CWL
+            </button>
+            <button class="tab-btn" data-tab="profilo" onclick="closeNav()">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                Il mio Profilo
+            </button>
+            <button class="tab-btn" data-tab="cerca" onclick="closeNav()">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                Cerca
             </button>
             <button class="tab-btn admin-only" data-tab="admin" style="display:none" onclick="closeNav()">
-                <span class="nav-icon">👥</span> Gestione Utenti
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 13.17 10.33 12 8 12zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C23 13.17 18.33 12 16 12z"/></svg>
+                Gestione Utenti
             </button>
         </nav>
 
@@ -451,6 +462,82 @@
                 </div>
             </section>
 
+            <!-- ── TAB: IL MIO PROFILO ──────────────────────────────────── -->
+            <section id="tab-profilo" class="tab-content" style="display:none">
+                <div class="page-header">
+                    <div>
+                        <h2>Il mio Profilo</h2>
+                        <p class="page-sub">Dettagli account Clash of Clans</p>
+                    </div>
+                    <button class="btn-secondary btn-sm" onclick="loadProfile()">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" style="flex-shrink:0"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+                        Aggiorna
+                    </button>
+                </div>
+                <div id="profilo-no-tag" class="profilo-empty" style="display:none">
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="40" height="40" style="opacity:.3"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                    <p>Nessun tag CoC associato al tuo account.</p>
+                    <p style="font-size:0.8rem">Registrati tramite Chiave API per collegare il profilo.</p>
+                </div>
+                <div id="profilo-loading" class="profilo-loading" style="display:none">
+                    <div class="spinner"></div>
+                    <span>Caricamento profilo…</span>
+                </div>
+                <div id="profilo-content" style="display:none">
+                    <div id="profilo-header-card" class="profilo-hero-card"></div>
+                    <div class="subtab-bar">
+                        <button class="subtab-btn active" onclick="switchProfiloTab('home',this)">Villaggio Base</button>
+                        <button class="subtab-btn" onclick="switchProfiloTab('builder',this)">Base Costruttore</button>
+                        <button class="subtab-btn" onclick="switchProfiloTab('capital',this)">Capitale</button>
+                    </div>
+                    <div id="profilo-tab-home">
+                        <div class="profilo-section" id="ps-heroes"><h3 class="profilo-section-title">Eroi</h3><div id="profilo-heroes" class="profilo-units-grid"></div></div>
+                        <div class="profilo-section" id="ps-equipment"><h3 class="profilo-section-title">Equipaggiamento Eroi</h3><div id="profilo-equipment" class="profilo-units-grid"></div></div>
+                        <div class="profilo-section" id="ps-pets"><h3 class="profilo-section-title">Famigli</h3><div id="profilo-pets" class="profilo-units-grid"></div></div>
+                        <div class="profilo-section" id="ps-troops"><h3 class="profilo-section-title">Truppe</h3><div id="profilo-troops" class="profilo-units-grid"></div></div>
+                        <div class="profilo-section" id="ps-spells"><h3 class="profilo-section-title">Incantesimi</h3><div id="profilo-spells" class="profilo-units-grid"></div></div>
+                        <div class="profilo-section" id="ps-siege"><h3 class="profilo-section-title">Macchine d'Assedio</h3><div id="profilo-siege" class="profilo-units-grid"></div></div>
+                        <div class="profilo-section" id="ps-achievements"><h3 class="profilo-section-title">Obiettivi Villaggio</h3><div id="profilo-achievements" class="profilo-achievements-list"></div></div>
+                    </div>
+                    <div id="profilo-tab-builder" style="display:none">
+                        <div id="profilo-bh-stats" class="profilo-bh-stats"></div>
+                        <div class="profilo-section" id="ps-builder-units"><h3 class="profilo-section-title">Truppe &amp; Eroi Builder</h3><div id="profilo-builder-units" class="profilo-units-grid"></div></div>
+                        <div class="profilo-section" id="ps-builder-ach"><h3 class="profilo-section-title">Obiettivi Builder</h3><div id="profilo-builder-achievements" class="profilo-achievements-list"></div></div>
+                    </div>
+                    <div id="profilo-tab-capital" style="display:none">
+                        <div id="profilo-capital-stats" class="profilo-bh-stats"></div>
+                        <div class="profilo-section" id="ps-capital-troops"><h3 class="profilo-section-title">Truppe Capitale</h3><div id="profilo-capital-troops" class="profilo-units-grid"></div></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ── TAB: CERCA ────────────────────────────────────────────── -->
+            <section id="tab-cerca" class="tab-content" style="display:none">
+                <div class="page-header">
+                    <div>
+                        <h2>Cerca</h2>
+                        <p class="page-sub">Cerca clan e giocatori in Clash of Clans</p>
+                    </div>
+                </div>
+                <div class="card" style="margin-bottom:1.25rem">
+                    <div class="cerca-row">
+                        <div class="toggle-group">
+                            <button class="toggle-btn active" id="cerca-type-clan" onclick="setCercaType('clan')">Clan</button>
+                            <button class="toggle-btn" id="cerca-type-player" onclick="setCercaType('player')">Giocatore</button>
+                        </div>
+                        <div class="cerca-input-wrap">
+                            <input type="text" id="cerca-input" class="cerca-input" placeholder="Nome (min 3 lettere) o Tag #ABC…" autocomplete="off" spellcheck="false">
+                            <button class="btn-primary btn-sm" onclick="eseguiCerca()">
+                                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" style="flex-shrink:0"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                                Cerca
+                            </button>
+                        </div>
+                    </div>
+                    <p id="cerca-hint" class="cerca-hint">Clan: cerca per nome (min 3 caratteri) o tag (#ABC123)</p>
+                </div>
+                <div id="cerca-results"></div>
+            </section>
+
         </main>
 
     </div><!-- /.app-body -->
@@ -459,19 +546,27 @@
     <nav class="bottom-nav" id="bottom-nav">
         <button class="bnav-btn active" data-tab="members">
             <img id="bnav-clan-badge" class="tab-clan-badge" src="" alt="" style="display:none">
-            <span class="bnav-icon bnav-icon--fallback">🏠</span>
+            <svg class="bnav-icon bnav-icon--fallback" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
             <span class="bnav-label clan-name-dyn">Clan</span>
         </button>
         <button class="bnav-btn" data-tab="warlog">
-            <span class="bnav-icon">⚔️</span>
+            <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg>
             <span class="bnav-label">Registri</span>
         </button>
         <button class="bnav-btn" data-tab="cwl">
-            <span class="bnav-icon">🏆</span>
+            <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M19 3H5v10c0 4.42 3.58 8 8 8s8-3.58 8-8V3h-2zm0 10c0 3.31-2.69 6-6 6s-6-2.69-6-6V5h12v8zM7.5 9l1.09 2.26L11 12l-2.41.74L7.5 15l-1.09-2.26L4 12l2.41-.74L7.5 9zm9 0l1.09 2.26L20 12l-2.41.74L16.5 15l-1.09-2.26L13 12l2.41-.74L16.5 9z"/></svg>
             <span class="bnav-label">Bonus</span>
         </button>
+        <button class="bnav-btn" data-tab="profilo">
+            <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            <span class="bnav-label">Profilo</span>
+        </button>
+        <button class="bnav-btn" data-tab="cerca">
+            <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            <span class="bnav-label">Cerca</span>
+        </button>
         <button class="bnav-btn admin-only" data-tab="admin" style="display:none">
-            <span class="bnav-icon">👥</span>
+            <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 13.17 10.33 12 8 12zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C23 13.17 18.33 12 16 12z"/></svg>
             <span class="bnav-label">Utenti</span>
         </button>
     </nav>

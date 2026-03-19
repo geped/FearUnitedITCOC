@@ -470,6 +470,8 @@ const TAB_TITLES = {
   members: 'Clan',
   warlog:  'Registri Guerre',
   cwl:     'Bonus CWL',
+  profilo: 'Il mio Profilo',
+  cerca:   'Cerca',
   admin:   'Gestione Utenti',
 };
 
@@ -487,6 +489,7 @@ function activateTab(tabId) {
   if (tabId === 'admin') loadUsers();
   if (tabId === 'warlog') setTimeout(loadWarLog, 80);
   if (tabId === 'cwl') setTimeout(loadAssignBonus, 80);
+  if (tabId === 'profilo') setTimeout(loadProfile, 80);
 }
 
 document.querySelectorAll('.tab-btn, .bnav-btn').forEach(btn => {
@@ -2660,7 +2663,7 @@ async function saveCurrentWar() {
   const btn = document.getElementById('btn-save-war');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Salvataggio…'; }
   try {
-    const r = await fetch(`/api/save-current-war${clanQ()}`, { method: 'POST' });
+    const r = await fetch(`/api/auto-save-wars${clanQ()}`, { method: 'POST' });
     const data = await r.json();
     if (data.skipped) {
       const reason = data.reason === 'notInWar' || data.reason?.includes('state=')
@@ -3289,5 +3292,290 @@ function closeCwlSeasonDetail() {
   if (!modal) return;
   modal.classList.remove('cdm-overlay--visible');
   modal.addEventListener('transitionend', () => modal.remove(), { once: true });
+}
+
+// ── IL MIO PROFILO ────────────────────────────────────────────────────────────
+
+let _profileData = null;
+let _profiloActiveTab = 'home';
+
+async function loadProfile() {
+  const session = (await db.auth.getSession())?.data?.session;
+  const cocTag  = session?.user?.user_metadata?.coc_tag;
+
+  const noTag    = document.getElementById('profilo-no-tag');
+  const loading  = document.getElementById('profilo-loading');
+  const content  = document.getElementById('profilo-content');
+
+  if (!cocTag) {
+    if (noTag)   noTag.style.display   = 'flex';
+    if (content) content.style.display = 'none';
+    return;
+  }
+  if (noTag)   noTag.style.display   = 'none';
+  if (loading) loading.style.display = 'flex';
+  if (content) content.style.display = 'none';
+
+  try {
+    const r = await fetch(`/api/lookup?type=player&playerTag=${encodeURIComponent(cocTag)}`);
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Errore caricamento profilo');
+    _profileData = data;
+    renderProfile(data);
+    if (loading) loading.style.display = 'none';
+    if (content) content.style.display = 'block';
+  } catch (e) {
+    if (loading) loading.style.display = 'none';
+    if (content) {
+      content.style.display = 'block';
+      content.innerHTML = `<p style="color:var(--red);padding:1rem">Errore: ${e.message}</p>`;
+    }
+  }
+}
+
+function renderProfile(p) {
+  // Header card
+  const leagueName   = p.league?.name || '';
+  const leagueBadge  = LEAGUE_BADGE_MAP[leagueName];
+  const leagueHtml   = leagueBadge
+    ? `<img src="leagues/${leagueBadge}.png" alt="${leagueName}" class="profilo-league-badge">`
+    : (leagueName ? `<span class="profilo-league-name">${leagueName}</span>` : '');
+  const clanHtml = p.clan
+    ? `<span class="profilo-clan-tag">${p.clan.name}</span>`
+    : '<span class="profilo-clan-tag" style="color:var(--text-3)">Nessun clan</span>';
+  const roleHtml = p.role ? `<span class="badge badge-gold">${cocRole(p.role).label}</span>` : '';
+
+  const headerEl = document.getElementById('profilo-header-card');
+  if (headerEl) headerEl.innerHTML = `
+    <div class="profilo-hero-left">
+      ${thImgV(p.townHallLevel || 1)}
+      <div class="profilo-hero-info">
+        <div class="profilo-hero-name">${p.name}</div>
+        <div class="profilo-hero-tag mono">${p.tag}</div>
+        <div class="profilo-hero-meta">${clanHtml} ${roleHtml}</div>
+      </div>
+      <div class="profilo-league-wrap">${leagueHtml}</div>
+    </div>
+    <div class="profilo-stats-row">
+      <div class="profilo-stat"><span class="profilo-stat-val">${p.trophies ?? '—'}</span><span class="profilo-stat-lbl">Trofei</span></div>
+      <div class="profilo-stat"><span class="profilo-stat-val">${p.warStars ?? '—'}</span><span class="profilo-stat-lbl">Stelle War</span></div>
+      <div class="profilo-stat"><span class="profilo-stat-val">${p.donations ?? '—'}</span><span class="profilo-stat-lbl">Donate</span></div>
+      <div class="profilo-stat"><span class="profilo-stat-val">${p.donationsReceived ?? '—'}</span><span class="profilo-stat-lbl">Ricevute</span></div>
+      <div class="profilo-stat"><span class="profilo-stat-val">${p.attackWins ?? '—'}</span><span class="profilo-stat-lbl">Att. Vinti</span></div>
+      <div class="profilo-stat"><span class="profilo-stat-val">${p.expLevel ?? '—'}</span><span class="profilo-stat-lbl">Livello</span></div>
+    </div>`;
+
+  // Home village
+  const heroes    = (p.heroes   || []).filter(x => x.village === 'home');
+  const equipment = (p.heroEquipment || []).filter(x => x.village === 'home');
+  const pets      = (p.troops   || []).filter(x => x.village === 'home' && x.superTroopIsActive === undefined && PETS_SET.has(x.name));
+  const troops    = (p.troops   || []).filter(x => x.village === 'home' && !PETS_SET.has(x.name));
+  const spells    = (p.spells   || []).filter(x => x.village === 'home');
+  const siege     = (p.troops   || []).filter(x => x.village === 'home' && SIEGE_SET.has(x.name));
+  // Filter siege from troops
+  const troopsOnly = troops.filter(x => !SIEGE_SET.has(x.name));
+  const achHome   = (p.achievements || []).filter(a => a.village === 'home');
+
+  _renderUnits('profilo-heroes',    heroes,    'hero');
+  _renderUnits('profilo-equipment', equipment, 'equipment');
+  _renderUnits('profilo-pets',      pets,      'unit');
+  _renderUnits('profilo-troops',    troopsOnly,'unit');
+  _renderUnits('profilo-spells',    spells,    'unit');
+  _renderUnits('profilo-siege',     siege,     'unit');
+  _renderAchievements('profilo-achievements', achHome);
+  document.getElementById('ps-pets').style.display = pets.length ? 'block' : 'none';
+
+  // Builder base
+  const bhStats = document.getElementById('profilo-bh-stats');
+  if (bhStats) bhStats.innerHTML = `
+    <div class="profilo-bh-card">
+      <div class="profilo-bh-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M19 3H5v2h1v14H4v2h16v-2h-2V5h1V3zm-4 16h-6v-5h6v5zm0-7h-6V8h6v4z"/></svg>
+      </div>
+      <div>
+        <div class="profilo-bh-label">Base del Costruttore</div>
+        <div class="profilo-bh-val">BH ${p.builderHallLevel ?? '—'}</div>
+        <div class="profilo-bh-sub">${p.builderBaseTrophies ?? '—'} trofei · Best: ${p.builderBaseBestTrophies ?? '—'}</div>
+      </div>
+    </div>`;
+  const builderUnits = [
+    ...(p.heroes  || []).filter(x => x.village === 'builderBase'),
+    ...(p.troops  || []).filter(x => x.village === 'builderBase'),
+  ];
+  const achBuilder = (p.achievements || []).filter(a => a.village === 'builderBase');
+  _renderUnits('profilo-builder-units', builderUnits, 'unit');
+  _renderAchievements('profilo-builder-achievements', achBuilder);
+
+  // Capital
+  const capStats = document.getElementById('profilo-capital-stats');
+  if (capStats) capStats.innerHTML = `
+    <div class="profilo-bh-card">
+      <div class="profilo-bh-icon">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 4l6 2.67V11c0 3.5-2.33 6.79-6 7.93-3.67-1.14-6-4.43-6-7.93V7.67L12 5z"/></svg>
+      </div>
+      <div>
+        <div class="profilo-bh-label">Capitale del Clan</div>
+        <div class="profilo-bh-val">${(p.clanCapitalContributions ?? 0).toLocaleString('it')} Capital Gold contribuiti</div>
+      </div>
+    </div>`;
+  const capTroops = (p.troops || []).filter(x => x.village === 'clanCapital');
+  _renderUnits('profilo-capital-troops', capTroops, 'unit');
+  _renderAchievements('profilo-achievements', achHome); // re-render to make sure
+}
+
+const PETS_SET = new Set(['L.A.S.S.I','Electro Owl','Mighty Yak','Unicorn','Frosty','Diggy','Poison Lizard','Phoenix','Spirit Fox','Angry Jelly']);
+const SIEGE_SET = new Set(['Wall Wrecker','Battle Blimp','Stone Slammer','Siege Barracks','Log Launcher','Flame Flinger','Battle Drill']);
+
+function _renderUnits(containerId, units, type) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!units.length) { el.innerHTML = '<span class="profilo-empty-units">Nessuna unità</span>'; return; }
+  el.innerHTML = units.map(u => {
+    const pct = u.maxLevel ? Math.round((u.level / u.maxLevel) * 100) : 100;
+    const isMax = u.level >= u.maxLevel;
+    const isLocked = !u.level || u.level === 0;
+    const barColor = isMax ? 'var(--gold)' : isLocked ? 'var(--text-3)' : 'var(--green)';
+    return `<div class="profilo-unit-card${isMax ? ' profilo-unit-max' : ''}${isLocked ? ' profilo-unit-locked' : ''}">
+      <div class="profilo-unit-name">${u.name}</div>
+      <div class="profilo-unit-lv">${isLocked ? '—' : `Lv ${u.level}`}${u.maxLevel ? ` / ${u.maxLevel}` : ''}</div>
+      <div class="profilo-unit-bar-wrap"><div class="profilo-unit-bar" style="width:${isLocked?0:pct}%;background:${barColor}"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function _renderAchievements(containerId, achievements) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!achievements.length) { el.innerHTML = '<span class="profilo-empty-units">Nessun obiettivo</span>'; return; }
+  el.innerHTML = achievements.map(a => {
+    const done = a.value >= a.target;
+    const pct  = a.target ? Math.min(100, Math.round((a.value / a.target) * 100)) : 100;
+    return `<div class="profilo-ach-row${done ? ' profilo-ach-done' : ''}">
+      <div class="profilo-ach-icon">${done
+        ? '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16" style="opacity:.35"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>'
+      }</div>
+      <div class="profilo-ach-body">
+        <div class="profilo-ach-name">${a.name}</div>
+        ${!done ? `<div class="profilo-ach-bar-wrap"><div class="profilo-ach-bar" style="width:${pct}%"></div></div>
+        <div class="profilo-ach-prog">${a.value.toLocaleString('it')} / ${a.target.toLocaleString('it')}</div>` : ''}
+      </div>
+      ${a.stars ? `<div class="profilo-ach-stars">${'⭐'.repeat(a.stars)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function switchProfiloTab(tab, btn) {
+  ['home','builder','capital'].forEach(t => {
+    const el = document.getElementById(`profilo-tab-${t}`);
+    if (el) el.style.display = t === tab ? 'block' : 'none';
+  });
+  document.querySelectorAll('#tab-profilo .subtab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  _profiloActiveTab = tab;
+}
+
+// ── CERCA ─────────────────────────────────────────────────────────────────────
+
+let _cercaType = 'clan';
+
+function setCercaType(type) {
+  _cercaType = type;
+  document.getElementById('cerca-type-clan').classList.toggle('active', type === 'clan');
+  document.getElementById('cerca-type-player').classList.toggle('active', type === 'player');
+  const hint = document.getElementById('cerca-hint');
+  if (hint) hint.textContent = type === 'clan'
+    ? 'Cerca per nome (min 3 caratteri) o tag (#ABC123)'
+    : 'Inserisci il tag esatto del giocatore (es. #2J2ABC)';
+  const input = document.getElementById('cerca-input');
+  if (input) input.placeholder = type === 'clan' ? 'Nome clan o tag #ABC…' : 'Tag giocatore #ABC…';
+}
+
+async function eseguiCerca() {
+  const q = (document.getElementById('cerca-input')?.value || '').trim();
+  const results = document.getElementById('cerca-results');
+  if (!q) return;
+  if (_cercaType === 'player' && !q.startsWith('#')) {
+    results.innerHTML = '<p class="cerca-error">I giocatori si cercano solo per tag (es. #2J2ABC)</p>';
+    return;
+  }
+  results.innerHTML = '<div class="profilo-loading" style="display:flex"><div class="spinner"></div><span>Ricerca in corso…</span></div>';
+  try {
+    let url;
+    if (_cercaType === 'player') {
+      url = `/api/lookup?type=player&playerTag=${encodeURIComponent(q)}`;
+    } else {
+      url = `/api/lookup?type=search-clans&q=${encodeURIComponent(q)}`;
+    }
+    const r = await fetch(url);
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Nessun risultato');
+    if (_cercaType === 'player') {
+      renderCercaPlayer(data, results);
+    } else {
+      renderCercaClans(data.items || [], results);
+    }
+  } catch (e) {
+    results.innerHTML = `<p class="cerca-error">${e.message}</p>`;
+  }
+}
+
+document.getElementById('cerca-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') eseguiCerca();
+});
+
+function renderCercaPlayer(p, container) {
+  const leagueName  = p.league?.name || '';
+  const leagueBadge = LEAGUE_BADGE_MAP[leagueName];
+  const leagueHtml  = leagueBadge
+    ? `<img src="leagues/${leagueBadge}.png" alt="${leagueName}" class="cerca-league-badge">`
+    : (leagueName ? `<span style="font-size:0.8rem;color:var(--text-3)">${leagueName}</span>` : '');
+  container.innerHTML = `
+    <div class="cerca-player-card">
+      <div class="cerca-player-left">
+        ${thImg(p.townHallLevel)}
+        <div>
+          <div class="cerca-player-name">${p.name}</div>
+          <div class="cerca-player-tag mono">${p.tag}</div>
+          ${p.clan ? `<div class="cerca-player-clan">${p.clan.name}</div>` : ''}
+        </div>
+        ${leagueHtml}
+      </div>
+      <div class="profilo-stats-row" style="margin-top:0.75rem">
+        <div class="profilo-stat"><span class="profilo-stat-val">${p.trophies ?? '—'}</span><span class="profilo-stat-lbl">Trofei</span></div>
+        <div class="profilo-stat"><span class="profilo-stat-val">${p.warStars ?? '—'}</span><span class="profilo-stat-lbl">Stelle War</span></div>
+        <div class="profilo-stat"><span class="profilo-stat-val">${p.donations ?? '—'}</span><span class="profilo-stat-lbl">Donate</span></div>
+        <div class="profilo-stat"><span class="profilo-stat-val">${p.expLevel ?? '—'}</span><span class="profilo-stat-lbl">Livello</span></div>
+        <div class="profilo-stat"><span class="profilo-stat-val">TH${p.townHallLevel ?? '—'}</span><span class="profilo-stat-lbl">Town Hall</span></div>
+        <div class="profilo-stat"><span class="profilo-stat-val">BH${p.builderHallLevel ?? '—'}</span><span class="profilo-stat-lbl">Builder</span></div>
+      </div>
+    </div>`;
+}
+
+function renderCercaClans(clans, container) {
+  if (!clans.length) {
+    container.innerHTML = '<div class="profilo-empty"><p>Nessun clan trovato.</p></div>';
+    return;
+  }
+  container.innerHTML = clans.map(c => {
+    const badge = c.badgeUrls?.small || c.badgeUrls?.medium || '';
+    const typeLabel = CLAN_TYPE_LABELS[c.type] || c.type || '';
+    return `<div class="cerca-clan-card">
+      <div class="cerca-clan-left">
+        ${badge ? `<img src="${badge}" alt="" class="cerca-clan-badge">` : ''}
+        <div>
+          <div class="cerca-clan-name">${c.name}</div>
+          <div class="cerca-clan-tag mono">${c.tag}</div>
+          ${c.description ? `<div class="cerca-clan-desc">${c.description.slice(0,80)}${c.description.length>80?'…':''}</div>` : ''}
+        </div>
+      </div>
+      <div class="cerca-clan-stats">
+        <div class="profilo-stat"><span class="profilo-stat-val">${c.members ?? '—'}/50</span><span class="profilo-stat-lbl">Membri</span></div>
+        <div class="profilo-stat"><span class="profilo-stat-val">${c.clanLevel ?? '—'}</span><span class="profilo-stat-lbl">Livello</span></div>
+        <div class="profilo-stat"><span class="profilo-stat-val">${c.clanPoints ?? '—'}</span><span class="profilo-stat-lbl">Trofei</span></div>
+        ${typeLabel ? `<div class="profilo-stat"><span class="profilo-stat-val">${typeLabel}</span><span class="profilo-stat-lbl">Tipo</span></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
 }
 

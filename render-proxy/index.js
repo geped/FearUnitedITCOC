@@ -401,6 +401,47 @@ app.post('/save-all-wars', authMiddleware, async (req, res) => {
     }
 });
 
+app.get('/player', authMiddleware, async (req, res) => {
+    try {
+        const playerTag = parseClanTag(req.query.playerTag);
+        if (!playerTag) return res.status(400).json({ error: 'playerTag obbligatorio.' });
+        const r = await fetch(
+            `https://api.clashofclans.com/v1/players/${encodeTag(playerTag)}`,
+            { headers: cocHeaders() }
+        );
+        const data = await r.json();
+        if (!r.ok) return res.status(r.status).json({ error: data.reason || 'CoC API error', detail: data });
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/search-clans', authMiddleware, async (req, res) => {
+    try {
+        const q = (req.query.q || '').trim();
+        if (!q) return res.status(400).json({ error: 'Parametro q obbligatorio.' });
+        let url, r, data;
+        if (q.startsWith('#')) {
+            const tag = parseClanTag(q);
+            url = `https://api.clashofclans.com/v1/clans/${encodeTag(tag)}`;
+            r = await fetch(url, { headers: cocHeaders() });
+            data = await r.json();
+            if (!r.ok) return res.status(r.status).json({ error: data.reason || 'Clan non trovato' });
+            return res.json({ items: [data] });
+        } else {
+            if (q.length < 3) return res.status(400).json({ error: 'Il nome deve essere di almeno 3 caratteri.' });
+            url = `https://api.clashofclans.com/v1/clans?name=${encodeURIComponent(q)}&limit=20`;
+            r = await fetch(url, { headers: cocHeaders() });
+            data = await r.json();
+            if (!r.ok) return res.status(r.status).json({ error: data.reason || 'CoC API error' });
+            return res.json(data);
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/cwl-live', authMiddleware, async (req, res) => {
     try {
         const clanTag = req.query.clanTag;

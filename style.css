@@ -2642,3 +2642,277 @@ tbody tr:last-child td { border-bottom: none; }
   .cdm-war-clan-name { max-width:90px; font-size:.75rem; }
   .cdm-header-badge { width:42px; height:42px; }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   NAV SVG ICONS
+   ───────────────────────────────────────────────────────────── */
+.sidebar-nav .tab-btn .nav-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.bnav-icon { display: flex; align-items: center; justify-content: center; }
+.bnav-btn svg { display: block; }
+.sidebar-nav .tab-btn svg { display: block; }
+
+/* ─────────────────────────────────────────────────────────────
+   SPINNER
+   ───────────────────────────────────────────────────────────── */
+.spinner {
+    width: 20px; height: 20px;
+    border: 2px solid var(--border-2);
+    border-top-color: var(--gold);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─────────────────────────────────────────────────────────────
+   IL MIO PROFILO
+   ───────────────────────────────────────────────────────────── */
+.profilo-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 3rem 1rem;
+    text-align: center;
+    color: var(--text-3);
+    font-size: 0.88rem;
+}
+.profilo-loading {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 2rem 1rem;
+    color: var(--text-3);
+    font-size: 0.88rem;
+}
+.profilo-hero-card {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.25rem;
+    margin-bottom: 1.25rem;
+}
+.profilo-hero-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.85rem;
+}
+.profilo-hero-info { flex: 1; min-width: 0; }
+.profilo-hero-name {
+    font-family: 'Lilita One', cursive;
+    font-size: 1.25rem;
+    color: var(--text);
+    line-height: 1.2;
+}
+.profilo-hero-tag {
+    font-size: 0.72rem;
+    color: var(--text-3);
+    margin-bottom: 0.25rem;
+}
+.profilo-hero-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.3rem;
+}
+.profilo-clan-tag { font-size: 0.82rem; color: var(--text-2); }
+.profilo-league-wrap { flex-shrink: 0; }
+.profilo-league-badge { width: 44px; height: 44px; object-fit: contain; }
+.profilo-league-name { font-size: 0.8rem; color: var(--text-3); }
+.profilo-stats-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.profilo-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.1rem;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.35rem 0.6rem;
+    min-width: 56px;
+}
+.profilo-stat-val {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text);
+}
+.profilo-stat-lbl {
+    font-size: 0.6rem;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
+}
+.profilo-section {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+}
+.profilo-section-title {
+    font-family: 'Lilita One', cursive;
+    font-size: 0.92rem;
+    color: var(--gold);
+    margin-bottom: 0.75rem;
+    letter-spacing: 0.3px;
+}
+.profilo-units-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 0.5rem;
+}
+.profilo-unit-card {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.65rem;
+}
+.profilo-unit-card.profilo-unit-max { border-color: rgba(201,169,98,0.35); }
+.profilo-unit-card.profilo-unit-locked { opacity: 0.45; }
+.profilo-unit-name {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 0.2rem;
+}
+.profilo-unit-lv {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--text-3);
+    margin-bottom: 0.3rem;
+}
+.profilo-unit-bar-wrap {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+}
+.profilo-unit-bar {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.3s ease;
+}
+.profilo-empty-units {
+    font-size: 0.8rem;
+    color: var(--text-3);
+    padding: 0.25rem 0;
+}
+.profilo-achievements-list { display: flex; flex-direction: column; gap: 0.35rem; }
+.profilo-ach-row {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.45rem 0.65rem;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+.profilo-ach-row.profilo-ach-done { border-color: rgba(39,174,96,0.25); }
+.profilo-ach-icon { flex-shrink: 0; color: var(--green); }
+.profilo-ach-body { flex: 1; min-width: 0; }
+.profilo-ach-name { font-size: 0.8rem; color: var(--text-2); font-weight: 500; }
+.profilo-ach-prog { font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: var(--text-3); margin-top: 0.15rem; }
+.profilo-ach-bar-wrap { height: 3px; background: var(--border); border-radius: 2px; margin-top: 0.2rem; overflow: hidden; }
+.profilo-ach-bar { height: 100%; background: var(--blue); border-radius: 2px; }
+.profilo-ach-stars { font-size: 0.7rem; flex-shrink: 0; }
+.profilo-bh-stats { margin-bottom: 1rem; }
+.profilo-bh-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+}
+.profilo-bh-icon { color: var(--gold); opacity: 0.8; }
+.profilo-bh-label { font-size: 0.72rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.2rem; }
+.profilo-bh-val { font-family: 'Lilita One', cursive; font-size: 1.1rem; color: var(--text); }
+.profilo-bh-sub { font-size: 0.8rem; color: var(--text-3); margin-top: 0.1rem; }
+
+/* ─────────────────────────────────────────────────────────────
+   CERCA
+   ───────────────────────────────────────────────────────────── */
+.cerca-row {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 0.6rem;
+}
+.cerca-input-wrap {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex: 1;
+    min-width: 200px;
+}
+.cerca-input {
+    flex: 1;
+    padding: 0.45rem 0.75rem;
+    background: var(--bg);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    font-size: 0.88rem;
+    color: var(--text);
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+}
+.cerca-input:focus { border-color: var(--gold); }
+.cerca-input::placeholder { color: var(--text-3); }
+.cerca-hint { font-size: 0.78rem; color: var(--text-3); }
+.cerca-error { color: var(--red); font-size: 0.88rem; padding: 0.5rem 0; }
+.cerca-clan-card {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.85rem 1.1rem;
+    margin-bottom: 0.6rem;
+    transition: border-color 0.15s;
+}
+.cerca-clan-card:hover { border-color: var(--gold); }
+.cerca-clan-left { display: flex; align-items: center; gap: 0.85rem; margin-bottom: 0.6rem; }
+.cerca-clan-badge { width: 40px; height: 40px; object-fit: contain; flex-shrink: 0; }
+.cerca-clan-name { font-family: 'Lilita One', cursive; font-size: 1rem; color: var(--text); }
+.cerca-clan-tag { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--text-3); }
+.cerca-clan-desc { font-size: 0.78rem; color: var(--text-3); margin-top: 0.25rem; line-height: 1.4; }
+.cerca-clan-stats { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.cerca-player-card {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+}
+.cerca-player-left { display: flex; align-items: center; gap: 1rem; }
+.cerca-player-name { font-family: 'Lilita One', cursive; font-size: 1.1rem; color: var(--text); }
+.cerca-player-tag { font-family: 'IBM Plex Mono', monospace; font-size: 0.72rem; color: var(--text-3); }
+.cerca-player-clan { font-size: 0.8rem; color: var(--text-2); margin-top: 0.2rem; }
+.cerca-league-badge { width: 40px; height: 40px; object-fit: contain; }
+
+@media (max-width: 768px) {
+    .profilo-stats-row { gap: 0.35rem; }
+    .profilo-stat { min-width: 48px; padding: 0.3rem 0.4rem; }
+    .profilo-units-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+    .cerca-row { flex-direction: column; align-items: stretch; }
+    .cerca-input-wrap { min-width: unset; }
+}
