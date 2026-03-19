@@ -95,6 +95,39 @@ module.exports = async (req, res) => {
 
     if (error) return res.status(500).json({ error: error.message });
 
+    // --- INIZIO INVIO EMAIL DI BENVENUTO ---
+    // Se l'utente ha inserito la mail facoltativa e abbiamo la chiave API
+    if (realEmail && process.env.RESEND_API_KEY) {
+        try {
+            await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    from: 'Fear United IT <onboarding@resend.dev>', // Sostituisci col tuo dominio verificato se lo hai
+                    to: realEmail,
+                    subject: 'Benvenuto nel clan Fear United IT! ⚔️',
+                    html: `
+                        <h2>Ciao ${username}, benvenuto nella nostra Dashboard!</h2>
+                        <p>Il tuo account è stato collegato con successo al tuo villaggio.</p>
+                        <ul>
+                            <li><strong>Tag:</strong> ${playerTag}</li>
+                            <li><strong>Ruolo Clan:</strong> ${appRole}</li>
+                        </ul>
+                        <p>Ora puoi accedere per vedere le tue statistiche CWL e i bonus.</p>
+                        <p>A presto in gioco!</p>
+                    `
+                })
+            });
+        } catch (emailErr) {
+            console.error('Errore invio email di benvenuto:', emailErr);
+            // Non blocchiamo il login se l'email fallisce
+        }
+    }
+    // --- FINE INVIO EMAIL DI BENVENUTO ---
+
     return res.status(201).json({
         ok: true,
         username,

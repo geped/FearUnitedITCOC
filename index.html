@@ -142,6 +142,10 @@
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
                 Cerca
             </button>
+            <button class="tab-btn" data-tab="rankings" onclick="closeNav()">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M7 21h2v-2H7v2zm0-4h2v-2H7v2zm0-4h2v-2H7v2zm4 8h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2V7h-2v2zm4 12h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2V7h-2v2zm0-4h2V3h-2v2z"/></svg>
+                Classifiche
+            </button>
             <button class="tab-btn admin-only" data-tab="admin" style="display:none" onclick="closeNav()">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 13.17 10.33 12 8 12zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C23 13.17 18.33 12 16 12z"/></svg>
                 Gestione Utenti
@@ -491,9 +495,18 @@
                         <button class="subtab-btn" onclick="switchProfiloTab('capital',this)">Capitale</button>
                     </div>
                     <div id="profilo-tab-home">
-                        <div class="profilo-section" id="ps-heroes"><h3 class="profilo-section-title">Eroi</h3><div id="profilo-heroes" class="profilo-units-grid"></div></div>
-                        <div class="profilo-section" id="ps-equipment"><h3 class="profilo-section-title">Equipaggiamento Eroi</h3><div id="profilo-equipment" class="profilo-units-grid"></div></div>
-                        <div class="profilo-section" id="ps-pets-sec"><h3 class="profilo-section-title">Famigli</h3><div id="profilo-pets" class="profilo-units-grid"></div></div>
+                        <div class="profilo-section">
+                            <h3 class="profilo-section-title">Eroi &amp; Famigli</h3>
+                            <div class="profilo-sub-group">
+                                <div class="profilo-sub-label">Eroi</div>
+                                <div id="profilo-heroes" class="profilo-units-grid"></div>
+                            </div>
+                            <div class="profilo-sub-group" id="ps-pets-sec">
+                                <div class="profilo-sub-label">Famigli</div>
+                                <div id="profilo-pets" class="profilo-units-grid"></div>
+                            </div>
+                        </div>
+                        <div class="profilo-section" id="ps-equipment"><h3 class="profilo-section-title">Equipaggiamento Eroi</h3><div id="profilo-equipment"></div></div>
                         <div class="profilo-section" id="ps-troops"><h3 class="profilo-section-title">Truppe</h3><div id="profilo-troops" class="profilo-units-grid"></div></div>
                         <div class="profilo-section" id="ps-spells"><h3 class="profilo-section-title">Incantesimi</h3><div id="profilo-spells" class="profilo-units-grid"></div></div>
                         <div class="profilo-section" id="ps-siege"><h3 class="profilo-section-title">Macchine d'Assedio</h3><div id="profilo-siege" class="profilo-units-grid"></div></div>
@@ -522,6 +535,11 @@
                             <p class="page-sub">Cerca clan e giocatori in Clash of Clans</p>
                         </div>
                     </div>
+                    <div class="subtab-bar" style="margin-bottom:1rem">
+                        <button class="subtab-btn active" onclick="_switchCercaSubtab('ricerca',this)">🔍 Ricerca</button>
+                        <button class="subtab-btn" onclick="_switchCercaSubtab('preferiti',this)">⭐ Preferiti</button>
+                    </div>
+                    <div id="cerca-sub-ricerca">
                     <div class="card" style="margin-bottom:1.25rem">
                         <div class="cerca-row">
                             <div class="toggle-group">
@@ -539,6 +557,10 @@
                         <p id="cerca-hint" class="cerca-hint">Clan: cerca per nome (min 3 caratteri) o tag (#ABC123)</p>
                     </div>
                     <div id="cerca-results"></div>
+                    </div><!-- /cerca-sub-ricerca -->
+                    <div id="cerca-sub-preferiti" style="display:none">
+                        <div id="cerca-preferiti-content"></div>
+                    </div>
                 </div>
 
                 <!-- ── DETTAGLIO CLAN ── -->
@@ -559,6 +581,33 @@
                     <div id="cerca-player-content"></div>
                 </div>
 
+            </section>
+
+
+            <!-- ── TAB: CLASSIFICHE ──────────────────────────────────── -->
+            <section id="tab-rankings" class="tab-content" style="display:none">
+                <div class="page-header">
+                    <div>
+                        <h2>🏆 Classifiche</h2>
+                        <p class="page-sub">Top giocatori e clan nel mondo</p>
+                    </div>
+                    <button class="btn-secondary btn-sm" onclick="loadRankings()">🔄 Aggiorna</button>
+                </div>
+                <div class="card" style="margin-bottom:1rem">
+                    <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
+                        <div class="toggle-group">
+                            <button class="toggle-btn active" id="rank-btn-players" onclick="switchRankType('players')">👤 Giocatori</button>
+                            <button class="toggle-btn" id="rank-btn-clans" onclick="switchRankType('clans')">🛡️ Clan</button>
+                        </div>
+                        <div class="toggle-group">
+                            <button class="toggle-btn active" id="rank-btn-global" onclick="switchRankLocale('global')">🌍 Globale</button>
+                            <button class="toggle-btn" id="rank-btn-italy" onclick="switchRankLocale('italy')">🇮🇹 Italia</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="rankings-content">
+                    <div class="profilo-empty"><p style="color:var(--text-3)">Seleziona un tipo di classifica per caricare i dati.</p></div>
+                </div>
             </section>
 
         </main>
@@ -587,6 +636,10 @@
         <button class="bnav-btn" data-tab="cerca">
             <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
             <span class="bnav-label">Cerca</span>
+        </button>
+        <button class="bnav-btn" data-tab="rankings">
+            <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M7 21h2v-2H7v2zm0-4h2v-2H7v2zm0-4h2v-2H7v2zm4 8h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2V7h-2v2zm4 12h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2V7h-2v2zm0-4h2V3h-2v2z"/></svg>
+            <span class="bnav-label">Classifiche</span>
         </button>
         <button class="bnav-btn admin-only" data-tab="admin" style="display:none">
             <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 13.17 10.33 12 8 12zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C23 13.17 18.33 12 16 12z"/></svg>

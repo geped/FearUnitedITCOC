@@ -12,8 +12,13 @@ module.exports = async (req, res) => {
             const q = req.query.q;
             if (!q) return res.status(400).json({ error: 'q obbligatorio.' });
             proxyPath = `/search-clans?q=${encodeURIComponent(q)}`;
+        } else if (type === 'rankings') {
+            const rankType = req.query.rankType;
+            const locationId = req.query.locationId;
+            if (!rankType || !locationId) return res.status(400).json({ error: 'rankType e locationId obbligatori.' });
+            proxyPath = `/rankings?type=${encodeURIComponent(rankType)}&locationId=${encodeURIComponent(locationId)}`;
         } else {
-            return res.status(400).json({ error: 'type non valido. Usa: player, search-clans' });
+            return res.status(400).json({ error: 'type non valido. Usa: player, search-clans, rankings' });
         }
         const r = await fetch(`${proxyUrl}${proxyPath}`, {
             headers: { 'x-sync-key': process.env.SYNC_SECRET || '' },

@@ -485,7 +485,20 @@ app.get('/clan-info', authMiddleware, async (req, res) => {
             badgeUrls: data.badgeUrls,
             clanLevel: data.clanLevel,
             warLeague: data.warLeague || null,
-            members: data.members
+            members: data.members,
+            description: data.description || '',
+            type: data.type || '',
+            location: data.location || null,
+            clanPoints: data.clanPoints ?? 0,
+            clanBuilderBasePoints: data.clanBuilderBasePoints ?? 0,
+            warWins: data.warWins ?? 0,
+            warLosses: data.warLosses ?? null,
+            warTies: data.warTies ?? null,
+            warWinStreak: data.warWinStreak ?? 0,
+            isWarLogPublic: data.isWarLogPublic ?? false,
+            requiredTrophies: data.requiredTrophies ?? 0,
+            warFrequency: data.warFrequency || '',
+            labels: data.labels || []
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -571,8 +584,37 @@ app.get('/clan-members', authMiddleware, async (req, res) => {
         );
         const data = await r.json();
         if (!r.ok) return res.status(r.status).json({ error: data.reason || 'CoC API error' });
-        const items = (data.items || []).map(m => ({ name: m.name, tag: m.tag, role: m.role, townHallLevel: m.townHallLevel }));
+        const items = (data.items || []).map(m => ({
+            name: m.name, tag: m.tag, role: m.role,
+            townHallLevel: m.townHallLevel,
+            trophies: m.trophies ?? 0,
+            donations: m.donations ?? 0,
+            donationsReceived: m.donationsReceived ?? 0,
+            clanRank: m.clanRank ?? null,
+            expLevel: m.expLevel ?? null,
+            league: m.league ? {
+                id: m.league.id,
+                name: m.league.name,
+                iconUrls: m.league.iconUrls || {}
+            } : null
+        }));
         res.json({ items });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.get('/rankings', authMiddleware, async (req, res) => {
+    try {
+        const { type, locationId } = req.query;
+        if (!type || !locationId) return res.status(400).json({ error: 'type e locationId obbligatori.' });
+        const validTypes = ['players', 'clans', 'players-builder-base', 'clans-builder-base'];
+        if (!validTypes.includes(type)) return res.status(400).json({ error: 'type non valido.' });
+        const url = `https://api.clashofclans.com/v1/locations/${encodeURIComponent(locationId)}/rankings/${encodeURIComponent(type)}?limit=50`;
+        const r = await fetch(url, { headers: cocHeaders() });
+        const data = await r.json();
+        if (!r.ok) return res.status(r.status).json({ error: data.reason || 'CoC API error' });
+        res.json(data);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

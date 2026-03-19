@@ -490,6 +490,8 @@ function activateTab(tabId) {
   if (tabId === 'warlog') setTimeout(loadWarLog, 80);
   if (tabId === 'cwl') setTimeout(loadAssignBonus, 80);
   if (tabId === 'profilo') setTimeout(loadProfile, 80);
+  if (tabId === 'rankings') { setTimeout(loadRankings, 80); setTimeout(renderFavoriti, 80); }
+  if (tabId === 'cerca') setTimeout(renderFavoriti, 80);
 }
 
 document.querySelectorAll('.tab-btn, .bnav-btn').forEach(btn => {
@@ -588,9 +590,9 @@ function renderMembers(members) {
       ? `<img src="${m.league_icon_url}" class="league-badge-sm" alt="${leagueItName || ''}" title="${leagueItName || ''}" loading="lazy" onerror="this.outerHTML='<span class=\\'no-league-badge\\'>—</span>'">`
       : '<span class="no-league-badge">—</span>';
 
-    // Badge SVG per giocatori nuovi (< 7 giorni)
+    // Badge SVG per giocatori nuovi (< 7 giorni) — icona stella minuscola
     const newBadge = isNew
-      ? `<svg class="new-player-badge" viewBox="0 0 38 13" xmlns="http://www.w3.org/2000/svg" aria-label="Nuovo membro"><rect x="0.5" y="0.5" width="37" height="12" rx="2.5" fill="rgba(39,174,96,0.15)" stroke="rgba(39,174,96,0.45)"/><text x="19" y="9.5" text-anchor="middle" font-size="7" font-weight="700" fill="#27AE60" font-family="IBM Plex Mono,monospace" letter-spacing="0.6">NUOVO</text></svg>`
+      ? `<svg class="new-player-badge" viewBox="0 0 12 12" xmlns="http://www.w3.org/2000/svg" aria-label="Nuovo membro" title="Nuovo membro (< 7 giorni)"><path d="M6 1l1.29 2.61 2.88.42-2.08 2.03.49 2.86L6 7.6 3.42 8.92l.49-2.86L1.83 4.03l2.88-.42z" fill="#27AE60"/></svg>`
       : '';
 
     const tr = document.createElement("tr");
@@ -3356,8 +3358,9 @@ function renderPlayerView(p, prefix) {
     : '<span class="profilo-clan-ref" style="color:var(--text-3)">Nessun clan</span>';
   const roleHtml = p.role ? `<span class="badge badge-gold">${cocRole(p.role).label}</span>` : '';
   const copyBtn = !isHome
-    ? `<button class="btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${p.tag}').then(()=>this.textContent='Copiato!').then(()=>setTimeout(()=>this.textContent='Copia Tag',1500))" style="margin-left:auto">Copia Tag</button>`
+    ? `<button class="btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${p.tag}').then(()=>this.textContent='Copiato!').then(()=>setTimeout(()=>this.textContent='Copia Tag',1500))">Copia Tag</button>`
     : '';
+  const favBtnHtml = !isHome ? _favBtn('players', p.tag, p.name) : '';
 
   const headerEl = document.getElementById(`${prefix}-header-card`);
   if (headerEl) headerEl.innerHTML = `
@@ -3370,7 +3373,7 @@ function renderPlayerView(p, prefix) {
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.5rem">
         ${leagueHtml}
-        ${copyBtn}
+        <div style="display:flex;gap:0.4rem;align-items:center">${copyBtn}${favBtnHtml}</div>
       </div>
     </div>
     <div class="profilo-stats-row">
@@ -3449,9 +3452,9 @@ function renderPlayerView(p, prefix) {
   const siege    = (p.troops||[]).filter(x=>x.village==='home'&&SIEGE_SET.has(x.name));
   const achHome  = (p.achievements||[]).filter(a=>a.village==='home'||!a.village);
 
-  _renderUnits(ids.heroes,    heroes,    'heroes');
-  _renderUnits(ids.equipment, equipment, 'equipment');
-  _renderUnits(ids.pets,      pets,      'pets');
+  _renderUnits(ids.heroes,       heroes,    'heroes');
+  _renderEquipmentGrouped(ids.equipment, equipment);
+  _renderUnits(ids.pets,         pets,      'pets');
   _renderUnits(ids.troops,    troopsAll, 'troops');
   _renderUnits(ids.spells,    spells,    'spells');
   _renderUnits(ids.siege,     siege,     'troops');
@@ -3495,15 +3498,17 @@ function renderPlayerView(p, prefix) {
 
 // ── MAPPA CDN UNITÀ (API name → coc.guide category + slug) ───────────────────
 const UNIT_COC_SLUG = {
-  // Heroes
+  // ── Eroi Villaggio Base ────────────────────────────────────────────────────
   'Barbarian King':     {c:'hero',  s:'barbarian-king'},
   'Archer Queen':       {c:'hero',  s:'archer-queen'},
   'Grand Warden':       {c:'hero',  s:'grand-warden'},
   'Royal Champion':     {c:'hero',  s:'royal-champion'},
   'Minion Prince':      {c:'hero',  s:'minion-prince'},
+  'Dragon Duke':        {c:'hero',  s:'dragon-duke'},
+  // ── Eroi Builder / Capitale ───────────────────────────────────────────────
   'Battle Machine':     {c:'hero',  s:'battle-machine'},
   'B.O.B':              {c:'hero',  s:'bob'},
-  // Troops — slug differs from auto-generation
+  // ── Truppe — slug diverso dall'auto-generazione ───────────────────────────
   'Baby Dragon':        {c:'troop', s:'babydragon'},
   'Inferno Dragon':     {c:'troop', s:'infernodragon'},
   'Lava Hound':         {c:'troop', s:'lavahound'},
@@ -3511,7 +3516,26 @@ const UNIT_COC_SLUG = {
   'Hog Rider':          {c:'troop', s:'hog-rider'},
   'Wall Breaker':       {c:'troop', s:'wall-breaker'},
   'Ram Rider':          {c:'troop', s:'ram-rider'},
-  // Spells — all need explicit mapping (filenames differ from API names)
+  'Apprentice Warden':  {c:'troop', s:'apprentice-warden'},
+  'Druid':              {c:'troop', s:'druid'},
+  'Thrower':            {c:'troop', s:'thrower'},
+  'Super Barbarian':    {c:'troop', s:'super-barbarian'},
+  'Super Archer':       {c:'troop', s:'super-archer'},
+  'Super Giant':        {c:'troop', s:'super-giant'},
+  'Sneaky Goblin':      {c:'troop', s:'sneaky-goblin'},
+  'Super Wall Breaker': {c:'troop', s:'super-wall-breaker'},
+  'Rocket Balloon':     {c:'troop', s:'rocket-balloon'},
+  'Super Witch':        {c:'troop', s:'super-witch'},
+  'Ice Hound':          {c:'troop', s:'ice-hound'},
+  'Super Bowler':       {c:'troop', s:'super-bowler'},
+  'Super Dragon':       {c:'troop', s:'super-dragon'},
+  'Electro Titan':      {c:'troop', s:'electro-titan'},
+  'Root Rider':         {c:'troop', s:'root-rider'},
+  'Super Miner':        {c:'troop', s:'super-miner'},
+  'Super Hog Rider':    {c:'troop', s:'super-hog-rider'},
+  'Dragon Rider':       {c:'troop', s:'dragon-rider'},
+  'Minion':             {c:'troop', s:'minion'},
+  // ── Incantesimi (nomi CDN diversi dai nomi API) ────────────────────────────
   'Lightning Spell':    {c:'spell', s:'lighningstorm'},
   'Healing Spell':      {c:'spell', s:'healingwave'},
   'Rage Spell':         {c:'spell', s:'speedup'},
@@ -3527,7 +3551,9 @@ const UNIT_COC_SLUG = {
   'Poison Spell':       {c:'spell', s:'poison'},
   'Overgrowth Spell':   {c:'spell', s:'overgrowth'},
   'Goblin Spell':       {c:'spell', s:'goblin'},
-  // Pets
+  'Revive Spell':       {c:'spell', s:'revive'},
+  'Fireball Spell':     {c:'spell', s:'fireball'},
+  // ── Famigli ───────────────────────────────────────────────────────────────
   'L.A.S.S.I':          {c:'pet',   s:'lassi'},
   'Electro Owl':        {c:'pet',   s:'electro-owl'},
   'Mighty Yak':         {c:'pet',   s:'mighty-yak'},
@@ -3538,7 +3564,9 @@ const UNIT_COC_SLUG = {
   'Phoenix':            {c:'pet',   s:'phoenix'},
   'Spirit Fox':         {c:'pet',   s:'spirit-fox'},
   'Angry Jelly':        {c:'pet',   s:'angry-jelly'},
-  // Builder Base (coc.guide uses different naming)
+  'Sneezy':             {c:'pet',   s:'sneezy'},
+  'Greedy Raven':       {c:'pet',   s:'greedy-raven'},
+  // ── Builder Base ──────────────────────────────────────────────────────────
   'Raged Barbarian':    {c:'troop', s:'barbarian2'},
   'Sneaky Archer':      {c:'troop', s:'archer2'},
   'Boxer Giant':        {c:'troop', s:'giant2'},
@@ -3549,13 +3577,63 @@ const UNIT_COC_SLUG = {
   'Drop Ship':          {c:'troop', s:'drop-ship'},
   'Super P.E.K.K.A':    {c:'troop', s:'pekka2'},
   'Hog Glider':         {c:'troop', s:'hog-glider'},
-  // Siege machines
+  // ── Macchine d'assedio ────────────────────────────────────────────────────
   'Wall Wrecker':       {c:'troop', s:'siege-machine-ram'},
   'Battle Blimp':       {c:'troop', s:'siege-machine-flyer'},
   'Stone Slammer':      {c:'troop', s:'siege-catapult'},
   'Siege Barracks':     {c:'troop', s:'siege-machine-carrier'},
   'Log Launcher':       {c:'troop', s:'siege-log-launcher'},
+  'Flame Flinger':      {c:'troop', s:'flame-flinger'},
   'Battle Drill':       {c:'troop', s:'battleram'},
+  // ── Equipaggiamento eroi ──────────────────────────────────────────────────
+  // Re dei Barbari
+  'Barbarian Puppet':   {c:'equipment', s:'barbarian-puppet'},
+  'Rage Vial':          {c:'equipment', s:'rage-vial'},
+  'Earthquake Boots':   {c:'equipment', s:'earthquake-boots'},
+  'Vampstache':         {c:'equipment', s:'vampstache'},
+  'Giant Gauntlet':     {c:'equipment', s:'giant-gauntlet'},
+  'Spiky Ball':         {c:'equipment', s:'spiky-ball'},
+  // Regina degli Arcieri
+  'Archer Puppet':      {c:'equipment', s:'archer-puppet'},
+  'Invisibility Vial':  {c:'equipment', s:'invisibility-vial'},
+  'Giant Arrow':        {c:'equipment', s:'giant-arrow'},
+  'Healer Puppet':      {c:'equipment', s:'healer-puppet'},
+  'Frozen Arrow':       {c:'equipment', s:'frozen-arrow'},
+  'Magic Mirror':       {c:'equipment', s:'magic-mirror'},
+  // Grande Custode
+  'Eternal Tome':       {c:'equipment', s:'eternal-tome'},
+  'Life Gem':           {c:'equipment', s:'life-gem'},
+  'Rage Gem':           {c:'equipment', s:'rage-gem'},
+  'Healing Tome':       {c:'equipment', s:'healing-tome'},
+  'Fireball':           {c:'equipment', s:'fireball'},
+  'Lavaloon Puppet':    {c:'equipment', s:'lavaloon-puppet'},
+  // Campione Reale
+  'Royal Gem':          {c:'equipment', s:'royal-gem'},
+  'Seeking Shield':     {c:'equipment', s:'seeking-shield'},
+  'Hog Rider Puppet':   {c:'equipment', s:'hog-rider-puppet'},
+  'Haste Vial':         {c:'equipment', s:'haste-vial'},
+  'Rocket Spear':       {c:'equipment', s:'rocket-spear'},
+  'Metal Pants':        {c:'equipment', s:'metal-pants'},
+  // Principe degli Sgherri
+  'Dark Orb':           {c:'equipment', s:'dark-orb'},
+  'Henchmen Puppet':    {c:'equipment', s:'henchmen-puppet'},
+  // Campione Reale (aggiunte mancanti)
+  'Electro Boots':      {c:'equipment', s:'electro-boots'},
+  'Frost Flake':        {c:'equipment', s:'frost-flake'},
+  // Principe degli Sgherri (aggiunte mancanti)
+  'Dark Crown':         {c:'equipment', s:'dark-crown'},
+  'Meteor Staff':       {c:'equipment', s:'meteor-staff'},
+  'Noble Iron':         {c:'equipment', s:'noble-iron'},
+  // Re dei Barbari (aggiunte mancanti)
+  'Snake Bracelet':     {c:'equipment', s:'snake-bracelet'},
+  // Regina degli Arcieri (aggiunte mancanti)
+  'Action Figure':      {c:'equipment', s:'action-figure'},
+  // Grande Custode (aggiunte mancanti)
+  'Heroic Torch':       {c:'equipment', s:'heroic-torch'},
+  // Duca Drago
+  'Fire Heart':         {c:'equipment', s:'fire-heart'},
+  'Flame Blower':       {c:'equipment', s:'flame-blower'},
+  'Stun Blaster':       {c:'equipment', s:'stun-blaster'},
 };
 
 // ── NOMI ITALIANI UNITÀ ───────────────────────────────────────────────────────
@@ -3563,8 +3641,8 @@ const UNIT_NAME_IT = {
   // Eroi
   'Barbarian King':'Re dei Barbari','Archer Queen':'Regina degli Arcieri',
   'Grand Warden':'Grande Custode','Royal Champion':'Campione Reale',
-  'Minion Prince':'Principe dei Servitori','Battle Machine':'Macchina da Battaglia',
-  'B.O.B':'B.O.B',
+  'Minion Prince':'Principe degli Sgherri','Dragon Duke':'Duca Drago',
+  'Battle Machine':'Macchina da Battaglia','B.O.B':'B.O.B',
   // Truppe home
   'Barbarian':'Barbaro','Archer':'Arciera','Giant':'Gigante','Goblin':'Goblin',
   'Wall Breaker':'Spaccamuri','Balloon':'Mongolfiera','Wizard':'Mago',
@@ -3596,11 +3674,19 @@ const UNIT_NAME_IT = {
   'Stone Slammer':'Frantumatore di Pietre','Siege Barracks':'Caserma d\'Assedio',
   'Log Launcher':'Lancia-Tronchi','Flame Flinger':'Lanciatore di Fiamme',
   'Battle Drill':'Trivella da Battaglia',
+  // Equipaggiamento — nuovi items
+  'Snake Bracelet':'Bracciale Serpente','Action Figure':'Action Figure',
+  'Heroic Torch':'Torcia Eroica','Frost Flake':'Fiocco di Gelo',
+  'Dark Crown':'Corona Oscura','Meteor Staff':'Bastone Meteora',
+  'Noble Iron':'Ferro Nobile','Fire Heart':'Cuore di Fuoco',
+  'Flame Blower':'Soffiatore di Fiamme','Stun Blaster':'Blaster Stordente',
   // Famigli
   'L.A.S.S.I':'L.A.S.S.I','Electro Owl':'Gufo Elettro','Mighty Yak':'Yak Possente',
   'Unicorn':'Unicorno','Frosty':'Gelido','Diggy':'Scavino',
   'Poison Lizard':'Lucertola Velenosa','Phoenix':'Fenice',
   'Spirit Fox':'Volpe Spirito','Angry Jelly':'Medusa Arrabbiata',
+  'Greedy Raven':'Corvo Alalesta',
+  'Sneezy':'Starnuto',
   // Truppe builder
   'Raged Barbarian':'Barbaro Furioso','Sneaky Archer':'Arciera Furtiva',
   'Boxer Giant':'Gigante Pugile','Beta Minion':'Beta Servitore',
@@ -3633,8 +3719,92 @@ function _unitFallbackColor(name) {
   return cols[Math.abs(h)%cols.length];
 }
 
-const PETS_SET = new Set(['L.A.S.S.I','Electro Owl','Mighty Yak','Unicorn','Frosty','Diggy','Poison Lizard','Phoenix','Spirit Fox','Angry Jelly']);
+const PETS_SET = new Set(['L.A.S.S.I','Electro Owl','Mighty Yak','Unicorn','Frosty','Diggy','Poison Lizard','Phoenix','Spirit Fox','Angry Jelly','Sneezy','Greedy Raven']);
 const SIEGE_SET = new Set(['Wall Wrecker','Battle Blimp','Stone Slammer','Siege Barracks','Log Launcher','Flame Flinger','Battle Drill']);
+
+// ── MAPPA EQUIPAGGIAMENTO → EROE PROPRIETARIO ─────────────────────────────────
+// Fonte: wiki ufficiale Supercell (marzo 2026)
+const HERO_EQUIPMENT_MAP = {
+  // Re dei Barbari (7 items)
+  'Barbarian Puppet':'Barbarian King','Rage Vial':'Barbarian King',
+  'Earthquake Boots':'Barbarian King','Vampstache':'Barbarian King',
+  'Giant Gauntlet':'Barbarian King','Spiky Ball':'Barbarian King',
+  'Snake Bracelet':'Barbarian King',
+  // Regina degli Arcieri (7 items)
+  'Archer Puppet':'Archer Queen','Invisibility Vial':'Archer Queen',
+  'Giant Arrow':'Archer Queen','Healer Puppet':'Archer Queen',
+  'Frozen Arrow':'Archer Queen','Magic Mirror':'Archer Queen',
+  'Action Figure':'Archer Queen',
+  // Grande Custode (7 items)
+  'Eternal Tome':'Grand Warden','Life Gem':'Grand Warden',
+  'Rage Gem':'Grand Warden','Healing Tome':'Grand Warden',
+  'Fireball':'Grand Warden','Lavaloon Puppet':'Grand Warden',
+  'Heroic Torch':'Grand Warden',
+  // Campione Reale (7 items) — Electro Boots appartiene qui, NON al Duca Drago
+  'Royal Gem':'Royal Champion','Seeking Shield':'Royal Champion',
+  'Hog Rider Puppet':'Royal Champion','Haste Vial':'Royal Champion',
+  'Rocket Spear':'Royal Champion','Electro Boots':'Royal Champion',
+  'Frost Flake':'Royal Champion',
+  // Principe degli Sgherri (6 items) — Metal Pants appartiene qui, NON al Campione Reale
+  'Dark Orb':'Minion Prince','Henchmen Puppet':'Minion Prince',
+  'Metal Pants':'Minion Prince','Dark Crown':'Minion Prince',
+  'Meteor Staff':'Minion Prince','Noble Iron':'Minion Prince',
+  // Duca Drago (3 items, aggiunto feb 2026)
+  'Fire Heart':'Dragon Duke','Flame Blower':'Dragon Duke',
+  'Stun Blaster':'Dragon Duke',
+};
+const HERO_ORDER_EQUIP = ['Barbarian King','Archer Queen','Grand Warden','Royal Champion','Minion Prince','Dragon Duke'];
+
+// Renderizza equipaggiamento raggruppato per eroe
+function _renderEquipmentGrouped(containerId, equipment) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!equipment || !equipment.length) {
+    el.innerHTML = '<span class="profilo-empty-units">Nessun equipaggiamento sbloccato</span>';
+    return;
+  }
+
+  // Raggruppa per eroe
+  const groups = {};
+  HERO_ORDER_EQUIP.forEach(h => { groups[h] = []; });
+  groups['__altro__'] = [];
+  equipment.forEach(item => {
+    const hero = HERO_EQUIPMENT_MAP[item.name];
+    const key = (hero && groups[hero] !== undefined) ? hero : '__altro__';
+    groups[key].push(item);
+  });
+
+  function unitCardHtml(u) {
+    const nameIt  = _unitNameIt(u.name);
+    const imgUrl  = _unitCdnUrl(u.name, 'equipment');
+    const lvl     = u.level ?? 0;
+    const maxLvl  = u.maxLevel ?? 0;
+    const isMax   = maxLvl > 0 && lvl >= maxLvl;
+    const isLocked= lvl === 0;
+    const fbColor = _unitFallbackColor(u.name);
+    const fbInit  = (u.name||'?')[0].toUpperCase();
+    return `<div class="profilo-unit-card${isMax?' profilo-unit-max':''}${isLocked?' profilo-unit-locked':''}" title="${nameIt}">
+      <div class="profilo-unit-img-wrap">
+        <img src="${imgUrl}" alt="${nameIt}" class="profilo-unit-img" loading="lazy"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="profilo-unit-fallback" style="display:none;background:${fbColor}">${fbInit}</div>
+        ${!isLocked ? `<span class="unit-lv-badge${isMax?' unit-lv-badge--max':''}">${lvl}</span>` : ''}
+      </div>
+    </div>`;
+  }
+
+  let html = '';
+  [...HERO_ORDER_EQUIP, '__altro__'].forEach(heroKey => {
+    const items = groups[heroKey];
+    if (!items || !items.length) return;
+    const label = heroKey === '__altro__' ? 'Altro' : _unitNameIt(heroKey);
+    html += `<div class="profilo-equip-group">
+      <div class="profilo-equip-group-label">${label}</div>
+      <div class="profilo-units-grid">${items.map(unitCardHtml).join('')}</div>
+    </div>`;
+  });
+  el.innerHTML = html;
+}
 
 function _renderUnits(containerId, units, cdnCategory) {
   const el = document.getElementById(containerId);
@@ -3644,25 +3814,21 @@ function _renderUnits(containerId, units, cdnCategory) {
     return;
   }
   el.innerHTML = units.map(u => {
-    const nameIt = _unitNameIt(u.name);
-    const imgUrl = _unitCdnUrl(u.name, cdnCategory);
-    const lvl = u.level ?? 0;
-    const maxLvl = u.maxLevel ?? 0;
-    const pct = maxLvl ? Math.round((lvl / maxLvl) * 100) : 100;
-    const isMax = maxLvl && lvl >= maxLvl;
-    const isLocked = lvl === 0;
-    const barColor = isMax ? 'var(--gold)' : isLocked ? 'var(--border-2)' : 'var(--green)';
+    const nameIt  = _unitNameIt(u.name);
+    const imgUrl  = _unitCdnUrl(u.name, cdnCategory);
+    const lvl     = u.level ?? 0;
+    const maxLvl  = u.maxLevel ?? 0;
+    const isMax   = maxLvl > 0 && lvl >= maxLvl;
+    const isLocked= lvl === 0;
     const fbColor = _unitFallbackColor(u.name);
-    const fbInitial = (u.name||'?')[0].toUpperCase();
-    return `<div class="profilo-unit-card${isMax?' profilo-unit-max':''}${isLocked?' profilo-unit-locked':''}">
+    const fbInit  = (u.name||'?')[0].toUpperCase();
+    return `<div class="profilo-unit-card${isMax?' profilo-unit-max':''}${isLocked?' profilo-unit-locked':''}" title="${nameIt}">
       <div class="profilo-unit-img-wrap">
         <img src="${imgUrl}" alt="${nameIt}" class="profilo-unit-img" loading="lazy"
           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-        <div class="profilo-unit-fallback" style="display:none;background:${fbColor}">${fbInitial}</div>
+        <div class="profilo-unit-fallback" style="display:none;background:${fbColor}">${fbInit}</div>
+        ${!isLocked ? `<span class="unit-lv-badge${isMax?' unit-lv-badge--max':''}">${lvl}</span>` : ''}
       </div>
-      <div class="profilo-unit-name">${nameIt}</div>
-      <div class="profilo-unit-lv">${isLocked?'Bloccata':`Lv ${lvl}`}${maxLvl?` / ${maxLvl}`:''}</div>
-      <div class="profilo-unit-bar-wrap"><div class="profilo-unit-bar" style="width:${isLocked?0:pct}%;background:${barColor}"></div></div>
     </div>`;
   }).join('');
 }
@@ -3701,7 +3867,87 @@ function switchProfiloTab(tab, btn) {
 
 // ── CERCA ─────────────────────────────────────────────────────────────────────
 
+// ── PREFERITI (localStorage) ──────────────────────────────────────────────────
+let _favs = (() => {
+  try { return JSON.parse(localStorage.getItem('coc_favorites') || '{"clans":{},"players":{}}'); }
+  catch(_) { return {clans:{}, players:{}}; }
+})();
+function _saveFavs() { localStorage.setItem('coc_favorites', JSON.stringify(_favs)); }
+function toggleFavClan(tag, name, badge) {
+  if (_favs.clans[tag]) delete _favs.clans[tag];
+  else _favs.clans[tag] = { tag, name, badge: badge||'', ts: Date.now() };
+  _saveFavs(); _updateFavUI();
+}
+function toggleFavPlayer(tag, name) {
+  if (_favs.players[tag]) delete _favs.players[tag];
+  else _favs.players[tag] = { tag, name, ts: Date.now() };
+  _saveFavs(); _updateFavUI();
+}
+function _isFav(type, tag) { return !!_favs[type]?.[tag]; }
+function _favBtn(type, tag, name, badge) {
+  const active = _isFav(type, tag);
+  const onclick = type==='clans'
+    ? `toggleFavClan('${tag.replace(/'/g,"\\'")}','${name.replace(/'/g,"\\'")}','${(badge||'').replace(/'/g,"\\'")}')`
+    : `toggleFavPlayer('${tag.replace(/'/g,"\\'")}','${name.replace(/'/g,"\\'")}')`;
+  return `<button class="btn-fav${active?' btn-fav--active':''}" onclick="${onclick}" title="${active?'Rimuovi dai preferiti':'Aggiungi ai preferiti'}" id="fav-btn-${tag.replace(/[^a-zA-Z0-9]/g,'_')}">
+    <svg viewBox="0 0 24 24" fill="${active?'currentColor':'none'}" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+  </button>`;
+}
+function _updateFavUI() {
+  // Aggiorna tutti i btn-fav nella pagina
+  document.querySelectorAll('[id^="fav-btn-"]').forEach(btn => {
+    const id = btn.id.replace('fav-btn-','');
+    // cerca tag corrispondente (meno affidabile, ma sufficiente)
+    const isActive = btn.classList.contains('btn-fav--active');
+    // re-render dell'icona già fatto via onclick; aggiorna solo aria/title
+  });
+  renderFavoriti();
+}
+function renderFavoriti() {
+  const el = document.getElementById('cerca-preferiti-content');
+  if (!el) return;
+  const clans   = Object.values(_favs.clans||{}).sort((a,b)=>b.ts-a.ts);
+  const players = Object.values(_favs.players||{}).sort((a,b)=>b.ts-a.ts);
+  if (!clans.length && !players.length) {
+    el.innerHTML = '<div class="profilo-empty"><p>Nessun preferito salvato.<br><span style="font-size:0.78rem;color:var(--text-3)">Aggiungi clan e giocatori dalla ricerca.</span></p></div>';
+    return;
+  }
+  let html = '';
+  if (clans.length) {
+    html += '<div style="margin-bottom:1rem"><div class="profilo-sub-label" style="margin-bottom:0.5rem">Clan</div>';
+    html += clans.map(c => `
+      <div class="fav-row">
+        ${c.badge ? `<img src="${c.badge}" class="cerca-clan-badge" alt="" style="width:32px;height:32px">` : ''}
+        <span class="fav-name" onclick="openCercaClan('${c.tag}')" style="cursor:pointer">${c.name} <span class="mono" style="font-size:0.75rem;color:var(--text-3)">${c.tag}</span></span>
+        <button class="btn-fav btn-fav--active" onclick="toggleFavClan('${c.tag}','${c.name.replace(/'/g,"\\'")}','${(c.badge||'').replace(/'/g,"\\'")}')">
+          <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+        </button>
+      </div>`).join('');
+    html += '</div>';
+  }
+  if (players.length) {
+    html += '<div><div class="profilo-sub-label" style="margin-bottom:0.5rem">Giocatori</div>';
+    html += players.map(p => `
+      <div class="fav-row">
+        <span class="fav-name" onclick="openCercaPlayer('${p.tag}')" style="cursor:pointer">${p.name} <span class="mono" style="font-size:0.75rem;color:var(--text-3)">${p.tag}</span></span>
+        <button class="btn-fav btn-fav--active" onclick="toggleFavPlayer('${p.tag}','${p.name.replace(/'/g,"\\'")}')">
+          <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+        </button>
+      </div>`).join('');
+    html += '</div>';
+  }
+  el.innerHTML = html;
+}
+
 let _cercaType = 'clan';
+
+function _switchCercaSubtab(tab, btn) {
+  document.getElementById('cerca-sub-ricerca').style.display  = tab==='ricerca'  ? 'block' : 'none';
+  document.getElementById('cerca-sub-preferiti').style.display = tab==='preferiti' ? 'block' : 'none';
+  document.querySelectorAll('#cerca-search-area .subtab-btn').forEach(b=>b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  if (tab==='preferiti') renderFavoriti();
+}
 
 function setCercaType(type) {
   _cercaType = type;
@@ -3891,7 +4137,10 @@ function _renderCercaClanDetail(info, members, clanTag, container) {
         <div class="cc-meta">
           <span class="badge badge-gold">Lv. ${info.clanLevel??'—'}</span>
           ${typeLabel?`<span class="badge badge-gray">${typeLabel}</span>`:''}
+          ${_favBtn('clans', info.tag, info.name, badge)}
         </div>
+        ${info.clanPoints?`<div style="font-size:0.8rem;color:var(--text-3)">🏆 ${info.clanPoints.toLocaleString('it')} trofei${info.location?.name?' · 📍 '+info.location.name:''}</div>`:''}
+        ${info.warLeague?.name?`<div style="font-size:0.8rem;color:var(--gold-dim)">⚔️ ${info.warLeague.name}</div>`:''}
         ${info.description?`<div class="cc-desc">${info.description}</div>`:''}
       </div>
     </div>
@@ -3957,9 +4206,13 @@ function _renderCercaMembersList(members, clanTag) {
     <tbody>
       ${sorted.map(m=>{
         const role=cocRole(m.role);
-        const lb=LEAGUE_BADGE_MAP[m.league?.name||''];
+        const lbUrl = m.league?.iconUrls?.small || '';
+        const lbLocal = LEAGUE_BADGE_MAP[m.league?.name||''];
+        const lbHtml = lbUrl
+          ? `<img src="${lbUrl}" class="league-badge-sm" alt="${m.league?.name||''}" title="${m.league?.name||''}" loading="lazy">`
+          : (lbLocal ? `<img src="leagues/${lbLocal}.png" class="league-badge-sm" alt="">` : '');
         return `<tr class="cc-member-row" onclick="openCercaPlayer('${m.tag}','${clanTag}')">
-          <td class="col-league">${lb?`<img src="leagues/${lb}.png" class="league-badge-sm" alt="">`:''}</td>
+          <td class="col-league">${lbHtml}</td>
           <td class="col-th-cell">${thImgV(m.townHallLevel)}</td>
           <td>
             <div style="font-weight:600;font-size:0.88rem">${m.name}</div>
@@ -3994,7 +4247,8 @@ async function _loadCercaWarLog(clanTag) {
     }).slice(0,20);
     if (!wars.length) { cont.innerHTML='<div class="profilo-empty"><p>Nessuna war classica nel log.</p></div>'; return; }
 
-    const rows = wars.map(w=>{
+    window._cercaWarLogItems = wars;
+    const rows = wars.map((w, widx)=>{
       const date = w.endTime ? new Date(
         w.endTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/,'$1-$2-$3T$4:$5:$6')
       ).toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'2-digit'}) : '—';
@@ -4014,7 +4268,8 @@ async function _loadCercaWarLog(clanTag) {
       const starsLoro= w.opponent?.stars??0;
       const destNoi  = (+(w.clan?.destructionPercentage??0)).toFixed(1);
       const destLoro = (+(w.opponent?.destructionPercentage??0)).toFixed(1);
-      return `<tr>
+      const idx = widx;
+      return `<tr class="wl-row-clickable" onclick="openCercaWarDetail(${idx})">
         <td class="stat-cell">${date}</td>
         <td>${result}</td>
         <td>${clanCell}</td>
@@ -4025,7 +4280,8 @@ async function _loadCercaWarLog(clanTag) {
       </tr>`;
     }).join('');
 
-    cont.innerHTML = `<div class="table-wrap" style="margin-top:0.75rem">
+    cont.innerHTML = `<p style="font-size:0.78rem;color:var(--text-3);margin:0.5rem 0 0.25rem">Clicca su una riga per vedere i dettagli.</p>
+    <div class="table-wrap" style="margin-top:0.25rem">
       <table>
         <thead><tr>
           <th>Data</th><th>Risultato</th><th>Clan</th>
@@ -4040,6 +4296,58 @@ async function _loadCercaWarLog(clanTag) {
   }
 }
 
+function openCercaWarDetail(idx) {
+  const w = (window._cercaWarLogItems || [])[idx];
+  if (!w) return;
+  document.getElementById('cerca-war-detail-modal')?.remove();
+
+  const fmtDate = w.endTime ? new Date(
+    w.endTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6')
+  ).toLocaleDateString('it-IT', {day:'2-digit',month:'long',year:'numeric'}) : '—';
+
+  const resLabel = w.result==='win' ? '🏆 VITTORIA' : w.result==='lose' ? '❌ SCONFITTA' : '🤝 PAREGGIO';
+  const resColor = w.result==='win' ? 'var(--green)' : w.result==='lose' ? 'var(--red)' : 'var(--text-3)';
+
+  const clanBadge  = w.clan?.badgeUrls?.small  ? `<img src="${w.clan.badgeUrls.small}" class="cdm-war-badge" alt="">` : '🛡️';
+  const oppBadge   = w.opponent?.badgeUrls?.small ? `<img src="${w.opponent.badgeUrls.small}" class="cdm-war-badge" alt="">` : '🛡️';
+  const size = w.teamSize ?? '?';
+
+  const modal = document.createElement('div');
+  modal.id = 'cerca-war-detail-modal';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'display:flex;z-index:1000';
+  modal.innerHTML = `
+    <div class="modal-box" style="max-width:480px;width:100%">
+      <div class="modal-header">
+        <h2 style="font-size:1rem">Dettaglio War — ${fmtDate}</h2>
+        <button class="modal-close" onclick="document.getElementById('cerca-war-detail-modal').remove()">✕</button>
+      </div>
+      <div style="padding:1rem">
+        <div style="text-align:center;font-size:1.2rem;font-weight:700;color:${resColor};margin-bottom:1rem">${resLabel}</div>
+        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:0.75rem;align-items:center;text-align:center">
+          <div>
+            ${clanBadge}
+            <div style="font-weight:600;font-size:0.9rem;margin-top:0.3rem">${w.clan?.name||'Noi'}</div>
+            <div style="font-size:2rem;font-weight:700;color:var(--gold)">${w.clan?.stars??0}⭐</div>
+            <div style="font-size:0.85rem;color:var(--text-2)">${(+(w.clan?.destructionPercentage??0)).toFixed(1)}% 💥</div>
+          </div>
+          <div style="font-size:0.8rem;color:var(--text-3)">
+            <div style="font-size:1.1rem;font-weight:700">VS</div>
+            <div style="margin-top:0.3rem">${size}v${size}</div>
+          </div>
+          <div>
+            ${oppBadge}
+            <div style="font-weight:600;font-size:0.9rem;margin-top:0.3rem">${w.opponent?.name||'Avversario'}</div>
+            <div style="font-size:2rem;font-weight:700;color:var(--text-2)">${w.opponent?.stars??0}⭐</div>
+            <div style="font-size:0.85rem;color:var(--text-2)">${(+(w.opponent?.destructionPercentage??0)).toFixed(1)}% 💥</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
 async function _loadCercaCwlHistory(clanTag) {
   const cont = document.getElementById('cc-tab-cwl');
   if (!cont) return;
@@ -4049,7 +4357,14 @@ async function _loadCercaCwlHistory(clanTag) {
       .order('season',{ascending:false}).limit(20);
     if (error) throw new Error(error.message);
     if (!data||!data.length) {
-      cont.innerHTML='<div class="profilo-empty"><p>Nessuna cronologia CWL salvata per questo clan.<br><span style="font-size:0.78rem;color:var(--text-3)">Solo i clan nel tuo network hanno la cronologia CWL registrata.</span></p></div>';
+      // Fallback: prova a caricare CWL attuale dall'API
+      cont.innerHTML=`<div class="profilo-empty">
+        <p style="font-size:0.85rem;color:var(--text-3);margin-bottom:0.75rem">Nessuna cronologia salvata per questo clan.</p>
+        <button class="btn-secondary btn-sm" onclick="_loadCercaCwlLive('${clanTag.replace(/'/g,"\\'")}',this)">
+          🔄 Carica CWL attuale dall'API
+        </button>
+        <div id="cc-cwl-live-result" style="margin-top:0.75rem"></div>
+      </div>`;
       return;
     }
     cont.innerHTML = data.map(s=>{
@@ -4079,6 +4394,38 @@ async function _loadCercaCwlHistory(clanTag) {
   }
 }
 
+async function _loadCercaCwlLive(clanTag, btn) {
+  const resultDiv = document.getElementById('cc-cwl-live-result');
+  if (btn) { btn.disabled = true; btn.textContent = 'Caricamento…'; }
+  try {
+    const r = await fetch(`/api/cwl-stats?clanTag=${encodeURIComponent(clanTag)}`);
+    const d = await r.json();
+    if (!r.ok || d.state === 'notInWar') {
+      if (resultDiv) resultDiv.innerHTML = '<p style="font-size:0.82rem;color:var(--text-3)">Nessuna CWL attiva per questo clan al momento.</p>';
+      return;
+    }
+    // Mostra CWL live
+    const season = d.season || '—';
+    const league = d.leagueName || '—';
+    const rounds = (d.rounds||[]);
+    const html = `<div class="cwl-season-card" style="margin-bottom:0">
+      <div class="cwl-card-left">
+        <div class="cwl-card-month">CWL Attuale</div>
+        <div class="cwl-card-league"><span class="cwl-league-name">${league}</span></div>
+      </div>
+      <div class="cwl-card-right cwl-card-stats">
+        <div class="cwl-stat-item"><span class="cwl-stat-val">${rounds.length}</span><span class="cwl-stat-lbl">Round</span></div>
+        ${d.groupStandings?`<div class="cwl-stat-item"><span class="cwl-stat-val">${d.groupStandings.length}</span><span class="cwl-stat-lbl">Clan nel gruppo</span></div>`:''}
+      </div>
+    </div>`;
+    if (resultDiv) resultDiv.innerHTML = html;
+  } catch(e) {
+    if (resultDiv) resultDiv.innerHTML = `<div class="cerca-error">Errore: ${e.message}</div>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Carica CWL attuale dall\'API'; }
+  }
+}
+
 async function openCercaPlayer(playerTag, fromClanTag) {
   if (!_cercaStack.length) _cercaStack.push({type:'search'});
   _cercaStack.push({type:'player', tag:playerTag, fromClan:fromClanTag||null});
@@ -4099,16 +4446,25 @@ async function openCercaPlayer(playerTag, fromClanTag) {
     if (!r.ok) throw new Error(p.error||'Errore');
 
     container.innerHTML = `
-      <div id="cp-header-card" class="profilo-hero-card"></div>
+      <div id="cp-header-card" class="profilo-hero-card" data-player-tag="${p.tag}" data-player-name="${p.name.replace(/"/g,'&quot;')}"></div>
       <div class="subtab-bar">
         <button class="subtab-btn active" onclick="_switchCpTab('home',this)">Villaggio Base</button>
         <button class="subtab-btn" onclick="_switchCpTab('builder',this)">Base Costruttore</button>
         <button class="subtab-btn" onclick="_switchCpTab('capital',this)">Capitale</button>
       </div>
       <div id="cp-tab-home">
-        <div class="profilo-section"><h3 class="profilo-section-title">Eroi</h3><div id="cp-heroes" class="profilo-units-grid"></div></div>
-        <div class="profilo-section"><h3 class="profilo-section-title">Equipaggiamento Eroi</h3><div id="cp-equipment" class="profilo-units-grid"></div></div>
-        <div class="profilo-section" id="cp-pets-sec"><h3 class="profilo-section-title">Famigli</h3><div id="cp-pets" class="profilo-units-grid"></div></div>
+        <div class="profilo-section">
+          <h3 class="profilo-section-title">Eroi &amp; Famigli</h3>
+          <div class="profilo-sub-group">
+            <div class="profilo-sub-label">Eroi</div>
+            <div id="cp-heroes" class="profilo-units-grid"></div>
+          </div>
+          <div class="profilo-sub-group" id="cp-pets-sec">
+            <div class="profilo-sub-label">Famigli</div>
+            <div id="cp-pets" class="profilo-units-grid"></div>
+          </div>
+        </div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Equipaggiamento Eroi</h3><div id="cp-equipment"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Truppe</h3><div id="cp-troops" class="profilo-units-grid"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Incantesimi</h3><div id="cp-spells" class="profilo-units-grid"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Macchine d'Assedio</h3><div id="cp-siege" class="profilo-units-grid"></div></div>
@@ -4143,4 +4499,99 @@ function _switchCpTab(tab, btn) {
 document.querySelectorAll('.tab-btn,.bnav-btn').forEach(btn=>{
   btn.addEventListener('click',()=>{ if(btn.dataset.tab==='cerca') _cercaStack=[{type:'search'}]; });
 });
+
+// ── CLASSIFICHE ──────────────────────────────────────────────────────────────
+
+let _rankType    = 'players'; // players | clans
+let _rankLocale  = 'global';  // global | italy
+const RANK_LOCATIONS = { global: '32000000', italy: '32000094' };
+
+function switchRankType(type) {
+  _rankType = type;
+  document.getElementById('rank-btn-players').classList.toggle('active', type==='players');
+  document.getElementById('rank-btn-clans').classList.toggle('active', type==='clans');
+  loadRankings();
+}
+function switchRankLocale(locale) {
+  _rankLocale = locale;
+  document.getElementById('rank-btn-global').classList.toggle('active', locale==='global');
+  document.getElementById('rank-btn-italy').classList.toggle('active', locale==='italy');
+  loadRankings();
+}
+
+async function loadRankings() {
+  const el = document.getElementById('rankings-content');
+  if (!el) return;
+  el.innerHTML = '<div class="profilo-loading" style="display:flex"><div class="spinner"></div><span>Caricamento classifica…</span></div>';
+  const locId  = RANK_LOCATIONS[_rankLocale];
+  const type   = _rankType;
+  try {
+    const r = await fetch(`/api/lookup?type=rankings&rankType=${type}&locationId=${locId}`);
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Errore API');
+    const items = d.items || [];
+    if (!items.length) { el.innerHTML = '<div class="profilo-empty"><p>Nessun dato disponibile.</p></div>'; return; }
+    if (type === 'players') _renderRankPlayers(el, items);
+    else _renderRankClans(el, items);
+  } catch(e) {
+    el.innerHTML = `<div class="cerca-error">Errore: ${e.message}</div>`;
+  }
+}
+
+function _renderRankPlayers(el, items) {
+  el.innerHTML = `<div class="table-wrap"><table>
+    <thead><tr>
+      <th>#</th><th>Giocatore</th><th>Clan</th><th>TH</th><th>Trofei</th>
+    </tr></thead>
+    <tbody>
+      ${items.map((p,i) => {
+        const leagueBadge = LEAGUE_BADGE_MAP[p.league?.name||''];
+        const lbHtml = p.league?.iconUrls?.small
+          ? `<img src="${p.league.iconUrls.small}" class="league-badge-sm" alt="" style="margin-right:4px">`
+          : (leagueBadge ? `<img src="leagues/${leagueBadge}.png" class="league-badge-sm" style="margin-right:4px">` : '');
+        const rankClass = i===0?'rank-gold':i===1?'rank-silver':i===2?'rank-bronze':'';
+        return `<tr class="cc-member-row" onclick="openCercaPlayer('${p.tag}')">
+          <td class="stat-cell"><span class="rank-num ${rankClass}">${p.rank??i+1}</span></td>
+          <td>
+            <div style="display:flex;align-items:center;gap:0.35rem">
+              ${lbHtml}<span style="font-weight:600">${p.name}</span>
+            </div>
+            <div class="mono" style="font-size:0.72rem;color:var(--text-3)">${p.tag}</div>
+          </td>
+          <td style="font-size:0.82rem;color:var(--text-2)">${p.clan?.name||'—'}</td>
+          <td class="stat-cell">${thImgV(p.townHallLevel)}</td>
+          <td class="stat-cell">${(p.trophies||0).toLocaleString('it')} 🏆</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table></div>`;
+}
+
+function _renderRankClans(el, items) {
+  el.innerHTML = `<div class="table-wrap"><table>
+    <thead><tr>
+      <th>#</th><th>Clan</th><th>Membri</th><th>Trofei</th>
+    </tr></thead>
+    <tbody>
+      ${items.map((c,i) => {
+        const badge = c.badgeUrls?.small||'';
+        const rankClass = i===0?'rank-gold':i===1?'rank-silver':i===2?'rank-bronze':'';
+        return `<tr class="cc-member-row" onclick="openCercaClan('${c.tag}')">
+          <td class="stat-cell"><span class="rank-num ${rankClass}">${c.rank??i+1}</span></td>
+          <td>
+            <div style="display:flex;align-items:center;gap:0.4rem">
+              ${badge?`<img src="${badge}" class="cerca-clan-badge" style="width:28px;height:28px">`:'' }
+              <div>
+                <div style="font-weight:600">${c.name}</div>
+                <div class="mono" style="font-size:0.72rem;color:var(--text-3)">${c.tag}</div>
+              </div>
+            </div>
+          </td>
+          <td class="stat-cell">${c.members??'—'}/50</td>
+          <td class="stat-cell">${(c.clanPoints||0).toLocaleString('it')} 🏆</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table></div>`;
+}
 
