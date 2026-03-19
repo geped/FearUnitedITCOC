@@ -3493,6 +3493,71 @@ function renderPlayerView(p, prefix) {
   _renderUnits(ids.capTroops, capTroops, 'troops');
 }
 
+// ── MAPPA CDN UNITÀ (API name → coc.guide category + slug) ───────────────────
+const UNIT_COC_SLUG = {
+  // Heroes
+  'Barbarian King':     {c:'hero',  s:'barbarian-king'},
+  'Archer Queen':       {c:'hero',  s:'archer-queen'},
+  'Grand Warden':       {c:'hero',  s:'grand-warden'},
+  'Royal Champion':     {c:'hero',  s:'royal-champion'},
+  'Minion Prince':      {c:'hero',  s:'minion-prince'},
+  'Battle Machine':     {c:'hero',  s:'battle-machine'},
+  'B.O.B':              {c:'hero',  s:'bob'},
+  // Troops — slug differs from auto-generation
+  'Baby Dragon':        {c:'troop', s:'babydragon'},
+  'Inferno Dragon':     {c:'troop', s:'infernodragon'},
+  'Lava Hound':         {c:'troop', s:'lavahound'},
+  'Headhunter':         {c:'troop', s:'headhunter'},
+  'Hog Rider':          {c:'troop', s:'hog-rider'},
+  'Wall Breaker':       {c:'troop', s:'wall-breaker'},
+  'Ram Rider':          {c:'troop', s:'ram-rider'},
+  // Spells — all need explicit mapping (filenames differ from API names)
+  'Lightning Spell':    {c:'spell', s:'lighningstorm'},
+  'Healing Spell':      {c:'spell', s:'healingwave'},
+  'Rage Spell':         {c:'spell', s:'speedup'},
+  'Freeze Spell':       {c:'spell', s:'freeze'},
+  'Jump Spell':         {c:'spell', s:'jump'},
+  'Earthquake Spell':   {c:'spell', s:'earthquake'},
+  'Haste Spell':        {c:'spell', s:'haste'},
+  'Clone Spell':        {c:'spell', s:'duplicate'},
+  'Invisibility Spell': {c:'spell', s:'invisibility'},
+  'Recall Spell':       {c:'spell', s:'recall'},
+  'Bat Spell':          {c:'spell', s:'spawnbats'},
+  'Skeleton Spell':     {c:'spell', s:'spawnskele'},
+  'Poison Spell':       {c:'spell', s:'poison'},
+  'Overgrowth Spell':   {c:'spell', s:'overgrowth'},
+  'Goblin Spell':       {c:'spell', s:'goblin'},
+  // Pets
+  'L.A.S.S.I':          {c:'pet',   s:'lassi'},
+  'Electro Owl':        {c:'pet',   s:'electro-owl'},
+  'Mighty Yak':         {c:'pet',   s:'mighty-yak'},
+  'Unicorn':            {c:'pet',   s:'unicorn'},
+  'Frosty':             {c:'pet',   s:'frosty'},
+  'Diggy':              {c:'pet',   s:'diggy'},
+  'Poison Lizard':      {c:'pet',   s:'poison-lizard'},
+  'Phoenix':            {c:'pet',   s:'phoenix'},
+  'Spirit Fox':         {c:'pet',   s:'spirit-fox'},
+  'Angry Jelly':        {c:'pet',   s:'angry-jelly'},
+  // Builder Base (coc.guide uses different naming)
+  'Raged Barbarian':    {c:'troop', s:'barbarian2'},
+  'Sneaky Archer':      {c:'troop', s:'archer2'},
+  'Boxer Giant':        {c:'troop', s:'giant2'},
+  'Beta Minion':        {c:'troop', s:'minion2'},
+  'Bomber':             {c:'troop', s:'bomber2'},
+  'Cannon Cart':        {c:'troop', s:'moving-cannon'},
+  'Night Witch':        {c:'troop', s:'dark-witch'},
+  'Drop Ship':          {c:'troop', s:'drop-ship'},
+  'Super P.E.K.K.A':    {c:'troop', s:'pekka2'},
+  'Hog Glider':         {c:'troop', s:'hog-glider'},
+  // Siege machines
+  'Wall Wrecker':       {c:'troop', s:'siege-machine-ram'},
+  'Battle Blimp':       {c:'troop', s:'siege-machine-flyer'},
+  'Stone Slammer':      {c:'troop', s:'siege-catapult'},
+  'Siege Barracks':     {c:'troop', s:'siege-machine-carrier'},
+  'Log Launcher':       {c:'troop', s:'siege-log-launcher'},
+  'Battle Drill':       {c:'troop', s:'battleram'},
+};
+
 // ── NOMI ITALIANI UNITÀ ───────────────────────────────────────────────────────
 const UNIT_NAME_IT = {
   // Eroi
@@ -3550,8 +3615,15 @@ const UNIT_NAME_IT = {
 function _unitNameIt(name) { return UNIT_NAME_IT[name] || name; }
 
 function _unitCdnUrl(name, category) {
-  const slug = name.toLowerCase().replace(/['.]/g,'').replace(/\s+/g,'-').replace(/-+/g,'-');
-  return `https://coc.guide/static/imgs/${category}/${slug}.png`;
+  if (UNIT_COC_SLUG[name]) {
+    const {c, s} = UNIT_COC_SLUG[name];
+    return `https://coc.guide/static/imgs/${c}/${s}.png`;
+  }
+  // Auto-generate for unmapped units with singular category names
+  const CAT = {heroes:'hero',troops:'troop',spells:'spell',pets:'pet',equipment:'equipment'};
+  const cat = CAT[category] || category || 'troop';
+  const slug = name.toLowerCase().replace(/['.()]/g,'').replace(/\s+/g,'-').replace(/-+/g,'-');
+  return `https://coc.guide/static/imgs/${cat}/${slug}.png`;
 }
 
 function _unitFallbackColor(name) {
@@ -3908,30 +3980,61 @@ async function _loadCercaWarLog(clanTag) {
     const r = await fetch(`/api/war-log?clanTag=${encodeURIComponent(clanTag)}`);
     const data = await r.json();
     if (r.status === 403 || data.reason === 'accessDenied') {
-      cont.innerHTML = '<div class="profilo-empty"><svg viewBox="0 0 24 24" fill="currentColor" width="32" height="32" style="opacity:.3"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg><p>War log privato per questo clan.</p></div>';
+      cont.innerHTML = '<div class="profilo-empty"><p>⚠️ War log privato. Il clan ha il registro guerra impostato su privato.</p></div>';
       return;
     }
     if (!r.ok) throw new Error(data.error||'Errore');
-    const wars = (data.items||[]).slice(0,20);
-    if (!wars.length) { cont.innerHTML='<div class="profilo-empty"><p>Nessuna war trovata.</p></div>'; return; }
-    cont.innerHTML = wars.map(w=>{
-      const res=w.result==='win'?'Vittoria':w.result==='lose'?'Sconfitta':'Pareggio';
-      const rc=w.result==='win'?'badge-green':w.result==='lose'?'badge-red':'badge-gray';
-      const dt=w.endTime?new Date(w.endTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/,'$1-$2-$3T$4:$5:$6Z')).toLocaleDateString('it'):'—';
-      return `<div class="wl-cerca-row">
-        <div class="wl-cerca-left">
-          <span class="badge ${rc}">${res}</span>
-          <div>
-            <div style="font-weight:600;font-size:0.88rem">vs ${w.opponent?.name||'—'}</div>
-            <div style="font-size:0.75rem;color:var(--text-3)">${dt} · ${w.teamSize??'—'}v${w.teamSize??'—'}</div>
-          </div>
-        </div>
-        <div class="wl-cerca-stats mono" style="font-size:0.82rem">
-          <span>${w.clan?.stars??'—'}⭐ ${(+(w.clan?.destructionPercentage??0)).toFixed(1)}%</span>
-          <span style="color:var(--text-3)">vs ${w.opponent?.stars??'—'}⭐ ${(+(w.opponent?.destructionPercentage??0)).toFixed(1)}%</span>
-        </div>
-      </div>`;
+    const wars = (data.items||[]).filter(w=>{
+      const wt=(w.warType||'').toLowerCase();
+      if(wt==='cwl') return false;
+      if(!w.opponent?.name) return false;
+      const maxStars=(w.teamSize||50)*3;
+      if((w.clan?.stars||0)>maxStars) return false;
+      return true;
+    }).slice(0,20);
+    if (!wars.length) { cont.innerHTML='<div class="profilo-empty"><p>Nessuna war classica nel log.</p></div>'; return; }
+
+    const rows = wars.map(w=>{
+      const date = w.endTime ? new Date(
+        w.endTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/,'$1-$2-$3T$4:$5:$6')
+      ).toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'2-digit'}) : '—';
+      const result = w.result==='win'  ? '<span class="wl-win">Vinta ✓</span>'
+                   : w.result==='lose' ? '<span class="wl-lose">Persa ✗</span>'
+                   : '<span class="wl-draw">Patta =</span>';
+      const size = w.teamSize??'?';
+      const clanBadge = w.clan?.badgeUrls?.small
+        ? `<img src="${w.clan.badgeUrls.small}" alt="" class="wl-clan-badge">` : '🛡️';
+      const oppBadge  = w.opponent?.badgeUrls?.small
+        ? `<img src="${w.opponent.badgeUrls.small}" alt="" class="wl-clan-badge">` : '🛡️';
+      const clanLv = w.clan?.clanLevel     ? `<span class="wl-clan-lv">Lv ${w.clan.clanLevel}</span>` : '';
+      const oppLv  = w.opponent?.clanLevel ? `<span class="wl-clan-lv">Lv ${w.opponent.clanLevel}</span>` : '';
+      const clanCell = `<div class="wl-clan-cell">${clanBadge}<span>${w.clan?.name??'—'}${clanLv}</span></div>`;
+      const oppCell  = `<div class="wl-clan-cell">${oppBadge}<span>${w.opponent?.name??'—'}${oppLv}</span></div>`;
+      const starsNoi = w.clan?.stars??0;
+      const starsLoro= w.opponent?.stars??0;
+      const destNoi  = (+(w.clan?.destructionPercentage??0)).toFixed(1);
+      const destLoro = (+(w.opponent?.destructionPercentage??0)).toFixed(1);
+      return `<tr>
+        <td class="stat-cell">${date}</td>
+        <td>${result}</td>
+        <td>${clanCell}</td>
+        <td class="stat-cell" style="text-align:center">vs<br><span style="font-size:0.72rem;color:var(--text-3)">${size}v${size}</span></td>
+        <td>${oppCell}</td>
+        <td class="stat-cell">${starsNoi}⭐ — ${starsLoro}⭐</td>
+        <td class="stat-cell">${destNoi}% — ${destLoro}%</td>
+      </tr>`;
     }).join('');
+
+    cont.innerHTML = `<div class="table-wrap" style="margin-top:0.75rem">
+      <table>
+        <thead><tr>
+          <th>Data</th><th>Risultato</th><th>Clan</th>
+          <th style="text-align:center">—</th><th>Avversario</th>
+          <th>⭐ Noi — Loro</th><th>💥 Noi — Loro</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
   } catch(e) {
     cont.innerHTML=`<div class="cerca-error">Errore: ${e.message}</div>`;
   }
@@ -3946,7 +4049,7 @@ async function _loadCercaCwlHistory(clanTag) {
       .order('season',{ascending:false}).limit(20);
     if (error) throw new Error(error.message);
     if (!data||!data.length) {
-      cont.innerHTML='<div class="profilo-empty"><p>Nessuna cronologia CWL disponibile per questo clan.</p></div>';
+      cont.innerHTML='<div class="profilo-empty"><p>Nessuna cronologia CWL salvata per questo clan.<br><span style="font-size:0.78rem;color:var(--text-3)">Solo i clan nel tuo network hanno la cronologia CWL registrata.</span></p></div>';
       return;
     }
     cont.innerHTML = data.map(s=>{
