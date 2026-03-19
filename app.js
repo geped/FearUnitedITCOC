@@ -3334,110 +3334,262 @@ async function loadProfile() {
 }
 
 function renderProfile(p) {
-  // Header card
-  const leagueName   = p.league?.name || '';
-  const leagueBadge  = LEAGUE_BADGE_MAP[leagueName];
-  const leagueHtml   = leagueBadge
-    ? `<img src="leagues/${leagueBadge}.png" alt="${leagueName}" class="profilo-league-badge">`
+  _ensureProfiloIds();
+  renderPlayerView(p, 'profilo');
+}
+
+function _ensureProfiloIds() {
+  // Map prefixed IDs to the static HTML IDs from index.html
+  // profilo-tab-home/builder/capital already exist
+  // We just need the mapping to be aware of which prefix maps where
+}
+
+function renderPlayerView(p, prefix) {
+  const isHome = prefix === 'profilo';
+  const leagueName  = p.league?.name || '';
+  const leagueBadge = LEAGUE_BADGE_MAP[leagueName];
+  const leagueHtml  = leagueBadge
+    ? `<img src="leagues/${leagueBadge}.png" alt="${leagueName}" class="profilo-league-badge" title="${leagueName}">`
     : (leagueName ? `<span class="profilo-league-name">${leagueName}</span>` : '');
   const clanHtml = p.clan
-    ? `<span class="profilo-clan-tag">${p.clan.name}</span>`
-    : '<span class="profilo-clan-tag" style="color:var(--text-3)">Nessun clan</span>';
+    ? `<span class="profilo-clan-ref">${p.clan.name}</span>`
+    : '<span class="profilo-clan-ref" style="color:var(--text-3)">Nessun clan</span>';
   const roleHtml = p.role ? `<span class="badge badge-gold">${cocRole(p.role).label}</span>` : '';
+  const copyBtn = !isHome
+    ? `<button class="btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${p.tag}').then(()=>this.textContent='Copiato!').then(()=>setTimeout(()=>this.textContent='Copia Tag',1500))" style="margin-left:auto">Copia Tag</button>`
+    : '';
 
-  const headerEl = document.getElementById('profilo-header-card');
+  const headerEl = document.getElementById(`${prefix}-header-card`);
   if (headerEl) headerEl.innerHTML = `
-    <div class="profilo-hero-left">
+    <div class="profilo-hero-top">
       ${thImgV(p.townHallLevel || 1)}
       <div class="profilo-hero-info">
         <div class="profilo-hero-name">${p.name}</div>
         <div class="profilo-hero-tag mono">${p.tag}</div>
-        <div class="profilo-hero-meta">${clanHtml} ${roleHtml}</div>
+        <div class="profilo-hero-meta">${clanHtml}${roleHtml ? ' '+roleHtml : ''}</div>
       </div>
-      <div class="profilo-league-wrap">${leagueHtml}</div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.5rem">
+        ${leagueHtml}
+        ${copyBtn}
+      </div>
     </div>
     <div class="profilo-stats-row">
-      <div class="profilo-stat"><span class="profilo-stat-val">${p.trophies ?? '—'}</span><span class="profilo-stat-lbl">Trofei</span></div>
-      <div class="profilo-stat"><span class="profilo-stat-val">${p.warStars ?? '—'}</span><span class="profilo-stat-lbl">Stelle War</span></div>
-      <div class="profilo-stat"><span class="profilo-stat-val">${p.donations ?? '—'}</span><span class="profilo-stat-lbl">Donate</span></div>
-      <div class="profilo-stat"><span class="profilo-stat-val">${p.donationsReceived ?? '—'}</span><span class="profilo-stat-lbl">Ricevute</span></div>
-      <div class="profilo-stat"><span class="profilo-stat-val">${p.attackWins ?? '—'}</span><span class="profilo-stat-lbl">Att. Vinti</span></div>
-      <div class="profilo-stat"><span class="profilo-stat-val">${p.expLevel ?? '—'}</span><span class="profilo-stat-lbl">Livello</span></div>
+      <div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:var(--gold)"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm4.24 16L12 15.45 7.77 18l1.12-4.81-3.73-3.23 4.92-.42L12 5l1.92 4.53 4.92.42-3.73 3.23L16.23 18z"/></svg>
+        <span class="profilo-stat-val">${p.trophies ?? '—'}</span>
+        <span class="profilo-stat-lbl">Trofei</span>
+      </div>
+      <div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:#f0a500"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+        <span class="profilo-stat-val">${p.warStars ?? '—'}</span>
+        <span class="profilo-stat-lbl">Stelle War</span>
+      </div>
+      <div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:var(--green)"><path d="M4 16l4.586-4.586a2 2 0 0 1 2.828 0L16 16m-2-2l1.586-1.586a2 2 0 0 1 2.828 0L20 14m-6-6h.01M6 20h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/></svg>
+        <span class="profilo-stat-val">${p.attackWins ?? '—'}</span>
+        <span class="profilo-stat-lbl">Att. Vinti</span>
+      </div>
+      <div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:var(--blue)"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+        <span class="profilo-stat-val">${p.defenseWins ?? '—'}</span>
+        <span class="profilo-stat-lbl">Dif. Vinte</span>
+      </div>
+      <div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:var(--gold)"><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
+        <span class="profilo-stat-val">${p.donations ?? '—'}</span>
+        <span class="profilo-stat-lbl">Donate</span>
+      </div>
+      <div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:var(--text-3)"><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/></svg>
+        <span class="profilo-stat-val">${p.donationsReceived ?? '—'}</span>
+        <span class="profilo-stat-lbl">Ricevute</span>
+      </div>
+      <div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:var(--text-2)"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+        <span class="profilo-stat-val">Lv ${p.expLevel ?? '—'}</span>
+        <span class="profilo-stat-lbl">Esperienza</span>
+      </div>
+      ${p.builderHallLevel ? `<div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:var(--text-3)"><path d="M19 3H5v2h1v14H4v2h16v-2h-2V5h1V3zm-4 16h-6v-5h6v5zm0-7h-6V8h6v4z"/></svg>
+        <span class="profilo-stat-val">BH${p.builderHallLevel}</span>
+        <span class="profilo-stat-lbl">Builder</span>
+      </div>` : ''}
+      ${p.clanCapitalContributions ? `<div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:#f0a500"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 4l6 2.67V11c0 3.5-2.33 6.79-6 7.93-3.67-1.14-6-4.43-6-7.93V7.67L12 5z"/></svg>
+        <span class="profilo-stat-val">${(p.clanCapitalContributions/1000).toFixed(0)}k</span>
+        <span class="profilo-stat-lbl">Capital</span>
+      </div>` : ''}
     </div>`;
 
-  // Home village
-  const heroes    = (p.heroes   || []).filter(x => x.village === 'home');
-  const equipment = (p.heroEquipment || []).filter(x => x.village === 'home');
-  const pets      = (p.troops   || []).filter(x => x.village === 'home' && x.superTroopIsActive === undefined && PETS_SET.has(x.name));
-  const troops    = (p.troops   || []).filter(x => x.village === 'home' && !PETS_SET.has(x.name));
-  const spells    = (p.spells   || []).filter(x => x.village === 'home');
-  const siege     = (p.troops   || []).filter(x => x.village === 'home' && SIEGE_SET.has(x.name));
-  // Filter siege from troops
-  const troopsOnly = troops.filter(x => !SIEGE_SET.has(x.name));
-  const achHome   = (p.achievements || []).filter(a => a.village === 'home');
+  // Mappa prefix → IDs container
+  const ids = {
+    heroes:    `${prefix}-heroes`,
+    equipment: `${prefix}-equipment`,
+    pets:      `${prefix}-pets`,
+    troops:    `${prefix}-troops`,
+    spells:    `${prefix}-spells`,
+    siege:     `${prefix}-siege`,
+    achHome:   `${prefix}-ach-home`,
+    bhStats:   `${prefix}-bh-stats`,
+    builderU:  `${prefix}-builder-units`,
+    builderA:  `${prefix}-builder-ach`,
+    capStats:  `${prefix}-capital-stats`,
+    capTroops: `${prefix}-capital-troops`,
+    petsSec:   `${prefix}-pets-sec`,
+  };
+  // Per 'profilo' il prefisso dei section IDs è ps-
+  // Per 'cp' il prefisso è cp-
+  const secPfx = prefix === 'profilo' ? 'ps' : prefix;
 
-  _renderUnits('profilo-heroes',    heroes,    'hero');
-  _renderUnits('profilo-equipment', equipment, 'equipment');
-  _renderUnits('profilo-pets',      pets,      'unit');
-  _renderUnits('profilo-troops',    troopsOnly,'unit');
-  _renderUnits('profilo-spells',    spells,    'unit');
-  _renderUnits('profilo-siege',     siege,     'unit');
-  _renderAchievements('profilo-achievements', achHome);
-  document.getElementById('ps-pets').style.display = pets.length ? 'block' : 'none';
+  const heroes   = (p.heroes||[]).filter(x=>x.village==='home');
+  const equipment= (p.heroEquipment||[]).filter(x=>!x.village||x.village==='home');
+  const pets     = (p.troops||[]).filter(x=>x.village==='home'&&PETS_SET.has(x.name));
+  const troopsAll= (p.troops||[]).filter(x=>x.village==='home'&&!PETS_SET.has(x.name)&&!SIEGE_SET.has(x.name));
+  const spells   = (p.spells||[]).filter(x=>x.village==='home');
+  const siege    = (p.troops||[]).filter(x=>x.village==='home'&&SIEGE_SET.has(x.name));
+  const achHome  = (p.achievements||[]).filter(a=>a.village==='home'||!a.village);
 
-  // Builder base
-  const bhStats = document.getElementById('profilo-bh-stats');
-  if (bhStats) bhStats.innerHTML = `
-    <div class="profilo-bh-card">
-      <div class="profilo-bh-icon">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M19 3H5v2h1v14H4v2h16v-2h-2V5h1V3zm-4 16h-6v-5h6v5zm0-7h-6V8h6v4z"/></svg>
-      </div>
-      <div>
-        <div class="profilo-bh-label">Base del Costruttore</div>
-        <div class="profilo-bh-val">BH ${p.builderHallLevel ?? '—'}</div>
-        <div class="profilo-bh-sub">${p.builderBaseTrophies ?? '—'} trofei · Best: ${p.builderBaseBestTrophies ?? '—'}</div>
-      </div>
-    </div>`;
+  _renderUnits(ids.heroes,    heroes,    'heroes');
+  _renderUnits(ids.equipment, equipment, 'equipment');
+  _renderUnits(ids.pets,      pets,      'pets');
+  _renderUnits(ids.troops,    troopsAll, 'troops');
+  _renderUnits(ids.spells,    spells,    'spells');
+  _renderUnits(ids.siege,     siege,     'troops');
+  _renderAchievements(ids.achHome, achHome);
+
+  const petsSec = document.getElementById(`${secPfx}-pets-sec`)||document.getElementById(`${prefix}-pets-sec`);
+  if (petsSec) petsSec.style.display = pets.length ? 'block' : 'none';
+
+  // Builder
+  const bhEl = document.getElementById(ids.bhStats);
+  if (bhEl) bhEl.innerHTML = `<div class="profilo-bh-card">
+    <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28" style="color:var(--gold);opacity:.8"><path d="M19 3H5v2h1v14H4v2h16v-2h-2V5h1V3zm-4 16h-6v-5h6v5zm0-7h-6V8h6v4z"/></svg>
+    <div>
+      <div class="profilo-bh-label">Base del Costruttore</div>
+      <div class="profilo-bh-val">BH ${p.builderHallLevel??'—'}</div>
+      <div class="profilo-bh-sub">${p.builderBaseTrophies??'—'} trofei · Massimo: ${p.builderBaseBestTrophies??'—'}</div>
+    </div>
+  </div>`;
+
   const builderUnits = [
-    ...(p.heroes  || []).filter(x => x.village === 'builderBase'),
-    ...(p.troops  || []).filter(x => x.village === 'builderBase'),
+    ...(p.heroes||[]).filter(x=>x.village==='builderBase'),
+    ...(p.troops||[]).filter(x=>x.village==='builderBase'),
   ];
-  const achBuilder = (p.achievements || []).filter(a => a.village === 'builderBase');
-  _renderUnits('profilo-builder-units', builderUnits, 'unit');
-  _renderAchievements('profilo-builder-achievements', achBuilder);
+  const achBuilder = (p.achievements||[]).filter(a=>a.village==='builderBase');
+  _renderUnits(ids.builderU, builderUnits, 'troops');
+  _renderAchievements(ids.builderA, achBuilder);
 
   // Capital
-  const capStats = document.getElementById('profilo-capital-stats');
-  if (capStats) capStats.innerHTML = `
-    <div class="profilo-bh-card">
-      <div class="profilo-bh-icon">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 4l6 2.67V11c0 3.5-2.33 6.79-6 7.93-3.67-1.14-6-4.43-6-7.93V7.67L12 5z"/></svg>
-      </div>
-      <div>
-        <div class="profilo-bh-label">Capitale del Clan</div>
-        <div class="profilo-bh-val">${(p.clanCapitalContributions ?? 0).toLocaleString('it')} Capital Gold contribuiti</div>
-      </div>
-    </div>`;
-  const capTroops = (p.troops || []).filter(x => x.village === 'clanCapital');
-  _renderUnits('profilo-capital-troops', capTroops, 'unit');
-  _renderAchievements('profilo-achievements', achHome); // re-render to make sure
+  const capEl = document.getElementById(ids.capStats);
+  if (capEl) capEl.innerHTML = `<div class="profilo-bh-card">
+    <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28" style="color:#f0a500;opacity:.8"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 4l6 2.67V11c0 3.5-2.33 6.79-6 7.93-3.67-1.14-6-4.43-6-7.93V7.67L12 5z"/></svg>
+    <div>
+      <div class="profilo-bh-label">Capitale del Clan</div>
+      <div class="profilo-bh-val">${(p.clanCapitalContributions??0).toLocaleString('it')} Capital Gold contribuiti</div>
+    </div>
+  </div>`;
+
+  const capTroops = (p.troops||[]).filter(x=>x.village==='clanCapital');
+  _renderUnits(ids.capTroops, capTroops, 'troops');
+}
+
+// ── NOMI ITALIANI UNITÀ ───────────────────────────────────────────────────────
+const UNIT_NAME_IT = {
+  // Eroi
+  'Barbarian King':'Re dei Barbari','Archer Queen':'Regina degli Arcieri',
+  'Grand Warden':'Grande Custode','Royal Champion':'Campione Reale',
+  'Minion Prince':'Principe dei Servitori','Battle Machine':'Macchina da Battaglia',
+  'B.O.B':'B.O.B',
+  // Truppe home
+  'Barbarian':'Barbaro','Archer':'Arciera','Giant':'Gigante','Goblin':'Goblin',
+  'Wall Breaker':'Spaccamuri','Balloon':'Mongolfiera','Wizard':'Mago',
+  'Healer':'Guaritrice','Dragon':'Drago','P.E.K.K.A':'P.E.K.K.A',
+  'Minion':'Servitore','Hog Rider':'Cavalcatore di Cinghiale',
+  'Valkyrie':'Valchiria','Golem':'Golem','Witch':'Strega',
+  'Lava Hound':'Segugio di Lava','Bowler':'Bocciatore',
+  'Baby Dragon':'Piccolo Drago','Miner':'Minatore',
+  'Super Barbarian':'Super Barbaro','Sneaky Goblin':'Goblin Furtivo',
+  'Super Giant':'Super Gigante','Rocket Balloon':'Mongolfiera Razzo',
+  'Inferno Dragon':'Drago Inferno','Super Witch':'Super Strega',
+  'Ice Hound':'Segugio di Ghiaccio','Super Bowler':'Super Bocciatore',
+  'Super Dragon':'Super Drago','Electro Dragon':'Drago Elettro',
+  'Yeti':'Yeti','Dragon Rider':'Cavalcatore di Draghi',
+  'Electro Titan':'Titano Elettro','Root Rider':'Cavalcatore di Radici',
+  'Thrower':'Lanciatore','Super Archer':'Super Arciera',
+  'Super Wall Breaker':'Super Spaccamuri','Super Miner':'Super Minatore',
+  'Super Hog Rider':'Super Cavalcatore','Apprentice Warden':'Custode Apprendista',
+  // Incantesimi
+  'Lightning Spell':'Fulmine','Healing Spell':'Guarigione','Rage Spell':'Rabbia',
+  'Freeze Spell':'Congelamento','Jump Spell':'Salto','Earthquake Spell':'Terremoto',
+  'Haste Spell':'Velocità','Clone Spell':'Clone','Invisibility Spell':'Invisibilità',
+  'Recall Spell':'Richiamo','Bat Spell':'Pipistrelli','Skeleton Spell':'Scheletri',
+  'Goblin Spell':'Goblin','Overgrowth Spell':'Ipercrescita',
+  'Poison Spell':'Veleno',
+  'Dark Spell':'Oscuro',
+  // Macchine d'assedio
+  'Wall Wrecker':'Sfondamura','Battle Blimp':'Dirigibile da Battaglia',
+  'Stone Slammer':'Frantumatore di Pietre','Siege Barracks':'Caserma d\'Assedio',
+  'Log Launcher':'Lancia-Tronchi','Flame Flinger':'Lanciatore di Fiamme',
+  'Battle Drill':'Trivella da Battaglia',
+  // Famigli
+  'L.A.S.S.I':'L.A.S.S.I','Electro Owl':'Gufo Elettro','Mighty Yak':'Yak Possente',
+  'Unicorn':'Unicorno','Frosty':'Gelido','Diggy':'Scavino',
+  'Poison Lizard':'Lucertola Velenosa','Phoenix':'Fenice',
+  'Spirit Fox':'Volpe Spirito','Angry Jelly':'Medusa Arrabbiata',
+  // Truppe builder
+  'Raged Barbarian':'Barbaro Furioso','Sneaky Archer':'Arciera Furtiva',
+  'Boxer Giant':'Gigante Pugile','Beta Minion':'Beta Servitore',
+  'Bomber':'Bombarolo',
+  'Cannon Cart':'Carrello Cannone','Night Witch':'Strega Notturna',
+  'Drop Ship':'Nave Lanciatore','Super P.E.K.K.A':'Super P.E.K.K.A',
+  'Hog Glider':'Aliante Cinghiale',
+  // Truppe capitale
+  'Super Wizard':'Super Mago','Super Valkyrie':'Super Valchiria',
+};
+
+function _unitNameIt(name) { return UNIT_NAME_IT[name] || name; }
+
+function _unitCdnUrl(name, category) {
+  const slug = name.toLowerCase().replace(/['.]/g,'').replace(/\s+/g,'-').replace(/-+/g,'-');
+  return `https://coc.guide/static/imgs/${category}/${slug}.png`;
+}
+
+function _unitFallbackColor(name) {
+  let h = 0;
+  for (const c of (name||'')) h = ((h<<5)-h)+c.charCodeAt(0);
+  const cols = ['#8B4513','#2980B9','#27AE60','#8E44AD','#E67E22','#C0392B','#16A085','#D35400'];
+  return cols[Math.abs(h)%cols.length];
 }
 
 const PETS_SET = new Set(['L.A.S.S.I','Electro Owl','Mighty Yak','Unicorn','Frosty','Diggy','Poison Lizard','Phoenix','Spirit Fox','Angry Jelly']);
 const SIEGE_SET = new Set(['Wall Wrecker','Battle Blimp','Stone Slammer','Siege Barracks','Log Launcher','Flame Flinger','Battle Drill']);
 
-function _renderUnits(containerId, units, type) {
+function _renderUnits(containerId, units, cdnCategory) {
   const el = document.getElementById(containerId);
   if (!el) return;
-  if (!units.length) { el.innerHTML = '<span class="profilo-empty-units">Nessuna unità</span>'; return; }
+  if (!units || !units.length) {
+    el.innerHTML = '<span class="profilo-empty-units">Nessuna unità sbloccata</span>';
+    return;
+  }
   el.innerHTML = units.map(u => {
-    const pct = u.maxLevel ? Math.round((u.level / u.maxLevel) * 100) : 100;
-    const isMax = u.level >= u.maxLevel;
-    const isLocked = !u.level || u.level === 0;
-    const barColor = isMax ? 'var(--gold)' : isLocked ? 'var(--text-3)' : 'var(--green)';
-    return `<div class="profilo-unit-card${isMax ? ' profilo-unit-max' : ''}${isLocked ? ' profilo-unit-locked' : ''}">
-      <div class="profilo-unit-name">${u.name}</div>
-      <div class="profilo-unit-lv">${isLocked ? '—' : `Lv ${u.level}`}${u.maxLevel ? ` / ${u.maxLevel}` : ''}</div>
+    const nameIt = _unitNameIt(u.name);
+    const imgUrl = _unitCdnUrl(u.name, cdnCategory);
+    const lvl = u.level ?? 0;
+    const maxLvl = u.maxLevel ?? 0;
+    const pct = maxLvl ? Math.round((lvl / maxLvl) * 100) : 100;
+    const isMax = maxLvl && lvl >= maxLvl;
+    const isLocked = lvl === 0;
+    const barColor = isMax ? 'var(--gold)' : isLocked ? 'var(--border-2)' : 'var(--green)';
+    const fbColor = _unitFallbackColor(u.name);
+    const fbInitial = (u.name||'?')[0].toUpperCase();
+    return `<div class="profilo-unit-card${isMax?' profilo-unit-max':''}${isLocked?' profilo-unit-locked':''}">
+      <div class="profilo-unit-img-wrap">
+        <img src="${imgUrl}" alt="${nameIt}" class="profilo-unit-img" loading="lazy"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="profilo-unit-fallback" style="display:none;background:${fbColor}">${fbInitial}</div>
+      </div>
+      <div class="profilo-unit-name">${nameIt}</div>
+      <div class="profilo-unit-lv">${isLocked?'Bloccata':`Lv ${lvl}`}${maxLvl?` / ${maxLvl}`:''}</div>
       <div class="profilo-unit-bar-wrap"><div class="profilo-unit-bar" style="width:${isLocked?0:pct}%;background:${barColor}"></div></div>
     </div>`;
   }).join('');
@@ -3542,13 +3694,17 @@ function renderCercaPlayer(p, container) {
         ${leagueHtml}
       </div>
       <div class="profilo-stats-row" style="margin-top:0.75rem">
-        <div class="profilo-stat"><span class="profilo-stat-val">${p.trophies ?? '—'}</span><span class="profilo-stat-lbl">Trofei</span></div>
-        <div class="profilo-stat"><span class="profilo-stat-val">${p.warStars ?? '—'}</span><span class="profilo-stat-lbl">Stelle War</span></div>
-        <div class="profilo-stat"><span class="profilo-stat-val">${p.donations ?? '—'}</span><span class="profilo-stat-lbl">Donate</span></div>
-        <div class="profilo-stat"><span class="profilo-stat-val">${p.expLevel ?? '—'}</span><span class="profilo-stat-lbl">Livello</span></div>
-        <div class="profilo-stat"><span class="profilo-stat-val">TH${p.townHallLevel ?? '—'}</span><span class="profilo-stat-lbl">Town Hall</span></div>
-        <div class="profilo-stat"><span class="profilo-stat-val">BH${p.builderHallLevel ?? '—'}</span><span class="profilo-stat-lbl">Builder</span></div>
+        <div class="profilo-stat"><span class="profilo-stat-val">${p.trophies??'—'}</span><span class="profilo-stat-lbl">Trofei</span></div>
+        <div class="profilo-stat"><span class="profilo-stat-val">${p.warStars??'—'}</span><span class="profilo-stat-lbl">Stelle War</span></div>
+        <div class="profilo-stat"><span class="profilo-stat-val">${p.donations??'—'}</span><span class="profilo-stat-lbl">Donate</span></div>
+        <div class="profilo-stat"><span class="profilo-stat-val">${p.expLevel??'—'}</span><span class="profilo-stat-lbl">Livello</span></div>
+        <div class="profilo-stat"><span class="profilo-stat-val">TH${p.townHallLevel??'—'}</span><span class="profilo-stat-lbl">Town Hall</span></div>
+        <div class="profilo-stat"><span class="profilo-stat-val">BH${p.builderHallLevel??'—'}</span><span class="profilo-stat-lbl">Builder</span></div>
       </div>
+      <button class="btn-primary btn-sm" style="margin-top:0.75rem;width:100%" onclick="openCercaPlayer('${p.tag}')">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+        Apri Profilo Completo
+      </button>
     </div>`;
 }
 
@@ -3563,19 +3719,325 @@ function renderCercaClans(clans, container) {
     return `<div class="cerca-clan-card">
       <div class="cerca-clan-left">
         ${badge ? `<img src="${badge}" alt="" class="cerca-clan-badge">` : ''}
-        <div>
+        <div style="flex:1;min-width:0">
           <div class="cerca-clan-name">${c.name}</div>
           <div class="cerca-clan-tag mono">${c.tag}</div>
-          ${c.description ? `<div class="cerca-clan-desc">${c.description.slice(0,80)}${c.description.length>80?'…':''}</div>` : ''}
+          ${c.description ? `<div class="cerca-clan-desc">${c.description.slice(0,90)}${c.description.length>90?'…':''}</div>` : ''}
         </div>
       </div>
       <div class="cerca-clan-stats">
-        <div class="profilo-stat"><span class="profilo-stat-val">${c.members ?? '—'}/50</span><span class="profilo-stat-lbl">Membri</span></div>
-        <div class="profilo-stat"><span class="profilo-stat-val">${c.clanLevel ?? '—'}</span><span class="profilo-stat-lbl">Livello</span></div>
-        <div class="profilo-stat"><span class="profilo-stat-val">${c.clanPoints ?? '—'}</span><span class="profilo-stat-lbl">Trofei</span></div>
-        ${typeLabel ? `<div class="profilo-stat"><span class="profilo-stat-val">${typeLabel}</span><span class="profilo-stat-lbl">Tipo</span></div>` : ''}
+        <div class="profilo-stat"><span class="profilo-stat-val">${c.members??'—'}/50</span><span class="profilo-stat-lbl">Membri</span></div>
+        <div class="profilo-stat"><span class="profilo-stat-val">${c.clanLevel??'—'}</span><span class="profilo-stat-lbl">Livello</span></div>
+        <div class="profilo-stat"><span class="profilo-stat-val">${c.clanPoints??'—'}</span><span class="profilo-stat-lbl">Trofei</span></div>
+        ${typeLabel?`<div class="profilo-stat"><span class="profilo-stat-val">${typeLabel}</span><span class="profilo-stat-lbl">Tipo</span></div>`:''}
       </div>
+      <button class="btn-primary btn-sm" style="margin-top:0.75rem;width:100%" onclick="openCercaClan('${c.tag}')">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        Apri Clan Completo
+      </button>
     </div>`;
   }).join('');
 }
+
+// ── CERCA — NAVIGAZIONE DETTAGLI ─────────────────────────────────────────────
+
+let _cercaStack = []; // [{type:'search'},{type:'clan',tag},{type:'player',tag,fromClan}]
+
+function _showCercaArea(area) {
+  document.getElementById('cerca-search-area').style.display  = area === 'search' ? 'block' : 'none';
+  document.getElementById('cerca-detail-clan').style.display  = area === 'clan'   ? 'block' : 'none';
+  document.getElementById('cerca-detail-player').style.display= area === 'player' ? 'block' : 'none';
+}
+
+function cercaTorna() {
+  _cercaStack.pop();
+  const prev = _cercaStack[_cercaStack.length-1];
+  if (!prev || prev.type === 'search') {
+    _showCercaArea('search');
+  } else if (prev.type === 'clan') {
+    _showCercaArea('clan');
+  } else {
+    _showCercaArea('search');
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function cercaPlayerTorna() {
+  _cercaStack.pop();
+  const prev = _cercaStack[_cercaStack.length-1];
+  if (prev?.type === 'clan') {
+    _showCercaArea('clan');
+  } else {
+    _showCercaArea('search');
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Inizializza stack quando si entra nel tab cerca
+const _origActivateTab = activateTab;
+// patch activateTab per resettare lo stack cerca
+document.querySelectorAll('.tab-btn, .bnav-btn').forEach(btn => {
+  // già gestito da activateTab, qui aggiungiamo solo il reset stack
+});
+
+async function openCercaClan(tag) {
+  if (!_cercaStack.length) _cercaStack.push({type:'search'});
+  _cercaStack.push({type:'clan', tag});
+  _showCercaArea('clan');
+  window.scrollTo({top:0,behavior:'smooth'});
+
+  const backBtn = document.getElementById('cerca-back-btn');
+  if (backBtn) backBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg> Torna ai risultati`;
+
+  const container = document.getElementById('cerca-clan-content');
+  container.innerHTML = `<div class="profilo-loading" style="display:flex"><div class="spinner"></div><span>Caricamento clan…</span></div>`;
+
+  try {
+    const [infoR, membR] = await Promise.all([
+      fetch(`/api/clan-info?clanTag=${encodeURIComponent(tag)}`),
+      fetch(`/api/clan-members?clanTag=${encodeURIComponent(tag)}`),
+    ]);
+    const info  = await infoR.json();
+    const membs = await membR.json();
+    if (!infoR.ok) throw new Error(info.error || 'Clan non trovato');
+    _renderCercaClanDetail(info, membs.items || membs || [], tag, container);
+  } catch(e) {
+    container.innerHTML = `<div class="cerca-error">Errore: ${e.message}</div>`;
+  }
+}
+
+function _renderCercaClanDetail(info, members, clanTag, container) {
+  const badge = info.badgeUrls?.medium || info.badgeUrls?.small || '';
+  const typeLabel = CLAN_TYPE_LABELS[info.type] || '';
+
+  container.innerHTML = `
+    <div class="cc-header">
+      ${badge?`<img src="${badge}" alt="" class="cc-badge">`:''}
+      <div class="cc-info">
+        <div class="cc-name">${info.name}</div>
+        <div class="cc-tag mono">${info.tag}</div>
+        <div class="cc-meta">
+          <span class="badge badge-gold">Lv. ${info.clanLevel??'—'}</span>
+          ${typeLabel?`<span class="badge badge-gray">${typeLabel}</span>`:''}
+        </div>
+        ${info.description?`<div class="cc-desc">${info.description}</div>`:''}
+      </div>
+    </div>
+    <div class="profilo-stats-row" style="margin-bottom:1.25rem">
+      <div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:var(--gold)"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 13.17 10.33 12 8 12zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C23 13.17 18.33 12 16 12z"/></svg>
+        <span class="profilo-stat-val">${info.members??'—'}/50</span>
+        <span class="profilo-stat-lbl">Membri</span>
+      </div>
+      <div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:#f0a500"><path d="M7 3H4v5c0 1.5.8 2.8 2 3.6V13H4v2h16v-2h-2v-1.4c1.2-.8 2-2.1 2-3.6V3h-3V1H7v2z"/></svg>
+        <span class="profilo-stat-val">${info.clanPoints??'—'}</span>
+        <span class="profilo-stat-lbl">Trofei</span>
+      </div>
+      <div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:var(--green)"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg>
+        <span class="profilo-stat-val">${info.warWins??'—'}</span>
+        <span class="profilo-stat-lbl">War Vinte</span>
+      </div>
+      <div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:var(--blue)"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg>
+        <span class="profilo-stat-val">${info.warWinStreak??'—'}</span>
+        <span class="profilo-stat-lbl">Streak</span>
+      </div>
+    </div>
+    <div class="subtab-bar">
+      <button class="subtab-btn active" onclick="_switchCercaClanTab('members',this)">Membri</button>
+      <button class="subtab-btn" onclick="_switchCercaClanTab('warlog',this)">War Classiche</button>
+      <button class="subtab-btn" onclick="_switchCercaClanTab('cwl',this)">Cronologia CWL</button>
+    </div>
+    <div id="cc-tab-members">${_renderCercaMembersList(members, clanTag)}</div>
+    <div id="cc-tab-warlog" style="display:none"><div class="profilo-loading" style="display:flex"><div class="spinner"></div><span>Caricamento…</span></div></div>
+    <div id="cc-tab-cwl" style="display:none"><div class="profilo-loading" style="display:flex"><div class="spinner"></div><span>Caricamento…</span></div></div>
+  `;
+
+  _loadCercaWarLog(clanTag);
+  _loadCercaCwlHistory(clanTag);
+}
+
+function _switchCercaClanTab(tab, btn) {
+  ['members','warlog','cwl'].forEach(t => {
+    const el = document.getElementById(`cc-tab-${t}`);
+    if (el) el.style.display = t === tab ? 'block' : 'none';
+  });
+  document.querySelectorAll('#cerca-clan-content .subtab-btn').forEach(b=>b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+function _renderCercaMembersList(members, clanTag) {
+  if (!members || !members.length) return '<div class="profilo-empty"><p>Nessun membro trovato.</p></div>';
+  const sorted = [...members].sort((a,b)=>{
+    const ro={leader:0,coLeader:1,admin:2,member:3};
+    return (ro[a.role]??3)-(ro[b.role]??3)||(b.trophies||0)-(a.trophies||0);
+  });
+  return `<div class="card"><div class="table-wrap"><table>
+    <thead><tr>
+      <th class="col-league">Lega</th>
+      <th class="col-th-hdr">TH</th>
+      <th>Nome / Tag · Ruolo</th>
+      <th>Trofei</th>
+      <th class="col-extra">Don. / Ric.</th>
+    </tr></thead>
+    <tbody>
+      ${sorted.map(m=>{
+        const role=cocRole(m.role);
+        const lb=LEAGUE_BADGE_MAP[m.league?.name||''];
+        return `<tr class="cc-member-row" onclick="openCercaPlayer('${m.tag}','${clanTag}')">
+          <td class="col-league">${lb?`<img src="leagues/${lb}.png" class="league-badge-sm" alt="">`:''}</td>
+          <td class="col-th-cell">${thImgV(m.townHallLevel)}</td>
+          <td>
+            <div style="font-weight:600;font-size:0.88rem">${m.name}</div>
+            <div class="tag-cell">${m.tag} · <span class="${role.cls}">${role.label}</span></div>
+          </td>
+          <td class="mono" style="font-size:0.85rem">${m.trophies??'—'}</td>
+          <td class="col-extra mono" style="font-size:0.82rem;color:var(--text-3)">${m.donations??0}/${m.donationsReceived??0}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table></div></div>`;
+}
+
+async function _loadCercaWarLog(clanTag) {
+  const cont = document.getElementById('cc-tab-warlog');
+  if (!cont) return;
+  try {
+    const r = await fetch(`/api/war-log?clanTag=${encodeURIComponent(clanTag)}`);
+    const data = await r.json();
+    if (r.status === 403 || data.reason === 'accessDenied') {
+      cont.innerHTML = '<div class="profilo-empty"><svg viewBox="0 0 24 24" fill="currentColor" width="32" height="32" style="opacity:.3"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg><p>War log privato per questo clan.</p></div>';
+      return;
+    }
+    if (!r.ok) throw new Error(data.error||'Errore');
+    const wars = (data.items||[]).slice(0,20);
+    if (!wars.length) { cont.innerHTML='<div class="profilo-empty"><p>Nessuna war trovata.</p></div>'; return; }
+    cont.innerHTML = wars.map(w=>{
+      const res=w.result==='win'?'Vittoria':w.result==='lose'?'Sconfitta':'Pareggio';
+      const rc=w.result==='win'?'badge-green':w.result==='lose'?'badge-red':'badge-gray';
+      const dt=w.endTime?new Date(w.endTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/,'$1-$2-$3T$4:$5:$6Z')).toLocaleDateString('it'):'—';
+      return `<div class="wl-cerca-row">
+        <div class="wl-cerca-left">
+          <span class="badge ${rc}">${res}</span>
+          <div>
+            <div style="font-weight:600;font-size:0.88rem">vs ${w.opponent?.name||'—'}</div>
+            <div style="font-size:0.75rem;color:var(--text-3)">${dt} · ${w.teamSize??'—'}v${w.teamSize??'—'}</div>
+          </div>
+        </div>
+        <div class="wl-cerca-stats mono" style="font-size:0.82rem">
+          <span>${w.clan?.stars??'—'}⭐ ${(+(w.clan?.destructionPercentage??0)).toFixed(1)}%</span>
+          <span style="color:var(--text-3)">vs ${w.opponent?.stars??'—'}⭐ ${(+(w.opponent?.destructionPercentage??0)).toFixed(1)}%</span>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    cont.innerHTML=`<div class="cerca-error">Errore: ${e.message}</div>`;
+  }
+}
+
+async function _loadCercaCwlHistory(clanTag) {
+  const cont = document.getElementById('cc-tab-cwl');
+  if (!cont) return;
+  try {
+    const {data,error} = await db.from('cwl_seasons')
+      .select('*').eq('clan_tag', clanTag)
+      .order('season',{ascending:false}).limit(20);
+    if (error) throw new Error(error.message);
+    if (!data||!data.length) {
+      cont.innerHTML='<div class="profilo-empty"><p>Nessuna cronologia CWL disponibile per questo clan.</p></div>';
+      return;
+    }
+    cont.innerHTML = data.map(s=>{
+      const leagueIt=LEAGUE_EN_TO_IT[s.league]||s.league||'—';
+      const lb=LEAGUE_BADGE[leagueIt];
+      const pos=s.position||0;
+      const dt=new Date(s.season+'-01').toLocaleDateString('it',{year:'numeric',month:'long'});
+      return `<div class="cwl-season-card">
+        <div class="cwl-card-left">
+          <div class="cwl-card-month">${dt}</div>
+          <div class="cwl-card-league">
+            ${lb?`<img src="${lb}" class="cwl-league-img" alt="">`:''}<span class="cwl-league-name">${leagueIt}</span>
+          </div>
+        </div>
+        <div class="cwl-card-mid">
+          <div class="cwl-pos-badge">${POS_MEDALS[pos]||''}</div>
+          ${POS_LABELS[pos]?`<div class="cwl-league-sub">${POS_LABELS[pos]}</div>`:''}
+        </div>
+        <div class="cwl-card-right cwl-card-stats">
+          ${s.wins!=null?`<div class="cwl-stat-item"><span class="cwl-stat-val">${s.wins}</span><span class="cwl-stat-lbl">Vittorie</span></div>`:''}
+          ${s.stars!=null?`<div class="cwl-stat-item"><span class="cwl-stat-val">${s.stars}⭐</span><span class="cwl-stat-lbl">Stelle</span></div>`:''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    cont.innerHTML=`<div class="cerca-error">Errore: ${e.message}</div>`;
+  }
+}
+
+async function openCercaPlayer(playerTag, fromClanTag) {
+  if (!_cercaStack.length) _cercaStack.push({type:'search'});
+  _cercaStack.push({type:'player', tag:playerTag, fromClan:fromClanTag||null});
+  _showCercaArea('player');
+  window.scrollTo({top:0,behavior:'smooth'});
+
+  const backBtn = document.getElementById('cerca-back-player-btn');
+  if (backBtn) backBtn.innerHTML = fromClanTag
+    ? `<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg> Torna al clan`
+    : `<svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg> Torna ai risultati`;
+
+  const container = document.getElementById('cerca-player-content');
+  container.innerHTML = `<div class="profilo-loading" style="display:flex"><div class="spinner"></div><span>Caricamento profilo…</span></div>`;
+
+  try {
+    const r = await fetch(`/api/lookup?type=player&playerTag=${encodeURIComponent(playerTag)}`);
+    const p = await r.json();
+    if (!r.ok) throw new Error(p.error||'Errore');
+
+    container.innerHTML = `
+      <div id="cp-header-card" class="profilo-hero-card"></div>
+      <div class="subtab-bar">
+        <button class="subtab-btn active" onclick="_switchCpTab('home',this)">Villaggio Base</button>
+        <button class="subtab-btn" onclick="_switchCpTab('builder',this)">Base Costruttore</button>
+        <button class="subtab-btn" onclick="_switchCpTab('capital',this)">Capitale</button>
+      </div>
+      <div id="cp-tab-home">
+        <div class="profilo-section"><h3 class="profilo-section-title">Eroi</h3><div id="cp-heroes" class="profilo-units-grid"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Equipaggiamento Eroi</h3><div id="cp-equipment" class="profilo-units-grid"></div></div>
+        <div class="profilo-section" id="cp-pets-sec"><h3 class="profilo-section-title">Famigli</h3><div id="cp-pets" class="profilo-units-grid"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Truppe</h3><div id="cp-troops" class="profilo-units-grid"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Incantesimi</h3><div id="cp-spells" class="profilo-units-grid"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Macchine d'Assedio</h3><div id="cp-siege" class="profilo-units-grid"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Obiettivi Villaggio</h3><div id="cp-ach-home" class="profilo-achievements-list"></div></div>
+      </div>
+      <div id="cp-tab-builder" style="display:none">
+        <div id="cp-bh-stats" class="profilo-bh-stats"></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Truppe &amp; Eroi Builder</h3><div id="cp-builder-units" class="profilo-units-grid"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Obiettivi Builder</h3><div id="cp-builder-ach" class="profilo-achievements-list"></div></div>
+      </div>
+      <div id="cp-tab-capital" style="display:none">
+        <div id="cp-capital-stats" class="profilo-bh-stats"></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Truppe Capitale</h3><div id="cp-capital-troops" class="profilo-units-grid"></div></div>
+      </div>`;
+
+    renderPlayerView(p, 'cp');
+  } catch(e) {
+    container.innerHTML = `<div class="cerca-error">Errore: ${e.message}</div>`;
+  }
+}
+
+function _switchCpTab(tab, btn) {
+  ['home','builder','capital'].forEach(t=>{
+    const el=document.getElementById(`cp-tab-${t}`);
+    if(el) el.style.display=t===tab?'block':'none';
+  });
+  document.querySelectorAll('#cerca-player-content .subtab-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+}
+
+// Reset stack quando si cambia tab
+document.querySelectorAll('.tab-btn,.bnav-btn').forEach(btn=>{
+  btn.addEventListener('click',()=>{ if(btn.dataset.tab==='cerca') _cercaStack=[{type:'search'}]; });
+});
 

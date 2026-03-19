@@ -493,16 +493,16 @@
                     <div id="profilo-tab-home">
                         <div class="profilo-section" id="ps-heroes"><h3 class="profilo-section-title">Eroi</h3><div id="profilo-heroes" class="profilo-units-grid"></div></div>
                         <div class="profilo-section" id="ps-equipment"><h3 class="profilo-section-title">Equipaggiamento Eroi</h3><div id="profilo-equipment" class="profilo-units-grid"></div></div>
-                        <div class="profilo-section" id="ps-pets"><h3 class="profilo-section-title">Famigli</h3><div id="profilo-pets" class="profilo-units-grid"></div></div>
+                        <div class="profilo-section" id="ps-pets-sec"><h3 class="profilo-section-title">Famigli</h3><div id="profilo-pets" class="profilo-units-grid"></div></div>
                         <div class="profilo-section" id="ps-troops"><h3 class="profilo-section-title">Truppe</h3><div id="profilo-troops" class="profilo-units-grid"></div></div>
                         <div class="profilo-section" id="ps-spells"><h3 class="profilo-section-title">Incantesimi</h3><div id="profilo-spells" class="profilo-units-grid"></div></div>
                         <div class="profilo-section" id="ps-siege"><h3 class="profilo-section-title">Macchine d'Assedio</h3><div id="profilo-siege" class="profilo-units-grid"></div></div>
-                        <div class="profilo-section" id="ps-achievements"><h3 class="profilo-section-title">Obiettivi Villaggio</h3><div id="profilo-achievements" class="profilo-achievements-list"></div></div>
+                        <div class="profilo-section" id="ps-achievements"><h3 class="profilo-section-title">Obiettivi Villaggio</h3><div id="profilo-ach-home" class="profilo-achievements-list"></div></div>
                     </div>
                     <div id="profilo-tab-builder" style="display:none">
                         <div id="profilo-bh-stats" class="profilo-bh-stats"></div>
                         <div class="profilo-section" id="ps-builder-units"><h3 class="profilo-section-title">Truppe &amp; Eroi Builder</h3><div id="profilo-builder-units" class="profilo-units-grid"></div></div>
-                        <div class="profilo-section" id="ps-builder-ach"><h3 class="profilo-section-title">Obiettivi Builder</h3><div id="profilo-builder-achievements" class="profilo-achievements-list"></div></div>
+                        <div class="profilo-section" id="ps-builder-ach"><h3 class="profilo-section-title">Obiettivi Builder</h3><div id="profilo-builder-ach" class="profilo-achievements-list"></div></div>
                     </div>
                     <div id="profilo-tab-capital" style="display:none">
                         <div id="profilo-capital-stats" class="profilo-bh-stats"></div>
@@ -513,29 +513,52 @@
 
             <!-- ── TAB: CERCA ────────────────────────────────────────────── -->
             <section id="tab-cerca" class="tab-content" style="display:none">
-                <div class="page-header">
-                    <div>
-                        <h2>Cerca</h2>
-                        <p class="page-sub">Cerca clan e giocatori in Clash of Clans</p>
-                    </div>
-                </div>
-                <div class="card" style="margin-bottom:1.25rem">
-                    <div class="cerca-row">
-                        <div class="toggle-group">
-                            <button class="toggle-btn active" id="cerca-type-clan" onclick="setCercaType('clan')">Clan</button>
-                            <button class="toggle-btn" id="cerca-type-player" onclick="setCercaType('player')">Giocatore</button>
-                        </div>
-                        <div class="cerca-input-wrap">
-                            <input type="text" id="cerca-input" class="cerca-input" placeholder="Nome (min 3 lettere) o Tag #ABC…" autocomplete="off" spellcheck="false">
-                            <button class="btn-primary btn-sm" onclick="eseguiCerca()">
-                                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" style="flex-shrink:0"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-                                Cerca
-                            </button>
+
+                <!-- ── AREA RICERCA ── -->
+                <div id="cerca-search-area">
+                    <div class="page-header">
+                        <div>
+                            <h2>Cerca</h2>
+                            <p class="page-sub">Cerca clan e giocatori in Clash of Clans</p>
                         </div>
                     </div>
-                    <p id="cerca-hint" class="cerca-hint">Clan: cerca per nome (min 3 caratteri) o tag (#ABC123)</p>
+                    <div class="card" style="margin-bottom:1.25rem">
+                        <div class="cerca-row">
+                            <div class="toggle-group">
+                                <button class="toggle-btn active" id="cerca-type-clan" onclick="setCercaType('clan')">Clan</button>
+                                <button class="toggle-btn" id="cerca-type-player" onclick="setCercaType('player')">Giocatore</button>
+                            </div>
+                            <div class="cerca-input-wrap">
+                                <input type="text" id="cerca-input" class="cerca-input" placeholder="Nome (min 3 lettere) o Tag #ABC…" autocomplete="off" spellcheck="false">
+                                <button class="btn-primary btn-sm" onclick="eseguiCerca()">
+                                    <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" style="flex-shrink:0"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                                    Cerca
+                                </button>
+                            </div>
+                        </div>
+                        <p id="cerca-hint" class="cerca-hint">Clan: cerca per nome (min 3 caratteri) o tag (#ABC123)</p>
+                    </div>
+                    <div id="cerca-results"></div>
                 </div>
-                <div id="cerca-results"></div>
+
+                <!-- ── DETTAGLIO CLAN ── -->
+                <div id="cerca-detail-clan" style="display:none">
+                    <button id="cerca-back-btn" class="cerca-back-btn" onclick="cercaTorna()">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                        Torna ai risultati
+                    </button>
+                    <div id="cerca-clan-content"></div>
+                </div>
+
+                <!-- ── DETTAGLIO GIOCATORE ── -->
+                <div id="cerca-detail-player" style="display:none">
+                    <button id="cerca-back-player-btn" class="cerca-back-btn" onclick="cercaPlayerTorna()">
+                        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                        Torna ai risultati
+                    </button>
+                    <div id="cerca-player-content"></div>
+                </div>
+
             </section>
 
         </main>
