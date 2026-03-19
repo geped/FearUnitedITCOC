@@ -65,7 +65,7 @@ module.exports = async (req, res) => {
 
     // 4. Email interna: tag senza # in lowercase
     const emailBase = playerTag.replace('#', '').toLowerCase();
-    const email = `${emailBase}@fearunited.internal`;
+    const email = `${emailBase}@cocboard.internal`;
 
     // 5. Crea l'utente su Supabase
     const supabase = createClient(process.env.SUPABASE_URL, serviceKey, {

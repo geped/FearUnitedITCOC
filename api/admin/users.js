@@ -21,7 +21,7 @@ module.exports = async (req, res) => {
         if (!password) return res.status(400).json({ error: 'Password obbligatoria.' });
 
         // Genera email fittizia prevedibile se non fornita
-        const resolvedEmail = email || `${username.toLowerCase().replace(/[^a-z0-9]/g, '_')}@fearunited.internal`;
+        const resolvedEmail = email || `${username.toLowerCase().replace(/[^a-z0-9]/g, '_')}@cocboard.internal`;
 
 
         const { data, error } = await supabase.auth.admin.createUser({

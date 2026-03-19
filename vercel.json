@@ -3,6 +3,14 @@
     {
       "path": "/api/sync-members",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/purge-ex-players",
+      "schedule": "0 7 1 * *"
+    },
+    {
+      "path": "/api/auto-save-wars",
+      "schedule": "0 */6 * * *"
     }
   ]
 }

@@ -376,6 +376,31 @@ app.post('/save-war', authMiddleware, async (req, res) => {
     }
 });
 
+app.post('/save-all-wars', authMiddleware, async (req, res) => {
+    try {
+        const { data, error } = await supabase()
+            .from('members')
+            .select('clan_tag')
+            .not('clan_tag', 'is', null);
+        if (error) return res.status(500).json({ error: error.message });
+
+        const tags = [...new Set((data || []).map(r => r.clan_tag).filter(Boolean))];
+        if (!tags.length) return res.json({ ok: true, clans: 0, results: [] });
+
+        const settled = await Promise.allSettled(tags.map(tag => saveEndedWar(tag)));
+        const results = tags.map((tag, i) => ({
+            clan_tag: tag,
+            ...(settled[i].status === 'fulfilled'
+                ? settled[i].value
+                : { error: settled[i].reason?.message }),
+        }));
+
+        res.json({ ok: true, clans: tags.length, results });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/cwl-live', authMiddleware, async (req, res) => {
     try {
         const clanTag = req.query.clanTag;
