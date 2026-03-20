@@ -1,153 +1,114 @@
 # Testing Patterns
 
-**Analysis Date:** 2026-03-20
-
-## Test Framework
-
-**Runner:** None detected
-- No `jest.config.*`, `vitest.config.*`, or `mocha` configuration files found
-- No test runner listed in `package.json` scripts
-- `package.json` has no `devDependencies` at all
-
-**Assertion Library:** None
-
-**Run Commands:**
-```bash
-# No test commands defined
-# package.json scripts section is absent
-```
-
-## Test File Organization
-
-**Status:** No test files exist in the codebase.
-
-A search for `*.test.*` and `*.spec.*` across the project returned zero results.
-
-## What This Means
-
-This is a zero-test codebase. There are no unit tests, integration tests, or end-to-end tests for any module:
-- `app.js` (4597 lines) — no tests
-- `render-proxy/index.js` (624 lines) — no tests
-- `api/*.js` serverless functions — no tests
-- `api/generate-bonuses.js` contains the `calculateMerit()` pure function which is the only clearly unit-testable logic — not tested
-
-## Testable Logic
-
-The following pure or near-pure functions exist and could be unit tested without mocking:
-
-**`api/generate-bonuses.js`**
-```js
-function calculateMerit(stats, history) {
-    let score = (stats.stars || 0) * 100 + (stats.destructionPercentage || 0);
-    if (stats.attacksRequired != null && stats.attacksMade != null) {
-        score -= (stats.attacksRequired - stats.attacksMade) * 500;
-    }
-    if (history?.received_last_month) score = 0;
-    return Math.max(score, 0);
-}
-```
-
-**`render-proxy/index.js`**
-```js
-function parseClanTag(raw) { /* normalizes tag, adds # prefix */ }
-function encodeTag(tag) { return encodeURIComponent(tag); }
-```
-
-**`api/register-with-coc.js`**
-```js
-function normalizeTag(raw) { /* same logic as parseClanTag */ }
-```
-
-**`app.js` (frontend)**
-```js
-function thImgSrc(level) { /* returns image path based on level */ }
-function resolveLoginEmail(input) { /* converts username to internal email */ }
-function leagueTierNameIt(name) { /* translates league tier name to Italian */ }
-function cocRole(role) { /* maps API role to display label */ }
-```
-
-## If Tests Were Added
-
-**Recommended framework:** Vitest (compatible with Node.js, zero-config)
-
-**Recommended structure:**
-```
-tests/
-  unit/
-    calculateMerit.test.js
-    parseClanTag.test.js
-    resolveLoginEmail.test.js
-  integration/
-    api/
-      sync-members.test.js     # mock fetch + supabase
-      generate-bonuses.test.js # mock supabase
-```
-
-**Example unit test pattern (Vitest):**
-```js
-import { describe, it, expect } from 'vitest'
-import { calculateMerit } from '../api/generate-bonuses.js'
-
-describe('calculateMerit', () => {
-  it('calculates score: stars × 100 + destruction%', () => {
-    const stats = { stars: 5, destructionPercentage: 87.5, attacksMade: 2, attacksRequired: 2 }
-    expect(calculateMerit(stats, null)).toBe(587.5)
-  })
-
-  it('deducts 500 per missed attack', () => {
-    const stats = { stars: 3, destructionPercentage: 60, attacksMade: 1, attacksRequired: 2 }
-    expect(calculateMerit(stats, null)).toBe(3 * 100 + 60 - 500) // -140 → clamped to 0
-    expect(calculateMerit(stats, null)).toBe(0)
-  })
-
-  it('returns 0 when received_last_month is true', () => {
-    const stats = { stars: 10, destructionPercentage: 100, attacksMade: 2, attacksRequired: 2 }
-    expect(calculateMerit(stats, { received_last_month: true })).toBe(0)
-  })
-})
-```
-
-**Mocking pattern for Supabase in API functions:**
-```js
-import { vi } from 'vitest'
-
-vi.mock('@supabase/supabase-js', () => ({
-  createClient: vi.fn(() => ({
-    from: vi.fn(() => ({
-      select: vi.fn().mockReturnThis(),
-      upsert: vi.fn().mockResolvedValue({ error: null }),
-    }))
-  }))
-}))
-```
-
-**Mocking pattern for `fetch` (CoC API proxying):**
-```js
-global.fetch = vi.fn().mockResolvedValue({
-  ok: true,
-  json: async () => ({ items: [] }),
-  status: 200,
-})
-```
-
-## Coverage
-
-**Requirements:** None enforced (no config, no CI pipeline)
-
-**Current state:** 0% coverage — no tests exist
-
-## Risk Areas Without Tests
-
-The following areas carry the highest risk from untested changes:
-
-| Area | File | Risk |
-|------|------|------|
-| Bonus score formula | `api/generate-bonuses.js` | Score calculation errors go unnoticed until CWL season |
-| Tag normalization | `render-proxy/index.js`, `api/register-with-coc.js` | Duplicate/broken tag format breaks all API calls |
-| Login email resolution | `app.js` `resolveLoginEmail()` | Auth failures for users |
-| CWL stats aggregation | `render-proxy/index.js` `getCwlStats()` | Complex loop logic with silent errors |
-| Role mapping (CoC → app) | `api/register-with-coc.js` `COC_ROLE_MAP` | Incorrect role assignment on registration |
+**Analysis Date:** 2026-03-20 (aggiornato post-fix criticità)
 
 ---
 
-*Testing analysis: 2026-03-20*
+## Test Framework
+
+**Runner:** Node.js built-in `node:test` (nessuna dipendenza esterna)
+- Configurato in `package.json` → `"test": "node --test tests/*.test.js"`
+- Nessun `jest.config.*` o `vitest.config.*` — volutamente zero-config
+
+**Assertion Library:** `node:assert/strict` (built-in)
+
+**Run Commands:**
+```bash
+npm test
+# oppure direttamente:
+node --test tests/*.test.js
+```
+
+---
+
+## Test File Organization
+
+```
+tests/
+  bonus-calculator.test.js   # 6 test per calculateMerit()
+  purge-logic.test.js        # 5 test per shouldPurge()
+```
+
+**Totale:** 11 test, tutti ✓ passati.
+
+---
+
+## Test esistenti
+
+### `tests/bonus-calculator.test.js` — Formula merit CWL
+
+Testa la funzione `calculateMerit(stats, history)` estratta da `api/generate-bonuses.js`.
+
+Formula testata:
+```js
+merit = (stars / req) * 40 + (destruction / made) * 0.2 + (made / req) * 20
+```
+
+| Test | Input | Atteso |
+|------|-------|--------|
+| Score massimo | 7att, 21★, 700% | 160 |
+| Anti-duplicati | `received_last_month: true` | 0 |
+| Nessun attacco | 0/7, 0★, 0% | 0 |
+| Partecipazione parziale penalizza | 3/7 vs 7/7 attacchi | parziale < pieno |
+| Divisione per zero su `attacksRequired=0` | — | non lancia eccezioni |
+| Arrotondamento | score con decimali | max 1 decimale |
+
+### `tests/purge-logic.test.js` — Logica purge ex-membri
+
+Testa la funzione `shouldPurge(lastActiveSeason, retentionMonths, referenceDate)` estratta da `api/purge-ex-players.js`.
+
+Retention configurata: **6 mesi**.
+
+| Test | Input | Atteso |
+|------|-------|--------|
+| Inattivo 7 mesi | stagione 2025-07, ref 2026-03 | true (purga) |
+| Inattivo esattamente 6 mesi | stagione 2025-09, ref 2026-03 | true (incluso nel cutoff) |
+| Inattivo 5 mesi | stagione 2025-10, ref 2026-03 | false (non purgare) |
+| Stagione corrente | stagione 2026-03, ref 2026-03-20 | false |
+| Stagione null/undefined | null, undefined | false (dati mancanti) |
+
+---
+
+## Aree Coperte vs Non Coperte
+
+### Coperte ✓
+- Formula calcolo bonus CWL (`calculateMerit`)
+- Logica di scadenza purge ex-membri (`shouldPurge`)
+
+### Non coperte ✗ (rischio noto)
+
+| Area | File | Rischio |
+|------|------|---------|
+| Proxy CoC API (fetch chain) | `render-proxy/index.js` | Regressioni su aggregazione CWL stats |
+| Auth JWT middleware | `api/_utils/require-role.js` | Bypass accidentale protezione endpoints |
+| Tag normalization | `render-proxy/index.js` `parseClanTag()` | Tag malformati rompono tutte le chiamate CoC |
+| Login dual-domain | `app.js` `resolveLoginEmail()` | Auth failure per utenti con account legacy |
+| Filtro guerra CWL vs classica | `app.js` riga ~2420 | Inclusione errata CWL nel war log classico |
+
+---
+
+## Se si aggiungessero più test
+
+**Pattern raccomandato** (compatibile con il runner attuale `node:test`):
+
+```js
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+
+// Estrai la funzione da testare nel file sorgente o copiane la logica
+function myPureFunction(input) { ... }
+
+test('descrizione caso', () => {
+    const result = myPureFunction(input);
+    assert.equal(result, expected);
+});
+```
+
+**Candidati prioritari:**
+1. `parseClanTag()` in `render-proxy/index.js` — funzione pura, alta criticità
+2. `requireRole()` in `api/_utils/require-role.js` — verifica estrazione token Bearer
+3. Formula destrizione media — `destructionPercentage / attacksMade` usata in `renderCwlTable()`
+
+---
+
+*Testing analysis: 2026-03-20 — aggiornato post-fix 16 criticità*

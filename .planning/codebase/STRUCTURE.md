@@ -1,213 +1,230 @@
 # Codebase Structure
 
-**Analysis Date:** 2026-03-20
+**Analysis Date:** 2026-03-20 (aggiornato post-fix criticità)
+
+---
 
 ## Directory Layout
 
 ```
 FearUnitedCoC/                  # Project root
 ├── index.html                  # SPA shell — all HTML markup (742 lines)
-├── app.js                      # All frontend logic (4597 lines)
+├── app.js                      # All frontend logic (4650 lines)
 ├── style.css                   # All styles (3224 lines)
 ├── supabase-config.js          # Supabase client init — sets window.sb
-├── firebase-config.js          # Legacy Firebase (do not use)
-├── vercel.json                 # Vercel cron job definitions
-├── package.json                # Minimal (only @vercel/node listed)
+├── vercel.json                 # Vercel cron job definitions (3 cron jobs)
+├── package.json                # @supabase/supabase-js + script test
 │
-├── api/                        # Vercel serverless functions
+├── api/                        # Vercel serverless functions (12/12 — limite Hobby)
+│   ├── _utils/                 # Moduli condivisi (NON contano nel limite 12)
+│   │   ├── proxy-client.js     # proxyFetch(res, path, params) — helper comune
+│   │   └── require-role.js     # requireRole(req, roles) — auth JWT middleware
 │   ├── admin/
-│   │   └── users.js            # CRUD utenti (requires SERVICE_ROLE_KEY)
-│   ├── sync-members.js         # Cron: daily member sync (delegates to proxy)
-│   ├── auto-save-wars.js       # Cron: daily war auto-save (delegates to proxy)
-│   ├── purge-ex-players.js     # Cron: monthly ex-member cleanup
+│   │   └── users.js            # CRUD utenti — verifica ruolo 'admin' via JWT
+│   ├── sync-members.js         # Cron: daily member sync 6:00 UTC (delega a proxy)
+│   ├── auto-save-wars.js       # Cron: daily war auto-save 20:00 UTC (delega a proxy)
+│   ├── purge-ex-players.js     # Cron: monthly ex-member cleanup 7:00 UTC del 1°
 │   ├── clan-info.js            # Proxy forwarder: clan info
 │   ├── clan-members.js         # Proxy forwarder: live member list
 │   ├── cwl-stats.js            # Proxy forwarder: CWL live stats
 │   ├── war-log.js              # Proxy forwarder: war log
 │   ├── lookup.js               # Proxy forwarder: player lookup, clan search, rankings
-│   ├── generate-bonuses.js     # Bonus calculation + Supabase upsert
-│   ├── import-bonus.js         # Excel bonus import
+│   ├── generate-bonuses.js     # Bonus calculation (legge cwl_history) + Supabase upsert
+│   ├── import-bonus.js         # Excel bonus import (richiede header x-sync-key)
 │   └── register-with-coc.js   # User registration via CoC in-game API key
 │
 ├── render-proxy/
-│   └── index.js                # Express server on Render.com (625 lines)
-│                               # Holds COC_API_TOKEN, makes all CoC API calls
+│   └── index.js                # Express server on Render.com (631 lines)
+│                               # Holds COC_API_TOKEN + SUPABASE_SERVICE_ROLE_KEY
+│                               # Makes all CoC API calls + writes to Supabase
+│
+├── tests/                      # Node.js built-in test runner
+│   ├── bonus-calculator.test.js  # 6 test — calculateMerit() formula
+│   └── purge-logic.test.js       # 5 test — shouldPurge() logic
 │
 ├── th/                         # Town Hall level icons
-│   ├── level_01.webp           # TH levels 1–18 are .webp
-│   ├── ...
-│   ├── level_18.webp
-│   ├── level_19.png            # TH levels 19–20 are .png
-│   ├── level_20.png
-│   └── webp/                   # Alternative webp copies
+│   └── webp/                   # TH levels 1–18 .webp (usare percorso webp/)
 │
 ├── leagues/                    # CWL league badge images
 │                               # Named by league: BronzoI.png, ArgentoIII.png, etc.
 │
-├── schema.sql                  # Base schema
+├── schema-MASTER.sql           # Schema unificato — ordine di applicazione corretto
+├── schema.sql                  # Base schema (members, RLS policies)
 ├── schema-cwl.sql              # CWL history + seasons tables
 ├── schema-bonus.sql            # Bonus table
 ├── schema-classic-wars.sql     # Classic wars table
 ├── schema-league.sql           # League table
 ├── schema-multiclan.sql        # Multi-clan support schema
 ├── schema-retention.sql        # Retention/cleanup schema
-└── schema-update.sql           # Schema migration patches
+├── schema-update.sql           # Schema migration patches
+├── schema-security-rls.sql     # RLS: cwl_bonuses read-only per anon
+└── schema-security-rls-v2.sql  # RLS: ripristina write anon su members (render-proxy)
 ```
 
+---
+
 ## Directory Purposes
+
+**`api/_utils/`:**
+- Purpose: Moduli condivisi tra serverless functions — non espongono endpoints
+- `proxy-client.js`: funzione `proxyFetch(res, path, params)` — gestisce RENDER_PROXY_URL, header x-sync-key, error handling. Usata da `clan-info`, `clan-members`, `cwl-stats`, `war-log`
+- `require-role.js`: funzione `requireRole(req, allowedRoles)` — estrae JWT da header Authorization, verifica con Supabase Auth, controlla `user_metadata.role`. Usata da `admin/users` e `generate-bonuses`
 
 **`api/`:**
 - Purpose: Vercel serverless functions — one file per endpoint
 - Contains: Node.js CommonJS modules, each exporting a single `async (req, res) => {}` handler
-- Key files: `register-with-coc.js` (user onboarding), `lookup.js` (consolidated proxy forwarder), `admin/users.js` (admin CRUD)
-- Pattern: Most functions are thin forwarders to `RENDER_PROXY_URL`; only `generate-bonuses.js`, `import-bonus.js`, and `register-with-coc.js` contain real business logic
+- Key files: `register-with-coc.js` (user onboarding), `lookup.js` (consolidated proxy forwarder), `admin/users.js` (admin CRUD con verifica ruolo)
+- Pattern: Proxy forwarders usano `proxyFetch` da `_utils`; solo `generate-bonuses.js`, `import-bonus.js` e `register-with-coc.js` contengono logica di business
 
 **`api/admin/`:**
-- Purpose: Admin-only endpoints requiring `SUPABASE_SERVICE_ROLE_KEY`
-- Contains: `users.js` — full CRUD on `auth.users` via Supabase admin API
-- Access control: Caller must be `isAdmin` (enforced in `app.js` before calling, but service key check is server-side)
+- Purpose: Admin-only endpoints
+- Access control: Verifica JWT + `user_metadata.role === 'admin'` via `requireRole(req, ['admin'])`
 
 **`render-proxy/`:**
 - Purpose: Persistent Express server on Render.com acting as trusted CoC API intermediary
-- Contains: `index.js` with all route handlers and business logic for data aggregation
-- Deploy: Separate deployment from Vercel — changes require `render` deploy, not `vercel deploy`
-- Auth: All routes protected by `authMiddleware` checking `x-sync-key` header
+- Contains: `index.js` con tutti i route handler e logica aggregazione dati
+- Auth su Supabase: usa `SUPABASE_SERVICE_ROLE_KEY` per scrivere (bypassa RLS)
+- Deploy: Separato da Vercel — push su git o deploy manuale dalla dashboard Render
+- Auth proxy: Tutti i route protetti da `authMiddleware` che verifica header `x-sync-key`
+- Warm-up: `GET /health` endpoint disponibile per evitare cold start
 
-**`th/`:**
-- Purpose: Static TH level icon assets served directly by Vercel CDN
-- Naming: `level_NN.webp` for levels 1–18, `level_NN.png` for 19–20
-- Referenced by: `thImgSrc(level)` in `app.js` line 524
+**`tests/`:**
+- Purpose: Test unitari con Node.js built-in test runner
+- Run: `npm test` (script in `package.json`)
+- Filosofia: zero dipendenze — logica estratta per copia/testabilità
+
+**`th/webp/`:**
+- Purpose: Static TH level icon assets
+- Naming: `level_NN.webp` per tutti i livelli (1–18+)
+- I file precedenti in `th/` root sono stati rimossi
 
 **`leagues/`:**
 - Purpose: CWL war league badge images
-- Naming: Italian league name concatenated (e.g., `BronzoI.png`, `CristalloIII.png`, `LeggendaV2.png`)
-- Referenced by: `LEAGUE_BADGE_MAP` in `app.js` line 249
+- Naming: Italian league name concatenated (e.g., `BronzoI.png`, `CristalloIII.png`)
+- Referenced by: `LEAGUE_BADGE_MAP` in `app.js`
 
 **`schema*.sql`:**
-- Purpose: Supabase SQL migration scripts — run manually in Supabase SQL Editor
-- Not applied automatically — no migration runner is configured
+- Purpose: Supabase SQL migration scripts — eseguiti manualmente nel Supabase SQL Editor
+- Punto di partenza: usare `schema-MASTER.sql` per setup da zero
+- Non applicati automaticamente
+
+---
 
 ## Key File Locations
 
 **Entry Points:**
 - `index.html`: Browser entry — all HTML structure, loads scripts
-- `app.js` line 32: App boot — `db.auth.onAuthStateChange()` is the real initialization point
-- `supabase-config.js`: Must load before `app.js` — sets `window.sb`
+- `app.js` line 32: App boot — `db.auth.onAuthStateChange()` è il punto di init reale
+- `supabase-config.js`: Deve caricarsi prima di `app.js` — imposta `window.sb`
 
 **Configuration:**
-- `vercel.json`: Cron schedule definitions (no routing config — all routes are file-based)
-- `render-proxy/index.js` line 623: `const PORT = process.env.PORT || 3000`
+- `vercel.json`: Cron schedule definitions (3 cron jobs: sync-members, purge-ex-players, auto-save-wars)
+- `render-proxy/index.js` line ~625: `const PORT = process.env.PORT || 3000`
 
 **Core Logic:**
-- `app.js` line 383: `showApp()` — post-login initialization, role/clan setup
-- `app.js` line 478: `activateTab()` — tab navigation hub, triggers lazy data loads
-- `app.js` line 887: `loadAssignBonus()` — CWL bonus assignment entry point
-- `app.js` line 1885: `applyBonusCriteria()` — bonus score calculation (live data path)
+- `app.js` line ~383: `showApp()` — post-login initialization, role/clan setup
+- `app.js` line ~478: `activateTab()` — tab navigation hub, triggers lazy data loads
+- `app.js` line ~887: `loadAssignBonus()` — CWL bonus assignment entry point
+- `app.js` line ~1885: `applyBonusCriteria()` — bonus score calculation (live data path)
+- `api/generate-bonuses.js`: `calculateMerit()` — formula ufficiale bonus serverless
 - `render-proxy/index.js` line 137: `getCwlStats()` — CWL data aggregation (all rounds, standings)
 - `render-proxy/index.js` line 94: `syncMembers()` — member sync from CoC API to Supabase
 - `render-proxy/index.js` line 29: `saveEndedWar()` — classic war detection and persistence
-- `api/register-with-coc.js`: Full registration flow with CoC token verification
 
 **Admin:**
-- `api/admin/users.js`: GET/POST/PUT/DELETE on `auth.users`
-- `app.js` line 2221: `loadUsers()` — admin panel frontend
+- `api/admin/users.js`: GET/POST/PUT/DELETE su `auth.users` (richiede JWT admin)
+- `app.js` line ~2221: `loadUsers()` — admin panel frontend
+
+**Utilities:**
+- `api/_utils/proxy-client.js`: `proxyFetch()` — usare per qualsiasi nuova function che parla con render-proxy
+- `api/_utils/require-role.js`: `requireRole()` — usare per qualsiasi endpoint che richiede ruolo specifico
 
 **Database Schemas:**
-- `schema.sql`: Members table baseline
-- `schema-cwl.sql`: `cwl_history` table with seed data
+- `schema-MASTER.sql`: File unificato — usare questo per setup da zero
+- `schema.sql`: Members table + RLS baseline
+- `schema-cwl.sql`: `cwl_history` table con seed data
 - `schema-classic-wars.sql`: `classic_wars` table
-- `schema-multiclan.sql`: Multi-clan support additions to `members`
+
+---
 
 ## Naming Conventions
 
 **Files:**
-- Serverless functions: `kebab-case.js` matching the URL path (e.g., `sync-members.js` → `/api/sync-members`)
+- Serverless functions: `kebab-case.js` matching URL path (e.g., `sync-members.js` → `/api/sync-members`)
+- Shared utilities: `api/_utils/kebab-case.js`
 - Frontend: single flat files at root (`app.js`, `style.css`, `index.html`)
 - SQL schemas: `schema-[feature].sql`
 
 **Directories:**
-- All lowercase, kebab-case for multi-word (`render-proxy/`, `api/admin/`)
+- All lowercase, kebab-case for multi-word (`render-proxy/`, `api/admin/`, `api/_utils/`)
 
 **Functions in `app.js`:**
 - Load functions: `loadXxx()` — async, fetches data, calls render
 - Render functions: `renderXxx()` — sync, builds DOM from data
 - Open/Close modals: `openXxxModal()`, `closeXxxModal()`
 - Switch tabs/views: `switchXxxTab(tab, btn)`
-- Private helpers: `_xxxHelper()` — underscore prefix for internal use
 
 **HTML IDs:**
 - Tab sections: `tab-{tabId}` (e.g., `tab-members`, `tab-cwl`)
-- Navigation buttons: `data-tab="{tabId}"` attribute on `.tab-btn` and `.bnav-btn`
-- Dynamic clan name elements: class `clan-name-dyn`
+- Navigation buttons: `data-tab="{tabId}"` attribute on `.tab-btn` e `.bnav-btn`
 
-**CSS Classes:**
-- Role badges: `role-leader`, `role-coleader`, `role-elder`, `role-member`
-- Admin-gated elements: class `admin-only`
-- Badge containers: `badge`, `badge-gold`
+---
 
 ## Where to Add New Code
 
 **New data-displaying tab:**
 1. Add HTML section in `index.html` as `<section id="tab-{name}" class="tab-content">`
 2. Add nav button in sidebar and bottom-nav with `data-tab="{name}"`
-3. Add entry to `TAB_TITLES` object in `app.js` line 469
-4. Add `if (tabId === '{name}') loadXxx()` in `activateTab()` in `app.js` line 478
+3. Add entry to `TAB_TITLES` object in `app.js`
+4. Add `if (tabId === '{name}') loadXxx()` in `activateTab()` in `app.js`
 5. Add `loadXxx()` and `renderXxx()` functions in `app.js` (append after existing sections)
 
 **New Vercel API endpoint:**
-1. Create `api/{endpoint-name}.js` exporting `async (req, res) => {}`
-2. If it needs CoC data: forward to `RENDER_PROXY_URL/{route}` with `x-sync-key` header
-3. If it needs admin access: create in `api/admin/` and use `SUPABASE_SERVICE_ROLE_KEY`
-4. No entry in `vercel.json` needed — Vercel auto-detects files in `api/`
+1. **Verifica il limite 12 functions** — conta i file in `api/` (escludi `_utils/` e `admin/`)
+2. Create `api/{endpoint-name}.js` exporting `async (req, res) => {}`
+3. Se parla con CoC: usa `proxyFetch` da `api/_utils/proxy-client.js`
+4. Se richiede auth: usa `requireRole` da `api/_utils/require-role.js`
+5. Se è admin-only: crea in `api/admin/` e usa `requireRole(req, ['admin'])`
 
 **New Render proxy route:**
-1. Add `app.get()` or `app.post()` in `render-proxy/index.js` before the `app.listen()` call
-2. Apply `authMiddleware` as second argument for all routes
-3. Deploy separately to Render (not part of `vercel deploy`)
+1. Add `app.get()` o `app.post()` in `render-proxy/index.js` prima di `app.listen()`
+2. Apply `authMiddleware` as second argument per tutti i route
+3. Deploy separato su Render (non parte di `vercel deploy`)
 
 **New cron job:**
-1. Create the handler in `api/{job-name}.js`
-2. Add entry to `vercel.json` `crons` array with `path` and `schedule`
+1. Crea handler in `api/{job-name}.js` (attenzione limite 12 functions)
+2. Aggiungi entry in `vercel.json` `crons` array
+3. **Nota:** Vercel Hobby supporta solo cron giornalieri (frequenza minima: `0 H * * *`)
 
 **New Supabase table:**
-1. Write SQL in a new `schema-{feature}.sql` file
-2. Apply manually in Supabase SQL Editor
-3. Add RLS policies — pattern: `FOR SELECT USING (auth.role() = 'authenticated')`
+1. Scrivi SQL in un nuovo `schema-{feature}.sql`
+2. Aggiungi al `schema-MASTER.sql` nell'ordine corretto
+3. Esegui manualmente nel Supabase SQL Editor
+4. RLS pattern: `FOR SELECT USING (auth.role() = 'authenticated')` — write solo via service role
 
-**Utilities and helpers:**
-- Shared frontend helpers: add as named functions in `app.js` near the relevant section
-- No shared modules between API functions — each `api/*.js` is self-contained
+**New shared API utility:**
+1. Crea in `api/_utils/{name}.js`
+2. Esporta con `module.exports = { functionName }`
+3. Importa con `const { functionName } = require('./_utils/{name}')`
+
+---
 
 ## Special Directories
 
 **`.planning/`:**
 - Purpose: GSD planning artifacts (phases, codebase maps, reports)
-- Generated: Partially (by GSD tooling)
 - Committed: Yes
 
 **`.agent/`:**
 - Purpose: GSD agent skill definitions and tooling
-- Generated: Yes (GSD framework)
 - Committed: Yes
 
-**`node_modules/`:**
-- Purpose: Root-level dependencies (minimal — mostly `@supabase/supabase-js` for API functions)
-- Generated: Yes
-- Committed: No
-
-**`functions/`:**
-- Purpose: Legacy Firebase Cloud Functions (migration to Supabase complete)
-- Generated: No
-- Committed: Yes — but do not add new logic here
-
 **`scraper/`:**
-- Purpose: One-off asset scraping scripts (CoC building images)
-- Generated: No — not part of the application runtime
+- Purpose: One-off asset scraping scripts — non parte del runtime
 
 **`report/`:**
-- Purpose: Generated reports (player stats, etc.) — not part of app runtime
-- Generated: Yes
+- Purpose: Report generati (player stats, ecc.) — non parte del runtime
 
 ---
 
-*Structure analysis: 2026-03-20*
+*Structure analysis: 2026-03-20 — aggiornato post-fix 16 criticità*

@@ -1,6 +1,8 @@
 # Technology Stack
 
-**Analysis Date:** 2026-03-20
+**Analysis Date:** 2026-03-20 (aggiornato post-fix criticità)
+
+---
 
 ## Languages
 
@@ -11,73 +13,86 @@
 **Secondary:**
 - HTML5 - `index.html` (single-page application markup)
 - CSS3 - `style.css` (all styling, no preprocessor)
-- Python - `import_bonus.py`, `read_excel.py`, `read_excel2.py`, `read_excel3.py` (data import utilities, not part of production runtime)
+- Python - `import_bonus.py`, `read_excel.py` (data import utilities, non parte del runtime di produzione)
 
 ## Runtime
 
 **Environment:**
-- Node.js (no version pinned — no `.nvmrc` or `.node-version` file detected)
-- Executed on two separate platforms: Vercel (serverless) and Render.com (persistent Express server)
+- Node.js (no version pinned — no `.nvmrc` or `.node-version` file)
+- Eseguito su due piattaforme: Vercel (serverless) e Render.com (persistent Express)
 
 **Package Manager:**
 - npm
-- Root lockfile: `package-lock.json` (present)
-- Render-proxy lockfile: not detected (only `package.json` in `render-proxy/`)
+- Root `package.json`: `@supabase/supabase-js ^2.0.0` + script `test`
+- `render-proxy/package.json`: `express`, `@supabase/supabase-js`, `node-fetch`
 
 ## Frameworks
 
 **Core:**
-- Express 4.18+ - HTTP server for `render-proxy/index.js` on Render.com
-- None on frontend — Vanilla JS SPA, no React/Vue/Angular
+- Express 4.18+ - HTTP server per `render-proxy/index.js` su Render.com
+- None su frontend — Vanilla JS SPA, no React/Vue/Angular
 
 **Testing:**
-- Not detected — no test runner configuration found
+- Node.js built-in `node:test` + `node:assert/strict`
+- Script: `npm test` → `node --test tests/*.test.js`
+- 11 test unitari (6 bonus-calculator + 5 purge-logic)
 
 **Build/Dev:**
-- No build step — frontend is served as static files directly via Vercel
-- No Webpack, Vite, or bundler detected
+- No build step — frontend servito come file statici su Vercel
+- No Webpack, Vite, o bundler
 
 ## Key Dependencies
 
 **Critical:**
-- `@supabase/supabase-js ^2.0.0` - Database client used in both root (`package.json`) and `render-proxy/package.json`; loaded client-side via CDN (`cdn.jsdelivr.net/npm/@supabase/supabase-js@2`)
-- `express ^4.18.0` - HTTP framework for the Render proxy only (`render-proxy/package.json`)
+- `@supabase/supabase-js ^2.0.0` - Database client usato in root e `render-proxy/`; caricato lato client via CDN (`cdn.jsdelivr.net/npm/@supabase/supabase-js@2`)
+- `express ^4.18.0` - HTTP framework solo per il proxy Render
 
 **CDN-loaded (frontend, no local install):**
-- `@supabase/supabase-js@2` via `https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js` — loaded in `index.html` line 652
+- `@supabase/supabase-js@2` via CDN in `index.html`
+
+**Rimosso:**
+- Firebase / Firestore — completamente rimosso (file, config, dipendenze)
 
 ## Configuration
 
-**Environment (set on Vercel and Render — never committed):**
+**Environment (su Vercel e Render — mai committate):**
 - `SUPABASE_URL` - Supabase project URL
 - `SUPABASE_ANON_KEY` - Supabase public anon key
-- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key (admin ops, user creation/deletion)
-- `COC_API_TOKEN` - Clash of Clans API bearer token (used only in `render-proxy/index.js`)
-- `RENDER_PROXY_URL` - URL of the Render Express proxy (used by Vercel serverless functions)
-- `SYNC_SECRET` - Shared secret for inter-service auth between Vercel and Render
-- `CRON_SECRET` - Secret for Vercel cron job authentication (used in `api/purge-ex-players.js`)
-- `RESEND_API_KEY` - Optional: Resend email API key for welcome emails (used in `api/register-with-coc.js`)
-- `PORT` - Render proxy listen port (defaults to 3000)
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key — usata da render-proxy per scrivere (bypassa RLS) e da Vercel per admin ops
+- `COC_API_TOKEN` - Clash of Clans API bearer token (solo in `render-proxy/index.js`)
+- `RENDER_PROXY_URL` - URL del proxy Render (usato dalle Vercel functions)
+- `SYNC_SECRET` - Segreto condiviso per auth inter-servizio: Vercel ↔ Render + script Python
+- `CRON_SECRET` - Segreto per cron Vercel (usato in `api/purge-ex-players.js`)
+- `RESEND_API_KEY` - Opzionale: Resend API key per email di benvenuto
+- `PORT` - Render proxy listen port (default: 3000)
 
-**Client-side config (committed, not secret):**
-- `supabase-config.js` — hardcodes Supabase project URL and anon key, creates `window.sb` client with `persistSession: false`
+**Client-side config (committata, non segreta):**
+- `supabase-config.js` — hardcoda Supabase URL e anon key, crea `window.sb`
 
 **Build:**
-- `vercel.json` — defines cron schedules (no routing/rewrite rules detected, purely cron config)
+- `vercel.json` — define 3 cron schedules:
+  - `0 6 * * *` → `/api/sync-members`
+  - `0 7 1 * *` → `/api/purge-ex-players`
+  - `0 20 * * *` → `/api/auto-save-wars`
 
 ## Platform Requirements
 
 **Development:**
-- Node.js + npm to install and run `render-proxy/`
-- Python 3 + openpyxl/pandas (inferred) to run bonus import scripts
-- Supabase project with schema applied from `schema*.sql` files
-- Environment variables configured on both platforms
+- Node.js + npm per installare e avviare `render-proxy/`
+- Python 3 + openpyxl per gli script di import bonus
+- Supabase project con schema applicato da `schema-MASTER.sql`
+- Variabili d'ambiente configurate su entrambe le piattaforme
 
 **Production:**
-- Vercel (Hobby plan) — hosts static frontend + serverless API functions in `api/`; limit of 12 functions enforced (see commit log `fdc7225`)
-- Render.com — hosts `render-proxy/index.js` as a persistent Express server with a fixed IP (required for CoC API IP whitelist)
-- Supabase — PostgreSQL database (project ID: `ubgpohirljxmnamuzuqi`)
+- Vercel (Hobby plan) — static frontend + serverless API functions in `api/`
+  - **Limite: 12 functions** — attualmente 12/12 (incluso `admin/users.js`)
+  - Cron jobs: solo frequenza giornaliera (min `0 H * * *`) su Hobby plan
+- Render.com (piano gratuito) — `render-proxy/index.js` come persistent Express server
+  - IP fisso richiesto per whitelist CoC API
+  - Cold start ~30s dopo 15min di inattività
+  - Warm-up: endpoint `/health` + ping giornaliero da `sync-members`
+- Supabase — PostgreSQL database (project: `ubgpohirljxmnamuzuqi`)
 
 ---
 
-*Stack analysis: 2026-03-20*
+*Stack analysis: 2026-03-20 — aggiornato post-fix 16 criticità*
