@@ -1,6 +1,8 @@
 module.exports = async (req, res) => {
     try {
         const proxyUrl = process.env.RENDER_PROXY_URL;
+        // Warm-up del proxy prima della sync (evita cold start per gli utenti)
+        if (proxyUrl) fetch(`${proxyUrl}/health`).catch(() => {});
         if (!proxyUrl) return res.status(500).json({ error: 'RENDER_PROXY_URL non configurata su Vercel.' });
         const clanTag = req.query.clanTag || req.body?.clanTag;
         if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });

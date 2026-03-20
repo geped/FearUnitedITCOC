@@ -23,11 +23,13 @@ ALTER TABLE public.cwl_bonuses ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "auth_members" ON public.members
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY "anon_members" ON public.members
-  FOR ALL TO anon USING (true) WITH CHECK (true);
+-- Anon: solo lettura (ANON_KEY è pubblica nel frontend — nessuna scrittura senza auth)
+CREATE POLICY "anon_members_read" ON public.members
+  FOR SELECT TO anon USING (true);
 
 CREATE POLICY "auth_bonuses" ON public.cwl_bonuses
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-CREATE POLICY "anon_bonuses" ON public.cwl_bonuses
-  FOR ALL TO anon USING (true) WITH CHECK (true);
+-- Anon: solo lettura
+CREATE POLICY "anon_bonuses_read" ON public.cwl_bonuses
+  FOR SELECT TO anon USING (true);

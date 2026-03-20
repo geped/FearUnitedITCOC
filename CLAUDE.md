@@ -105,7 +105,7 @@ SYNC_SECRET
 ## Algoritmo Bonus CWL
 
 ```
-score = (stelle × 100) + destruction% - (attacchi_mancati × 500)
+merit = (stelle / attacchi_richiesti) × 40 + (distruzione_media%) × 0.2 + (attacchi_fatti / attacchi_richiesti) × 20
 ```
 
 - Giocatori che hanno ricevuto il bonus il mese scorso ricevono score = 0 (anti-duplicati)
