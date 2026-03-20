@@ -1,76 +1,117 @@
-# Piattaforma Web Clan CWL
+# CoCBoard — Dashboard Clan Fear United IT
 
-Questo progetto fornisce una dashboard front-end per gestire i membri di un clan Clash of Clans e calcolare i bonus CWL in base alle regole di merito.
+Dashboard web per la gestione del clan Clash of Clans **Fear United IT** (`#2J2VLPP9R`).
 
-## Struttura
+## Stack
 
-- `index.html` - interfaccia utente principale
-- `style.css` - stili base
-- `firebase-config.js` - configurazione Firebase fornita dall'utente
-- `app.js` - logica JavaScript per sincronizzare membri, calcolare punteggi e generare classifiche
+| Layer | Tecnologia |
+|-------|-----------|
+| Frontend | HTML5 / CSS3 / Vanilla JavaScript |
+| Database | Supabase (PostgreSQL + Auth) |
+| API serverless | Vercel (Node.js) |
+| Proxy backend | Render.com (Express) |
+| API esterna | Clash of Clans API v1 |
 
-## Architettura dati (Firestore)
+## Funzionalità principali
 
-Si usano due collezioni:
+- **Sincronizzazione membri** — cron giornaliero che aggiorna il roster dal clan CoC
+- **Calcolo bonus CWL** — formula di merito basata su stelle, distruzione e partecipazione
+- **Storico performance** — storico CWL per stagione con Hall of Fame
+- **War log** — log guerre classiche con dettaglio per giocatore
+- **Classifiche** — ranking bonus e statistiche comparative
+- **Gestione utenti** — CRUD utenti con ruoli (admin, co-capo, anziano, membro, utente)
 
-- `members` - documenti indicizzati per tag (senza #) con informazioni nome, ruolo, `firstSeen` (timestamp di primo rilevamento).
-- `cwl_bonuses` - storico dei bonus assegnati (tag, data, banding)
+## Struttura directory
 
-## Funzionalità
-
-1. **Sincronizzazione live** dei membri tramite l'API ufficiale di Supercell (clan tag `#2J2VLPP9R`, token incluso nel codice). Gli ingressi vengono salvati in Firestore.
-2. **Visualizzazione** della tabella membri, con evidenza (sfondo rosso chiaro) per chi è entrato negli ultimi 7 giorni.
-3. **Generazione classifica bonus** tramite un algoritmo che:
-   - assegna punti per stelle e percentuale di distruzione
-   - penalizza attacchi mancati
-   - azzera punteggio se il giocatore ha già ricevuto bonus il mese precedente
-4. Possibilità di estendere facilmente l'algoritmo con dati reali (war log, performance storica).
-
-## Note di sviluppo
-
-- Il calcolo dei punteggi usa attualmente dati fittizi; è necessario integrare gli endpoint di guerra per raccogliere statistiche reali.
-- Le credenziali sono inserite direttamente per semplicità; in produzione vanno gestite tramite variabili ambiente o Cloud Functions.
-- Per ospitare si può usare Firebase Hosting collegato al progetto `clanmanagercwl`. 
-
-## Prossimi passi possibili
-
-- Implementare l'alert visivo per richieste CWL da nuovi membri.
-- Aggiungere report donate/ricevute.
-- Automatizzare l'inserimento dei bonus e la rotazione storica.
-
-## Backend (Cloud Functions)
-
-Una directory `functions/` contiene un piccolo servizio Node.js per Firebase:
-
-1. **syncMembers** – funzione pianificata (ogni 6 ore) che chiama l'API Supercell e aggiorna la collezione `members`.
-2. **generateBonuses** – endpoint HTTPS/manuale che ricalcola le classifiche, applica penalità rotazione e popola `cwl_bonuses`.
-
-Per avviare l'emulatore locale:
-
-```bash
-cd functions
-npm install
-npm run serve
+```
+├── index.html              # SPA markup
+├── app.js                  # Logica frontend (~4650 righe)
+├── style.css               # Stili (~3224 righe)
+├── supabase-config.js      # Init client Supabase (lato client)
+│
+├── api/                    # Serverless functions Vercel
+│   ├── _utils/
+│   │   ├── proxy-client.js # Helper condiviso per chiamate al proxy
+│   │   └── require-role.js # Middleware autenticazione JWT + ruolo
+│   ├── admin/users.js      # CRUD utenti (solo admin)
+│   ├── sync-members.js     # Cron: sync giornaliero 6:00 UTC
+│   ├── auto-save-wars.js   # Cron: salvataggio guerre 20:00 UTC
+│   ├── purge-ex-players.js # Cron: pulizia ex-membri 1° del mese
+│   ├── generate-bonuses.js # Calcolo e salvataggio bonus CWL
+│   ├── import-bonus.js     # Import bonus da Excel
+│   ├── register-with-coc.js# Registrazione tramite chiave API CoC
+│   ├── lookup.js           # Player/clan lookup e rankings
+│   ├── clan-info.js        # Info clan
+│   ├── clan-members.js     # Lista membri live
+│   ├── cwl-stats.js        # Stats CWL live
+│   └── war-log.js          # Log guerre
+│
+├── render-proxy/
+│   └── index.js            # Proxy Express su Render.com
+│
+├── tests/
+│   ├── bonus-calculator.test.js
+│   └── purge-logic.test.js
+│
+├── schema-MASTER.sql       # Schema Supabase unificato
+└── vercel.json             # Configurazione cron Vercel
 ```
 
-### Inizializzare Firebase nel progetto
+## Algoritmo Bonus CWL
 
-Devi eseguire `firebase init` **dalla cartella di progetto** (`C:\Users\pedro\Desktop\Claude\FearUnitedCoC`), non dalla tua home. Se lo lanci da un livello superiore vedrai il messaggio "You're about to initialize a Firebase project in this directory: C:\Users\pedro".
+```
+merit = (stelle / attacchi_richiesti) × 40
+      + (distruzione_media%) × 0.2
+      + (attacchi_fatti / attacchi_richiesti) × 20
+```
 
-Quando ti vengono chieste le funzionalità, seleziona almeno:
+- Chi ha ricevuto il bonus il mese scorso ottiene score = 0 (anti-duplicati)
+- Il calcolo può essere automatico o con override manuale
 
-- **Functions** (per le Cloud Functions già presenti)
-- **Firestore** (se vuoi emulare o impostare regole/index)
-- **Emulators** (puoi includere Firestore e Functions nell'emulatore)
+## Setup ambiente
 
-Usando la barra spazio e Invio per confermare.
+### Variabili d'ambiente richieste
 
-Dopo l'inizializzazione avrai un `firebase.json` e una sottocartella `functions` configurata.
+**Vercel:**
+```
+SUPABASE_URL
+SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+RENDER_PROXY_URL
+SYNC_SECRET
+CRON_SECRET
+RESEND_API_KEY        # opzionale
+```
 
-Per il deploy reale serve la CLI Firebase (`firebase login` + `firebase deploy --only functions`).
+**Render.com:**
+```
+SUPABASE_URL
+SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
+COC_API_TOKEN
+SYNC_SECRET
+PORT
+```
 
-Puoi invocare `generateBonuses` via chiamata HTTP (o pianificarla con un altro trigger se desiderato).
+### Database
 
----
+Applicare `schema-MASTER.sql` nel Supabase SQL Editor per creare tutte le tabelle e policy RLS nell'ordine corretto.
 
-Questa base consente ai sistemi automatizzati di generare l'intero stack front-end e back-end; la logica umana si concentra solo sulle regole di merito e sulla configurazione dei database.
+### Deploy
+
+```bash
+# Frontend + API Vercel
+vercel --prod --yes
+
+# Test
+npm test
+```
+
+Il proxy Render.com viene deployato separatamente tramite la sua dashboard o con push su git.
+
+## Note
+
+- Vercel Hobby plan: limite di **12 serverless functions** (attualmente al limite)
+- Vercel Hobby plan: cron jobs solo con frequenza giornaliera
+- Il proxy Render.com è necessario perché la CoC API non supporta chiamate dirette dal browser (CORS + token segreto)
+- `api/_utils/` contiene moduli condivisi e non conta nel limite delle 12 functions
