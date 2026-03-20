@@ -161,3 +161,80 @@ test('completezza: ogni item in HERO_EQUIPMENT_MAP ha entry in UNIT_COC_SLUG', (
     `Item in HERO_EQUIPMENT_MAP senza entry in UNIT_COC_SLUG: ${missing.join(', ')}`
   );
 });
+
+// ── Test EQUIP-03: Fallback SVG neutro ───────────────────────────────────────
+
+test('EQUIP-03: fallback equipment usa SVG neutro, non colored-initial', () => {
+  // Funzione locale unitCardHtml TARGET (post-fix) — usa SVG placeholder neutro
+  function unitCardHtml(u) {
+    const nameIt = u.name;
+    const imgUrl = `https://coc.guide/static/imgs/equipment/${u.name.toLowerCase().replace(/\s+/g, '-')}.png`;
+    const lvl = u.level ?? 0;
+    const maxLvl = u.maxLevel ?? 0;
+    const isMax = maxLvl > 0 && lvl >= maxLvl;
+    const isLocked = lvl === 0;
+    return `<div class="profilo-unit-card${isMax ? ' profilo-unit-max' : ''}${isLocked ? ' profilo-unit-locked' : ''}" title="${nameIt}">
+      <div class="profilo-unit-img-wrap">
+        <img src="${imgUrl}" alt="${nameIt}" class="profilo-unit-img" loading="lazy"
+          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="profilo-unit-fallback profilo-unit-fallback--neutral" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 3l-1.9 5.8H4.2l4.8 3.5-1.8 5.7L12 14.5l4.8 3.5-1.8-5.7 4.8-3.5h-5.9z"/>
+          </svg>
+        </div>
+        ${!isLocked ? `<span class="unit-lv-badge${isMax ? ' unit-lv-badge--max' : ''}">${lvl}</span>` : ''}
+      </div>
+    </div>`;
+  }
+
+  const html = unitCardHtml({ name: 'Fake Equipment Item', level: 5, maxLevel: 10 });
+  assert.ok(html.includes('svg'), 'Il fallback deve contenere un tag svg');
+  assert.ok(html.includes('profilo-unit-fallback--neutral'), 'Il fallback deve avere la classe --neutral');
+  assert.ok(!html.includes('_unitFallbackColor'), 'Il fallback non deve usare _unitFallbackColor');
+  assert.ok(!html.includes('fbColor'), 'Il template non deve contenere fbColor');
+});
+
+// ── Test ARCH-01: getAssetUrl URL CDN ────────────────────────────────────────
+
+test('ARCH-01: getAssetUrl produce URL CDN corretti per item mappati', () => {
+  const SLUG_SUBSET = {
+    'Barbarian Puppet': { c: 'equipment', s: 'barbarian-puppet' },
+    'Battle Drill':     { c: 'troop',     s: 'battle-drill' },
+  };
+  function getAssetUrl(name, category) {
+    if (SLUG_SUBSET[name]) {
+      const { c, s } = SLUG_SUBSET[name];
+      return `https://coc.guide/static/imgs/${c}/${s}.png`;
+    }
+    const CAT = { heroes: 'hero', troops: 'troop', spells: 'spell', pets: 'pet', equipment: 'equipment' };
+    const cat = CAT[category] || category || 'troop';
+    const slug = name.toLowerCase().replace(/['.()]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-');
+    return `https://coc.guide/static/imgs/${cat}/${slug}.png`;
+  }
+
+  assert.equal(
+    getAssetUrl('Barbarian Puppet', 'equipment'),
+    'https://coc.guide/static/imgs/equipment/barbarian-puppet.png',
+    'Barbarian Puppet deve generare URL equipment corretto'
+  );
+  assert.equal(
+    getAssetUrl('Battle Drill', 'troops'),
+    'https://coc.guide/static/imgs/troop/battle-drill.png',
+    'Battle Drill deve generare URL troop (non troops) corretto'
+  );
+});
+
+test('ARCH-01b: getAssetUrl auto-genera slug per item non mappati', () => {
+  function getAssetUrl(name, category) {
+    const CAT = { heroes: 'hero', troops: 'troop', spells: 'spell', pets: 'pet', equipment: 'equipment' };
+    const cat = CAT[category] || category || 'troop';
+    const slug = name.toLowerCase().replace(/['.()]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-');
+    return `https://coc.guide/static/imgs/${cat}/${slug}.png`;
+  }
+
+  assert.equal(
+    getAssetUrl('Some New Troop', 'troops'),
+    'https://coc.guide/static/imgs/troop/some-new-troop.png',
+    'Auto-slug deve generare URL corretto per item non mappati'
+  );
+});

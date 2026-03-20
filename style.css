@@ -3053,6 +3053,16 @@ tbody tr:last-child td { border-bottom: none; }
     color: rgba(255,255,255,0.9);
     font-weight: 700;
 }
+.profilo-unit-fallback--neutral {
+  background: transparent !important;
+  color: #8e99a4;
+  align-items: center;
+  justify-content: center;
+}
+.profilo-unit-fallback--neutral svg {
+  width: 60%;
+  height: 60%;
+}
 .profilo-unit-name {
     font-size: 0.68rem;
     font-weight: 600;

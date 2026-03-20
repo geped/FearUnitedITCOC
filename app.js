@@ -3754,7 +3754,7 @@ const UNIT_NAME_IT = {
 
 function _unitNameIt(name) { return UNIT_NAME_IT[name] || name; }
 
-function _unitCdnUrl(name, category) {
+function getAssetUrl(name, category) {
   if (UNIT_COC_SLUG[name]) {
     const {c, s} = UNIT_COC_SLUG[name];
     return `https://coc.guide/static/imgs/${c}/${s}.png`;
@@ -3766,6 +3766,7 @@ function _unitCdnUrl(name, category) {
   return `https://coc.guide/static/imgs/${cat}/${slug}.png`;
 }
 
+// TODO: rimuovere se non usata altrove
 function _unitFallbackColor(name) {
   let h = 0;
   for (const c of (name||'')) h = ((h<<5)-h)+c.charCodeAt(0);
@@ -3831,18 +3832,20 @@ function _renderEquipmentGrouped(containerId, equipment) {
 
   function unitCardHtml(u) {
     const nameIt  = _unitNameIt(u.name);
-    const imgUrl  = _unitCdnUrl(u.name, 'equipment');
+    const imgUrl  = getAssetUrl(u.name, 'equipment');
     const lvl     = u.level ?? 0;
     const maxLvl  = u.maxLevel ?? 0;
     const isMax   = maxLvl > 0 && lvl >= maxLvl;
     const isLocked= lvl === 0;
-    const fbColor = _unitFallbackColor(u.name);
-    const fbInit  = (u.name||'?')[0].toUpperCase();
     return `<div class="profilo-unit-card${isMax?' profilo-unit-max':''}${isLocked?' profilo-unit-locked':''}" title="${nameIt}">
       <div class="profilo-unit-img-wrap">
         <img src="${imgUrl}" alt="${nameIt}" class="profilo-unit-img" loading="lazy"
           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-        <div class="profilo-unit-fallback" style="display:none;background:${fbColor}">${fbInit}</div>
+        <div class="profilo-unit-fallback profilo-unit-fallback--neutral" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 3l-1.9 5.8H4.2l4.8 3.5-1.8 5.7L12 14.5l4.8 3.5-1.8-5.7 4.8-3.5h-5.9z"/>
+          </svg>
+        </div>
         ${!isLocked ? `<span class="unit-lv-badge${isMax?' unit-lv-badge--max':''}">${lvl}</span>` : ''}
       </div>
     </div>`;
@@ -3870,18 +3873,20 @@ function _renderUnits(containerId, units, cdnCategory) {
   }
   el.innerHTML = units.map(u => {
     const nameIt  = _unitNameIt(u.name);
-    const imgUrl  = _unitCdnUrl(u.name, cdnCategory);
+    const imgUrl  = getAssetUrl(u.name, cdnCategory);
     const lvl     = u.level ?? 0;
     const maxLvl  = u.maxLevel ?? 0;
     const isMax   = maxLvl > 0 && lvl >= maxLvl;
     const isLocked= lvl === 0;
-    const fbColor = _unitFallbackColor(u.name);
-    const fbInit  = (u.name||'?')[0].toUpperCase();
     return `<div class="profilo-unit-card${isMax?' profilo-unit-max':''}${isLocked?' profilo-unit-locked':''}" title="${nameIt}">
       <div class="profilo-unit-img-wrap">
         <img src="${imgUrl}" alt="${nameIt}" class="profilo-unit-img" loading="lazy"
           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-        <div class="profilo-unit-fallback" style="display:none;background:${fbColor}">${fbInit}</div>
+        <div class="profilo-unit-fallback profilo-unit-fallback--neutral" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 3l-1.9 5.8H4.2l4.8 3.5-1.8 5.7L12 14.5l4.8 3.5-1.8-5.7 4.8-3.5h-5.9z"/>
+          </svg>
+        </div>
         ${!isLocked ? `<span class="unit-lv-badge${isMax?' unit-lv-badge--max':''}">${lvl}</span>` : ''}
       </div>
     </div>`;
