@@ -1,0 +1,505 @@
+{
+  "statistics": {
+    "detectionDate": "2026-03-20T11:20:33.850Z",
+    "formats": {
+      "javascript": {
+        "sources": {
+          "api/admin/users.js": {
+            "lines": 63,
+            "tokens": 940,
+            "sources": 1,
+            "clones": 1,
+            "duplicatedLines": 7,
+            "duplicatedTokens": 91,
+            "percentage": 11.11,
+            "percentageTokens": 9.68,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "api/war-log.js": {
+            "lines": 15,
+            "tokens": 260,
+            "sources": 1,
+            "clones": 4,
+            "duplicatedLines": 27,
+            "duplicatedTokens": 513,
+            "percentage": 180,
+            "percentageTokens": 197.31,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "api/sync-members.js": {
+            "lines": 16,
+            "tokens": 277,
+            "sources": 1,
+            "clones": 2,
+            "duplicatedLines": 13,
+            "duplicatedTokens": 191,
+            "percentage": 81.25,
+            "percentageTokens": 68.95,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "api/register-with-coc.js": {
+            "lines": 140,
+            "tokens": 1292,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "api/purge-ex-players.js": {
+            "lines": 136,
+            "tokens": 1354,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "api/lookup.js": {
+            "lines": 30,
+            "tokens": 493,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "api/import-bonus.js": {
+            "lines": 23,
+            "tokens": 326,
+            "sources": 1,
+            "clones": 1,
+            "duplicatedLines": 7,
+            "duplicatedTokens": 91,
+            "percentage": 30.43,
+            "percentageTokens": 27.91,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "api/generate-bonuses.js": {
+            "lines": 42,
+            "tokens": 663,
+            "sources": 1,
+            "clones": 0,
+            "duplicatedLines": 0,
+            "duplicatedTokens": 0,
+            "percentage": 0,
+            "percentageTokens": 0,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "api/cwl-stats.js": {
+            "lines": 15,
+            "tokens": 259,
+            "sources": 1,
+            "clones": 3,
+            "duplicatedLines": 23,
+            "duplicatedTokens": 377,
+            "percentage": 153.33,
+            "percentageTokens": 145.56,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "api/clan-members.js": {
+            "lines": 15,
+            "tokens": 259,
+            "sources": 1,
+            "clones": 2,
+            "duplicatedLines": 15,
+            "duplicatedTokens": 258,
+            "percentage": 100,
+            "percentageTokens": 99.61,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "api/clan-info.js": {
+            "lines": 15,
+            "tokens": 260,
+            "sources": 1,
+            "clones": 2,
+            "duplicatedLines": 15,
+            "duplicatedTokens": 259,
+            "percentage": 100,
+            "percentageTokens": 99.62,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          },
+          "api/auto-save-wars.js": {
+            "lines": 25,
+            "tokens": 405,
+            "sources": 1,
+            "clones": 3,
+            "duplicatedLines": 17,
+            "duplicatedTokens": 234,
+            "percentage": 68,
+            "percentageTokens": 57.78,
+            "newDuplicatedLines": 0,
+            "newClones": 0
+          }
+        },
+        "total": {
+          "lines": 535,
+          "tokens": 6788,
+          "sources": 12,
+          "clones": 9,
+          "duplicatedLines": 62,
+          "duplicatedTokens": 1007,
+          "percentage": 11.59,
+          "percentageTokens": 14.84,
+          "newDuplicatedLines": 0,
+          "newClones": 0
+        }
+      }
+    },
+    "total": {
+      "lines": 535,
+      "tokens": 6788,
+      "sources": 12,
+      "clones": 9,
+      "duplicatedLines": 62,
+      "duplicatedTokens": 1007,
+      "percentage": 11.59,
+      "percentageTokens": 14.84,
+      "newDuplicatedLines": 0,
+      "newClones": 0
+    }
+  },
+  "duplicates": [
+    {
+      "format": "javascript",
+      "lines": 8,
+      "fragment": "const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;\n    if (!serviceKey) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY non configurata.' });\n\n    const supabase = createClient(process.env.SUPABASE_URL, serviceKey, {\n        auth: { autoRefreshToken: false, persistSession: false }\n    });\n\n    const",
+      "tokens": 0,
+      "firstFile": {
+        "name": "api\\import-bonus.js",
+        "start": 7,
+        "end": 14,
+        "startLoc": {
+          "line": 7,
+          "column": 5,
+          "position": 76
+        },
+        "endLoc": {
+          "line": 14,
+          "column": 6,
+          "position": 167
+        }
+      },
+      "secondFile": {
+        "name": "api\\admin\\users.js",
+        "start": 4,
+        "end": 11,
+        "startLoc": {
+          "line": 4,
+          "column": 5,
+          "position": 37
+        },
+        "endLoc": {
+          "line": 11,
+          "column": 22,
+          "position": 128
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 7,
+      "fragment": "module.exports = async (req, res) => {\n    try {\n        const proxyUrl = process.env.RENDER_PROXY_URL;\n        if (!proxyUrl) return res.status(500).json({ error: 'RENDER_PROXY_URL non configurata.' });\n        const clanTag = req.query.clanTag;\n        if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });\n        const response = await fetch(`${proxyUrl}/cwl-live?clanTag=",
+      "tokens": 0,
+      "firstFile": {
+        "name": "api\\cwl-stats.js",
+        "start": 1,
+        "end": 7,
+        "startLoc": {
+          "line": 1,
+          "column": 1,
+          "position": 0
+        },
+        "endLoc": {
+          "line": 7,
+          "column": 19,
+          "position": 127
+        }
+      },
+      "secondFile": {
+        "name": "api\\war-log.js",
+        "start": 1,
+        "end": 7,
+        "startLoc": {
+          "line": 1,
+          "column": 1,
+          "position": 0
+        },
+        "endLoc": {
+          "line": 7,
+          "column": 18,
+          "position": 127
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 9,
+      "fragment": "headers: { 'x-sync-key': process.env.SYNC_SECRET || '' }\n        });\n        const data = await response.json();\n        if (!response.ok) throw new Error(data.error || 'Errore proxy');\n        res.status(200).json(data);\n    } catch (err) {\n        res.status(500).json({ error: err.message });\n    }\n};",
+      "tokens": 0,
+      "firstFile": {
+        "name": "api\\cwl-stats.js",
+        "start": 8,
+        "end": 16,
+        "startLoc": {
+          "line": 8,
+          "column": 13,
+          "position": 140
+        },
+        "endLoc": {
+          "line": 16,
+          "column": 2,
+          "position": 259
+        }
+      },
+      "secondFile": {
+        "name": "api\\sync-members.js",
+        "start": 9,
+        "end": 17,
+        "startLoc": {
+          "line": 9,
+          "column": 2,
+          "position": 157
+        },
+        "endLoc": {
+          "line": 17,
+          "column": 2,
+          "position": 277
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 7,
+      "fragment": "module.exports = async (req, res) => {\n    try {\n        const proxyUrl = process.env.RENDER_PROXY_URL;\n        if (!proxyUrl) return res.status(500).json({ error: 'RENDER_PROXY_URL non configurata.' });\n        const clanTag = req.query.clanTag;\n        if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });\n        const response = await fetch(`${proxyUrl}/clan-members?clanTag=",
+      "tokens": 0,
+      "firstFile": {
+        "name": "api\\clan-members.js",
+        "start": 1,
+        "end": 7,
+        "startLoc": {
+          "line": 1,
+          "column": 1,
+          "position": 0
+        },
+        "endLoc": {
+          "line": 7,
+          "column": 23,
+          "position": 127
+        }
+      },
+      "secondFile": {
+        "name": "api\\war-log.js",
+        "start": 1,
+        "end": 7,
+        "startLoc": {
+          "line": 1,
+          "column": 1,
+          "position": 0
+        },
+        "endLoc": {
+          "line": 7,
+          "column": 18,
+          "position": 127
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 10,
+      "fragment": "${encodeURIComponent(clanTag)}`, {\n            headers: { 'x-sync-key': process.env.SYNC_SECRET || '' }\n        });\n        const data = await response.json();\n        if (!response.ok) throw new Error(data.error || 'Errore proxy');\n        res.status(200).json(data);\n    } catch (err) {\n        res.status(500).json({ error: err.message });\n    }\n};",
+      "tokens": 0,
+      "firstFile": {
+        "name": "api\\clan-members.js",
+        "start": 7,
+        "end": 16,
+        "startLoc": {
+          "line": 7,
+          "column": 23,
+          "position": 128
+        },
+        "endLoc": {
+          "line": 16,
+          "column": 2,
+          "position": 259
+        }
+      },
+      "secondFile": {
+        "name": "api\\cwl-stats.js",
+        "start": 7,
+        "end": 17,
+        "startLoc": {
+          "line": 7,
+          "column": 19,
+          "position": 128
+        },
+        "endLoc": {
+          "line": 17,
+          "column": 2,
+          "position": 277
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 7,
+      "fragment": "module.exports = async (req, res) => {\n    try {\n        const proxyUrl = process.env.RENDER_PROXY_URL;\n        if (!proxyUrl) return res.status(500).json({ error: 'RENDER_PROXY_URL non configurata.' });\n        const clanTag = req.query.clanTag;\n        if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });\n        const response = await fetch(`${proxyUrl}/clan-info?clanTag=",
+      "tokens": 0,
+      "firstFile": {
+        "name": "api\\clan-info.js",
+        "start": 1,
+        "end": 7,
+        "startLoc": {
+          "line": 1,
+          "column": 1,
+          "position": 0
+        },
+        "endLoc": {
+          "line": 7,
+          "column": 20,
+          "position": 127
+        }
+      },
+      "secondFile": {
+        "name": "api\\war-log.js",
+        "start": 1,
+        "end": 7,
+        "startLoc": {
+          "line": 1,
+          "column": 1,
+          "position": 0
+        },
+        "endLoc": {
+          "line": 7,
+          "column": 18,
+          "position": 127
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 10,
+      "fragment": "${encodeURIComponent(clanTag)}`, {\n            headers: { 'x-sync-key': process.env.SYNC_SECRET || '' }\n        });\n        const data = await response.json();\n        if (!response.ok) return res.status(response.status).json(data);\n        res.status(200).json(data);\n    } catch (err) {\n        res.status(500).json({ error: err.message });\n    }\n};",
+      "tokens": 0,
+      "firstFile": {
+        "name": "api\\clan-info.js",
+        "start": 7,
+        "end": 16,
+        "startLoc": {
+          "line": 7,
+          "column": 20,
+          "position": 128
+        },
+        "endLoc": {
+          "line": 16,
+          "column": 2,
+          "position": 260
+        }
+      },
+      "secondFile": {
+        "name": "api\\war-log.js",
+        "start": 7,
+        "end": 16,
+        "startLoc": {
+          "line": 7,
+          "column": 18,
+          "position": 128
+        },
+        "endLoc": {
+          "line": 16,
+          "column": 2,
+          "position": 260
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 7,
+      "fragment": ", {\n            method: 'POST',\n            headers: { 'x-sync-key': process.env.SYNC_SECRET || '' },\n        });\n        const data = await r.json();\n        if (!r.ok) throw new Error(data.error || 'Errore proxy');\n        res",
+      "tokens": 0,
+      "firstFile": {
+        "name": "api\\auto-save-wars.js",
+        "start": 16,
+        "end": 22,
+        "startLoc": {
+          "line": 16,
+          "column": 16,
+          "position": 273
+        },
+        "endLoc": {
+          "line": 22,
+          "column": 4,
+          "position": 354
+        }
+      },
+      "secondFile": {
+        "name": "api\\auto-save-wars.js",
+        "start": 8,
+        "end": 14,
+        "startLoc": {
+          "line": 8,
+          "column": 2,
+          "position": 158
+        },
+        "endLoc": {
+          "line": 14,
+          "column": 7,
+          "position": 239
+        }
+      }
+    },
+    {
+      "format": "javascript",
+      "lines": 6,
+      "fragment": ".ok) throw new Error(data.error || 'Errore proxy');\n        res.status(200).json(data);\n    } catch (err) {\n        res.status(500).json({ error: err.message });\n    }\n};",
+      "tokens": 0,
+      "firstFile": {
+        "name": "api\\auto-save-wars.js",
+        "start": 21,
+        "end": 26,
+        "startLoc": {
+          "line": 21,
+          "column": 2,
+          "position": 333
+        },
+        "endLoc": {
+          "line": 26,
+          "column": 2,
+          "position": 405
+        }
+      },
+      "secondFile": {
+        "name": "api\\sync-members.js",
+        "start": 12,
+        "end": 17,
+        "startLoc": {
+          "line": 12,
+          "column": 9,
+          "position": 205
+        },
+        "endLoc": {
+          "line": 17,
+          "column": 2,
+          "position": 277
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .agent/hooks/gsd-check-update.js"
+          }
+        ]
+      }
+    ],
+    "AfterTool": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .agent/hooks/gsd-context-monitor.js"
+          }
+        ]
+      }
+    ]
+  }
+}

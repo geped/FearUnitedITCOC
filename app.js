@@ -525,7 +525,7 @@ function activateTab(tabId) {
   const titleEl = document.getElementById('topbar-title');
   if (titleEl) titleEl.textContent = TAB_TITLES[tabId] || tabId;
   if (tabId === 'admin') loadUsers();
-  if (tabId === 'warlog') { fetch('/api/keep-alive').catch(() => {}); setTimeout(loadWarLog, 80); }
+  if (tabId === 'warlog') setTimeout(loadWarLog, 80);
   if (tabId === 'cwl') setTimeout(loadAssignBonus, 80);
   if (tabId === 'profilo') setTimeout(loadProfile, 80);
   if (tabId === 'rankings') { setTimeout(loadRankings, 80); setTimeout(renderFavoriti, 80); }

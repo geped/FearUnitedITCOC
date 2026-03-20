@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:developer.clashofclans.com)",
+      "WebFetch(domain:cocpy.readthedocs.io)",
+      "Bash(grep -r warleagues . --include=*.js --include=*.json)",
+      "WebFetch(domain:static.wikia.nocookie.net)",
+      "WebFetch(domain:www.google.com)",
+      "WebFetch(domain:clashofclans.fandom.com)",
+      "WebFetch(domain:www.clashofstats.com)",
+      "WebFetch(domain:clashofstats.com)",
+      "WebFetch(domain:webcache.googleusercontent.com)",
+      "WebFetch(domain:web.archive.org)",
+      "WebFetch(domain:consent.googleusercontent.com)",
+      "Bash(curl --version)",
+      "Bash(curl -sL --ssl-no-revoke \"https://api-assets.clashofclans.com/warleagues/64/48000021.png\" -o \"C:/Users/pedro/Desktop/Claude/FearUnitedCoC/leagues/Leggenda.png\")",
+      "WebFetch(domain:brawlertobi.com)",
+      "WebFetch(domain:clashspot.net)",
+      "WebFetch(domain:lordsclashofclans.wordpress.com)",
+      "WebFetch(domain:brawlace.com)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(curl -kL -o \"Skeleton.png\" \"https://clashofclans.fandom.com/wiki/Special:FilePath/Skeleton_League.png\" -w \"\\\\nHTTP %{http_code} size:%{size_download}\\\\n\")",
+      "Bash(curl -kL -A \"Mozilla/5.0 \\(Windows NT 10.0; Win64; x64\\) AppleWebKit/537.36\" -o \"Skeleton.png\" \"https://static.wikia.nocookie.net/clashofclans/images/8/83/Skeleton_League.png\" -w \"\\\\nHTTP %{http_code} size:%{size_download}\\\\n\")",
+      "Bash(vercel --version)",
+      "Bash(vercel deploy:*)",
+      "WebSearch",
+      "WebFetch(domain:www.allclash.com)",
+      "WebFetch(domain:gameboost.com)",
+      "WebFetch(domain:www.clashwithhide.com)",
+      "WebFetch(domain:houseofclashers.com)",
+      "WebFetch(domain:www.ldplayer.net)",
+      "WebFetch(domain:iocmkt.com)",
+      "WebFetch(domain:cocbasedrop.com)",
+      "Bash(npx miniverse:*)",
+      "Bash(node_modules/.bin/miniverse --help)"
+    ]
+  }
+}

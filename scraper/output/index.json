@@ -1,0 +1,3084 @@
+{
+  "Town Hall": [
+    {
+      "level": 1,
+      "image_path": "town_hall\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "town_hall\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "town_hall\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "town_hall\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "town_hall\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "town_hall\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "town_hall\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "town_hall\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "town_hall\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "town_hall\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "town_hall\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "town_hall\\level_12.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "town_hall\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "town_hall\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "town_hall\\level_15.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "town_hall\\level_16.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "town_hall\\level_17.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 18,
+      "image_path": "town_hall\\level_18.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 19,
+      "image_path": "town_hall\\level_19.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 20,
+      "image_path": "town_hall\\level_20.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Cannon": [
+    {
+      "level": 1,
+      "image_path": "cannon\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "cannon\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "cannon\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "cannon\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "cannon\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "cannon\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "cannon\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "cannon\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "cannon\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "cannon\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "cannon\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "cannon\\level_12.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "cannon\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "cannon\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "cannon\\level_15.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "cannon\\level_16.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "cannon\\level_17.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 18,
+      "image_path": "cannon\\level_18.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 19,
+      "image_path": "cannon\\level_19.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 20,
+      "image_path": "cannon\\level_20.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Archer Tower": [
+    {
+      "level": 1,
+      "image_path": "archer_tower\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "archer_tower\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "archer_tower\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "archer_tower\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "archer_tower\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "archer_tower\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "archer_tower\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "archer_tower\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "archer_tower\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "archer_tower\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "archer_tower\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "archer_tower\\level_12.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "archer_tower\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "archer_tower\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "archer_tower\\level_15.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "archer_tower\\level_16.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "archer_tower\\level_17.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 18,
+      "image_path": "archer_tower\\level_18.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 19,
+      "image_path": "archer_tower\\level_19.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 20,
+      "image_path": "archer_tower\\level_20.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Mortar": [
+    {
+      "level": 1,
+      "image_path": "mortar\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "mortar\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "mortar\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "mortar\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "mortar\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "mortar\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "mortar\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "mortar\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "mortar\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "mortar\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "mortar\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "mortar\\level_12.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "mortar\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "mortar\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "mortar\\level_15.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "mortar\\level_16.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "mortar\\level_17.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 18,
+      "image_path": "mortar\\level_18.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 19,
+      "image_path": "mortar\\level_19.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 20,
+      "image_path": "mortar\\level_20.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Air Defense": [
+    {
+      "level": 1,
+      "image_path": "air_defense\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "air_defense\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "air_defense\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "air_defense\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "air_defense\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "air_defense\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "air_defense\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "air_defense\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "air_defense\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "air_defense\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "air_defense\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "air_defense\\level_12.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "air_defense\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "air_defense\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "air_defense\\level_15.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "air_defense\\level_16.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "air_defense\\level_17.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 18,
+      "image_path": "air_defense\\level_18.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 19,
+      "image_path": "air_defense\\level_19.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 20,
+      "image_path": "air_defense\\level_20.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Wizard Tower": [
+    {
+      "level": 1,
+      "image_path": "wizard_tower\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "wizard_tower\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "wizard_tower\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "wizard_tower\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "wizard_tower\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "wizard_tower\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "wizard_tower\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "wizard_tower\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "wizard_tower\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "wizard_tower\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "wizard_tower\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "wizard_tower\\level_12.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "wizard_tower\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "wizard_tower\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "wizard_tower\\level_15.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "wizard_tower\\level_16.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "wizard_tower\\level_17.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 18,
+      "image_path": "wizard_tower\\level_18.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 19,
+      "image_path": "wizard_tower\\level_19.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 20,
+      "image_path": "wizard_tower\\level_20.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Air Sweeper": [
+    {
+      "level": 1,
+      "image_path": "air_sweeper\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "air_sweeper\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "air_sweeper\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "air_sweeper\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "air_sweeper\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "air_sweeper\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "air_sweeper\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "air_sweeper\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "air_sweeper\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "air_sweeper\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "air_sweeper\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "X-Bow": [
+    {
+      "level": 1,
+      "image_path": "x-bow\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "x-bow\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "x-bow\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "x-bow\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "x-bow\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "x-bow\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "x-bow\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "x-bow\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "x-bow\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "x-bow\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "x-bow\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "x-bow\\level_12.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "x-bow\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "x-bow\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "x-bow\\level_15.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "x-bow\\level_16.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "x-bow\\level_17.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 18,
+      "image_path": "x-bow\\level_18.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 19,
+      "image_path": "x-bow\\level_19.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Inferno Tower": [
+    {
+      "level": 1,
+      "image_path": "inferno_tower\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "inferno_tower\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "inferno_tower\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "inferno_tower\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "inferno_tower\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "inferno_tower\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "inferno_tower\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "inferno_tower\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "inferno_tower\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "inferno_tower\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "inferno_tower\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "inferno_tower\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "inferno_tower\\level_15.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "inferno_tower\\level_16.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "inferno_tower\\level_17.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "inferno_tower\\level_18.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "inferno_tower\\level_19.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 18,
+      "image_path": "inferno_tower\\level_20.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Eagle Artillery": [
+    {
+      "level": 1,
+      "image_path": "eagle_artillery\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "eagle_artillery\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "eagle_artillery\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "eagle_artillery\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "eagle_artillery\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "eagle_artillery\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "eagle_artillery\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "eagle_artillery\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "eagle_artillery\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "eagle_artillery\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "eagle_artillery\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "eagle_artillery\\level_12.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "eagle_artillery\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "eagle_artillery\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "eagle_artillery\\level_15.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "eagle_artillery\\level_16.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "eagle_artillery\\level_17.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 18,
+      "image_path": "eagle_artillery\\level_18.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 19,
+      "image_path": "eagle_artillery\\level_19.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 20,
+      "image_path": "eagle_artillery\\level_20.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Scattershot": [
+    {
+      "level": 1,
+      "image_path": "scattershot\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "scattershot\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "scattershot\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "scattershot\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "scattershot\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "scattershot\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "scattershot\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "scattershot\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "scattershot\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "scattershot\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "scattershot\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "scattershot\\level_12.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "scattershot\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "scattershot\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Gold Mine": [
+    {
+      "level": 1,
+      "image_path": "gold_mine\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "gold_mine\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "gold_mine\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "gold_mine\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "gold_mine\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "gold_mine\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "gold_mine\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "gold_mine\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "gold_mine\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "gold_mine\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "gold_mine\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "gold_mine\\level_12.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "gold_mine\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "gold_mine\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "gold_mine\\level_15.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "gold_mine\\level_16.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "gold_mine\\level_17.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 18,
+      "image_path": "gold_mine\\level_18.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 19,
+      "image_path": "gold_mine\\level_19.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 20,
+      "image_path": "gold_mine\\level_20.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Elixir Collector": [
+    {
+      "level": 1,
+      "image_path": "elixir_collector\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "elixir_collector\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "elixir_collector\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "elixir_collector\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "elixir_collector\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "elixir_collector\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "elixir_collector\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "elixir_collector\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "elixir_collector\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "elixir_collector\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "elixir_collector\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "elixir_collector\\level_12.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "elixir_collector\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "elixir_collector\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "elixir_collector\\level_15.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "elixir_collector\\level_16.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "elixir_collector\\level_17.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 18,
+      "image_path": "elixir_collector\\level_18.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 19,
+      "image_path": "elixir_collector\\level_19.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 20,
+      "image_path": "elixir_collector\\level_20.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Dark Elixir Drill": [
+    {
+      "level": 1,
+      "image_path": "dark_elixir_drill\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "dark_elixir_drill\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "dark_elixir_drill\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "dark_elixir_drill\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "dark_elixir_drill\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "dark_elixir_drill\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "dark_elixir_drill\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "dark_elixir_drill\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "dark_elixir_drill\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "dark_elixir_drill\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "dark_elixir_drill\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "dark_elixir_drill\\level_12.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "dark_elixir_drill\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "dark_elixir_drill\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "dark_elixir_drill\\level_15.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "dark_elixir_drill\\level_16.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Gold Storage": [
+    {
+      "level": 1,
+      "image_path": "gold_storage\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "gold_storage\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "gold_storage\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "gold_storage\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "gold_storage\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "gold_storage\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "gold_storage\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "gold_storage\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "gold_storage\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "gold_storage\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "gold_storage\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "gold_storage\\level_12.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "gold_storage\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "gold_storage\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "gold_storage\\level_15.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "gold_storage\\level_16.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "gold_storage\\level_17.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 18,
+      "image_path": "gold_storage\\level_18.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 19,
+      "image_path": "gold_storage\\level_19.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 20,
+      "image_path": "gold_storage\\level_20.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Elixir Storage": [
+    {
+      "level": 1,
+      "image_path": "elixir_storage\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "elixir_storage\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "elixir_storage\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "elixir_storage\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "elixir_storage\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "elixir_storage\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "elixir_storage\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "elixir_storage\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "elixir_storage\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "elixir_storage\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "elixir_storage\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "elixir_storage\\level_12.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "elixir_storage\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "elixir_storage\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "elixir_storage\\level_15.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "elixir_storage\\level_16.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Dark Elixir Storage": [
+    {
+      "level": 1,
+      "image_path": "dark_elixir_storage\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "dark_elixir_storage\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "dark_elixir_storage\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "dark_elixir_storage\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "dark_elixir_storage\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "dark_elixir_storage\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "dark_elixir_storage\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "dark_elixir_storage\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "dark_elixir_storage\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "dark_elixir_storage\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "dark_elixir_storage\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "dark_elixir_storage\\level_12.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "dark_elixir_storage\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "dark_elixir_storage\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "dark_elixir_storage\\level_15.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Clan Castle": [
+    {
+      "level": 1,
+      "image_path": "clan_castle\\level_01.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "clan_castle\\level_02.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "clan_castle\\level_03.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "clan_castle\\level_04.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "clan_castle\\level_05.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "clan_castle\\level_06.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "clan_castle\\level_07.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "clan_castle\\level_08.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "clan_castle\\level_09.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "clan_castle\\level_10.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "clan_castle\\level_11.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "clan_castle\\level_12.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "clan_castle\\level_13.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "clan_castle\\level_14.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "clan_castle\\level_15.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "clan_castle\\level_16.png",
+      "image_url": "",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "clan_castle\\level_17.png",
+      "image_url": "",
+      "stats": {}
+    }
+  ],
+  "Barracks": [
+    {
+      "level": 1,
+      "image_path": "barracks\\level_01.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/2/2c/Barracks1.png/revision/latest?cb=20230105080228",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "barracks\\level_02.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/6/6a/Barracks10.png/revision/latest?cb=20230105080358",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "barracks\\level_03.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/8/89/Barracks11.png/revision/latest?cb=20230105080412",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "barracks\\level_04.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/f/f4/Barracks12.png/revision/latest?cb=20230105080418",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "barracks\\level_05.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/d/d5/Barracks13.png/revision/latest?cb=20230105080430",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "barracks\\level_06.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/4/41/Barracks14.png/revision/latest?cb=20230105080437",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "barracks\\level_07.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/0/0c/Barracks15.png/revision/latest?cb=20230105080448",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "barracks\\level_08.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/2/21/Barracks16.png/revision/latest?cb=20230105080503",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "barracks\\level_09.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/4/4e/Barracks17.png/revision/latest?cb=20231211073653",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "barracks\\level_10.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/b/b5/Barracks18.png/revision/latest?cb=20241123131517",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "barracks\\level_11.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/4/41/Barracks19.png/revision/latest?cb=20260222202424",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "barracks\\level_12.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/f/f0/Barracks2.png/revision/latest?cb=20230105080243",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "barracks\\level_13.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/5/54/Barracks3.png/revision/latest?cb=20230105080258",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "barracks\\level_14.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/8/84/Barracks4.png/revision/latest?cb=20230105080307",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "barracks\\level_15.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/6/66/Barracks5.png/revision/latest?cb=20230105080316",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "barracks\\level_16.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/4/4c/Barracks6.png/revision/latest?cb=20230105080325",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "barracks\\level_17.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/2/29/Barracks7.png/revision/latest?cb=20230105080333",
+      "stats": {}
+    },
+    {
+      "level": 18,
+      "image_path": "barracks\\level_18.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/8/85/Barracks8.png/revision/latest?cb=20230105080339",
+      "stats": {}
+    },
+    {
+      "level": 19,
+      "image_path": "barracks\\level_19.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/3/39/Barracks9.png/revision/latest?cb=20230105080349",
+      "stats": {}
+    },
+    {
+      "level": 20,
+      "image_path": "barracks\\level_20.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/2/25/Barracks_level3_info.png/revision/latest?cb=20250318150026",
+      "stats": {}
+    }
+  ],
+  "Dark Barracks": [
+    {
+      "level": 1,
+      "image_path": "dark_barracks\\level_01.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/c/ca/DarkBarracksXmasLvL1Jap.png/revision/latest?cb=20141215154922",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "dark_barracks\\level_02.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/f/f6/Dark_Barracks1.png/revision/latest?cb=20230105081803",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "dark_barracks\\level_03.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/c/c9/Dark_Barracks10.png/revision/latest?cb=20230613000755",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "dark_barracks\\level_04.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/b/b1/Dark_Barracks11.png/revision/latest?cb=20240621142254",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "dark_barracks\\level_05.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/0/04/Dark_Barracks12.png/revision/latest?cb=20260222201236",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "dark_barracks\\level_06.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/d/dd/Dark_Barracks2.png/revision/latest?cb=20230105081814",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "dark_barracks\\level_07.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/f/f0/Dark_Barracks3.png/revision/latest?cb=20230105081822",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "dark_barracks\\level_08.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/1/1e/Dark_Barracks4.png/revision/latest?cb=20230105081828",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "dark_barracks\\level_09.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/6/60/Dark_Barracks5.png/revision/latest?cb=20230105081835",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "dark_barracks\\level_10.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/5/54/Dark_Barracks6.png/revision/latest?cb=20230105081843",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "dark_barracks\\level_11.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/b/b4/Dark_Barracks7.png/revision/latest?cb=20230105081849",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "dark_barracks\\level_12.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/3/30/Dark_Barracks8.png/revision/latest?cb=20230105081902",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "dark_barracks\\level_13.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/c/c5/Dark_Barracks9.png/revision/latest?cb=20230105081917",
+      "stats": {}
+    }
+  ],
+  "Army Camp": [
+    {
+      "level": 1,
+      "image_path": "army_camp\\level_01.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/7/79/Army_Camp1.png/revision/latest?cb=20171221130243",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "army_camp\\level_02.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/1/1d/Army_Camp10.png/revision/latest?cb=20180604160829",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "army_camp\\level_03.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/2/21/Army_Camp11.png/revision/latest?cb=20201012183216",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "army_camp\\level_04.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/1/19/Army_Camp12.png/revision/latest?cb=20221011075437",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "army_camp\\level_05.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/d/d3/Army_Camp13.png/revision/latest?cb=20260102090129",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "army_camp\\level_06.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/9/92/Army_Camp2.png/revision/latest?cb=20171221130257",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "army_camp\\level_07.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/c/ce/Army_Camp3.png/revision/latest?cb=20171221130313",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "army_camp\\level_08.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/e/e0/Army_Camp4.png/revision/latest?cb=20171221130327",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "army_camp\\level_09.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/d/dc/Army_Camp5.png/revision/latest?cb=20171221130341",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "army_camp\\level_10.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/6/68/Army_Camp6.png/revision/latest?cb=20171221130400",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "army_camp\\level_11.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/f/fb/Army_Camp7.png/revision/latest?cb=20171221130415",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "army_camp\\level_12.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/b/be/Army_Camp8.png/revision/latest?cb=20171221130431",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "army_camp\\level_13.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/7/7d/Army_Camp9.png/revision/latest?cb=20171221130455",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "army_camp\\level_14.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/d/d6/Old_lvl_4_army_camp.png/revision/latest?cb=20210928180648",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "army_camp\\level_15.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/b/b6/Old_lvl_5_army_camp.png/revision/latest?cb=20210928180647",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "army_camp\\level_16.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/a/aa/Old_lvl_6_army_camp.png/revision/latest?cb=20210928180648",
+      "stats": {}
+    }
+  ],
+  "Laboratory": [
+    {
+      "level": 1,
+      "image_path": "laboratory\\level_01.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/3/36/Laboratory1.png/revision/latest?cb=20221125084348",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "laboratory\\level_02.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/a/a7/Laboratory10.png/revision/latest?cb=20221125084528",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "laboratory\\level_03.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/a/a2/Laboratory11.png/revision/latest?cb=20221125084543",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "laboratory\\level_04.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/2/27/Laboratory12.png/revision/latest?cb=20221125084550",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "laboratory\\level_05.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/6/62/Laboratory13.png/revision/latest?cb=20221125084602",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "laboratory\\level_06.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/9/9b/Laboratory14.png/revision/latest?cb=20231213083349",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "laboratory\\level_07.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/7/7a/Laboratory15.png/revision/latest?cb=20241122153138",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "laboratory\\level_08.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/7/7d/Laboratory16.png/revision/latest?cb=20260222204504",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "laboratory\\level_09.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/0/04/Laboratory1_ChiefJourney.png/revision/latest?cb=20250604094404",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "laboratory\\level_10.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/4/49/Laboratory2.png/revision/latest?cb=20221125084354",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "laboratory\\level_11.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/6/63/Laboratory3.png/revision/latest?cb=20221125084401",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "laboratory\\level_12.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/4/43/Laboratory4.png/revision/latest?cb=20221125084408",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "laboratory\\level_13.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/d/d6/Laboratory5.png/revision/latest?cb=20221125084422",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "laboratory\\level_14.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/9/9c/Laboratory6.png/revision/latest?cb=20221125084430",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "laboratory\\level_15.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/f/f1/Laboratory7.png/revision/latest?cb=20221125084439",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "laboratory\\level_16.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/b/b8/Laboratory8.png/revision/latest?cb=20221125084453",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "laboratory\\level_17.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/5/58/Laboratory9.png/revision/latest?cb=20221125084509",
+      "stats": {}
+    }
+  ],
+  "Spell Factory": [
+    {
+      "level": 1,
+      "image_path": "spell_factory\\level_01.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/7/7d/ChallengesIcon_Spell_Factory_Sabotage.png/revision/latest?cb=20210520084027",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "spell_factory\\level_02.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/c/c8/Icon_BrewSpells.png/revision/latest?cb=20210227082407",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "spell_factory\\level_03.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/7/7a/Icon_Spell.png/revision/latest?cb=20221124044542",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "spell_factory\\level_04.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/a/a0/Res_SpellCapacity.png/revision/latest?cb=20250924105916",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "spell_factory\\level_05.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/c/ca/Spell_Factory1.png/revision/latest?cb=20210116211444",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "spell_factory\\level_06.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/e/e4/Spell_Factory1_Active.png/revision/latest?cb=20210116211357",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "spell_factory\\level_07.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/0/07/Spell_Factory2.png/revision/latest?cb=20210116211512",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "spell_factory\\level_08.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/3/34/Spell_Factory2_Active.png/revision/latest?cb=20210116211321",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "spell_factory\\level_09.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/a/af/Spell_Factory3.png/revision/latest?cb=20210116211541",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "spell_factory\\level_10.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/0/01/Spell_Factory3_Active.png/revision/latest?cb=20210116211253",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "spell_factory\\level_11.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/4/42/Spell_Factory4.png/revision/latest?cb=20210116211640",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "spell_factory\\level_12.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/a/a3/Spell_Factory4_Active.png/revision/latest?cb=20210116211210",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "spell_factory\\level_13.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/4/4c/Spell_Factory5.png/revision/latest?cb=20201208061541",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "spell_factory\\level_14.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/2/2a/Spell_Factory5_Active.png/revision/latest?cb=20201208061420",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "spell_factory\\level_15.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/c/c1/Spell_Factory6.png/revision/latest?cb=20201208033430",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "spell_factory\\level_16.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/9/9c/Spell_Factory6_Active.png/revision/latest?cb=20201208061506",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "spell_factory\\level_17.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/a/aa/Spell_Factory7.png/revision/latest?cb=20221125050011",
+      "stats": {}
+    },
+    {
+      "level": 18,
+      "image_path": "spell_factory\\level_18.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/6/6b/Spell_Factory7_Active.png/revision/latest?cb=20221125050025",
+      "stats": {}
+    },
+    {
+      "level": 19,
+      "image_path": "spell_factory\\level_19.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/b/b7/Spell_Factory8.png/revision/latest?cb=20241129150915",
+      "stats": {}
+    },
+    {
+      "level": 20,
+      "image_path": "spell_factory\\level_20.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/4/48/Spell_Factory8_Active.png/revision/latest?cb=20241129150914",
+      "stats": {}
+    }
+  ],
+  "Builder's Hut": [
+    {
+      "level": 1,
+      "image_path": "builders_hut\\level_01.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/a/aa/BarbBuilderHut.png/revision/latest?cb=20170805112553",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "builders_hut\\level_02.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/a/ac/BuilderHut4_ChiefJourney.png/revision/latest?cb=20250604094448",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "builders_hut\\level_03.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/9/91/Builder_Hut_info.png/revision/latest?cb=20250318143938",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "builders_hut\\level_04.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/5/54/Builder_Hut_info2.png/revision/latest?cb=20250318143952",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "builders_hut\\level_05.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/6/6d/Builder_Hut_info3.png/revision/latest?cb=20250318144022",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "builders_hut\\level_06.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/1/10/Builders_Hut.png/revision/latest?cb=20171106183136",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "builders_hut\\level_07.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/a/a0/Builders_Hut2.png/revision/latest?cb=20230613001440",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "builders_hut\\level_08.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/e/e0/Builders_Hut2_Active.png/revision/latest?cb=20230613001438",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "builders_hut\\level_09.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/f/f9/Builders_Hut3.png/revision/latest?cb=20230613001445",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "builders_hut\\level_10.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/a/a6/Builders_Hut3_Active.png/revision/latest?cb=20230613001443",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "builders_hut\\level_11.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/b/b4/Builders_Hut4.png/revision/latest?cb=20230613001500",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "builders_hut\\level_12.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/3/31/Builders_Hut4_Active.png/revision/latest?cb=20230613001448",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "builders_hut\\level_13.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/e/e7/Builders_Hut5.png/revision/latest?cb=20230613001516",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "builders_hut\\level_14.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/0/04/Builders_Hut5_Active.png/revision/latest?cb=20230613001515",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "builders_hut\\level_15.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/0/0b/Builders_Hut6.png/revision/latest?cb=20240418094935",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "builders_hut\\level_16.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/5/50/Builders_Hut6_Active.png/revision/latest?cb=20240418094900",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "builders_hut\\level_17.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/8/8c/Builders_Hut7.png/revision/latest?cb=20250528163313",
+      "stats": {}
+    },
+    {
+      "level": 18,
+      "image_path": "builders_hut\\level_18.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/8/8f/Builders_Hut7_Active.png/revision/latest?cb=20250325010129",
+      "stats": {}
+    },
+    {
+      "level": 19,
+      "image_path": "builders_hut\\level_19.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/2/24/GiantBuilderHut.png/revision/latest?cb=20170811073321",
+      "stats": {}
+    },
+    {
+      "level": 20,
+      "image_path": "builders_hut\\level_20.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/d/dc/Icon_BuilderPotion.png/revision/latest?cb=20210227082457",
+      "stats": {}
+    }
+  ],
+  "Wall": [
+    {
+      "level": 1,
+      "image_path": "wall\\level_01.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/5/53/Old_Wall11.png/revision/latest?cb=20210527030422",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "wall\\level_02.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/7/74/Wall1.png/revision/latest?cb=20171205125404",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "wall\\level_03.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/8/8b/Wall10.png/revision/latest?cb=20171205125626",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "wall\\level_04.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/1/10/Wall10B.png/revision/latest?cb=20230517053328",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "wall\\level_05.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/8/86/Wall11.png/revision/latest?cb=20171205125639",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "wall\\level_06.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/4/41/Wall12.png/revision/latest?cb=20171205125655",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "wall\\level_07.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/2/23/Wall13.png/revision/latest?cb=20180604155743",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "wall\\level_08.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/5/53/Wall14.png/revision/latest?cb=20201023201151",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "wall\\level_09.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/6/61/Wall15.png/revision/latest?cb=20210413212225",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "wall\\level_10.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/8/81/Wall16.png/revision/latest?cb=20221010075457",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "wall\\level_11.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/6/6c/Wall17.png/revision/latest?cb=20251209003136",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "wall\\level_12.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/0/02/Wall18.png/revision/latest?cb=20251211120721",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "wall\\level_13.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/4/4d/Wall19.png/revision/latest?cb=20260226043604",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "wall\\level_14.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/f/fb/Wall1B.png/revision/latest?cb=20170927102315",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "wall\\level_15.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/d/d2/Wall1C.png/revision/latest?cb=20220504055855",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "wall\\level_16.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/2/28/Wall1C_Corner.png/revision/latest?cb=20220504055849",
+      "stats": {}
+    },
+    {
+      "level": 17,
+      "image_path": "wall\\level_17.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/9/97/Wall2.png/revision/latest?cb=20171205125418",
+      "stats": {}
+    },
+    {
+      "level": 18,
+      "image_path": "wall\\level_18.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/9/99/Wall2B.png/revision/latest?cb=20170927102333",
+      "stats": {}
+    },
+    {
+      "level": 19,
+      "image_path": "wall\\level_19.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/6/6c/Wall2C.png/revision/latest?cb=20220504055856",
+      "stats": {}
+    },
+    {
+      "level": 20,
+      "image_path": "wall\\level_20.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/f/f0/Wall2C_Corner.png/revision/latest?cb=20220504055849",
+      "stats": {}
+    }
+  ],
+  "Bomb": [
+    {
+      "level": 1,
+      "image_path": "bomb\\level_01.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/a/a6/Bomb1.png/revision/latest?cb=20210213070620",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "bomb\\level_02.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/7/78/Bomb11.png/revision/latest?cb=20221012074258",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "bomb\\level_03.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/2/27/Bomb11_unarmed.png/revision/latest?cb=20221012074257",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "bomb\\level_04.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/9/9a/Bomb13.png/revision/latest?cb=20241127134105",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "bomb\\level_05.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/e/e2/Bomb13_unarmed.png/revision/latest?cb=20241127134121",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "bomb\\level_06.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/f/fe/Bomb1_unarmed.png/revision/latest?cb=20210213070818",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "bomb\\level_07.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/0/0a/Bomb3.png/revision/latest?cb=20210213070653",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "bomb\\level_08.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/0/04/Bomb3_unarmed.png/revision/latest?cb=20210213070818",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "bomb\\level_09.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/7/71/Bomb5.png/revision/latest?cb=20210213070719",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "bomb\\level_10.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/d/d2/Bomb5_unarmed.png/revision/latest?cb=20210213070842",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "bomb\\level_11.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/6/62/Bomb7.png/revision/latest?cb=20210213070737",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "bomb\\level_12.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/0/09/Bomb7_unarmed.png/revision/latest?cb=20210213070820",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "bomb\\level_13.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/5/5d/Bomb9.png/revision/latest?cb=20210213070754",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "bomb\\level_14.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/1/1e/Bomb9_unarmed.png/revision/latest?cb=20210213070821",
+      "stats": {}
+    },
+    {
+      "level": 15,
+      "image_path": "bomb\\level_15.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/1/1b/Bomb_InAction.gif/revision/latest?cb=20251107070940",
+      "stats": {}
+    },
+    {
+      "level": 16,
+      "image_path": "bomb\\level_16.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/2/24/Bomb_info.png/revision/latest?cb=20221122073915",
+      "stats": {}
+    }
+  ],
+  "Spring Trap": [
+    {
+      "level": 1,
+      "image_path": "spring_trap\\level_01.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/c/c2/SpringTrapHero.gif/revision/latest?cb=20251011130320",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "spring_trap\\level_02.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/7/74/Spring_Trap1.png/revision/latest?cb=20221218092202",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "spring_trap\\level_03.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/0/07/Spring_Trap11.png/revision/latest?cb=20251008003034",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "spring_trap\\level_04.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/a/a6/Spring_Trap13.png/revision/latest?cb=20251115151732",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "spring_trap\\level_05.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/e/e7/Spring_Trap1_unarmed.png/revision/latest?cb=20221218092334",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "spring_trap\\level_06.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/e/e2/Spring_Trap3.png/revision/latest?cb=20221218092328",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "spring_trap\\level_07.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/2/28/Spring_Trap3_unarmed.png/revision/latest?cb=20221218092334",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "spring_trap\\level_08.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/d/d5/Spring_Trap5.png/revision/latest?cb=20221218092228",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "spring_trap\\level_09.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/d/dc/Spring_Trap7.png/revision/latest?cb=20251008002947",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "spring_trap\\level_10.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/4/4c/Spring_Trap7_unarmed.png/revision/latest?cb=20251008003542",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "spring_trap\\level_11.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/f/fe/Spring_Trap9.png/revision/latest?cb=20251008003009",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "spring_trap\\level_12.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/c/c2/Spring_Trap_info.png/revision/latest?cb=20171130161342",
+      "stats": {}
+    }
+  ],
+  "Giant Bomb": [
+    {
+      "level": 1,
+      "image_path": "giant_bomb\\level_01.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/7/7b/Giant_Bomb1.png/revision/latest?cb=20230613001712",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "giant_bomb\\level_02.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/f/f3/Giant_Bomb11.png/revision/latest?cb=20241122153137",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "giant_bomb\\level_03.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/a/ac/Giant_Bomb11_unarmed.png/revision/latest?cb=20241126134109",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "giant_bomb\\level_04.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/b/bf/Giant_Bomb1_unarmed.png/revision/latest?cb=20230613001709",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "giant_bomb\\level_05.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/3/31/Giant_Bomb3.png/revision/latest?cb=20230613001720",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "giant_bomb\\level_06.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/4/49/Giant_Bomb3_unarmed.png/revision/latest?cb=20230613001718",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "giant_bomb\\level_07.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/a/a4/Giant_Bomb5.png/revision/latest?cb=20230613001727",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "giant_bomb\\level_08.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/b/b0/Giant_Bomb5_unarmed.png/revision/latest?cb=20230613001725",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "giant_bomb\\level_09.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/5/5e/Giant_Bomb7.png/revision/latest?cb=20230613001734",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "giant_bomb\\level_10.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/1/15/Giant_Bomb7_unarmed.png/revision/latest?cb=20230613001731",
+      "stats": {}
+    },
+    {
+      "level": 11,
+      "image_path": "giant_bomb\\level_11.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/d/d8/Giant_Bomb9.png/revision/latest?cb=20230613001740",
+      "stats": {}
+    },
+    {
+      "level": 12,
+      "image_path": "giant_bomb\\level_12.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/e/ef/Giant_Bomb9_unarmed.png/revision/latest?cb=20230613001739",
+      "stats": {}
+    },
+    {
+      "level": 13,
+      "image_path": "giant_bomb\\level_13.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/5/5e/Giant_Bomb_InAction.gif/revision/latest?cb=20251107071027",
+      "stats": {}
+    },
+    {
+      "level": 14,
+      "image_path": "giant_bomb\\level_14.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/8/89/Giant_Bomb_info.png/revision/latest?cb=20171009065411",
+      "stats": {}
+    }
+  ],
+  "Air Bomb": [
+    {
+      "level": 1,
+      "image_path": "air_bomb\\level_01.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/b/be/Air_Bomb1.png/revision/latest?cb=20231213085607",
+      "stats": {}
+    },
+    {
+      "level": 2,
+      "image_path": "air_bomb\\level_02.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/a/a6/Air_Bomb11.png/revision/latest?cb=20231213085327",
+      "stats": {}
+    },
+    {
+      "level": 3,
+      "image_path": "air_bomb\\level_03.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/9/91/Air_Bomb13.png/revision/latest?cb=20251120062204",
+      "stats": {}
+    },
+    {
+      "level": 4,
+      "image_path": "air_bomb\\level_04.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/5/5c/Air_Bomb3.png/revision/latest?cb=20231213085557",
+      "stats": {}
+    },
+    {
+      "level": 5,
+      "image_path": "air_bomb\\level_05.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/9/99/Air_Bomb5.png/revision/latest?cb=20231213085548",
+      "stats": {}
+    },
+    {
+      "level": 6,
+      "image_path": "air_bomb\\level_06.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/1/15/Air_Bomb7.png/revision/latest?cb=20231213085536",
+      "stats": {}
+    },
+    {
+      "level": 7,
+      "image_path": "air_bomb\\level_07.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/b/b1/Air_Bomb9.png/revision/latest?cb=20231213085519",
+      "stats": {}
+    },
+    {
+      "level": 8,
+      "image_path": "air_bomb\\level_08.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/b/b1/Air_Bomb_InAction.gif/revision/latest?cb=20251107070805",
+      "stats": {}
+    },
+    {
+      "level": 9,
+      "image_path": "air_bomb\\level_09.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/e/ed/Air_Bomb_info.png/revision/latest?cb=20171009072655",
+      "stats": {}
+    },
+    {
+      "level": 10,
+      "image_path": "air_bomb\\level_10.png",
+      "image_url": "https://static.wikia.nocookie.net/clashofclans/images/e/ef/Air_Bomb_unarmed.png/revision/latest?cb=20171009072924",
+      "stats": {}
+    }
+  ]
+}
