@@ -5,6 +5,19 @@ window._userClanTag    = null;  // es. '#2J2VLPP9R'
 window._clanName       = '';
 window._clanBadgeUrl   = null;
 
+// Fetch con JWT dell'utente corrente — usare per endpoint protetti (admin, import)
+async function authFetch(url, options = {}) {
+  const session = (await db.auth.getSession())?.data?.session;
+  const token = session?.access_token;
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...options.headers,
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+    }
+  });
+}
+
 // Restituisce '?clanTag=XXXX' da aggiungere alle fetch API
 function clanQ() {
   return window._userClanTag
@@ -57,8 +70,10 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
       if (fallback !== email) {
         const r2 = await db.auth.signInWithPassword({ email: fallback, password: pwd });
         if (!r2.error) return; // onAuthStateChange gestirà il resto
+        // Entrambi i tentativi falliti — usa errore del fallback per maggiore contesto
+        error = r2.error;
       }
-      const msg = error.message.includes('Invalid login')
+      const msg = (error.message.includes('Invalid login') || error.message.includes('invalid'))
         ? 'Credenziali errate. Controlla il nome utente e la password.'
         : error.message;
       showLoginError(msg);
@@ -656,9 +671,14 @@ document.getElementById("sync-btn").addEventListener("click", async () => {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Errore server");
     status.textContent = `✓ Sincronizzati ${data.synced} membri`;
+    setTimeout(() => { status.textContent = ''; }, 4000);
     loadMembers();
   } catch (err) {
-    status.textContent = "✗ " + err.message;
+    const msg = err.message.toLowerCase().includes('row-level security') || err.message.toLowerCase().includes('rls')
+      ? 'Sincronizzazione temporaneamente non disponibile. Riprova tra qualche minuto.'
+      : '✗ Sincronizzazione fallita. Riprova più tardi.';
+    status.textContent = msg;
+    setTimeout(() => { status.textContent = ''; }, 6000);
   }
 });
 
@@ -1132,7 +1152,7 @@ function renderAssignContent(players, season, isLive, expiryMap = {}) {
     const qname = name.replace(/"/g, '&quot;');
     return `<tr>
       <td class="assign-chk-col stat-cell" style="display:none">
-        <input type="checkbox" class="assign-check" data-name="${qname}" ${hasBonus ? 'checked' : ''} style="accent-color:#f0a500;width:16px;height:16px">
+        <input type="checkbox" class="assign-check" data-name="${qname}" ${hasBonus ? 'checked' : ''} data-stars="${p.stars ?? 0}" data-destruction="${p.destruction ?? 0}" data-attacks-made="${p.attacks_made ?? 0}" data-attacks-required="${p.attacks_required ?? 0}" data-bonus-score="${p.bonus_score ?? 0}" data-participated="${p.participated ? '1' : '0'}" style="accent-color:#f0a500;width:16px;height:16px">
       </td>
       <td class="assign-sec-col stat-cell" style="display:none">
         <input type="checkbox" class="assign-secondary" data-name="${qname}" ${isSec ? 'checked' : ''} style="accent-color:#7aaccc;width:16px;height:16px" title="Secondo account">
@@ -1278,10 +1298,13 @@ async function saveAssignChanges(season) {
       season,
       bonus_assigned: cb.checked,
       is_secondary:   secMap[cb.dataset.name] || false,
-      participated: true,
-      stars: 0, destruction: 0.0,
-      attacks_made: 0, attacks_required: 0,
-      bonus_score: 0, still_in_clan: true
+      participated: cb.dataset.participated !== '0',
+      stars:             parseInt(cb.dataset.stars || '0', 10),
+      destruction:       parseFloat(cb.dataset.destruction || '0'),
+      attacks_made:      parseInt(cb.dataset.attacksMade || '0', 10),
+      attacks_required:  parseInt(cb.dataset.attacksRequired || '0', 10),
+      bonus_score:       parseFloat(cb.dataset.bonusScore || '0'),
+      still_in_clan: true
     });
   });
 
@@ -1942,6 +1965,7 @@ async function applyBonusCriteria() {
       const req  = Math.max(p.attacks_required, 1);
       const made = p.attacks_made;
       const avgD = made > 0 ? p.destruction / made : 0;
+      // Formula merito CWL: (stelle/req)*40 + avgDestruction*0.2 + (made/req)*20 — allineata con api/generate-bonuses.js
       const merit = (p.stars / req) * 40 + avgD * 0.2 + (made / req) * 20;
       return {
         player_name: p.name, stars: p.stars, destruction: p.destruction,
@@ -2223,7 +2247,7 @@ async function loadUsers() {
   const msg   = document.getElementById('admin-msg');
   tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#5a7a98">Caricamento…</td></tr>';
 
-  const res = await fetch('/api/admin/users');
+  const res = await authFetch('/api/admin/users');
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     showAdminMsg(err.error || 'Errore caricamento utenti.', 'error');
@@ -2309,7 +2333,7 @@ async function createUser() {
 
   msgEl.textContent = 'Creazione in corso…'; msgEl.style.color = '#7a9ab8';
 
-  const res = await fetch('/api/admin/users', {
+  const res = await authFetch('/api/admin/users', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, email: email || undefined, password, role }),
@@ -2341,7 +2365,7 @@ async function saveRole(userId, btn) {
   const newRole = selEl.value;
   btn.disabled  = true; btn.textContent = '💾…';
 
-  const res = await fetch('/api/admin/users', {
+  const res = await authFetch('/api/admin/users', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId, role: newRole }),
@@ -2361,7 +2385,7 @@ async function resetUserPassword(userId, username) {
   if (!newPassword) return;
   if (newPassword.length < 6) { alert('Password troppo corta (min 6 caratteri).'); return; }
 
-  const res = await fetch('/api/admin/users', {
+  const res = await authFetch('/api/admin/users', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId, newPassword }),
@@ -2372,7 +2396,7 @@ async function resetUserPassword(userId, username) {
 
 async function deleteUser(userId, username) {
   if (!confirm(`Eliminare l'utente "${username}"? Questa azione è irreversibile.`)) return;
-  const res = await fetch('/api/admin/users', {
+  const res = await authFetch('/api/admin/users', {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId }),
