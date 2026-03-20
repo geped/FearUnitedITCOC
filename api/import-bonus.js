@@ -4,6 +4,13 @@ module.exports = async (req, res) => {
     // Solo POST
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+    // Verifica SYNC_SECRET (chiamata da script Python o da utenti admin via browser)
+    const providedSecret = req.headers['x-sync-key'] || req.headers['x-import-key'];
+    const syncSecret = process.env.SYNC_SECRET;
+    if (!syncSecret || providedSecret !== syncSecret) {
+        return res.status(401).json({ error: 'Accesso non autorizzato. Passa x-sync-key nell\'header.' });
+    }
+
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!serviceKey) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY non configurata.' });
 

@@ -346,6 +346,9 @@ function authMiddleware(req, res, next) {
 
 app.get('/', (_req, res) => res.json({ ok: true, service: 'CoCBoard Proxy', version: 'leagueTier-2026-03-18' }));
 
+// Keep-alive endpoint — usato dal cron Vercel ogni 14 min per evitare spin-down Render
+app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
+
 app.get('/myip', async (_req, res) => {
     try {
         const r = await fetch('https://api.ipify.org?format=json');

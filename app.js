@@ -1,3 +1,26 @@
+// ═══════════════════════════════════════════════════════════════════════════════
+// app.js — CoCBoard SPA  |  Fear United IT
+// ═══════════════════════════════════════════════════════════════════════════════
+// INDICE SEZIONI (Ctrl+F sul nome per navigare):
+//
+//   AUTH                    ~43     Login, logout, registrazione, recupero password
+//   NAVIGATION              ~482    Routing tra sezioni SPA
+//   CLAN                    ~240    Dettagli clan espandibili
+//   MEMBRI                  ~529    Lista e sync membri
+//   CWL                     ~685    Storico CWL, tabelle, live data
+//   ASSEGNA BONUS           ~815    Tab assegnazione bonus mensile
+//   STORICO ASSEGNAZIONI    ~1334   Vista storico per giocatore/mese
+//   HALL OF FAME            ~1518   Classifica storica bonus
+//   BONUS MODAL             ~1630   Modal Bonus Manager (calcolo merito)
+//   ALIAS PLAYER            ~1806   Gestione alias/cambi nome
+//   ADMIN UTENTI            ~2240   CRUD utenti (solo admin)
+//   REGISTRI GUERRE         ~2413   War log classiche + dettaglio modal
+//   CRONOLOGIA LEGHE CWL    ~2718   Storico stagioni CWL
+//   IL MIO PROFILO          ~3329   Profilo personale + unità
+//   CERCA                   ~3898   Ricerca clan/giocatori
+//
+// ═══════════════════════════════════════════════════════════════════════════════
+
 const db = window.sb;
 
 // Clan dell'utente loggato — impostati in showApp() dopo il login

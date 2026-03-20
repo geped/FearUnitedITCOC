@@ -1,6 +1,11 @@
 const { createClient } = require('@supabase/supabase-js');
+const { requireRole } = require('../_utils/require-role');
 
 module.exports = async (req, res) => {
+    // Verifica che il chiamante sia admin
+    const authError = await requireRole(req, ['admin']);
+    if (authError) return res.status(authError.status).json({ error: authError.error });
+
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!serviceKey) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY non configurata.' });
 
