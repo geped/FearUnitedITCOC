@@ -9,10 +9,10 @@
 
 ### Equipment & Profilo
 
-- [ ] **EQUIP-01**: L'utente vede lo "Stick Horse" correttamente elencato sotto il Barbarian King (non nella sezione "Altro")
-- [ ] **EQUIP-02**: La sezione "Altro" per gli equipaggiamenti non è più presente nel profilo
+- [x] **EQUIP-01**: L'utente vede lo "Stick Horse" correttamente elencato sotto il Barbarian King (non nella sezione "Altro")
+- [x] **EQUIP-02**: La sezione "Altro" per gli equipaggiamenti non è più presente nel profilo
 - [ ] **EQUIP-03**: Gli equipaggiamenti senza immagine mostrano un placeholder standard (icona neutra) invece del quadratino con l'iniziale
-- [ ] **EQUIP-04**: Il Battle Drill (Trivella da battaglia) mostra l'immagine corretta
+- [x] **EQUIP-04**: Il Battle Drill (Trivella da battaglia) mostra l'immagine corretta
 
 ### Classifiche
 
@@ -81,10 +81,10 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| EQUIP-01 | Phase 1 | Pending |
-| EQUIP-02 | Phase 1 | Pending |
+| EQUIP-01 | Phase 1 | Complete |
+| EQUIP-02 | Phase 1 | Complete |
 | EQUIP-03 | Phase 1 | Pending |
-| EQUIP-04 | Phase 1 | Pending |
+| EQUIP-04 | Phase 1 | Complete |
 | CLAS-01 | Phase 2 | Pending |
 | CLAS-02 | Phase 2 | Pending |
 | CLAS-03 | Phase 2 | Pending |

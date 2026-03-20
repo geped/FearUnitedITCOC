@@ -85,7 +85,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Equipment Fix e Asset Mapper | 0/2 | Planned | - |
+| 1. Equipment Fix e Asset Mapper | 1/2 | In Progress|  |
 | 2. Rankings Polish | 0/? | Not started | - |
 | 3. Ristrutturazione "Il mio clan" e Stato Condiviso | 0/? | Not started | - |
 | 4. WarDetailView Component | 0/? | Not started | - |

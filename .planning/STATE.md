@@ -1,3 +1,17 @@
+---
+gsd_state_version: 1.0
+milestone: v2.0
+milestone_name: milestone
+status: unknown
+stopped_at: Completed 01-equipment-fix-e-asset-mapper/01-01-PLAN.md
+last_updated: "2026-03-20T22:45:44.595Z"
+progress:
+  total_phases: 5
+  completed_phases: 0
+  total_plans: 2
+  completed_plans: 1
+---
+
 # Project State
 
 ## Project Reference
@@ -5,20 +19,17 @@
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** Admin e co-capi possono gestire l'intero ciclo CWL e visualizzare statistiche di clan da un'unica interfaccia browser
-**Current focus:** Phase 1 — Equipment Fix e Asset Mapper
+**Current focus:** Phase 01 — Equipment Fix e Asset Mapper
 
 ## Current Position
 
-Phase: 1 of 5 (Equipment Fix e Asset Mapper)
-Plan: 0 of ? in current phase
-Status: Ready to plan
-Last activity: 2026-03-20 — Roadmap v2.0 creata, pronta per la pianificazione della Phase 1
-
-Progress: [░░░░░░░░░░] 0%
+Phase: 01 (Equipment Fix e Asset Mapper) — EXECUTING
+Plan: 1 of 2
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0
 - Average duration: -
 - Total execution time: 0 hours
@@ -30,10 +41,12 @@ Progress: [░░░░░░░░░░] 0%
 | - | - | - | - |
 
 **Recent Trend:**
+
 - Last 5 plans: -
 - Trend: -
 
 *Updated after each plan completion*
+| Phase 01-equipment-fix-e-asset-mapper P01 | 8 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -47,6 +60,9 @@ Recent decisions affecting current work:
 - [Roadmap]: Bug fix prima di nuove feature — equipment e rankings in Phases 1-2 prima di refactoring strutturale
 - [Roadmap]: ARCH-01 (asset mapper) in Phase 1 — i fix equipment toccano le stesse mappe, evita doppio lavoro
 - [Roadmap]: ARCH-02 (shared state) in Phase 3 — prerequisito per Phase 4 e Phase 5
+- [Phase 01]: Battle Drill categoria 'troop' mantenuta in UNIT_COC_SLUG — solo slug corretto da 'battleram' a 'battle-drill'
+- [Phase 01]: Stick Horse slug 'stick-horse' committato nonostante 404 su coc.guide — onerror fallback gia' gestisce immagini mancanti
+- [Phase 01]: Safety net groups['__altro__'] preservata in app.js — solo rimossa l'iterazione forEach di rendering
 
 ### Pending Todos
 
@@ -61,6 +77,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20
-Stopped at: Roadmap v2.0 creata — nessun piano ancora pianificato
+Last session: 2026-03-20T22:45:44.592Z
+Stopped at: Completed 01-equipment-fix-e-asset-mapper/01-01-PLAN.md
 Resume file: None
