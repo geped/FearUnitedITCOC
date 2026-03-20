@@ -11,7 +11,7 @@
 
 - [x] **EQUIP-01**: L'utente vede lo "Stick Horse" correttamente elencato sotto il Barbarian King (non nella sezione "Altro")
 - [x] **EQUIP-02**: La sezione "Altro" per gli equipaggiamenti non è più presente nel profilo
-- [ ] **EQUIP-03**: Gli equipaggiamenti senza immagine mostrano un placeholder standard (icona neutra) invece del quadratino con l'iniziale
+- [x] **EQUIP-03**: Gli equipaggiamenti senza immagine mostrano un placeholder standard (icona neutra) invece del quadratino con l'iniziale
 - [x] **EQUIP-04**: Il Battle Drill (Trivella da battaglia) mostra l'immagine corretta
 
 ### Classifiche
@@ -39,7 +39,7 @@
 
 ### Architettura & Refactoring
 
-- [ ] **ARCH-01**: Esiste un asset mapper JS centralizzato che associa ogni ID truppa/equipaggiamento al percorso della sua immagine; tutte le visualizzazioni immagini lo usano
+- [x] **ARCH-01**: Esiste un asset mapper JS centralizzato che associa ogni ID truppa/equipaggiamento al percorso della sua immagine; tutte le visualizzazioni immagini lo usano
 - [ ] **ARCH-02**: Esiste un oggetto di stato globale condiviso per il clan attualmente visualizzato, usato sia da "Il mio clan" che da "Cerca"
 
 ---
@@ -83,7 +83,7 @@
 |-------------|-------|--------|
 | EQUIP-01 | Phase 1 | Complete |
 | EQUIP-02 | Phase 1 | Complete |
-| EQUIP-03 | Phase 1 | Pending |
+| EQUIP-03 | Phase 1 | Complete |
 | EQUIP-04 | Phase 1 | Complete |
 | CLAS-01 | Phase 2 | Pending |
 | CLAS-02 | Phase 2 | Pending |
@@ -99,7 +99,7 @@
 | CERCA-01 | Phase 5 | Pending |
 | CERCA-02 | Phase 5 | Pending |
 | CERCA-03 | Phase 5 | Pending |
-| ARCH-01 | Phase 1 | Pending |
+| ARCH-01 | Phase 1 | Complete |
 | ARCH-02 | Phase 3 | Pending |
 
 **Coverage:**

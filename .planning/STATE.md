@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 01-equipment-fix-e-asset-mapper/01-01-PLAN.md
-last_updated: "2026-03-20T22:45:44.595Z"
+stopped_at: Checkpoint human-verify 01-02 Task 2 — attesa verifica visiva utente
+last_updated: "2026-03-20T22:55:29.802Z"
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # Project State
@@ -47,6 +47,7 @@ Plan: 1 of 2
 
 *Updated after each plan completion*
 | Phase 01-equipment-fix-e-asset-mapper P01 | 8 | 2 tasks | 2 files |
+| Phase 01-equipment-fix-e-asset-mapper P02 | 6 | 1 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -63,6 +64,8 @@ Recent decisions affecting current work:
 - [Phase 01]: Battle Drill categoria 'troop' mantenuta in UNIT_COC_SLUG — solo slug corretto da 'battleram' a 'battle-drill'
 - [Phase 01]: Stick Horse slug 'stick-horse' committato nonostante 404 su coc.guide — onerror fallback gia' gestisce immagini mancanti
 - [Phase 01]: Safety net groups['__altro__'] preservata in app.js — solo rimossa l'iterazione forEach di rendering
+- [Phase 01-equipment-fix-e-asset-mapper]: _unitFallbackColor() mantenuta con TODO — nessun call site, rimozione demandata
+- [Phase 01-equipment-fix-e-asset-mapper]: SVG stella inline nel template HTML — zero dipendenze file esterni
 
 ### Pending Todos
 
@@ -77,6 +80,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T22:45:44.592Z
-Stopped at: Completed 01-equipment-fix-e-asset-mapper/01-01-PLAN.md
+Last session: 2026-03-20T22:55:29.799Z
+Stopped at: Checkpoint human-verify 01-02 Task 2 — attesa verifica visiva utente
 Resume file: None
