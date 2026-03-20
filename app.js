@@ -751,7 +751,10 @@ function renderCwlTable(history, live) {
     return rows.map((h, i) => {
       const lp = liveMap[h.player_name.toLowerCase()];
       const stars = lp ? lp.stars       : h.stars       != null ? h.stars       : '—';
-      const destr = lp ? lp.destruction.toFixed(1) + '%' : h.destruction ? h.destruction.toFixed(1) + '%' : '—';
+      // Distruzione media per attacco (coerente con tab Assegna Bonus)
+      const destr = lp
+        ? (lp.attacks_made > 0 ? (lp.destruction / lp.attacks_made).toFixed(1) + '%' : '—')
+        : (h.attacks_made > 0 ? (h.destruction / h.attacks_made).toFixed(1) + '%' : '—');
       const atk   = lp ? `${lp.attacks_made}/${lp.attacks_required}` : h.attacks_made ? `${h.attacks_made}/${h.attacks_required}` : '—';
       const participated = h.participated
         ? '<span class="cwl-yes">✓ CWL</span>'
@@ -781,7 +784,7 @@ function renderCwlTable(history, live) {
         <thead>
           <tr>
             <th>#</th><th>Nome</th><th>CWL</th>
-            <th>⭐ Stelle</th><th>💥 Distruz.</th>
+            <th>⭐ Stelle</th><th title="Distruzione media per attacco">💥 Distruz. media</th>
             <th>⚔ Attacchi</th><th>Score</th>
             <th>🏆 Mesi bonus</th>
           </tr>
@@ -2450,7 +2453,9 @@ async function loadWarLog() {
     });
     if (!items.length) { div.innerHTML = '<p class="wl-loading">Nessuna war classica nel log.</p>'; return; }
 
-    window._warLogItems = items;
+    // Mappa per endTime — evita race condition se la lista si ricarica mentre un modal è aperto
+    window._warLogMap = {};
+    items.forEach(w => { if (w.endTime) window._warLogMap[w.endTime] = w; });
 
     const rows = items.map((w, idx) => {
       const date = w.endTime ? new Date(
@@ -2477,7 +2482,7 @@ async function loadWarLog() {
       const ourClan = `<div class="wl-clan-cell">${clanBadge}<span>${w.clan?.name ?? 'Noi'}${clanLv}</span></div>`;
       const oppClan = `<div class="wl-clan-cell">${oppBadge}<span>${oppName}${oppLv}</span></div>`;
 
-      return `<tr class="wl-row-clickable" onclick="openClassicWarDetail(${idx})">
+      return `<tr class="wl-row-clickable" onclick="openClassicWarDetail('${w.endTime || idx}')">
         <td class="stat-cell">${date}</td>
         <td>${result}</td>
         <td>${ourClan}</td>
@@ -2514,8 +2519,9 @@ document.querySelectorAll('.tab-btn[data-tab="warlog"]').forEach(btn => {
 
 // ── DETTAGLIO WAR CLASSICA ────────────────────────────────────────────────────
 
-async function openClassicWarDetail(idx) {
-  const w = (window._warLogItems || [])[idx];
+async function openClassicWarDetail(key) {
+  // Cerca per endTime (chiave univoca) — robusto a ricaricamenti della lista
+  const w = (window._warLogMap || {})[key];
   if (!w) return;
 
   document.getElementById('classic-war-detail-modal')?.remove();

@@ -72,12 +72,7 @@ module.exports = async (req, res) => {
         auth: { autoRefreshToken: false, persistSession: false }
     });
 
-    // Controlla se esiste già un account con questa email
-    const { data: existing } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-    if (existing?.users?.some(u => u.email === email)) {
-        return res.status(409).json({ error: 'Questo tag è già associato a un account. Accedi con il tuo tag come nome utente.' });
-    }
-
+    // Tenta la creazione direttamente — se l'email esiste già Supabase restituisce un errore specifico
     const { data, error } = await supabase.auth.admin.createUser({
         email,
         password,
@@ -93,7 +88,13 @@ module.exports = async (req, res) => {
         }
     });
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+        const msg = error.message.toLowerCase();
+        if (msg.includes('already registered') || msg.includes('already been registered') || msg.includes('email') && msg.includes('exist')) {
+            return res.status(409).json({ error: 'Questo tag è già associato a un account. Accedi con il tuo tag come nome utente.' });
+        }
+        return res.status(500).json({ error: error.message });
+    }
 
     // --- INIZIO INVIO EMAIL DI BENVENUTO ---
     // Se l'utente ha inserito la mail facoltativa e abbiamo la chiave API
