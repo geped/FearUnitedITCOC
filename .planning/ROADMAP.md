@@ -30,7 +30,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Il Battle Drill mostra l'immagine corretta (non un'immagine sbagliata)
   4. Gli equipaggiamenti senza immagine mostrano un'icona placeholder neutra (non il quadratino con l'iniziale)
   5. Tutti i punti di rendering immagini usano la funzione centralizzata getAssetUrl() — nessuna logica immagine duplicata in app.js
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 01-01-PLAN.md — Test + fix costanti statiche (EQUIP-01, EQUIP-02, EQUIP-04)
+- [ ] 01-02-PLAN.md — SVG placeholder + getAssetUrl centralizzata (EQUIP-03, ARCH-01)
 
 ### Phase 2: Rankings Polish
 **Goal**: La sezione classifiche e' completamente funzionante: dati globali caricati, stemmi corretti, clan crest visibili, righe cliccabili, refresh manuale disponibile
@@ -82,7 +85,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Equipment Fix e Asset Mapper | 0/? | Not started | - |
+| 1. Equipment Fix e Asset Mapper | 0/2 | Planned | - |
 | 2. Rankings Polish | 0/? | Not started | - |
 | 3. Ristrutturazione "Il mio clan" e Stato Condiviso | 0/? | Not started | - |
 | 4. WarDetailView Component | 0/? | Not started | - |
