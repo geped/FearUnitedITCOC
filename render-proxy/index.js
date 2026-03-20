@@ -15,7 +15,11 @@ function parseClanTag(raw) {
 function encodeTag(tag) { return encodeURIComponent(tag); }
 
 function supabase() {
-    return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+    // Usa SERVICE_ROLE_KEY per le scritture dal proxy (bypassa RLS — solo operazioni interne)
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+    return createClient(process.env.SUPABASE_URL, key, {
+        auth: { autoRefreshToken: false, persistSession: false }
+    });
 }
 
 function cocHeaders() {
