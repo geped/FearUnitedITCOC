@@ -3637,7 +3637,7 @@ const UNIT_COC_SLUG = {
   'Siege Barracks':     {c:'troop', s:'siege-machine-carrier'},
   'Log Launcher':       {c:'troop', s:'siege-log-launcher'},
   'Flame Flinger':      {c:'troop', s:'flame-flinger'},
-  'Battle Drill':       {c:'troop', s:'battleram'},
+  'Battle Drill':       {c:'troop', s:'battle-drill'},
   // ── Equipaggiamento eroi ──────────────────────────────────────────────────
   // Re dei Barbari
   'Barbarian Puppet':   {c:'equipment', s:'barbarian-puppet'},
@@ -3679,6 +3679,7 @@ const UNIT_COC_SLUG = {
   'Noble Iron':         {c:'equipment', s:'noble-iron'},
   // Re dei Barbari (aggiunte mancanti)
   'Snake Bracelet':     {c:'equipment', s:'snake-bracelet'},
+  'Stick Horse':        {c:'equipment', s:'stick-horse'},
   // Regina degli Arcieri (aggiunte mancanti)
   'Action Figure':      {c:'equipment', s:'action-figure'},
   // Grande Custode (aggiunte mancanti)
@@ -3778,11 +3779,12 @@ const SIEGE_SET = new Set(['Wall Wrecker','Battle Blimp','Stone Slammer','Siege 
 // ── MAPPA EQUIPAGGIAMENTO → EROE PROPRIETARIO ─────────────────────────────────
 // Fonte: wiki ufficiale Supercell (marzo 2026)
 const HERO_EQUIPMENT_MAP = {
-  // Re dei Barbari (7 items)
+  // Re dei Barbari (8 items)
   'Barbarian Puppet':'Barbarian King','Rage Vial':'Barbarian King',
   'Earthquake Boots':'Barbarian King','Vampstache':'Barbarian King',
   'Giant Gauntlet':'Barbarian King','Spiky Ball':'Barbarian King',
   'Snake Bracelet':'Barbarian King',
+  'Stick Horse':'Barbarian King',
   // Regina degli Arcieri (7 items)
   'Archer Puppet':'Archer Queen','Invisibility Vial':'Archer Queen',
   'Giant Arrow':'Archer Queen','Healer Puppet':'Archer Queen',
@@ -3847,7 +3849,7 @@ function _renderEquipmentGrouped(containerId, equipment) {
   }
 
   let html = '';
-  [...HERO_ORDER_EQUIP, '__altro__'].forEach(heroKey => {
+  HERO_ORDER_EQUIP.forEach(heroKey => {
     const items = groups[heroKey];
     if (!items || !items.length) return;
     const label = heroKey === '__altro__' ? 'Altro' : _unitNameIt(heroKey);
