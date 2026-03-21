@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: unknown
-stopped_at: Phase 2 context gathered
-last_updated: "2026-03-20T23:48:19.265Z"
+stopped_at: "Phase 02-01 tasks 1-2 complete; checkpoint:human-verify for Task 3"
+last_updated: "2026-03-21T06:25:54.940Z"
 progress:
   total_phases: 5
-  completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  completed_phases: 2
+  total_plans: 3
+  completed_plans: 3
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-20)
 
 **Core value:** Admin e co-capi possono gestire l'intero ciclo CWL e visualizzare statistiche di clan da un'unica interfaccia browser
-**Current focus:** Phase 01 — Equipment Fix e Asset Mapper
+**Current focus:** Phase 02 — rankings-polish
 
 ## Current Position
 
-Phase: 01 (Equipment Fix e Asset Mapper) — EXECUTING
-Plan: 1 of 2
+Phase: 02 (rankings-polish) — EXECUTING
+Plan: 1 of 1
 
 ## Performance Metrics
 
@@ -48,6 +48,7 @@ Plan: 1 of 2
 *Updated after each plan completion*
 | Phase 01-equipment-fix-e-asset-mapper P01 | 8 | 2 tasks | 2 files |
 | Phase 01-equipment-fix-e-asset-mapper P02 | 6 | 1 tasks | 3 files |
+| Phase 02-rankings-polish P01 | 12 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,8 @@ Recent decisions affecting current work:
 - [Phase 01]: Safety net groups['__altro__'] preservata in app.js — solo rimossa l'iterazione forEach di rendering
 - [Phase 01-equipment-fix-e-asset-mapper]: _unitFallbackColor() mantenuta con TODO — nessun call site, rimozione demandata
 - [Phase 01-equipment-fix-e-asset-mapper]: SVG stella inline nel template HTML — zero dipendenze file esterni
+- [Phase 02-rankings-polish]: RANK_LOCATIONS.global fixed to string 'global' — CoC API requires string not numeric ID '32000000'
+- [Phase 02-rankings-polish]: cache: 'no-store' added to loadRankings fetch — ensures Aggiorna button forces fresh API call
 
 ### Pending Todos
 
@@ -80,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T23:48:19.261Z
-Stopped at: Phase 2 context gathered
-Resume file: .planning/phases/02-rankings-polish/02-CONTEXT.md
+Last session: 2026-03-21T06:25:54.936Z
+Stopped at: Phase 02-01 tasks 1-2 complete; checkpoint:human-verify for Task 3
+Resume file: None

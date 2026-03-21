@@ -16,13 +16,13 @@
 
 ### Classifiche
 
-- [ ] **CLAS-01**: La classifica "Giocatori + Globale" si carica senza errore `notFound`
-- [ ] **CLAS-02**: La classifica "Clan + Globale" mostra dati (non "Nessun dato")
-- [ ] **CLAS-03**: Gli stemmi delle leghe visualizzati sono quelli attuali (non le versioni obsolete)
-- [ ] **CLAS-04**: Le tabelle classifiche mostrano lo stemma del clan (clan crest) oltre al nome
-- [ ] **CLAS-05**: La colonna TH nelle classifiche mostra il livello numerico corretto — *nota ricerca: dipende da CLAS-01/02 (stesso root cause: locationId sbagliato); si risolve automaticamente con il fix rankings*
-- [ ] **CLAS-06**: Il tasto "Aggiorna" forza una chiamata fresca all'API CoC (ignora cache)
-- [ ] **CLAS-07**: Cliccando il nome di un giocatore/clan in classifica si apre il relativo profilo o dettaglio
+- [x] **CLAS-01**: La classifica "Giocatori + Globale" si carica senza errore `notFound`
+- [x] **CLAS-02**: La classifica "Clan + Globale" mostra dati (non "Nessun dato")
+- [x] **CLAS-03**: Gli stemmi delle leghe visualizzati sono quelli attuali (non le versioni obsolete)
+- [x] **CLAS-04**: Le tabelle classifiche mostrano lo stemma del clan (clan crest) oltre al nome
+- [x] **CLAS-05**: La colonna TH nelle classifiche mostra il livello numerico corretto — *nota ricerca: dipende da CLAS-01/02 (stesso root cause: locationId sbagliato); si risolve automaticamente con il fix rankings*
+- [x] **CLAS-06**: Il tasto "Aggiorna" forza una chiamata fresca all'API CoC (ignora cache)
+- [x] **CLAS-07**: Cliccando il nome di un giocatore/clan in classifica si apre il relativo profilo o dettaglio
 
 ### Il Mio Clan — Struttura
 
@@ -85,13 +85,13 @@
 | EQUIP-02 | Phase 1 | Complete |
 | EQUIP-03 | Phase 1 | Complete |
 | EQUIP-04 | Phase 1 | Complete |
-| CLAS-01 | Phase 2 | Pending |
-| CLAS-02 | Phase 2 | Pending |
-| CLAS-03 | Phase 2 | Pending |
-| CLAS-04 | Phase 2 | Pending |
-| CLAS-05 | Phase 2 | Pending |
-| CLAS-06 | Phase 2 | Pending |
-| CLAS-07 | Phase 2 | Pending |
+| CLAS-01 | Phase 2 | Complete |
+| CLAS-02 | Phase 2 | Complete |
+| CLAS-03 | Phase 2 | Complete |
+| CLAS-04 | Phase 2 | Complete |
+| CLAS-05 | Phase 2 | Complete |
+| CLAS-06 | Phase 2 | Complete |
+| CLAS-07 | Phase 2 | Complete |
 | CLAN-01 | Phase 3 | Pending |
 | CLAN-02 | Phase 3 | Pending |
 | CLAN-03 | Phase 4 | Pending |

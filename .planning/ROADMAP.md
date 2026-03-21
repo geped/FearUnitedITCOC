@@ -13,7 +13,7 @@ v2.0 evolves the existing working dashboard in five focused phases. Phases 1 and
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Equipment Fix e Asset Mapper** - Corregge i bug equipaggiamenti eroe e centralizza la gestione degli asset immagine (completed 2026-03-20)
-- [ ] **Phase 2: Rankings Polish** - Completa la sezione classifiche con stemmi, clan crest, righe cliccabili e refresh forzato
+- [x] **Phase 2: Rankings Polish** - Completa la sezione classifiche con stemmi, clan crest, righe cliccabili e refresh forzato (completed 2026-03-21)
 - [ ] **Phase 3: Ristrutturazione "Il mio clan" e Stato Condiviso** - Introduce le sotto-tab e il foundation architetturale per i dati clan
 - [ ] **Phase 4: WarDetailView Component** - Aggiunge il dettaglio attacchi per guerre classiche e turni CWL
 - [ ] **Phase 5: Cerca Clan Avanzato** - Filtri ricerca avanzati e UI "Cerca clan" identica a "Il mio clan"
@@ -88,7 +88,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Equipment Fix e Asset Mapper | 2/2 | Complete   | 2026-03-20 |
-| 2. Rankings Polish | 0/1 | Not started | - |
+| 2. Rankings Polish | 1/1 | Complete   | 2026-03-21 |
 | 3. Ristrutturazione "Il mio clan" e Stato Condiviso | 0/? | Not started | - |
 | 4. WarDetailView Component | 0/? | Not started | - |
 | 5. Cerca Clan Avanzato | 0/? | Not started | - |
