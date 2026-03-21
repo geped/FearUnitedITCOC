@@ -4564,7 +4564,7 @@ document.querySelectorAll('.tab-btn,.bnav-btn').forEach(btn=>{
 
 let _rankType    = 'players'; // players | clans
 let _rankLocale  = 'global';  // global | italy
-const RANK_LOCATIONS = { global: '32000000', italy: '32000094' };
+const RANK_LOCATIONS = { global: 'global', italy: '32000094' };
 
 function switchRankType(type) {
   _rankType = type;
@@ -4586,7 +4586,7 @@ async function loadRankings() {
   const locId  = RANK_LOCATIONS[_rankLocale];
   const type   = _rankType;
   try {
-    const r = await fetch(`/api/lookup?type=rankings&rankType=${type}&locationId=${locId}`);
+    const r = await fetch(`/api/lookup?type=rankings&rankType=${type}&locationId=${locId}`, { cache: 'no-store' });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Errore API');
     const items = d.items || [];
