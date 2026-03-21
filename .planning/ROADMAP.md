@@ -45,7 +45,9 @@ Plans:
   3. La colonna TH nelle classifiche mostra il livello numerico corretto per ogni giocatore
   4. Gli stemmi delle leghe visualizzati sono quelli attuali e ogni riga clan mostra il clan crest
   5. Il tasto "Aggiorna" forza una chiamata fresca all'API e cliccando un nome si apre il profilo relativo
-**Plans**: TBD
+**Plans**: 1 plan
+Plans:
+- [ ] 02-01-PLAN.md — Fix locationId globale + cache bypass + test scaffold (CLAS-01 through CLAS-07)
 
 ### Phase 3: Ristrutturazione "Il mio clan" e Stato Condiviso
 **Goal**: "Il mio clan" e' navigabile tramite tre sotto-tab distinte, con stato condiviso corretto e senza regressioni sui selettori CSS delle sotto-tab esistenti
@@ -86,7 +88,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Equipment Fix e Asset Mapper | 2/2 | Complete   | 2026-03-20 |
-| 2. Rankings Polish | 0/? | Not started | - |
+| 2. Rankings Polish | 0/1 | Not started | - |
 | 3. Ristrutturazione "Il mio clan" e Stato Condiviso | 0/? | Not started | - |
 | 4. WarDetailView Component | 0/? | Not started | - |
 | 5. Cerca Clan Avanzato | 0/? | Not started | - |
