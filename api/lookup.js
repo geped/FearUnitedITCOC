@@ -17,6 +17,8 @@ module.exports = async (req, res) => {
             const locationId = req.query.locationId;
             if (!rankType || !locationId) return res.status(400).json({ error: 'rankType e locationId obbligatori.' });
             proxyPath = `/rankings?type=${encodeURIComponent(rankType)}&locationId=${encodeURIComponent(locationId)}`;
+        } else if (type === 'locations') {
+            proxyPath = '/locations';
         } else {
             return res.status(400).json({ error: 'type non valido. Usa: player, search-clans, rankings' });
         }

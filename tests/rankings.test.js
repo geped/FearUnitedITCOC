@@ -11,22 +11,10 @@ const assert = require('node:assert/strict');
 // ── Costanti (TARGET state — valore atteso dopo il fix) ───────────────────────
 const RANK_LOCATIONS = { global: 'global', italy: '32000094' };
 
-// ── Mappe copiate da app.js ───────────────────────────────────────────────────
-const LEAGUE_BADGE_MAP = {
-  'Bronze League III': 'BronzoIII', 'Bronze League II': 'BronzoII', 'Bronze League I': 'BronzoI',
-  'Silver League III': 'ArgentoIII', 'Silver League II': 'ArgentoII', 'Silver League I': 'ArgentoI',
-  'Gold League III':   'OroIII',     'Gold League II':   'OroII',     'Gold League I':   'OroI',
-  'Crystal League III':'CristalloIII','Crystal League II':'CristalloII','Crystal League I':'CristalloI',
-  'Master League III': 'MaestroIII', 'Master League II': 'MaestroII', 'Master League I': 'MaestroI',
-  'Champion League III':'CampioneIII','Champion League II':'CampioneII','Champion League I':'CampioneI',
-  'Titan League III':  'TitanoIII',  'Titan League II':  'TitanoII',  'Titan League I':  'TitanoI',
-  'Legend League':     'LeggendaV2',
-};
-
 // ── Funzioni di supporto copiate da app.js ────────────────────────────────────
 function thImgSrc(l) { return 'th/webp/level_' + String(l).padStart(2, '0') + '.webp'; }
-function openCercaPlayer() {}
-function openCercaClan() {}
+function openRankPlayer() {}
+function openRankClan() {}
 
 // thImgV — copiata da app.js linee 582-588
 function thImgV(level) {
@@ -37,20 +25,19 @@ function thImgV(level) {
   </div>`;
 }
 
-// _renderRankPlayers — copiata da app.js linee 4601-4628
+// _renderRankPlayers — copiata da app.js (versione aggiornata: CDN-only badge, no TH col, openRankPlayer)
 function _renderRankPlayers(el, items) {
   el.innerHTML = `<div class="table-wrap"><table>
     <thead><tr>
-      <th>#</th><th>Giocatore</th><th>Clan</th><th>TH</th><th>Trofei</th>
+      <th>#</th><th>Giocatore</th><th>Clan</th><th>Trofei</th>
     </tr></thead>
     <tbody>
       ${items.map((p,i) => {
-        const leagueBadge = LEAGUE_BADGE_MAP[p.league?.name||''];
         const lbHtml = p.league?.iconUrls?.small
           ? `<img src="${p.league.iconUrls.small}" class="league-badge-sm" alt="" style="margin-right:4px">`
-          : (leagueBadge ? `<img src="leagues/${leagueBadge}.png" class="league-badge-sm" style="margin-right:4px">` : '');
+          : '';
         const rankClass = i===0?'rank-gold':i===1?'rank-silver':i===2?'rank-bronze':'';
-        return `<tr class="cc-member-row" onclick="openCercaPlayer('${p.tag}')">
+        return `<tr class="cc-member-row" onclick="openRankPlayer('${p.tag.replace(/'/g,"\\'")}')">
           <td class="stat-cell"><span class="rank-num ${rankClass}">${p.rank??i+1}</span></td>
           <td>
             <div style="display:flex;align-items:center;gap:0.35rem">
@@ -59,7 +46,6 @@ function _renderRankPlayers(el, items) {
             <div class="mono" style="font-size:0.72rem;color:var(--text-3)">${p.tag}</div>
           </td>
           <td style="font-size:0.82rem;color:var(--text-2)">${p.clan?.name||'—'}</td>
-          <td class="stat-cell">${thImgV(p.townHallLevel)}</td>
           <td class="stat-cell">${(p.trophies||0).toLocaleString('it')} 🏆</td>
         </tr>`;
       }).join('')}
@@ -67,7 +53,7 @@ function _renderRankPlayers(el, items) {
   </table></div>`;
 }
 
-// _renderRankClans — copiata da app.js linee 4630-4656
+// _renderRankClans — copiata da app.js (usa openRankClan)
 function _renderRankClans(el, items) {
   el.innerHTML = `<div class="table-wrap"><table>
     <thead><tr>
@@ -77,7 +63,7 @@ function _renderRankClans(el, items) {
       ${items.map((c,i) => {
         const badge = c.badgeUrls?.small||'';
         const rankClass = i===0?'rank-gold':i===1?'rank-silver':i===2?'rank-bronze':'';
-        return `<tr class="cc-member-row" onclick="openCercaClan('${c.tag}')">
+        return `<tr class="cc-member-row" onclick="openRankClan('${c.tag.replace(/'/g,"\\'")}')">
           <td class="stat-cell"><span class="rank-num ${rankClass}">${c.rank??i+1}</span></td>
           <td>
             <div style="display:flex;align-items:center;gap:0.4rem">
@@ -143,22 +129,22 @@ test('CLAS-05b: thImgV(16) restituisce elemento con TH16', () => {
     `thImgV(16) deve contenere 'TH16', ottenuto: ${html}`);
 });
 
-// CLAS-03: CDN badge priorità sul fallback LEAGUE_BADGE_MAP
+// CLAS-03: CDN badge priorità — se disponibile usa CDN, non fallback locale
 test('CLAS-03: _renderRankPlayers usa CDN url quando disponibile', () => {
   const el = { innerHTML: '' };
   _renderRankPlayers(el, mockPlayers);
   assert.ok(el.innerHTML.includes('https://cdn.example.com/legend.png'),
     'Output deve contenere URL CDN della lega');
-  assert.ok(!el.innerHTML.includes('leagues/LeggendaV2.png'),
-    'Non deve usare fallback LEAGUE_BADGE_MAP quando CDN è disponibile');
+  assert.ok(!el.innerHTML.includes('leagues/'),
+    'Non deve usare badge locali quando CDN è disponibile');
 });
 
-// CLAS-03b: Fallback LEAGUE_BADGE_MAP quando CDN non disponibile
-test('CLAS-03b: _renderRankPlayers usa LEAGUE_BADGE_MAP come fallback', () => {
+// CLAS-03b: Nessun fallback a leagues/ se CDN non disponibile (badge omesso)
+test('CLAS-03b: _renderRankPlayers non mostra badge locale obsoleto se CDN assente', () => {
   const el = { innerHTML: '' };
   _renderRankPlayers(el, mockPlayersNoIcon);
-  assert.ok(el.innerHTML.includes('leagues/LeggendaV2.png'),
-    'Output deve usare fallback leagues/LeggendaV2.png quando CDN non disponibile');
+  assert.ok(!el.innerHTML.includes('leagues/'),
+    'Non deve usare fallback leagues/*.png — badge locali obsoleti rimossi');
 });
 
 // CLAS-04: Clan crest con classe cerca-clan-badge
@@ -171,18 +157,22 @@ test('CLAS-04: _renderRankClans mostra badge clan con cerca-clan-badge', () => {
     'Output deve contenere URL badge del clan');
 });
 
-// CLAS-07: onclick openCercaPlayer nei giocatori
-test('CLAS-07: _renderRankPlayers ha onclick openCercaPlayer', () => {
+// CLAS-07: onclick openRankPlayer (profilo inline, non cerca)
+test('CLAS-07: _renderRankPlayers ha onclick openRankPlayer', () => {
   const el = { innerHTML: '' };
   _renderRankPlayers(el, mockPlayers);
-  assert.ok(el.innerHTML.includes("openCercaPlayer('#ABC123')"),
-    "Output deve contenere onclick openCercaPlayer con tag giocatore");
+  assert.ok(el.innerHTML.includes('openRankPlayer('),
+    "Output deve contenere onclick openRankPlayer");
+  assert.ok(!el.innerHTML.includes('openCercaPlayer('),
+    "Non deve usare openCercaPlayer (aprirebbe tab cerca)");
 });
 
-// CLAS-07b: onclick openCercaClan nei clan
-test('CLAS-07b: _renderRankClans ha onclick openCercaClan', () => {
+// CLAS-07b: onclick openRankClan (profilo inline, non cerca)
+test('CLAS-07b: _renderRankClans ha onclick openRankClan', () => {
   const el = { innerHTML: '' };
   _renderRankClans(el, mockClans);
-  assert.ok(el.innerHTML.includes("openCercaClan('#CLAN01')"),
-    "Output deve contenere onclick openCercaClan con tag clan");
+  assert.ok(el.innerHTML.includes('openRankClan('),
+    "Output deve contenere onclick openRankClan");
+  assert.ok(!el.innerHTML.includes('openCercaClan('),
+    "Non deve usare openCercaClan (aprirebbe tab cerca)");
 });

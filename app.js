@@ -528,7 +528,7 @@ function activateTab(tabId) {
   if (tabId === 'warlog') setTimeout(loadWarLog, 80);
   if (tabId === 'cwl') setTimeout(loadAssignBonus, 80);
   if (tabId === 'profilo') setTimeout(loadProfile, 80);
-  if (tabId === 'rankings') { setTimeout(loadRankings, 80); setTimeout(renderFavoriti, 80); }
+  if (tabId === 'rankings') { setTimeout(loadRankings, 80); setTimeout(renderFavoriti, 80); _detectUserCountry(); }
   if (tabId === 'cerca') setTimeout(renderFavoriti, 80);
 }
 
@@ -4286,8 +4286,8 @@ function _renderCercaMembersList(members, clanTag) {
   </table></div></div>`;
 }
 
-async function _loadCercaWarLog(clanTag) {
-  const cont = document.getElementById('cc-tab-warlog');
+async function _loadCercaWarLog(clanTag, tabId = 'cc-tab-warlog') {
+  const cont = document.getElementById(tabId);
   if (!cont) return;
   try {
     const r = await fetch(`/api/war-log?clanTag=${encodeURIComponent(clanTag)}`);
@@ -4562,9 +4562,10 @@ document.querySelectorAll('.tab-btn,.bnav-btn').forEach(btn=>{
 
 // ── CLASSIFICHE ──────────────────────────────────────────────────────────────
 
-let _rankType    = 'players'; // players | clans
-let _rankLocale  = 'global';  // global | italy
-const RANK_LOCATIONS = { global: 'global', italy: '32000094' };
+let _rankType      = 'players'; // players | clans
+let _rankLocaleId  = 'global';  // CoC locationId string ('global', '32000094', ecc.)
+let _rankActiveBtnId = 'rank-btn-global'; // ID bottone locale attivo
+let _rankLocations = null; // cache lista locations CoC API
 
 function switchRankType(type) {
   _rankType = type;
@@ -4572,10 +4573,18 @@ function switchRankType(type) {
   document.getElementById('rank-btn-clans').classList.toggle('active', type==='clans');
   loadRankings();
 }
-function switchRankLocale(locale) {
-  _rankLocale = locale;
-  document.getElementById('rank-btn-global').classList.toggle('active', locale==='global');
-  document.getElementById('rank-btn-italy').classList.toggle('active', locale==='italy');
+
+function switchRankLocale(localeId, displayName, btnId) {
+  if (!localeId) return;
+  _rankLocaleId = localeId;
+  // Deseleziona il bottone precedente
+  if (_rankActiveBtnId) {
+    const prev = document.getElementById(_rankActiveBtnId);
+    if (prev) prev.classList.remove('active');
+  }
+  _rankActiveBtnId = btnId;
+  const next = document.getElementById(btnId);
+  if (next) next.classList.add('active');
   loadRankings();
 }
 
@@ -4583,10 +4592,9 @@ async function loadRankings() {
   const el = document.getElementById('rankings-content');
   if (!el) return;
   el.innerHTML = '<div class="profilo-loading" style="display:flex"><div class="spinner"></div><span>Caricamento classifica…</span></div>';
-  const locId  = RANK_LOCATIONS[_rankLocale];
-  const type   = _rankType;
+  const type = _rankType;
   try {
-    const r = await fetch(`/api/lookup?type=rankings&rankType=${type}&locationId=${locId}`, { cache: 'no-store' });
+    const r = await fetch(`/api/lookup?type=rankings&rankType=${type}&locationId=${encodeURIComponent(_rankLocaleId)}`, { cache: 'no-store' });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Errore API');
     const items = d.items || [];
@@ -4598,19 +4606,242 @@ async function loadRankings() {
   }
 }
 
+// ── GEOLOCALIZZAZIONE PAESE ───────────────────────────────────────────────────
+
+async function _detectUserCountry() {
+  try {
+    // Step 1: rileva country code via IP
+    const geoR = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(4000) });
+    if (!geoR.ok) return;
+    const geo = await geoR.json();
+    const countryCode = geo.country_code;
+    const countryName = geo.country_name;
+    if (!countryCode) return;
+
+    // Step 2: ottieni lista locations CoC (con cache in memoria)
+    if (!_rankLocations) {
+      const locR = await fetch('/api/lookup?type=locations');
+      if (!locR.ok) return;
+      const locData = await locR.json();
+      _rankLocations = locData.items || [];
+    }
+
+    // Step 3: trova la location CoC corrispondente al paese
+    const match = _rankLocations.find(l => l.isCountry && l.countryCode === countryCode);
+    if (!match) return;
+
+    // Step 4: aggiorna il bottone locale
+    const btn = document.getElementById('rank-btn-local');
+    if (!btn) return;
+    btn.textContent = `📍 ${countryName}`;
+    btn.dataset.locId = String(match.id);
+    btn.style.display = '';
+  } catch(_) {
+    // Geolocalizzazione non disponibile — nessun effetto visivo
+  }
+}
+
+// ── SHOW/HIDE area detail inline ─────────────────────────────────────────────
+
+function _showRankDetail(which) {
+  document.getElementById('rank-controls').style.display   = 'none';
+  document.getElementById('rankings-content').style.display = 'none';
+  document.getElementById('rank-detail-area').style.display = 'block';
+  document.getElementById('rank-player-detail').style.display = which === 'player' ? 'block' : 'none';
+  document.getElementById('rank-clan-detail').style.display   = which === 'clan'   ? 'block' : 'none';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function _rankDetailBack() {
+  document.getElementById('rank-detail-area').style.display  = 'none';
+  document.getElementById('rank-controls').style.display     = '';
+  document.getElementById('rankings-content').style.display  = '';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ── PROFILO PLAYER INLINE ─────────────────────────────────────────────────────
+
+async function openRankPlayer(playerTag) {
+  _showRankDetail('player');
+  const container = document.getElementById('rank-player-detail');
+  container.innerHTML = '<div class="profilo-loading" style="display:flex"><div class="spinner"></div><span>Caricamento profilo…</span></div>';
+  try {
+    const r = await fetch(`/api/lookup?type=player&playerTag=${encodeURIComponent(playerTag)}`);
+    const p = await r.json();
+    if (!r.ok) throw new Error(p.error || 'Errore');
+    container.innerHTML = `
+      <div id="rk-header-card" class="profilo-hero-card" data-player-tag="${p.tag}" data-player-name="${p.name.replace(/"/g,'&quot;')}"></div>
+      <div class="subtab-bar">
+        <button class="subtab-btn active" onclick="_switchRkTab('home',this)">Villaggio Base</button>
+        <button class="subtab-btn" onclick="_switchRkTab('builder',this)">Base Costruttore</button>
+        <button class="subtab-btn" onclick="_switchRkTab('capital',this)">Capitale</button>
+      </div>
+      <div id="rk-tab-home">
+        <div class="profilo-section">
+          <h3 class="profilo-section-title">Eroi &amp; Famigli</h3>
+          <div class="profilo-sub-group">
+            <div class="profilo-sub-label">Eroi</div>
+            <div id="rk-heroes" class="profilo-units-grid"></div>
+          </div>
+          <div class="profilo-sub-group" id="rk-pets-sec">
+            <div class="profilo-sub-label">Famigli</div>
+            <div id="rk-pets" class="profilo-units-grid"></div>
+          </div>
+        </div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Equipaggiamento Eroi</h3><div id="rk-equipment"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Truppe</h3><div id="rk-troops" class="profilo-units-grid"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Incantesimi</h3><div id="rk-spells" class="profilo-units-grid"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Macchine d'Assedio</h3><div id="rk-siege" class="profilo-units-grid"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Obiettivi Villaggio</h3><div id="rk-ach-home" class="profilo-achievements-list"></div></div>
+      </div>
+      <div id="rk-tab-builder" style="display:none">
+        <div id="rk-bh-stats" class="profilo-bh-stats"></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Truppe &amp; Eroi Builder</h3><div id="rk-builder-units" class="profilo-units-grid"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Obiettivi Builder</h3><div id="rk-builder-ach" class="profilo-achievements-list"></div></div>
+      </div>
+      <div id="rk-tab-capital" style="display:none">
+        <div id="rk-capital-stats" class="profilo-bh-stats"></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Truppe Capitale</h3><div id="rk-capital-troops" class="profilo-units-grid"></div></div>
+      </div>`;
+    renderPlayerView(p, 'rk');
+  } catch(e) {
+    container.innerHTML = `<div class="cerca-error">Errore: ${e.message}</div>`;
+  }
+}
+
+function _switchRkTab(tab, btn) {
+  ['home','builder','capital'].forEach(t => {
+    const el = document.getElementById(`rk-tab-${t}`);
+    if (el) el.style.display = t === tab ? 'block' : 'none';
+  });
+  document.querySelectorAll('#rank-player-detail .subtab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+// ── PROFILO CLAN INLINE ───────────────────────────────────────────────────────
+
+async function openRankClan(tag) {
+  _showRankDetail('clan');
+  const container = document.getElementById('rank-clan-detail');
+  container.innerHTML = '<div class="profilo-loading" style="display:flex"><div class="spinner"></div><span>Caricamento clan…</span></div>';
+  try {
+    const [infoR, membR] = await Promise.all([
+      fetch(`/api/clan-info?clanTag=${encodeURIComponent(tag)}`),
+      fetch(`/api/clan-members?clanTag=${encodeURIComponent(tag)}`),
+    ]);
+    const info  = await infoR.json();
+    const membs = await membR.json();
+    if (!infoR.ok) throw new Error(info.error || 'Clan non trovato');
+    _renderRankClanDetail(info, membs.items || membs || [], tag, container);
+  } catch(e) {
+    container.innerHTML = `<div class="cerca-error">Errore: ${e.message}</div>`;
+  }
+}
+
+function _renderRankClanDetail(info, members, clanTag, container) {
+  const badge = info.badgeUrls?.medium || info.badgeUrls?.small || '';
+  const typeLabel = CLAN_TYPE_LABELS[info.type] || '';
+  container.innerHTML = `
+    <div class="cc-header">
+      ${badge?`<img src="${badge}" alt="" class="cc-badge">`:''}
+      <div class="cc-info">
+        <div class="cc-name">${info.name}</div>
+        <div class="cc-tag mono">${info.tag}</div>
+        <div class="cc-meta">
+          <span class="badge badge-gold">Lv. ${info.clanLevel??'—'}</span>
+          ${typeLabel?`<span class="badge badge-gray">${typeLabel}</span>`:''}
+          ${_favBtn('clans', info.tag, info.name, badge)}
+        </div>
+        ${info.clanPoints?`<div style="font-size:0.8rem;color:var(--text-3)">🏆 ${info.clanPoints.toLocaleString('it')} trofei${info.location?.name?' · 📍 '+info.location.name:''}</div>`:''}
+        ${info.warLeague?.name?`<div style="font-size:0.8rem;color:var(--gold-dim)">⚔️ ${info.warLeague.name}</div>`:''}
+        ${info.description?`<div class="cc-desc">${info.description}</div>`:''}
+      </div>
+    </div>
+    <div class="profilo-stats-row" style="margin-bottom:1.25rem">
+      <div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:var(--gold)"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 13.17 10.33 12 8 12zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C23 13.17 18.33 12 16 12z"/></svg>
+        <span class="profilo-stat-val">${info.members??'—'}/50</span>
+        <span class="profilo-stat-lbl">Membri</span>
+      </div>
+      <div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:#f0a500"><path d="M7 3H4v5c0 1.5.8 2.8 2 3.6V13H4v2h16v-2h-2v-1.4c1.2-.8 2-2.1 2-3.6V3h-3V1H7v2z"/></svg>
+        <span class="profilo-stat-val">${info.clanPoints??'—'}</span>
+        <span class="profilo-stat-lbl">Trofei</span>
+      </div>
+      <div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:var(--green)"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg>
+        <span class="profilo-stat-val">${info.warWins??'—'}</span>
+        <span class="profilo-stat-lbl">War Vinte</span>
+      </div>
+      <div class="profilo-stat">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="color:var(--blue)"><path d="M13 3h-2v10h2V3zm4.83 2.17l-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.58-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/></svg>
+        <span class="profilo-stat-val">${info.warWinStreak??'—'}</span>
+        <span class="profilo-stat-lbl">Streak</span>
+      </div>
+    </div>
+    <div class="subtab-bar">
+      <button class="subtab-btn active" onclick="_switchRkClanTab('members',this)">Membri</button>
+      <button class="subtab-btn" onclick="_switchRkClanTab('warlog',this)">War Classiche</button>
+    </div>
+    <div id="rk-cc-tab-members">${_renderRankMembersList(members, clanTag)}</div>
+    <div id="rk-cc-tab-warlog" style="display:none"><div class="profilo-loading" style="display:flex"><div class="spinner"></div><span>Caricamento…</span></div></div>
+  `;
+  _loadCercaWarLog(clanTag, 'rk-cc-tab-warlog');
+}
+
+function _renderRankMembersList(members, clanTag) {
+  if (!members || !members.length) return '<div class="profilo-empty"><p>Nessun membro trovato.</p></div>';
+  const sorted = [...members].sort((a,b)=>{
+    const ro={leader:0,coLeader:1,admin:2,member:3};
+    return (ro[a.role]??3)-(ro[b.role]??3)||(b.trophies||0)-(a.trophies||0);
+  });
+  return `<div class="card"><div class="table-wrap"><table>
+    <thead><tr>
+      <th class="col-league">Lega</th>
+      <th class="col-th-hdr">TH</th>
+      <th>Giocatore</th>
+      <th class="stat-cell">Trofei</th>
+    </tr></thead>
+    <tbody>${sorted.map(m=>{
+      const lbUrl = m.league?.iconUrls?.small||'';
+      const lbHtml = lbUrl
+        ? `<img src="${lbUrl}" class="league-badge-sm" alt="" loading="lazy">`
+        : '<span class="no-league-badge">—</span>';
+      const roleLabel = {leader:'Leader',coLeader:'Co-leader',admin:'Anziano',member:'Membro'}[m.role]||m.role||'';
+      return `<tr class="cc-member-row" onclick="openRankPlayer('${m.tag.replace(/'/g,"\\'")}')">
+        <td class="col-league">${lbHtml}</td>
+        <td class="col-th-cell">${thImgV(m.townHallLevel)}</td>
+        <td>
+          <div style="font-weight:600">${m.name}</div>
+          <div class="mono" style="font-size:0.7rem;color:var(--text-3)">${roleLabel}</div>
+        </td>
+        <td class="stat-cell">${(m.trophies||0).toLocaleString('it')} 🏆</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div></div>`;
+}
+
+function _switchRkClanTab(tab, btn) {
+  ['members','warlog'].forEach(t => {
+    const el = document.getElementById(`rk-cc-tab-${t}`);
+    if (el) el.style.display = t === tab ? 'block' : 'none';
+  });
+  document.querySelectorAll('#rank-clan-detail .subtab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
 function _renderRankPlayers(el, items) {
   el.innerHTML = `<div class="table-wrap"><table>
     <thead><tr>
-      <th>#</th><th>Giocatore</th><th>Clan</th><th>TH</th><th>Trofei</th>
+      <th>#</th><th>Giocatore</th><th>Clan</th><th>Trofei</th>
     </tr></thead>
     <tbody>
       ${items.map((p,i) => {
-        const leagueBadge = LEAGUE_BADGE_MAP[p.league?.name||''];
         const lbHtml = p.league?.iconUrls?.small
           ? `<img src="${p.league.iconUrls.small}" class="league-badge-sm" alt="" style="margin-right:4px">`
-          : (leagueBadge ? `<img src="leagues/${leagueBadge}.png" class="league-badge-sm" style="margin-right:4px">` : '');
+          : '';
         const rankClass = i===0?'rank-gold':i===1?'rank-silver':i===2?'rank-bronze':'';
-        return `<tr class="cc-member-row" onclick="openCercaPlayer('${p.tag}')">
+        return `<tr class="cc-member-row" onclick="openRankPlayer('${p.tag.replace(/'/g,"\\'")}')">
           <td class="stat-cell"><span class="rank-num ${rankClass}">${p.rank??i+1}</span></td>
           <td>
             <div style="display:flex;align-items:center;gap:0.35rem">
@@ -4619,7 +4850,6 @@ function _renderRankPlayers(el, items) {
             <div class="mono" style="font-size:0.72rem;color:var(--text-3)">${p.tag}</div>
           </td>
           <td style="font-size:0.82rem;color:var(--text-2)">${p.clan?.name||'—'}</td>
-          <td class="stat-cell">${thImgV(p.townHallLevel)}</td>
           <td class="stat-cell">${(p.trophies||0).toLocaleString('it')} 🏆</td>
         </tr>`;
       }).join('')}
@@ -4636,7 +4866,7 @@ function _renderRankClans(el, items) {
       ${items.map((c,i) => {
         const badge = c.badgeUrls?.small||'';
         const rankClass = i===0?'rank-gold':i===1?'rank-silver':i===2?'rank-bronze':'';
-        return `<tr class="cc-member-row" onclick="openCercaClan('${c.tag}')">
+        return `<tr class="cc-member-row" onclick="openRankClan('${c.tag.replace(/'/g,"\\'")}')">
           <td class="stat-cell"><span class="rank-num ${rankClass}">${c.rank??i+1}</span></td>
           <td>
             <div style="display:flex;align-items:center;gap:0.4rem">

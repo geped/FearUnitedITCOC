@@ -627,5 +627,17 @@ app.get('/rankings', authMiddleware, async (req, res) => {
     }
 });
 
+app.get('/locations', authMiddleware, async (req, res) => {
+    try {
+        const url = 'https://api.clashofclans.com/v1/locations?limit=300';
+        const r = await fetch(url, { headers: cocHeaders() });
+        const data = await r.json();
+        if (!r.ok) return res.status(r.status).json({ error: data.reason || 'CoC API error' });
+        res.json(data);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Proxy listening on port ${PORT}`));
