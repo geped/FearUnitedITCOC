@@ -17,22 +17,23 @@
 <div id="login-screen">
     <div class="login-box">
         <div class="login-logo">
-            <span class="login-icon">⚔️</span>
-            <h1>Fear United</h1>
-            <p class="login-sub">CWL Manager</p>
+            <span class="login-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M12 3l2 6h6l-5 4 2 8-5-3-5 3 2-8-5-4h6z"/></svg></span>
+            <h1>CoCBoard</h1>
+            <p class="login-sub">Gestione clan, CWL e giocatori</p>
         </div>
         <div id="login-error" style="display:none"></div>
 
         <!-- ── ACCEDI ── -->
-        <form id="login-form">
+        <form id="login-form" autocomplete="on">
             <div class="input-wrap">
-                <span class="input-icon">👤</span>
-                <input type="text" id="email" placeholder="Nome utente o tag" required autocomplete="username">
+                <span class="input-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></span>
+                <input type="text" id="email" name="username" placeholder="Nome utente o tag (#)" required autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text">
             </div>
             <div class="input-wrap">
-                <span class="input-icon">🔒</span>
-                <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
+                <span class="input-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg></span>
+                <input type="password" id="password" name="password" placeholder="Password" required autocomplete="current-password">
             </div>
+            <label class="login-remember"><input type="checkbox" id="login-remember"> Ricorda nome utente su questo dispositivo</label>
             <button type="submit" class="btn-primary btn-full">Accedi</button>
         </form>
         <div id="login-links" class="login-links">
@@ -322,6 +323,7 @@
             </section>
 
 
+
             <!-- ── TAB: BONUS CWL ────────────────────────────────────── -->
             <section id="tab-cwl" class="tab-content" style="display:none">
                 <div class="page-header">
@@ -593,15 +595,35 @@
                     </div>
                     <button class="btn-secondary btn-sm" onclick="loadRankings()">🔄 Aggiorna</button>
                 </div>
-                <div class="card" id="rank-controls" style="margin-bottom:1rem">
-                    <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
-                        <div class="toggle-group">
-                            <button class="toggle-btn active" id="rank-btn-players" onclick="switchRankType('players')">👤 Giocatori</button>
-                            <button class="toggle-btn" id="rank-btn-clans" onclick="switchRankType('clans')">🛡️ Clan</button>
+                <div class="card rank-controls-card" id="rank-controls">
+                    <div class="rank-controls-primary">
+                        <div class="toggle-group rank-type-toggles">
+                            <button type="button" class="toggle-btn active" id="rank-btn-players" onclick="switchRankType('players')">Giocatori</button>
+                            <button type="button" class="toggle-btn" id="rank-btn-clans" onclick="switchRankType('clans')">Clan</button>
                         </div>
-                        <div class="toggle-group">
-                            <button class="toggle-btn active" id="rank-btn-global" onclick="switchRankLocale('global','Globale','rank-btn-global')">🌍 Globale</button>
-                            <button class="toggle-btn" id="rank-btn-local" onclick="switchRankLocale(this.dataset.locId,'',this.id)" style="display:none">📍 Il tuo paese</button>
+                    </div>
+                    <div class="rank-controls-geo">
+                        <div class="rank-geo-heading">
+                            <svg class="rank-geo-heading-ico" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg>
+                            <span>Classifica nel territorio</span>
+                        </div>
+                        <p class="rank-geo-hint">Predefinito: Italia. Globale o un altro paese sono opzioni aggiuntive.</p>
+                        <div class="rank-geo-row">
+                            <div class="toggle-group rank-geo-toggles">
+                                <button type="button" class="toggle-btn active" id="rank-btn-local"
+                                    data-loc-id="32000094"
+                                    onclick="switchRankLocale(this.dataset.locId,'Italia','rank-btn-local')"
+                                    title="Top giocatori o clan in Italia">Italia</button>
+                                <button type="button" class="toggle-btn" id="rank-btn-global"
+                                    onclick="switchRankLocale('global','Globale','rank-btn-global')"
+                                    title="Classifica mondiale">Globale</button>
+                            </div>
+                            <div class="rank-country-picker">
+                                <label class="rank-country-picker-label" for="rank-country-select">Altro paese</label>
+                                <div class="rank-country-select-wrap">
+                                    <select id="rank-country-select" class="rank-country-select" title="Lista paesi CoC" aria-label="Scegli un altro paese per la classifica"></select>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

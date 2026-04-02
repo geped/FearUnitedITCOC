@@ -664,20 +664,29 @@ app.get('/clan-members', authMiddleware, async (req, res) => {
         );
         const data = await r.json();
         if (!r.ok) return res.status(r.status).json({ error: data.reason || 'CoC API error' });
-        const items = (data.items || []).map(m => ({
-            name: m.name, tag: m.tag, role: m.role,
-            townHallLevel: m.townHallLevel,
-            trophies: m.trophies ?? 0,
-            donations: m.donations ?? 0,
-            donationsReceived: m.donationsReceived ?? 0,
-            clanRank: m.clanRank ?? null,
-            expLevel: m.expLevel ?? null,
-            league: m.league ? {
-                id: m.league.id,
-                name: m.league.name,
-                iconUrls: m.league.iconUrls || {}
-            } : null
-        }));
+        const items = (data.items || []).map(m => {
+            const lt = m.leagueTier;
+            const leg = m.league;
+            const league = lt && (lt.name || lt.iconUrls)
+                ? {
+                    id: lt.id ?? leg?.id,
+                    name: lt.name || leg?.name || null,
+                    iconUrls: lt.iconUrls || leg?.iconUrls || {},
+                }
+                : leg
+                  ? { id: leg.id, name: leg.name, iconUrls: leg.iconUrls || {} }
+                  : null;
+            return {
+                name: m.name, tag: m.tag, role: m.role,
+                townHallLevel: m.townHallLevel,
+                trophies: m.trophies ?? 0,
+                donations: m.donations ?? 0,
+                donationsReceived: m.donationsReceived ?? 0,
+                clanRank: m.clanRank ?? null,
+                expLevel: m.expLevel ?? null,
+                league,
+            };
+        });
         res.json({ items });
     } catch (err) {
         res.status(500).json({ error: err.message });

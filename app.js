@@ -61,6 +61,121 @@ function cocBadgeUrl(bu) {
   return bu.small || bu.medium || bu.large || '';
 }
 
+/**
+ * Stemma lega giocatore: priorità iconUrls CoC API (sempre allineati al gioco), poi PNG locale, poi "—".
+ * `opts.imgClass` per header profilo / cerca (default league-badge-sm).
+ */
+function rankLeagueBadgeHtml(league, opts) {
+  if (!league) return '<span class="no-league-badge">—</span>';
+  const nameEn = league.name || '';
+  const imgClass = (opts && opts.imgClass) || 'league-badge-sm';
+  const titleEsc = nameEn.replace(/"/g, '&quot;').replace(/</g, '');
+  const apiUrl = league.iconUrls && (league.iconUrls.large || league.iconUrls.medium || league.iconUrls.small);
+  const localFile = LEAGUE_BADGE_MAP[nameEn];
+  const localPath = localFile ? `leagues/${localFile}.png` : '';
+  const fbAttr = localPath ? ` data-league-fb="${localPath.replace(/"/g, '&quot;')}"` : '';
+
+  if (apiUrl) {
+    return `<img src="${apiUrl}" alt="" class="${imgClass}" loading="lazy" decoding="async"${fbAttr} title="${titleEsc}" onerror="_rankLeagueImgErr(this)">`;
+  }
+  if (localPath) {
+    return `<img src="${localPath}" alt="${nameEn.replace(/"/g, '')}" class="${imgClass}" loading="lazy" title="${titleEsc}">`;
+  }
+  return nameEn
+    ? `<span class="no-league-badge" title="${titleEsc}">—</span>`
+    : '<span class="no-league-badge">—</span>';
+}
+
+function _rankLeagueImgErr(img) {
+  const fb = img.getAttribute('data-league-fb');
+  if (fb && !img.dataset.leagueFbTried) {
+    img.dataset.leagueFbTried = '1';
+    img.removeAttribute('data-league-fb');
+    img.src = fb;
+    img.onerror = function () { this.outerHTML = '<span class="no-league-badge">—</span>'; };
+    return;
+  }
+  img.outerHTML = '<span class="no-league-badge">—</span>';
+}
+
+/** Lega da mostrare sul profilo: leagueTier (ranked) ha priorità su league legacy */
+function _playerLeagueForBadge(p) {
+  if (!p) return null;
+  const lt = p.leagueTier;
+  if (lt && (lt.name || (lt.iconUrls && (lt.iconUrls.small || lt.iconUrls.medium || lt.iconUrls.large)))) {
+    return {
+      name: lt.name || p.league?.name || '',
+      iconUrls: lt.iconUrls || p.league?.iconUrls,
+    };
+  }
+  return p.league || null;
+}
+
+/** URL CDN da nome (fallback se asset API non carica nel browser) */
+function unitImgUrl(u, category) {
+  if (!u) return getAssetUrl('', category);
+  const coc = _cocUnitIconUrl(u);
+  if (coc) return coc;
+  return getAssetUrl(u.name, category);
+}
+
+/** Icona CoC dall'API: large prima (spesso più stabile), poi medium/small */
+function _cocUnitIconUrl(u) {
+  if (!u?.iconUrls) return '';
+  const i = u.iconUrls;
+  return i.large || i.medium || i.small || '';
+}
+
+/**
+ * Coppia src + fallback coc.guide per <img>: se l'asset Supercell fallisce (hotlink/referrer),
+ * onerror prova il secondo URL.
+ */
+function _unitImgSrcPair(u, category) {
+  const slugUrl = getAssetUrl(u?.name, category);
+  const coc = _cocUnitIconUrl(u);
+  if (coc) return { src: coc, fb: slugUrl };
+  return { src: slugUrl, fb: '' };
+}
+
+function _unitImgDataFbAttr(fb) {
+  if (!fb) return '';
+  return ` data-fb="${String(fb).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`;
+}
+
+function _profiloUnitImgOnError(img) {
+  const fb = img.getAttribute('data-fb');
+  if (fb && !img.dataset.fbTried) {
+    img.dataset.fbTried = '1';
+    img.removeAttribute('data-fb');
+    img.src = fb;
+    return;
+  }
+  img.style.display = 'none';
+  const nx = img.nextElementSibling;
+  if (nx) nx.style.display = 'flex';
+}
+
+let _cwlHeroLvlCache = {};
+function _sumHomeHeroLevels(p) {
+  if (!p || !p.heroes) return null;
+  return p.heroes.filter(h => h.village === 'home').reduce((s, h) => s + (h.level || 0), 0);
+}
+async function _getHeroLevelsSum(playerTag) {
+  const k = playerTag;
+  if (_cwlHeroLvlCache[k] !== undefined) return _cwlHeroLvlCache[k];
+  try {
+    const r = await fetch(`/api/lookup?type=player&playerTag=${encodeURIComponent(playerTag)}`);
+    const p = await r.json();
+    if (!r.ok) { _cwlHeroLvlCache[k] = null; return null; }
+    const s = _sumHomeHeroLevels(p);
+    _cwlHeroLvlCache[k] = s;
+    return s;
+  } catch (_) {
+    _cwlHeroLvlCache[k] = null;
+    return null;
+  }
+}
+
 /** Data/ora CoC API `yyyyMMddTHHmmss.fffZ` → Date */
 function parseCocApiTime(str) {
   if (!str || str.length < 14) return null;
@@ -102,6 +217,18 @@ function resolveLoginEmail(input) {
   return s.toLowerCase().replace(/[^a-z0-9]/g, '_') + '@cocboard.internal';
 }
 
+const COCSAVED_LOGIN_KEY = 'cocboard_saved_login_id';
+
+function _prefillLoginSaved() {
+  const saved = localStorage.getItem(COCSAVED_LOGIN_KEY);
+  const emailEl = document.getElementById('email');
+  const rememberCb = document.getElementById('login-remember');
+  if (saved && emailEl) {
+    emailEl.value = saved;
+    if (rememberCb) rememberCb.checked = true;
+  }
+}
+
 document.getElementById("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const submitBtn = e.target.querySelector('button[type="submit"]');
@@ -109,6 +236,9 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
   submitBtn.textContent = "Caricamento…";
   try {
     const rawInput = document.getElementById("email").value;
+    const remember = document.getElementById('login-remember')?.checked;
+    if (remember) localStorage.setItem(COCSAVED_LOGIN_KEY, rawInput.trim());
+    else localStorage.removeItem(COCSAVED_LOGIN_KEY);
     const email    = resolveLoginEmail(rawInput);
     const pwd = document.getElementById("password").value;
     let { error } = await db.auth.signInWithPassword({ email, password: pwd });
@@ -240,6 +370,7 @@ function showLogin() {
   document.getElementById("login-screen").style.display = "flex";
   document.getElementById("app").style.display = "none";
   document.getElementById("no-clan-screen").style.display = "none";
+  _prefillLoginSaved();
 }
 
 function updateClanUI() {
@@ -316,11 +447,23 @@ const LEAGUE_BADGE_MAP = {
   'Bronze League III': 'BronzoIII', 'Bronze League II': 'BronzoII', 'Bronze League I': 'BronzoI',
   'Silver League III': 'ArgentoIII', 'Silver League II': 'ArgentoII', 'Silver League I': 'ArgentoI',
   'Gold League III':   'OroIII',     'Gold League II':   'OroII',     'Gold League I':   'OroI',
-  'Crystal League III':'CristalloIII','Crystal League II':'CristalloII','Crystal League I':'CristalloI',
+  'Crystal League III':'CristalloIII','Deep Crystal League III':'CristalloIII','Crystal League II':'CristalloII','Deep Crystal League II':'CristalloII','Crystal League I':'CristalloI','Deep Crystal League I':'CristalloI',
   'Master League III': 'MaestroIII', 'Master League II': 'MaestroII', 'Master League I': 'MaestroI',
   'Champion League III':'CampioneIII','Champion League II':'CampioneII','Champion League I':'CampioneI',
   'Titan League III':  'TitanoIII',  'Titan League II':  'TitanoII',  'Titan League I':  'TitanoI',
   'Legend League':     'LeggendaV2',
+  // Leghe Ranked Battles (nomi API inglese → asset locale aggiornato più vicino al tier)
+  'Skeleton League III': 'BronzoI', 'Skeleton League II': 'ArgentoIII', 'Skeleton League I': 'OroI',
+  'Barbarian League III': 'OroIII', 'Barbarian League II': 'CristalloIII', 'Barbarian League I': 'MaestroI',
+  'Archer League III': 'CristalloIII', 'Archer League II': 'MaestroII', 'Archer League I': 'CampioneI',
+  'Wizard League III': 'MaestroIII', 'Wizard League II': 'CampioneII', 'Wizard League I': 'TitanoI',
+  'Valkyrie League III': 'CampioneIII', 'Valkyrie League II': 'TitanoII', 'Valkyrie League I': 'Leggenda',
+  'Witch League III': 'TitanoIII', 'Witch League II': 'Leggenda', 'Witch League I': 'Leggenda',
+  'Golem League III': 'MaestroI', 'Golem League II': 'CampioneIII', 'Golem League I': 'TitanoIII',
+  'P.E.K.K.A League III': 'CampioneI', 'P.E.K.K.A League II': 'TitanoI', 'P.E.K.K.A League I': 'LeggendaV2',
+  'Electro Titan League III': 'TitanoII', 'Electro Titan League II': 'Leggenda', 'Electro Titan League I': 'LeggendaV2',
+  'Dragon League III': 'CampioneII', 'Dragon League II': 'TitanoII', 'Dragon League I': 'LeggendaV2',
+  'Electro Dragon League III': 'TitanoIII', 'Electro Dragon League II': 'LeggendaV2', 'Electro Dragon League I': 'LeggendaV2',
 };
 
 // Converte leagueTier.name (es. "Electro League 31") in nome italiano (es. "Elettro #31")
@@ -654,10 +797,16 @@ function renderMembers(members, exPlayers = []) {
     const role = cocRole(m.role);
 
     // Lega individuale giocatore (leagueTier dal DB = campo leagueTier CoC API)
-    const leagueItName = leagueTierNameIt(m.league_name);
-    const leagueHtml = m.league_icon_url
-      ? `<img src="${m.league_icon_url}" class="league-badge-sm" alt="${leagueItName || ''}" title="${leagueItName || ''}" loading="lazy" onerror="this.outerHTML='<span class=\\'no-league-badge\\'>—</span>'">`
-      : '<span class="no-league-badge">—</span>';
+    const leagueHtml = rankLeagueBadgeHtml(
+      m.league_name
+        ? {
+            name: m.league_name,
+            iconUrls: m.league_icon_url
+              ? { small: m.league_icon_url, medium: m.league_icon_url, large: m.league_icon_url }
+              : undefined,
+          }
+        : null
+    );
 
     // Badge SVG per giocatori nuovi (< 7 giorni) — icona stella minuscola
     const newBadge = isNew
@@ -3231,25 +3380,63 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
 
 function openCwlSeasonDetail(season) {
   window._cwlOpenSeason = season;
+  window._cwlModalAlienFocusTag = null;
   const rounds = (window._cwlSeasonRoundsMap || {})[season] || [];
   if (!rounds.length) return;
-
-  // Recupera la season card per gruppoStandings e meta info
-  const card = document.querySelector(`.cwl-season-card[data-season="${season}"]`);
-  const league   = card?.dataset?.league  || null;
-  const position = card?.dataset?.pos     || null;
-
-  // Cerca groupStandings dalla stagione (se live)
   let groupStandings = null;
   const allMerged = window._cwlMergedSeasons || [];
   const seasonObj  = allMerged.find(s => s.season === season);
   if (seasonObj?.groupStandings) groupStandings = seasonObj.groupStandings;
-
-  _renderCwlDetailModal(season, rounds, groupStandings, seasonObj);
+  _renderCwlDetailModal(season, rounds, groupStandings, seasonObj, null);
 }
 
-function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
+/** Apre il dettaglio CWL dal punto di vista di un altro clan dello stesso gruppo (solo stagione live). */
+async function openCwlSeasonDetailAsClan(season, clanTag) {
+  const tag = normClanTag(clanTag);
+  if (normClanTag(tag) === normClanTag(window._userClanTag)) {
+    openCwlSeasonDetail(season);
+    return;
+  }
+  const merged = window._cwlMergedSeasons || [];
+  const baseSeason = merged.find(s => s.season === season);
+  if (!baseSeason?.isLive) {
+    alert('La vista per altri clan è disponibile solo per la stagione CWL in corso.');
+    return;
+  }
+  window._cwlOpenSeason = season;
+  try {
+    const r = await fetch(`/api/cwl-stats?clanTag=${encodeURIComponent(tag)}`);
+    const d = await r.json();
+    if (!r.ok) {
+      alert(d.error || 'Errore caricamento CWL.');
+      return;
+    }
+    if (d.state === 'notInWar' || !d.roundsData?.length) {
+      alert('Nessun dato CWL per questo clan (deve essere in CWL con round attivi).');
+      return;
+    }
+    const focusName = (d.groupStandings || []).find(c => normClanTag(c.tag) === normClanTag(tag))?.name
+      || d.roundsData[0]?.clan?.name || 'Clan';
+    const seasonObj = {
+      season: d.season || season,
+      league: d.leagueNameIt || baseSeason.league,
+      position: d.ourPosition,
+      isLive: d.state !== 'ended',
+      groupStandings: d.groupStandings,
+      players: d.players
+    };
+    _renderCwlDetailModal(season, d.roundsData, d.groupStandings, seasonObj, { focusClanTag: tag, focusClanName: focusName });
+  } catch (e) {
+    alert(e.message || 'Errore di rete');
+  }
+}
+
+function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj, modalContext) {
   document.getElementById('cwl-detail-modal')?.remove();
+
+  const focusClanTag = normClanTag(modalContext?.focusClanTag || window._userClanTag);
+  const focusClanName = modalContext?.focusClanName || window._clanName || 'Il tuo clan';
+  window._cwlModalAlienFocusTag = modalContext?.focusClanTag || null;
 
   const league      = seasonObj?.league   || null;
   const position    = seasonObj?.position || null;
@@ -3258,6 +3445,7 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
   const leagueColor = league ? (LEAGUE_COLOR[league] || 'var(--gold)') : 'var(--gold)';
   const posMedal    = position ? (POS_MEDALS[+position] || `${position}°`) : null;
   const posLabel    = position ? (POS_LABELS[+position]  || `${position}°`) : null;
+  const isAlienView = !!(modalContext?.focusClanTag && normClanTag(modalContext.focusClanTag) !== normClanTag(window._userClanTag));
 
   const hasDetailedData = rounds.some(r => r.defenderMap != null || r.clan?.members?.length);
   const TOTAL_ROUNDS = 7;
@@ -3275,16 +3463,23 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
   // ── Panel: Classifica lega ──
   let standingsContent = '<p style="color:var(--text-3);padding:.5rem;font-size:.85rem">Dati classifica non disponibili per questa stagione.</p>';
   if (groupStandings?.length) {
+    const seasonEsc = String(season).replace(/'/g, "\\'");
     standingsContent = `<div class="cdm-standings-list">
       ${groupStandings.map((c, i) => {
-        const isUs = normClanTag(c.tag) === normClanTag(window._userClanTag);
+        const isUs = normClanTag(c.tag) === focusClanTag;
+        const canPeekOther = !!(seasonObj?.isLive && normClanTag(c.tag) !== focusClanTag);
         const medal = ['🥇','🥈','🥉'][i] || `${i+1}.`;
         const bu = cocBadgeUrl(c.badgeUrls);
         const clBadge = bu
           ? `<img src="${bu}" class="cdm-clan-badge" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<span class=\\'cdm-clan-badge-ph\\'>🛡️</span>'">`
           : '<span class="cdm-clan-badge-ph">🛡️</span>';
         const avgD = c.warCount > 0 ? (c.totalDestr / c.warCount).toFixed(1) + '%' : (c.totalDestr ? c.totalDestr.toFixed(1) + '%' : '—');
-        return `<div class="cdm-standing-row${isUs ? ' cdm-standing-row--us' : ''}">
+        const tagEsc = String(c.tag || '').replace(/'/g, "\\'");
+        const peekOn = canPeekOther
+          ? ` onclick="event.stopPropagation();openCwlSeasonDetailAsClan('${seasonEsc}','${tagEsc}')" title="Apri dettaglio per ${c.name.replace(/"/g, '&quot;')}"`
+          : '';
+        const peekCls = canPeekOther ? ' cdm-standing-row--peek' : '';
+        return `<div class="cdm-standing-row${isUs ? ' cdm-standing-row--us' : ''}${peekCls}"${peekOn}>
           <span class="cdm-rank">${medal}</span>
           ${clBadge}
           <span class="cdm-clan-name${isUs ? ' cdm-clan-name--us' : ''}">${c.name}</span>
@@ -3316,12 +3511,15 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
     </table></div>`;
   }
 
-  // ── Round selector (condiviso tra Turni e Anteprima) ──
-  const RESULT_ICON = { win:'🟢', lose:'🔴', draw:'🟡', ongoing:'🔵', preparation:'⚪', upcoming:'⬜' };
+  // ── Round selector (Turni, Anteprima, Confronto) ──
+  const roundDot = (r) => {
+    if (r.upcoming) return '<span class="cdm-rdot cdm-rdot--soon" aria-hidden="true"></span>';
+    const rc = { win:'cdm-rdot--win', lose:'cdm-rdot--lose', draw:'cdm-rdot--draw', ongoing:'cdm-rdot--go', preparation:'cdm-rdot--prep' }[r.result] || 'cdm-rdot--prep';
+    return `<span class="cdm-rdot ${rc}" aria-hidden="true"></span>`;
+  };
   const roundSelectorHtml = roundSlots.map((r, i) => {
-    const icon = r.upcoming ? '⬜' : (RESULT_ICON[r.result] || '⚪');
     const cls = `cdm-round-tab${i === 0 ? ' active' : ''}${r.upcoming ? ' cdm-round-tab--upcoming' : ''}`;
-    return `<button class="${cls}" onclick="_cwlSelectRound(${i})" id="cdm-tab-${i}">${icon} T${r.roundNumber || i+1}</button>`;
+    return `<button type="button" class="${cls}" onclick="_cwlSelectRound(${i})" id="cdm-tab-${i}">${roundDot(r)} T${r.roundNumber || i + 1}</button>`;
   }).join('');
 
   // ── Panel: Turni (tabella attacchi) ──
@@ -3396,8 +3594,8 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
       attacksHtml = `
       <div class="cdm-attacks-section">
         <div class="cdm-atk-switcher">
-          <button class="cdm-atk-sw-btn cdm-atk-sw-btn--active" id="${pid}-btn-us" onclick="_cwlAtkSwitch('${pid}','us')">${window._clanName || 'Il tuo clan'}</button>
-          <button class="cdm-atk-sw-btn" id="${pid}-btn-opp" onclick="_cwlAtkSwitch('${pid}','opp')">${r.opponent?.name || 'Avversario'}</button>
+          <button type="button" class="cdm-atk-sw-btn cdm-atk-sw-btn--active" id="${pid}-btn-us" onclick="_cwlAtkSwitch('${pid}','us')">${focusClanName}</button>
+          <button type="button" class="cdm-atk-sw-btn" id="${pid}-btn-opp" onclick="_cwlAtkSwitch('${pid}','opp')">${r.opponent?.name || 'Avversario'}</button>
         </div>
         <div id="${pid}-panel-us">${ourTableHtml}</div>
         <div id="${pid}-panel-opp" style="display:none">${oppTableHtml}</div>
@@ -3407,7 +3605,7 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
       <div class="cdm-war-header">
         <div class="cdm-war-side cdm-war-side--us">
           ${ourBadge}
-          <div class="cdm-war-clan-name">${window._clanName || 'Il tuo Clan'}</div>
+          <div class="cdm-war-clan-name">${focusClanName}</div>
           <div class="cdm-war-stars">⭐ ${r.clan?.stars ?? '—'}</div>
           <div class="cdm-war-destr">💥 ${fmtDestr(r.clan?.destruction)}</div>
           <div class="cdm-war-attacks">⚔ ${r.clan?.attacksUsed ?? '—'}/${totalAtks}</div>
@@ -3482,7 +3680,7 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
       </div>
       <div class="prev-war-split">
         <div class="prev-war-side prev-war-side--us">
-          <div class="prev-side-header">${ourBadge}<span>${window._clanName || 'Il tuo clan'}</span></div>
+          <div class="prev-side-header">${ourBadge}<span>${focusClanName}</span></div>
           ${thComp(r.clan?.members)}
           <div class="prev-score">⭐ ${r.clan?.stars ?? 0} &nbsp; 💥 ${r.clan?.destruction != null ? r.clan.destruction.toFixed(1)+'%' : '0.0%'}</div>
         </div>
@@ -3501,13 +3699,30 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
   const previewPanelsHtml = roundSlots.map((r, i) =>
     `<div style="display:${i===0?'block':'none'}" id="cdm-ppanel-${i}">${renderPreview(r)}</div>`
   ).join('');
+  const confrontoPanelsHtml = roundSlots.map((r, i) =>
+    `<div style="display:${i===0?'block':'none'}" id="cdm-cpanel-${i}" class="cdm-confronto-slot"><p class="cdm-confronto-placeholder" style="color:var(--text-3);font-size:0.85rem;padding:0.5rem">Seleziona la scheda Confronto per caricare i dati.</p></div>`
+  ).join('');
 
   const leagueBadgeHtml = badgeUrl
     ? `<img src="${badgeUrl}" class="cdm-header-badge" alt="${league||''}">`
     : '';
 
+  const CDM_ICO = {
+    trophy: '<svg class="cdm-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M5 3h14v2h-1v3c0 2.5-1.6 4.5-4 4.9V15h2v2H8v-2h2v-2.1c-2.4-.4-4-2.4-4-4.9V5H5V3zm2 2v3c0 1.9 1.3 3.4 3 3.9 1.7-.5 3-2 3-3.9V5H7zm-4 0h2v3c0 1.1.3 2.1.8 3H3c-.6-1.3-1-2.7-1-4V5zm18 0v2c0 1.3-.4 2.7-1 4h-2.8c.5-.9.8-1.9.8-3V5h3z"/></svg>',
+    chart: '<svg class="cdm-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M3 13h2v8H3v-8zm8-6h2v14h-2V7zm8 4h2v10h-2V11z"/></svg>',
+    sword: '<svg class="cdm-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M14.5 2l1.4 1.4-4.3 4.3 2.1 2.1 4.3-4.3L19.5 7 9 17.5 6.5 20 4 17.5 6.5 15 16 5.5l-1.5-1.5 4-4zM7.2 18.3L8.8 19.9 7.1 21.6 5.5 20l1.7-1.7z"/></svg>',
+    eye: '<svg class="cdm-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5C21.3 7.6 17 4.5 12 4.5zm0 12a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>',
+    balance: '<svg class="cdm-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 2C6.5 6 3 9.6 3 14a9 9 0 0 0 18 0c0-4.4-3.5-8-9-12zm0 15.5A5.5 5.5 0 0 1 6.5 12 12 12 0 0 1 12 5.6 12 12 0 0 1 17.5 12 5.5 5.5 0 0 1 12 17.5z"/></svg>',
+    sync: '<svg class="cdm-ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4V1L7 6l5 5V7c2.76 0 5 2.24 5 5 0 1.13-.4 2.16-1.03 3l1.46 1.46A7.93 7.93 0 0 0 20 12c0-2.21-.9-4.22-2.35-5.65zM12 19c-2.76 0-5-2.24-5-5 0-1.13.4-2.16 1.03-3L6.57 9.54A7.93 7.93 0 0 0 4 12c0 3.31 2.69 6 6 6v3l5-5-5-5v3z"/></svg>'
+  };
+
   // Default: Anteprima se live/dettagliata, altrimenti Turni
   const defaultTab = (isLive || hasDetailedData) ? 'preview' : 'rounds';
+  const roundTabsVisible = defaultTab === 'rounds' || defaultTab === 'preview' || defaultTab === 'confronto';
+
+  const backHdr = isAlienView
+    ? `<button type="button" class="cdm-back-btn" onclick="event.stopPropagation();openCwlSeasonDetail(window._cwlOpenSeason)"><svg class="cdm-ico" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg> Indietro</button>`
+    : '';
 
   const modal = document.createElement('div');
   modal.id = 'cwl-detail-modal';
@@ -3516,33 +3731,39 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
     <div class="cdm-box" onclick="event.stopPropagation()">
       <div class="cdm-header">
         <div class="cdm-header-left">
+          ${backHdr}
           ${leagueBadgeHtml}
           <div>
-            <div class="cdm-header-season">${seasonLabel(season)}${isLive ? ' <span class="cwl-live-badge-sm">🟢 LIVE</span>' : ''}</div>
+            <div class="cdm-header-season">${seasonLabel(season)}${isLive ? ' <span class="cwl-live-badge-sm"><span class="cwl-live-dot"></span> LIVE</span>' : ''}</div>
             ${league ? `<div class="cdm-header-league" style="color:${leagueColor}">${league}</div>` : ''}
             ${posMedal ? `<div class="cdm-header-pos">${posMedal} ${posLabel}</div>` : ''}
+            ${isAlienView ? `<div class="cdm-header-viewas" style="font-size:0.78rem;color:var(--text-3)">Vista: ${focusClanName}</div>` : ''}
           </div>
         </div>
-        <button class="cdm-close" onclick="closeCwlSeasonDetail()">✕</button>
+        <button type="button" class="cdm-close" onclick="closeCwlSeasonDetail()">✕</button>
       </div>
       <div class="cdm-modal-toolbar">
-        <button type="button" class="btn-secondary btn-sm" onclick="refreshCwlDetailModal()">🔄 Aggiorna stato</button>
+        <button type="button" class="btn-secondary btn-sm" onclick="refreshCwlDetailModal()">${CDM_ICO.sync} Aggiorna stato</button>
       </div>
       <div class="cdm-mtabs">
-        <button class="cdm-mtab${defaultTab==='standings'?' cdm-mtab--active':''}" id="cdm-mtab-standings" onclick="switchCdmTab('standings')">🏆 Lega</button>
-        <button class="cdm-mtab${defaultTab==='players'?' cdm-mtab--active':''}" id="cdm-mtab-players" onclick="switchCdmTab('players')">📊 Player</button>
-        <button class="cdm-mtab${defaultTab==='rounds'?' cdm-mtab--active':''}" id="cdm-mtab-rounds" onclick="switchCdmTab('rounds')">⚔ Turni</button>
-        <button class="cdm-mtab${defaultTab==='preview'?' cdm-mtab--active':''}" id="cdm-mtab-preview" onclick="switchCdmTab('preview')">👁️ Anteprima</button>
+        <button type="button" class="cdm-mtab${defaultTab==='standings'?' cdm-mtab--active':''}" id="cdm-mtab-standings" onclick="switchCdmTab('standings')">${CDM_ICO.trophy} Lega</button>
+        <button type="button" class="cdm-mtab${defaultTab==='players'?' cdm-mtab--active':''}" id="cdm-mtab-players" onclick="switchCdmTab('players')">${CDM_ICO.chart} Player</button>
+        <button type="button" class="cdm-mtab${defaultTab==='rounds'?' cdm-mtab--active':''}" id="cdm-mtab-rounds" onclick="switchCdmTab('rounds')">${CDM_ICO.sword} Turni</button>
+        <button type="button" class="cdm-mtab${defaultTab==='preview'?' cdm-mtab--active':''}" id="cdm-mtab-preview" onclick="switchCdmTab('preview')">${CDM_ICO.eye} Anteprima</button>
+        <button type="button" class="cdm-mtab${defaultTab==='confronto'?' cdm-mtab--active':''}" id="cdm-mtab-confronto" onclick="switchCdmTab('confronto')">${CDM_ICO.balance} Confronto</button>
       </div>
-      <div id="cdm-round-sel" class="cdm-round-tabs" style="display:${(defaultTab==='rounds'||defaultTab==='preview')?'flex':'none'}">${roundSelectorHtml}</div>
+      <div id="cdm-round-sel" class="cdm-round-tabs" style="display:${roundTabsVisible?'flex':'none'}">${roundSelectorHtml}</div>
       <div id="cdm-panel-standings" style="display:${defaultTab==='standings'?'block':'none'}">${standingsContent}</div>
       <div id="cdm-panel-players"   style="display:${defaultTab==='players'?'block':'none'}">${playersContent}</div>
       <div id="cdm-panel-rounds"    style="display:${defaultTab==='rounds'?'block':'none'}"><div class="cdm-round-content">${roundPanelsHtml}</div></div>
       <div id="cdm-panel-preview"   style="display:${defaultTab==='preview'?'block':'none'}">${previewPanelsHtml}</div>
+      <div id="cdm-panel-confronto" style="display:${defaultTab==='confronto'?'block':'none'}">${confrontoPanelsHtml}</div>
     </div>`;
 
   modal.addEventListener('click', closeCwlSeasonDetail);
   document.body.appendChild(modal);
+  window._cwlModalRoundSlots = roundSlots;
+  window._cwlModalRoundIdx = 0;
   requestAnimationFrame(() => modal.classList.add('cdm-overlay--visible'));
 }
 
@@ -3554,21 +3775,64 @@ function _cwlAtkSwitch(pid, side) {
 }
 
 function _cwlSelectRound(idx) {
+  window._cwlModalRoundIdx = idx;
   document.querySelectorAll('.cdm-round-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
   document.querySelectorAll('[id^="cdm-rpanel-"]').forEach((p, i) => { p.style.display = i === idx ? 'block' : 'none'; });
   document.querySelectorAll('[id^="cdm-ppanel-"]').forEach((p, i) => { p.style.display = i === idx ? 'block' : 'none'; });
+  document.querySelectorAll('[id^="cdm-cpanel-"]').forEach((p, i) => { p.style.display = i === idx ? 'block' : 'none'; });
+  const ctab = document.getElementById('cdm-mtab-confronto');
+  if (ctab?.classList.contains('cdm-mtab--active')) refreshCwlConfrontoRound(idx);
 }
 
 function switchCdmTab(tab) {
-  const panels = { standings: 'cdm-panel-standings', players: 'cdm-panel-players', rounds: 'cdm-panel-rounds', preview: 'cdm-panel-preview' };
+  const panels = { standings: 'cdm-panel-standings', players: 'cdm-panel-players', rounds: 'cdm-panel-rounds', preview: 'cdm-panel-preview', confronto: 'cdm-panel-confronto' };
   Object.entries(panels).forEach(([key, id]) => {
     const el = document.getElementById(id);
     if (el) el.style.display = key === tab ? 'block' : 'none';
   });
   document.querySelectorAll('.cdm-mtab').forEach(b => b.classList.toggle('cdm-mtab--active', b.id === `cdm-mtab-${tab}`));
-  // Show round selector only for rounds and preview tabs
   const sel = document.getElementById('cdm-round-sel');
-  if (sel) sel.style.display = (tab === 'rounds' || tab === 'preview') ? 'flex' : 'none';
+  if (sel) sel.style.display = (tab === 'rounds' || tab === 'preview' || tab === 'confronto') ? 'flex' : 'none';
+  if (tab === 'confronto') refreshCwlConfrontoRound(window._cwlModalRoundIdx || 0);
+}
+
+/** Tabella confronto TH / player / somma eroi (villaggio principale) per mappa vs avversario */
+async function refreshCwlConfrontoRound(roundIdx) {
+  const slots = window._cwlModalRoundSlots;
+  const panel = document.getElementById(`cdm-cpanel-${roundIdx}`);
+  if (!panel || !slots?.[roundIdx]) return;
+  const r = slots[roundIdx];
+  if (r.upcoming) {
+    panel.innerHTML = '<p class="cdm-confronto-empty">Turno non ancora disputato.</p>';
+    return;
+  }
+  const sortM = arr => [...(arr || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const us = sortM(r.clan?.members);
+  const them = sortM(r.opponent?.members);
+  const n = Math.max(us.length, them.length);
+  panel.innerHTML = '<div class="profilo-loading" style="display:flex;gap:0.5rem;align-items:center;padding:0.75rem"><div class="spinner"></div><span>Caricamento livelli eroi…</span></div>';
+  const rows = [];
+  for (let i = 0; i < n; i++) {
+    const a = us[i];
+    const b = them[i];
+    const hA = a ? await _getHeroLevelsSum(a.tag) : null;
+    const hB = b ? await _getHeroLevelsSum(b.tag) : null;
+    rows.push(`<tr>
+      <td class="cdm-cf-th">${a ? thImgV(a.thLevel) : '—'}</td>
+      <td class="cdm-cf-name">${a ? a.name : '—'}</td>
+      <td class="cdm-cf-hero">${hA != null ? hA : '—'}</td>
+      <td class="cdm-cf-vs">vs</td>
+      <td class="cdm-cf-th">${b ? thImgV(b.thLevel) : '—'}</td>
+      <td class="cdm-cf-name">${b ? b.name : '—'}</td>
+      <td class="cdm-cf-hero">${hB != null ? hB : '—'}</td>
+    </tr>`);
+  }
+  panel.innerHTML = `<div class="cdm-attacks-scroll"><table class="cdm-confronto-table">
+    <thead><tr>
+      <th>TH</th><th>Player</th><th>Σ eroi</th>
+      <th class="cdm-cf-vs-th">vs</th>
+      <th>TH</th><th>Player</th><th>Σ eroi</th>
+    </tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 }
 
 function closeCwlSeasonDetail() {
@@ -3584,7 +3848,12 @@ async function refreshCwlDetailModal() {
   if (!season) return;
   try {
     await loadCwlSeasons();
-    openCwlSeasonDetail(season);
+    const alien = window._cwlModalAlienFocusTag;
+    if (alien && normClanTag(alien) !== normClanTag(window._userClanTag)) {
+      await openCwlSeasonDetailAsClan(season, alien);
+    } else {
+      openCwlSeasonDetail(season);
+    }
   } catch (e) {
     console.error(e);
   }
@@ -3642,11 +3911,10 @@ function _ensureProfiloIds() {
 
 function renderPlayerView(p, prefix) {
   const isHome = prefix === 'profilo';
-  const leagueName  = p.league?.name || '';
-  const leagueBadge = LEAGUE_BADGE_MAP[leagueName];
-  const leagueHtml  = leagueBadge
-    ? `<img src="leagues/${leagueBadge}.png" alt="${leagueName}" class="profilo-league-badge" title="${leagueName}">`
-    : (leagueName ? `<span class="profilo-league-name">${leagueName}</span>` : '');
+  const leagueForBadge = _playerLeagueForBadge(p);
+  const leagueHtml = leagueForBadge
+    ? rankLeagueBadgeHtml(leagueForBadge, { imgClass: 'profilo-league-badge' })
+    : '';
   const clanHtml = p.clan
     ? `<span class="profilo-clan-ref">${p.clan.name}</span>`
     : '<span class="profilo-clan-ref" style="color:var(--text-3)">Nessun clan</span>';
@@ -3738,12 +4006,13 @@ function renderPlayerView(p, prefix) {
   // Per 'cp' il prefisso è cp-
   const secPfx = prefix === 'profilo' ? 'ps' : prefix;
 
-  const heroes   = (p.heroes||[]).filter(x=>x.village==='home');
+  const isHomeV = x => !x.village || x.village === 'home';
+  const heroes   = (p.heroes||[]).filter(isHomeV);
   const equipment= (p.heroEquipment||[]).filter(x=>!x.village||x.village==='home');
-  const pets     = (p.troops||[]).filter(x=>x.village==='home'&&PETS_SET.has(x.name));
-  const troopsAll= (p.troops||[]).filter(x=>x.village==='home'&&!PETS_SET.has(x.name)&&!SIEGE_SET.has(x.name));
-  const spells   = (p.spells||[]).filter(x=>x.village==='home');
-  const siege    = (p.troops||[]).filter(x=>x.village==='home'&&SIEGE_SET.has(x.name));
+  const pets     = (p.troops||[]).filter(x=>isHomeV(x)&&PETS_SET.has(x.name));
+  const troopsAll= (p.troops||[]).filter(x=>isHomeV(x)&&!PETS_SET.has(x.name)&&!SIEGE_SET.has(x.name));
+  const spells   = (p.spells||[]).filter(isHomeV);
+  const siege    = (p.troops||[]).filter(x=>isHomeV(x)&&SIEGE_SET.has(x.name));
   const achHome  = (p.achievements||[]).filter(a=>a.village==='home'||!a.village);
 
   _renderUnits(ids.heroes,       heroes,    'heroes');
@@ -4073,15 +4342,15 @@ function _renderEquipmentGrouped(containerId, equipment) {
 
   function unitCardHtml(u) {
     const nameIt  = _unitNameIt(u.name);
-    const imgUrl  = getAssetUrl(u.name, 'equipment');
+    const pair    = _unitImgSrcPair(u, 'equipment');
     const lvl     = u.level ?? 0;
     const maxLvl  = u.maxLevel ?? 0;
     const isMax   = maxLvl > 0 && lvl >= maxLvl;
     const isLocked= lvl === 0;
     return `<div class="profilo-unit-card${isMax?' profilo-unit-max':''}${isLocked?' profilo-unit-locked':''}" title="${nameIt}">
       <div class="profilo-unit-img-wrap">
-        <img src="${imgUrl}" alt="${nameIt}" class="profilo-unit-img" loading="lazy"
-          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <img src="${pair.src}" alt="${nameIt}" class="profilo-unit-img" loading="lazy" decoding="async"${_unitImgDataFbAttr(pair.fb)}
+          onerror="_profiloUnitImgOnError(this)">
         <div class="profilo-unit-fallback profilo-unit-fallback--neutral" style="display:none">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 3l-1.9 5.8H4.2l4.8 3.5-1.8 5.7L12 14.5l4.8 3.5-1.8-5.7 4.8-3.5h-5.9z"/>
@@ -4114,15 +4383,15 @@ function _renderUnits(containerId, units, cdnCategory) {
   }
   el.innerHTML = units.map(u => {
     const nameIt  = _unitNameIt(u.name);
-    const imgUrl  = getAssetUrl(u.name, cdnCategory);
+    const pair    = _unitImgSrcPair(u, cdnCategory);
     const lvl     = u.level ?? 0;
     const maxLvl  = u.maxLevel ?? 0;
     const isMax   = maxLvl > 0 && lvl >= maxLvl;
     const isLocked= lvl === 0;
     return `<div class="profilo-unit-card${isMax?' profilo-unit-max':''}${isLocked?' profilo-unit-locked':''}" title="${nameIt}">
       <div class="profilo-unit-img-wrap">
-        <img src="${imgUrl}" alt="${nameIt}" class="profilo-unit-img" loading="lazy"
-          onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <img src="${pair.src}" alt="${nameIt}" class="profilo-unit-img" loading="lazy" decoding="async"${_unitImgDataFbAttr(pair.fb)}
+          onerror="_profiloUnitImgOnError(this)">
         <div class="profilo-unit-fallback profilo-unit-fallback--neutral" style="display:none">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg">
             <path d="M12 3l-1.9 5.8H4.2l4.8 3.5-1.8 5.7L12 14.5l4.8 3.5-1.8-5.7 4.8-3.5h-5.9z"/>
@@ -4174,15 +4443,29 @@ let _favs = (() => {
   catch(_) { return {clans:{}, players:{}}; }
 })();
 function _saveFavs() { localStorage.setItem('coc_favorites', JSON.stringify(_favs)); }
+function _syncFavBtnDOM(type, tag) {
+  const id = `fav-btn-${type}_${String(tag).replace(/[^a-zA-Z0-9]/g, '_')}`;
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  const active = _isFav(type, tag);
+  btn.classList.toggle('btn-fav--active', active);
+  btn.title = active ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti';
+  const svg = btn.querySelector('svg');
+  if (svg) svg.setAttribute('fill', active ? 'currentColor' : 'none');
+}
 function toggleFavClan(tag, name, badge) {
   if (_favs.clans[tag]) delete _favs.clans[tag];
   else _favs.clans[tag] = { tag, name, badge: badge||'', ts: Date.now() };
-  _saveFavs(); _updateFavUI();
+  _saveFavs();
+  _syncFavBtnDOM('clans', tag);
+  _updateFavUI();
 }
 function toggleFavPlayer(tag, name) {
   if (_favs.players[tag]) delete _favs.players[tag];
   else _favs.players[tag] = { tag, name, ts: Date.now() };
-  _saveFavs(); _updateFavUI();
+  _saveFavs();
+  _syncFavBtnDOM('players', tag);
+  _updateFavUI();
 }
 function _isFav(type, tag) { return !!_favs[type]?.[tag]; }
 function _favBtn(type, tag, name, badge) {
@@ -4190,7 +4473,7 @@ function _favBtn(type, tag, name, badge) {
   const onclick = type==='clans'
     ? `toggleFavClan('${tag.replace(/'/g,"\\'")}','${name.replace(/'/g,"\\'")}','${(badge||'').replace(/'/g,"\\'")}')`
     : `toggleFavPlayer('${tag.replace(/'/g,"\\'")}','${name.replace(/'/g,"\\'")}')`;
-  return `<button class="btn-fav${active?' btn-fav--active':''}" onclick="${onclick}" title="${active?'Rimuovi dai preferiti':'Aggiungi ai preferiti'}" id="fav-btn-${tag.replace(/[^a-zA-Z0-9]/g,'_')}">
+  return `<button type="button" class="btn-fav${active?' btn-fav--active':''}" onclick="${onclick};event.stopPropagation()" title="${active?'Rimuovi dai preferiti':'Aggiungi ai preferiti'}" id="fav-btn-${type}_${tag.replace(/[^a-zA-Z0-9]/g,'_')}">
     <svg viewBox="0 0 24 24" fill="${active?'currentColor':'none'}" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
   </button>`;
 }
@@ -4220,7 +4503,7 @@ function renderFavoriti() {
       <div class="fav-row">
         ${c.badge ? `<img src="${c.badge}" class="cerca-clan-badge" alt="" style="width:32px;height:32px">` : ''}
         <span class="fav-name" onclick="openCercaClan('${c.tag}')" style="cursor:pointer">${c.name} <span class="mono" style="font-size:0.75rem;color:var(--text-3)">${c.tag}</span></span>
-        <button class="btn-fav btn-fav--active" onclick="toggleFavClan('${c.tag}','${c.name.replace(/'/g,"\\'")}','${(c.badge||'').replace(/'/g,"\\'")}')">
+        <button type="button" class="btn-fav btn-fav--active" onclick="toggleFavClan('${c.tag.replace(/'/g,"\\'")}','${c.name.replace(/'/g,"\\'")}','${(c.badge||'').replace(/'/g,"\\'")}')">
           <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
         </button>
       </div>`).join('');
@@ -4231,7 +4514,7 @@ function renderFavoriti() {
     html += players.map(p => `
       <div class="fav-row">
         <span class="fav-name" onclick="openCercaPlayer('${p.tag}')" style="cursor:pointer">${p.name} <span class="mono" style="font-size:0.75rem;color:var(--text-3)">${p.tag}</span></span>
-        <button class="btn-fav btn-fav--active" onclick="toggleFavPlayer('${p.tag}','${p.name.replace(/'/g,"\\'")}')">
+        <button type="button" class="btn-fav btn-fav--active" onclick="toggleFavPlayer('${p.tag.replace(/'/g,"\\'")}','${p.name.replace(/'/g,"\\'")}')">
           <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
         </button>
       </div>`).join('');
@@ -4296,13 +4579,14 @@ document.getElementById('cerca-input')?.addEventListener('keydown', e => {
 });
 
 function renderCercaPlayer(p, container) {
-  const leagueName  = p.league?.name || '';
-  const leagueBadge = LEAGUE_BADGE_MAP[leagueName];
-  const leagueHtml  = leagueBadge
-    ? `<img src="leagues/${leagueBadge}.png" alt="${leagueName}" class="cerca-league-badge">`
-    : (leagueName ? `<span style="font-size:0.8rem;color:var(--text-3)">${leagueName}</span>` : '');
+  const leagueFor = _playerLeagueForBadge(p);
+  const leagueHtml = leagueFor
+    ? rankLeagueBadgeHtml(leagueFor, { imgClass: 'cerca-league-badge' })
+    : '';
+  const fav = _favBtn('players', p.tag, p.name);
   container.innerHTML = `
     <div class="cerca-player-card">
+      <div class="cerca-player-card-head">
       <div class="cerca-player-left">
         ${thImg(p.townHallLevel)}
         <div>
@@ -4311,6 +4595,8 @@ function renderCercaPlayer(p, container) {
           ${p.clan ? `<div class="cerca-player-clan">${p.clan.name}</div>` : ''}
         </div>
         ${leagueHtml}
+      </div>
+      ${fav}
       </div>
       <div class="profilo-stats-row" style="margin-top:0.75rem">
         <div class="profilo-stat"><span class="profilo-stat-val">${p.trophies??'—'}</span><span class="profilo-stat-lbl">Trofei</span></div>
@@ -4335,7 +4621,9 @@ function renderCercaClans(clans, container) {
   container.innerHTML = clans.map(c => {
     const badge = c.badgeUrls?.small || c.badgeUrls?.medium || '';
     const typeLabel = CLAN_TYPE_LABELS[c.type] || c.type || '';
+    const fav = _favBtn('clans', c.tag, c.name, badge);
     return `<div class="cerca-clan-card">
+      <div class="cerca-clan-card-head">
       <div class="cerca-clan-left">
         ${badge ? `<img src="${badge}" alt="" class="cerca-clan-badge">` : ''}
         <div style="flex:1;min-width:0">
@@ -4343,6 +4631,8 @@ function renderCercaClans(clans, container) {
           <div class="cerca-clan-tag mono">${c.tag}</div>
           ${c.description ? `<div class="cerca-clan-desc">${c.description.slice(0,90)}${c.description.length>90?'…':''}</div>` : ''}
         </div>
+      </div>
+      ${fav}
       </div>
       <div class="cerca-clan-stats">
         <div class="profilo-stat"><span class="profilo-stat-val">${c.members??'—'}/50</span><span class="profilo-stat-lbl">Membri</span></div>
@@ -4507,11 +4797,7 @@ function _renderCercaMembersList(members, clanTag) {
     <tbody>
       ${sorted.map(m=>{
         const role=cocRole(m.role);
-        const lbUrl = m.league?.iconUrls?.small || '';
-        const lbLocal = LEAGUE_BADGE_MAP[m.league?.name||''];
-        const lbHtml = lbUrl
-          ? `<img src="${lbUrl}" class="league-badge-sm" alt="${m.league?.name||''}" title="${m.league?.name||''}" loading="lazy">`
-          : (lbLocal ? `<img src="leagues/${lbLocal}.png" class="league-badge-sm" alt="">` : '');
+        const lbHtml = rankLeagueBadgeHtml(m.league);
         return `<tr class="cc-member-row" onclick="openCercaPlayer('${m.tag}','${clanTag}')">
           <td class="col-league">${lbHtml}</td>
           <td class="col-th-cell">${thImgV(m.townHallLevel)}</td>
@@ -4802,10 +5088,12 @@ document.querySelectorAll('.tab-btn,.bnav-btn').forEach(btn=>{
 });
 
 // ── CLASSIFICHE ──────────────────────────────────────────────────────────────
+// `global` deve essere la stringa letterale richiesta dalla CoC API per il mondiale
+const RANK_LOCATIONS = { global: 'global', italy: '32000094' };
 
 let _rankType      = 'players'; // players | clans
-let _rankLocaleId  = 'global';  // CoC locationId string ('global', '32000094', ecc.)
-let _rankActiveBtnId = 'rank-btn-global'; // ID bottone locale attivo
+let _rankLocaleId  = RANK_LOCATIONS.italy;
+let _rankActiveBtnId = 'rank-btn-local';
 let _rankLocations = null; // cache lista locations CoC API
 
 function switchRankType(type) {
@@ -4818,20 +5106,60 @@ function switchRankType(type) {
 function switchRankLocale(localeId, displayName, btnId) {
   if (!localeId) return;
   _rankLocaleId = localeId;
-  // Deseleziona il bottone precedente
-  if (_rankActiveBtnId) {
-    const prev = document.getElementById(_rankActiveBtnId);
-    if (prev) prev.classList.remove('active');
+  document.querySelectorAll('#rank-controls .rank-geo-toggles .toggle-btn').forEach(b => b.classList.remove('active'));
+  const sel = document.getElementById('rank-country-select');
+  if (sel) {
+    sel.classList.remove('rank-select--active');
+    if (btnId === 'rank-btn-global' || btnId === 'rank-btn-local') sel.value = '';
   }
-  _rankActiveBtnId = btnId;
-  const next = document.getElementById(btnId);
-  if (next) next.classList.add('active');
+  _rankActiveBtnId = btnId || null;
+  if (btnId) {
+    const next = document.getElementById(btnId);
+    if (next) next.classList.add('active');
+  }
   loadRankings();
+}
+
+function switchRankLocaleFromSelect() {
+  const sel = document.getElementById('rank-country-select');
+  if (!sel || !sel.value) return;
+  _rankLocaleId = sel.value;
+  document.querySelectorAll('#rank-controls .rank-geo-toggles .toggle-btn').forEach(b => b.classList.remove('active'));
+  sel.classList.add('rank-select--active');
+  _rankActiveBtnId = null;
+  loadRankings();
+}
+
+async function _initRankCountrySelect() {
+  const sel = document.getElementById('rank-country-select');
+  if (!sel || sel.dataset.ready === '1') return;
+  sel.dataset.ready = '1';
+  try {
+    if (!_rankLocations) {
+      const locR = await fetch('/api/lookup?type=locations');
+      if (!locR.ok) return;
+      const locData = await locR.json();
+      _rankLocations = locData.items || [];
+    }
+    const items = (_rankLocations || []).filter(x => x.isCountry).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'it'));
+    sel.innerHTML = '<option value="">Altro paese…</option>' + items.map(x =>
+      `<option value="${String(x.id).replace(/"/g, '')}">${String(x.name || x.id).replace(/</g, '')}</option>`
+    ).join('');
+    sel.addEventListener('change', () => {
+      if (!sel.value) {
+        sel.classList.remove('rank-select--active');
+        switchRankLocale(RANK_LOCATIONS.italy, 'Italia', 'rank-btn-local');
+        return;
+      }
+      switchRankLocaleFromSelect();
+    });
+  } catch (_) {}
 }
 
 async function loadRankings() {
   const el = document.getElementById('rankings-content');
   if (!el) return;
+  await _initRankCountrySelect();
   el.innerHTML = '<div class="profilo-loading" style="display:flex"><div class="spinner"></div><span>Caricamento classifica…</span></div>';
   const type = _rankType;
   try {
@@ -4871,14 +5199,22 @@ async function _detectUserCountry() {
     const match = _rankLocations.find(l => l.isCountry && l.countryCode === countryCode);
     if (!match) return;
 
-    // Step 4: aggiorna il bottone locale
     const btn = document.getElementById('rank-btn-local');
     if (!btn) return;
-    btn.textContent = `📍 ${countryName}`;
+    btn.textContent = match.name || countryName || 'Paese';
     btn.dataset.locId = String(match.id);
     btn.style.display = '';
+
+    const sel = document.getElementById('rank-country-select');
+    const usingCustom = sel?.classList.contains('rank-select--active');
+    const onGlobal = _rankActiveBtnId === 'rank-btn-global';
+    if (usingCustom || onGlobal) return;
+
+    _rankLocaleId = String(match.id);
+    const tab = document.getElementById('tab-rankings');
+    if (tab && tab.style.display !== 'none') loadRankings();
   } catch(_) {
-    // Geolocalizzazione non disponibile — nessun effetto visivo
+    // Geolocalizzazione non disponibile — resta predefinito Italia
   }
 }
 
@@ -5044,10 +5380,7 @@ function _renderRankMembersList(members, clanTag) {
       <th class="stat-cell">Trofei</th>
     </tr></thead>
     <tbody>${sorted.map(m=>{
-      const lbUrl = m.league?.iconUrls?.small||'';
-      const lbHtml = lbUrl
-        ? `<img src="${lbUrl}" class="league-badge-sm" alt="" loading="lazy">`
-        : '<span class="no-league-badge">—</span>';
+      const lbHtml = rankLeagueBadgeHtml(m.league);
       const roleLabel = {leader:'Leader',coLeader:'Co-leader',admin:'Anziano',member:'Membro'}[m.role]||m.role||'';
       return `<tr class="cc-member-row" onclick="openRankPlayer('${m.tag.replace(/'/g,"\\'")}')">
         <td class="col-league">${lbHtml}</td>
@@ -5074,13 +5407,13 @@ function _switchRkClanTab(tab, btn) {
 function _renderRankPlayers(el, items) {
   el.innerHTML = `<div class="table-wrap"><table>
     <thead><tr>
-      <th>#</th><th>Giocatore</th><th>Clan</th><th>Trofei</th>
+      <th>#</th><th>Giocatore</th><th>Clan</th><th>Trofei</th><th>Att. vinti</th><th>Dif. vinte</th>
     </tr></thead>
     <tbody>
       ${items.map((p,i) => {
-        const lbHtml = p.league?.iconUrls?.small
-          ? `<img src="${p.league.iconUrls.small}" class="league-badge-sm" alt="" style="margin-right:4px">`
-          : '';
+        const lbHtml = rankLeagueBadgeHtml(p.league);
+        const atk = p.attackWins != null ? p.attackWins : '—';
+        const def = p.defenseWins != null ? p.defenseWins : '—';
         const rankClass = i===0?'rank-gold':i===1?'rank-silver':i===2?'rank-bronze':'';
         return `<tr class="cc-member-row" onclick="openRankPlayer('${p.tag.replace(/'/g,"\\'")}')">
           <td class="stat-cell"><span class="rank-num ${rankClass}">${p.rank??i+1}</span></td>
@@ -5091,7 +5424,9 @@ function _renderRankPlayers(el, items) {
             <div class="mono" style="font-size:0.72rem;color:var(--text-3)">${p.tag}</div>
           </td>
           <td style="font-size:0.82rem;color:var(--text-2)">${p.clan?.name||'—'}</td>
-          <td class="stat-cell">${(p.trophies||0).toLocaleString('it')} 🏆</td>
+          <td class="stat-cell">${(p.trophies||0).toLocaleString('it')}</td>
+          <td class="stat-cell">${atk}</td>
+          <td class="stat-cell">${def}</td>
         </tr>`;
       }).join('')}
     </tbody>

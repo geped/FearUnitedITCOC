@@ -104,6 +104,13 @@ body {
 
 .login-box form { display: flex; flex-direction: column; gap: 0.7rem; margin-bottom: 0.7rem; }
 
+.login-remember {
+  display: flex; align-items: center; gap: 0.45rem;
+  font-size: 0.8rem; color: var(--text-2); cursor: pointer;
+  user-select: none; margin: -0.15rem 0 0;
+}
+.login-remember input { accent-color: var(--gold); cursor: pointer; }
+
 .input-wrap {
     position: relative;
     display: flex;
@@ -1557,6 +1564,131 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .toggle-btn.active { background: var(--gold-dim); color: var(--gold); }
 
+/* ── Classifiche: territorio + menu paesi ── */
+.rank-controls-card {
+    margin-bottom: 1rem;
+    padding: 0.85rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.rank-controls-primary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+.rank-controls-geo {
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+}
+.rank-geo-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-3);
+}
+.rank-geo-heading-ico {
+    opacity: 0.9;
+    color: var(--gold);
+    flex-shrink: 0;
+}
+.rank-geo-hint {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-3);
+    line-height: 1.4;
+    max-width: 40rem;
+}
+.rank-geo-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.85rem 1.1rem;
+}
+.rank-geo-toggles {
+    flex-shrink: 0;
+}
+.rank-country-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    flex: 1;
+    min-width: min(100%, 14rem);
+}
+.rank-country-picker-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-3);
+}
+.rank-country-select-wrap {
+    position: relative;
+}
+.rank-country-select-wrap::after {
+    content: '';
+    position: absolute;
+    right: 0.7rem;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 5px solid transparent;
+    border-top-color: var(--text-3);
+    pointer-events: none;
+    opacity: 0.85;
+}
+.rank-country-select {
+    width: 100%;
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.48rem 2.15rem 0.48rem 0.7rem;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 0.82rem;
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.rank-country-select:hover {
+    border-color: rgba(201, 169, 98, 0.4);
+}
+.rank-country-select:focus {
+    outline: none;
+    border-color: var(--gold);
+    box-shadow: 0 0 0 2px rgba(201, 169, 98, 0.12);
+}
+.rank-country-select.rank-select--active {
+    border-color: var(--gold);
+    color: var(--gold);
+    background: rgba(201, 169, 98, 0.07);
+}
+@media (max-width: 540px) {
+    .rank-geo-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .rank-geo-toggles.toggle-group {
+        width: 100%;
+    }
+    .rank-geo-toggles .toggle-btn {
+        flex: 1;
+        text-align: center;
+        padding: 0.45rem 0.6rem;
+    }
+    .rank-country-picker {
+        min-width: 0;
+    }
+}
+
 .criteria-grid {
     display: flex;
     flex-direction: column;
@@ -2587,7 +2719,7 @@ tbody tr:last-child td { border-bottom: none; }
   gap:.75rem; margin-bottom:1rem;
   border-bottom:1px solid var(--border); padding-bottom:.85rem;
 }
-.cdm-header-left { display:flex; align-items:center; gap:.75rem; }
+.cdm-header-left { display:flex; align-items:flex-start; gap:.5rem .75rem; flex-wrap:wrap; }
 .cdm-header-badge { width:56px; height:56px; object-fit:contain; }
 .cdm-header-season { font-size:1.05rem; font-weight:700; color:var(--text); }
 .cdm-header-league { font-size:.85rem; font-weight:600; margin-top:.15rem; }
@@ -2616,6 +2748,56 @@ tbody tr:last-child td { border-bottom: none; }
   background:var(--bg-3);
 }
 .cdm-standing-row--us { background:rgba(201,169,98,.08); color:var(--text); }
+.cdm-standing-row--peek {
+  cursor:pointer;
+  outline:1px solid rgba(201,169,98,.25);
+}
+.cdm-standing-row--peek:hover { background:rgba(201,169,98,.12); }
+.cdm-back-btn {
+  display:inline-flex; align-items:center; gap:.35rem;
+  margin-right:.5rem; padding:.25rem .5rem;
+  background:var(--bg-2); border:1px solid var(--border);
+  border-radius:6px; color:var(--text-2); font-size:.78rem;
+  cursor:pointer; flex-shrink:0;
+}
+.cdm-back-btn:hover { color:var(--gold); border-color:var(--gold); }
+.cdm-ico { flex-shrink:0; vertical-align:-2px; opacity:.9; }
+.cdm-mtab .cdm-ico { margin-right:.25rem; vertical-align:-3px; }
+.cdm-rdot {
+  display:inline-block; width:.55rem; height:.55rem; border-radius:50%;
+  margin-right:.2rem; vertical-align:middle;
+}
+.cdm-rdot--soon { background:var(--text-3); opacity:.45; }
+.cdm-rdot--win { background:#4caf50; }
+.cdm-rdot--lose { background:#e74c3c; }
+.cdm-rdot--draw { background:#f1c40f; }
+.cdm-rdot--go { background:#3498db; }
+.cdm-rdot--prep { background:var(--text-3); }
+.cwl-live-dot {
+  display:inline-block; width:.45rem; height:.45rem; border-radius:50%;
+  background:#4caf50; margin-right:.25rem; vertical-align:middle;
+}
+.cdm-confronto-table {
+  width:100%; border-collapse:collapse; font-size:.78rem;
+  min-width:520px;
+}
+.cdm-confronto-table th {
+  text-align:left; padding:.35rem .4rem;
+  color:var(--text-3); font-size:.68rem; font-weight:700;
+  letter-spacing:.04em; text-transform:uppercase;
+  border-bottom:1px solid var(--border);
+}
+.cdm-confronto-table td {
+  padding:.28rem .4rem; border-bottom:1px solid rgba(255,255,255,.04);
+  vertical-align:middle;
+}
+.cdm-cf-vs, .cdm-cf-vs-th { text-align:center; color:var(--text-3); font-weight:700; width:2rem; }
+.cdm-cf-name { font-weight:600; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cdm-cf-hero { font-family:'IBM Plex Mono',monospace; color:var(--text-2); }
+.cerca-player-card-head, .cerca-clan-card-head {
+  display:flex; align-items:flex-start; justify-content:space-between; gap:.65rem;
+}
+.cerca-player-card-head .btn-fav, .cerca-clan-card-head .btn-fav { flex-shrink:0; align-self:flex-start; }
 .cdm-rank { width:1.8rem; text-align:center; font-size:.9rem; flex-shrink:0; }
 .cdm-clan-badge { width:22px; height:22px; object-fit:contain; flex-shrink:0; }
 .cdm-clan-badge-ph { font-size:.9rem; flex-shrink:0; }
