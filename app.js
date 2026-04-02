@@ -48,6 +48,28 @@ function clanQ() {
     : '';
 }
 
+/** Tag clan per confronti sicuri (stesso formato del proxy) */
+function normClanTag(t) {
+  if (!t) return '';
+  const s = String(t).trim().toUpperCase();
+  return s.startsWith('#') ? s : '#' + s;
+}
+
+/** URL stemma clan API (small → medium → large) */
+function cocBadgeUrl(bu) {
+  if (!bu) return '';
+  return bu.small || bu.medium || bu.large || '';
+}
+
+/** Data/ora CoC API `yyyyMMddTHHmmss.fffZ` → Date */
+function parseCocApiTime(str) {
+  if (!str || str.length < 14) return null;
+  const y = str.slice(0, 4), mo = str.slice(4, 6), d = str.slice(6, 8);
+  if (str.charAt(8) !== 'T') return null;
+  const h = str.slice(9, 11), mi = str.slice(11, 13), sec = str.slice(13, 15);
+  return new Date(`${y}-${mo}-${d}T${h}:${mi}:${sec}Z`);
+}
+
 // Mappatura ruoli CoC API → etichette italiane
 // Nota: nell'API CoC "admin" = Anziano (Elder), NON admin app
 const COC_ROLES = {
@@ -82,6 +104,9 @@ function resolveLoginEmail(input) {
 
 document.getElementById("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Caricamento…";
   try {
     const rawInput = document.getElementById("email").value;
     const email    = resolveLoginEmail(rawInput);
@@ -103,6 +128,9 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
     }
   } catch (err) {
     showLoginError("Errore di connessione. Ricarica la pagina e riprova.");
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Accedi";
   }
 });
 
@@ -505,12 +533,12 @@ async function showApp(sessionUser) {
 // ── NAVIGATION ────────────────────────────────────────────────────────────────
 
 const TAB_TITLES = {
-  members: 'Clan',
-  warlog:  'Registri Guerre',
-  cwl:     'Bonus CWL',
-  profilo: 'Il mio Profilo',
-  cerca:   'Cerca',
-  admin:   'Gestione Utenti',
+  members:   'Clan',
+  warlog:    'Registri Guerre',
+  cwl:       'Bonus CWL',
+  profilo:   'Il mio Profilo',
+  cerca:     'Cerca',
+  admin:     'Gestione Utenti',
 };
 
 function activateTab(tabId) {
@@ -555,7 +583,10 @@ async function loadMembers() {
   const query = db.from("members").select("*").order("name");
   if (window._userClanTag) query.eq("clan_tag", window._userClanTag);
   const { data } = await query;
-  renderMembers(data || []);
+  const all = data || [];
+  const active   = all.filter(m => !m.left_at);
+  const exPlayers = all.filter(m => !!m.left_at).sort((a, b) => new Date(b.left_at) - new Date(a.left_at));
+  renderMembers(active, exPlayers);
 }
 
 // Ritorna il percorso immagine TH — usa webp (th/) per livelli 1-18, png per 19+
@@ -603,7 +634,7 @@ function thImgBonus(playerName, isExPlayer) {
   return '<span class="th-unknown">?</span>';
 }
 
-function renderMembers(members) {
+function renderMembers(members, exPlayers = []) {
   const tbody = document.querySelector("#members-table tbody");
   tbody.innerHTML = "";
   const now = new Date();
@@ -673,6 +704,51 @@ function renderMembers(members) {
   if (s('stat-leaders'))   s('stat-leaders').textContent   = leaders;
   if (s('stat-coleaders')) s('stat-coleaders').textContent = coleaders;
   if (s('stat-avg-th'))    s('stat-avg-th').textContent    = avgTh;
+
+  // ── Sezione Ex Player ────────────────────────────────────────────────────────
+  const membersCard = document.querySelector("#members-table").closest('.card');
+  let exSection = document.getElementById('ex-players-section');
+  if (exSection) exSection.remove();
+
+  if (exPlayers.length > 0) {
+    exSection = document.createElement('div');
+    exSection.id = 'ex-players-section';
+    exSection.className = 'card';
+    exSection.style.marginTop = '1rem';
+
+    const exRows = exPlayers.map(m => {
+      const leftDate = m.left_at ? new Date(m.left_at).toLocaleDateString('it-IT') : '—';
+      return `<tr>
+        <td class="col-th-cell">${thImgOut()}</td>
+        <td class="col-member">
+          <div class="member-name-wrap"><span class="member-name" style="color:var(--text-3)">${m.name}</span></div>
+          <span class="member-tag">${m.tag}</span>
+        </td>
+        <td class="stat-cell">${m.trophies ?? '—'}</td>
+        <td class="stat-cell" style="color:var(--red);font-size:0.78rem">${leftDate}</td>
+      </tr>`;
+    }).join('');
+
+    exSection.innerHTML = `
+      <div style="padding:0.75rem 1rem 0.5rem;display:flex;align-items:center;gap:0.5rem">
+        <span style="font-size:0.85rem;font-weight:600;color:var(--text-3)">🚪 Ex membri (${exPlayers.length})</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-th-hdr">TH</th>
+              <th>Nome / Tag</th>
+              <th>Trofei</th>
+              <th>Uscito il</th>
+            </tr>
+          </thead>
+          <tbody>${exRows}</tbody>
+        </table>
+      </div>`;
+
+    membersCard.after(exSection);
+  }
 }
 
 // Espande/comprime la riga extra (mobile) nella tabella membri
@@ -2963,7 +3039,7 @@ async function loadCwlSeasons() {
   // ── Stagione corrente/live da cwl-stats ───────────────────────────────────
   if (cwlData && cwlData.state !== 'notInWar' && cwlData.season) {
     const key      = cwlData.season;
-    const ourGroup = (cwlData.groupStandings || []).find(c => c.tag === window._userClanTag);
+    const ourGroup = (cwlData.groupStandings || []).find(c => normClanTag(c.tag) === normClanTag(window._userClanTag));
     dbMap[key] = {
       season:         key,
       league:         cwlData.leagueNameIt          || dbMap[key]?.league      || null,
@@ -2978,7 +3054,8 @@ async function loadCwlSeasons() {
       losses:         warSeasonMap[key]?.losses      ?? null,
       isLive:         cwlData.state !== 'ended',
       groupStandings: cwlData.groupStandings         || null,
-      roundsData:     cwlData.roundsData             || null
+      roundsData:     cwlData.roundsData             || null,
+      players:        cwlData.players                || null
     };
     // Sostituisce i dati war-log per la stagione live con quelli più dettagliati da cwl-stats
     if (cwlData.roundsData?.length) warSeasonRoundsMap[key] = cwlData.roundsData;
@@ -3004,6 +3081,7 @@ async function loadCwlSeasons() {
       losses:         d.losses      ?? wl.losses  ?? null,
       isLive:         d.isLive      || false,
       groupStandings: d.groupStandings || null,
+      players:        d.players        || null,
       hasRounds:      !!(warSeasonRoundsMap[s]?.length)
     });
   });
@@ -3011,6 +3089,20 @@ async function loadCwlSeasons() {
 
   window._cwlMergedSeasons = merged;
   renderCwlSeasons(merged, cwlSeasonsTableMissing);
+}
+
+// ── ANTEPRIMA CWL ─────────────────────────────────────────────────────────────
+
+function toggleCwlGroup(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const btn = el.previousElementSibling;
+  const isOpen = el.style.display === 'none';
+  el.style.display = isOpen ? 'block' : 'none';
+  if (btn) {
+    btn.textContent = isOpen ? 'Nascondi classifica ▲' : 'Mostra classifica ▼';
+    btn.setAttribute('aria-expanded', isOpen);
+  }
 }
 
 function renderCwlSeasons(seasons, tablesMissing) {
@@ -3067,22 +3159,32 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
       const liveBadge   = s.isLive
         ? `<span class="cwl-live-badge-sm">🟢 LIVE</span>` : '';
 
-      // Classifica gruppo (se disponibile — stagione live)
+      // Classifica gruppo (collassabile — bottone "Mostra classifica")
       let groupHtml = '';
       if (s.groupStandings?.length) {
-        groupHtml = `<div class="cwl-group-standings">
-          <div class="cwl-group-title">Classifica gruppo</div>
-          ${s.groupStandings.map((c, i) => {
-            const isMyClan = c.tag === window._userClanTag;
-            const rankMedal = ['🥇','🥈','🥉'][i] || `${i+1}.`;
-            return `<div class="cwl-group-row${isMyClan ? ' cwl-group-row--us' : ''}">
-              <span class="cwl-group-rank">${rankMedal}</span>
-              <span class="cwl-group-name">${isMyClan ? `<strong>${c.name}</strong>` : c.name}</span>
-              <span class="cwl-group-stars">⭐ ${c.stars}</span>
-              <span class="cwl-group-destr">💥 ${c.warCount ? (c.totalDestr/c.warCount).toFixed(0) : 0}%</span>
-            </div>`;
-          }).join('')}
-        </div>`;
+        const rowsHtml = s.groupStandings.map((c, i) => {
+          const isMyClan = normClanTag(c.tag) === normClanTag(window._userClanTag);
+          const rankMedal = ['🥇','🥈','🥉'][i] || `${i+1}.`;
+          const bUrl = cocBadgeUrl(c.badgeUrls);
+          const badge = bUrl
+            ? `<img src="${bUrl}" class="cwl-group-badge" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.opacity='0.35'">`
+            : '<span class="cwl-group-badge-ph">🛡️</span>';
+          return `<div class="cwl-group-row${isMyClan ? ' cwl-group-row--us' : ''}">
+            <span class="cwl-group-rank">${rankMedal}</span>
+            ${badge}
+            <span class="cwl-group-name">${isMyClan ? `<strong>${c.name}</strong>` : c.name}</span>
+            <span class="cwl-group-stars">⭐ ${c.stars}</span>
+            <span class="cwl-group-destr">💥 ${c.warCount ? (c.totalDestr/c.warCount).toFixed(0) : 0}%</span>
+          </div>`;
+        }).join('');
+        const sid = `grp-${s.season.replace(/[^a-z0-9]/gi, '')}`;
+        groupHtml = `
+          <div class="cwl-group-toggle-wrap">
+            <button class="cwl-group-toggle-btn" onclick="toggleCwlGroup('${sid}')" aria-expanded="false" aria-controls="${sid}">Mostra classifica ▼</button>
+            <div class="cwl-group-standings" id="${sid}" style="display:none">
+              ${rowsHtml}
+            </div>
+          </div>`;
       }
 
       html += `
@@ -3128,6 +3230,7 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
 // ── Modal Dettaglio Stagione CWL ──────────────────────────────────────────────
 
 function openCwlSeasonDetail(season) {
+  window._cwlOpenSeason = season;
   const rounds = (window._cwlSeasonRoundsMap || {})[season] || [];
   if (!rounds.length) return;
 
@@ -3146,69 +3249,83 @@ function openCwlSeasonDetail(season) {
 }
 
 function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
-  // Rimuove modal esistente
   document.getElementById('cwl-detail-modal')?.remove();
 
-  const league   = seasonObj?.league   || null;
-  const position = seasonObj?.position || null;
-  const isLive   = seasonObj?.isLive   || false;
-  const badgeUrl = league ? (LEAGUE_BADGE[league] || null) : null;
+  const league      = seasonObj?.league   || null;
+  const position    = seasonObj?.position || null;
+  const isLive      = seasonObj?.isLive   || false;
+  const badgeUrl    = league ? (LEAGUE_BADGE[league] || null) : null;
   const leagueColor = league ? (LEAGUE_COLOR[league] || 'var(--gold)') : 'var(--gold)';
-  const posMedal = position ? (POS_MEDALS[+position] || `${position}°`) : null;
-  const posLabel = position ? (POS_LABELS[+position]  || `${position}°`) : null;
+  const posMedal    = position ? (POS_MEDALS[+position] || `${position}°`) : null;
+  const posLabel    = position ? (POS_LABELS[+position]  || `${position}°`) : null;
 
-  // ── Normalizza sempre a 7 slot (turni 1-7) ──
-  // Per stagioni live: padda i round mancanti con placeholder "Da giocare"
-  // Per stagioni storiche (dati aggregati war-log): mostra round disponibili as-is
   const hasDetailedData = rounds.some(r => r.defenderMap != null || r.clan?.members?.length);
   const TOTAL_ROUNDS = 7;
   let roundSlots;
   if (isLive || hasDetailedData) {
-    // Stagione live o con dati dettagliati: forza 7 slot
     roundSlots = [];
     for (let i = 1; i <= TOTAL_ROUNDS; i++) {
       const found = rounds.find(r => (r.roundNumber || 0) === i);
       roundSlots.push(found || { roundNumber: i, upcoming: true });
     }
   } else {
-    // Stagione storica da war-log: mostra i dati disponibili (max 7)
     roundSlots = rounds.slice(0, TOTAL_ROUNDS);
   }
 
-  // ── Group Standings ──
-  let standingsHtml = '';
+  // ── Panel: Classifica lega ──
+  let standingsContent = '<p style="color:var(--text-3);padding:.5rem;font-size:.85rem">Dati classifica non disponibili per questa stagione.</p>';
   if (groupStandings?.length) {
-    standingsHtml = `
-    <div class="cdm-standings">
-      <div class="cdm-section-title">Classifica gruppo</div>
-      <div class="cdm-standings-list">
-        ${groupStandings.map((c, i) => {
-          const isUs = c.tag === window._userClanTag;
-          const medal = ['🥇','🥈','🥉'][i] || `${i+1}.`;
-          const clBadge = c.badgeUrls?.small ? `<img src="${c.badgeUrls.small}" class="cdm-clan-badge" alt="">` : '<span class="cdm-clan-badge-ph">🛡️</span>';
-          return `<div class="cdm-standing-row${isUs ? ' cdm-standing-row--us' : ''}">
-            <span class="cdm-rank">${medal}</span>
-            ${clBadge}
-            <span class="cdm-clan-name${isUs ? ' cdm-clan-name--us' : ''}">${c.name}</span>
-            <span class="cdm-clan-stars">⭐ ${c.stars}</span>
-            <span class="cdm-clan-destr">💥 ${c.warCount ? (c.totalDestr/c.warCount).toFixed(1)+'%' : '—'}</span>
-          </div>`;
-        }).join('')}
-      </div>
+    standingsContent = `<div class="cdm-standings-list">
+      ${groupStandings.map((c, i) => {
+        const isUs = normClanTag(c.tag) === normClanTag(window._userClanTag);
+        const medal = ['🥇','🥈','🥉'][i] || `${i+1}.`;
+        const bu = cocBadgeUrl(c.badgeUrls);
+        const clBadge = bu
+          ? `<img src="${bu}" class="cdm-clan-badge" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<span class=\\'cdm-clan-badge-ph\\'>🛡️</span>'">`
+          : '<span class="cdm-clan-badge-ph">🛡️</span>';
+        const avgD = c.warCount > 0 ? (c.totalDestr / c.warCount).toFixed(1) + '%' : (c.totalDestr ? c.totalDestr.toFixed(1) + '%' : '—');
+        return `<div class="cdm-standing-row${isUs ? ' cdm-standing-row--us' : ''}">
+          <span class="cdm-rank">${medal}</span>
+          ${clBadge}
+          <span class="cdm-clan-name${isUs ? ' cdm-clan-name--us' : ''}">${c.name}</span>
+          <span class="cdm-clan-stars">⭐ ${c.stars ?? 0}</span>
+          <span class="cdm-clan-destr">💥 ${avgD}</span>
+        </div>`;
+      }).join('')}
     </div>`;
   }
 
-  // ── Round Tabs ──
+  // ── Panel: Classifica player ──
+  let playersContent = '<p style="color:var(--text-3);padding:.5rem;font-size:.85rem">Disponibile solo per stagioni live.</p>';
+  const players = seasonObj?.players;
+  if (players?.length) {
+    const pRows = players.map((p, i) => {
+      const avgDestr = p.attacks_made > 0 ? (p.destruction / p.attacks_made).toFixed(1) : '—';
+      return `<tr>
+        <td class="cdm-pi-pos">${i + 1}</td>
+        <td class="cdm-pi-th">${thImgV(p.th_level)}</td>
+        <td class="cdm-pi-name">${p.name}</td>
+        <td class="cdm-pi-stat">⭐ ${p.stars}</td>
+        <td class="cdm-pi-stat">${avgDestr !== '—' ? avgDestr + '%' : '—'}</td>
+        <td class="cdm-pi-stat">${p.attacks_made}/${p.attacks_required}</td>
+      </tr>`;
+    }).join('');
+    playersContent = `<div class="cdm-attacks-scroll"><table class="cdm-attacks-table">
+      <thead><tr><th>#</th><th>TH</th><th>Giocatore</th><th>⭐</th><th>💥 avg</th><th>⚔</th></tr></thead>
+      <tbody>${pRows}</tbody>
+    </table></div>`;
+  }
+
+  // ── Round selector (condiviso tra Turni e Anteprima) ──
   const RESULT_ICON = { win:'🟢', lose:'🔴', draw:'🟡', ongoing:'🔵', preparation:'⚪', upcoming:'⬜' };
-  const roundTabsHtml = roundSlots.map((r, i) => {
+  const roundSelectorHtml = roundSlots.map((r, i) => {
     const icon = r.upcoming ? '⬜' : (RESULT_ICON[r.result] || '⚪');
-    const tabClass = `cdm-round-tab${i === 0 ? ' active' : ''}${r.upcoming ? ' cdm-round-tab--upcoming' : ''}`;
-    return `<button class="${tabClass}" onclick="_cwlSelectRound(${i})" id="cdm-tab-${i}">${icon} T${r.roundNumber || i+1}</button>`;
+    const cls = `cdm-round-tab${i === 0 ? ' active' : ''}${r.upcoming ? ' cdm-round-tab--upcoming' : ''}`;
+    return `<button class="${cls}" onclick="_cwlSelectRound(${i})" id="cdm-tab-${i}">${icon} T${r.roundNumber || i+1}</button>`;
   }).join('');
 
-  // ── Singolo turno HTML ──
+  // ── Panel: Turni (tabella attacchi) ──
   function renderRound(r, idx) {
-    // Placeholder per round non ancora disputati
     if (r.upcoming) {
       return `<div class="cdm-round-panel cdm-round-upcoming" id="cdm-round-${idx}">
         <div class="cdm-upcoming-msg">
@@ -3218,65 +3335,74 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
         </div>
       </div>`;
     }
-
     const RESULT_LABEL = { win:'VITTORIA', lose:'SCONFITTA', draw:'PAREGGIO', ongoing:'IN CORSO', preparation:'PREPARAZIONE' };
     const RESULT_CLASS = { win:'cdm-result--win', lose:'cdm-result--lose', draw:'cdm-result--draw', ongoing:'cdm-result--ongoing', preparation:'cdm-result--prep' };
     const resLabel = RESULT_LABEL[r.result] || '';
     const resClass = RESULT_CLASS[r.result] || '';
-    const oppBadge = r.opponent?.badgeUrls?.small
-      ? `<img src="${r.opponent.badgeUrls.small}" class="cdm-war-badge" alt="">`
+    const oppBu = cocBadgeUrl(r.opponent?.badgeUrls);
+    const ourBu = cocBadgeUrl(r.clan?.badgeUrls);
+    const oppBadge = oppBu
+      ? `<img src="${oppBu}" class="cdm-war-badge" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<span class=\\'cdm-war-badge-ph\\'>🛡️</span>'">`
       : '<span class="cdm-war-badge-ph">🛡️</span>';
-    const ourBadge = r.clan?.badgeUrls?.small
-      ? `<img src="${r.clan.badgeUrls.small}" class="cdm-war-badge" alt="">`
+    const ourBadge = ourBu
+      ? `<img src="${ourBu}" class="cdm-war-badge" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<span class=\\'cdm-war-badge-ph\\'>🛡️</span>'">`
       : '<span class="cdm-war-badge-ph">🛡️</span>';
-
     const fmtDestr = (v) => v != null ? v.toFixed(1) + '%' : '—';
     const totalAtks = (r.teamSize || 15) * (r.attacksPerMember || 1);
-
-    // Tabella attacchi (solo se dati dettagliati disponibili)
-    let attacksHtml = '';
-    if (r.clan?.members?.length) {
-      const defMap = r.defenderMap || {};
-      const thImg = (lv) => lv ? `<img src="/th/level_${lv}.png" class="cdm-th-icon" alt="TH${lv}" onerror="this.style.display='none'">` : '';
-      const attackRows = [];
-      r.clan.members.forEach(m => {
-        m.attacks.forEach(a => {
-          const def = defMap[a.defenderTag] || { name: a.defenderTag, thLevel: null };
-          const stars = '⭐'.repeat(a.stars) + '☆'.repeat(3 - a.stars);
-          attackRows.push(`<tr>
-            <td class="cdm-atk-player">${thImg(m.thLevel)}<span>${m.name}</span></td>
+    function buildAttackRows(sideMembers, defMap, atkPerMember) {
+      const rows = [];
+      const sortedM = [...(sideMembers || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+      sortedM.forEach(m => {
+        const atks = m.attacks || [];
+        atks.forEach(a => {
+          const def = defMap[a.defenderTag] || { name: a.defenderTag || '—', thLevel: null };
+          const destVal = a.destruction != null ? Number(a.destruction) : (a.destructionPercentage != null ? Number(a.destructionPercentage) : 0);
+          const stars = '⭐'.repeat(a.stars || 0) + '☆'.repeat(3 - (a.stars || 0));
+          rows.push(`<tr>
+            <td class="cdm-atk-player">${thImgV(m.thLevel)}<span>${m.name}</span></td>
             <td class="cdm-atk-arrow">→</td>
-            <td class="cdm-atk-player">${thImg(def.thLevel)}<span>${def.name}</span></td>
+            <td class="cdm-atk-player">${thImgV(def.thLevel)}<span>${def.name}</span></td>
             <td class="cdm-atk-stars">${stars}</td>
-            <td class="cdm-atk-destr">${a.destruction.toFixed(1)}%</td>
+            <td class="cdm-atk-destr">${destVal.toFixed(1)}%</td>
           </tr>`);
         });
-        const missing = (r.attacksPerMember || 1) - m.attacks.length;
+        const missing = atkPerMember - atks.length;
         for (let x = 0; x < missing; x++) {
-          attackRows.push(`<tr class="cdm-atk-missed">
-            <td class="cdm-atk-player">${thImg(m.thLevel)}<span>${m.name}</span></td>
+          rows.push(`<tr class="cdm-atk-missed">
+            <td class="cdm-atk-player">${thImgV(m.thLevel)}<span>${m.name}</span></td>
             <td class="cdm-atk-arrow">→</td>
             <td class="cdm-atk-player"><span style="color:var(--text-3)">—</span></td>
             <td colspan="2" style="color:var(--text-3);font-size:0.8rem">non attaccato</td>
           </tr>`);
         }
       });
-      if (attackRows.length) {
-        attacksHtml = `
-        <div class="cdm-attacks-section">
-          <div class="cdm-section-title">Attacchi ${window._clanName || 'del tuo clan'}</div>
-          <div class="cdm-attacks-scroll">
-            <table class="cdm-attacks-table">
-              <thead><tr>
-                <th>Attaccante</th><th></th><th>Difensore</th><th>⭐</th><th>💥</th>
-              </tr></thead>
-              <tbody>${attackRows.join('')}</tbody>
-            </table>
-          </div>
-        </div>`;
-      }
+      return rows;
     }
-
+    let attacksHtml = '';
+    const defMap = r.defenderMap || {};
+    const atkPerMember = r.attacksPerMember || 1;
+    const hasOurData = r.clan?.members?.length;
+    const hasOppData = r.opponent?.members?.length;
+    if (hasOurData || hasOppData) {
+      const pid = `atk-${idx}`;
+      const ourRows = hasOurData ? buildAttackRows(r.clan.members, defMap, atkPerMember) : [];
+      const oppRows = hasOppData ? buildAttackRows(r.opponent.members, defMap, atkPerMember) : [];
+      const ourTableHtml = ourRows.length
+        ? `<div class="cdm-attacks-scroll"><table class="cdm-attacks-table"><thead><tr><th>Attaccante</th><th></th><th>Difensore</th><th>⭐</th><th>💥</th></tr></thead><tbody>${ourRows.join('')}</tbody></table></div>`
+        : `<p style="color:var(--text-3);font-size:.8rem;padding:.5rem">Nessun dato disponibile</p>`;
+      const oppTableHtml = oppRows.length
+        ? `<div class="cdm-attacks-scroll"><table class="cdm-attacks-table"><thead><tr><th>Attaccante</th><th></th><th>Difensore</th><th>⭐</th><th>💥</th></tr></thead><tbody>${oppRows.join('')}</tbody></table></div>`
+        : `<p style="color:var(--text-3);font-size:.8rem;padding:.5rem">Nessun dato disponibile</p>`;
+      attacksHtml = `
+      <div class="cdm-attacks-section">
+        <div class="cdm-atk-switcher">
+          <button class="cdm-atk-sw-btn cdm-atk-sw-btn--active" id="${pid}-btn-us" onclick="_cwlAtkSwitch('${pid}','us')">${window._clanName || 'Il tuo clan'}</button>
+          <button class="cdm-atk-sw-btn" id="${pid}-btn-opp" onclick="_cwlAtkSwitch('${pid}','opp')">${r.opponent?.name || 'Avversario'}</button>
+        </div>
+        <div id="${pid}-panel-us">${ourTableHtml}</div>
+        <div id="${pid}-panel-opp" style="display:none">${oppTableHtml}</div>
+      </div>`;
+    }
     return `<div class="cdm-round-panel" id="cdm-round-${idx}">
       <div class="cdm-war-header">
         <div class="cdm-war-side cdm-war-side--us">
@@ -3302,13 +3428,86 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
     </div>`;
   }
 
-  const roundPanelsHtml = roundSlots.map((r, i) =>
+  // ── Panel: Anteprima (composizione TH per round) ──
+  function renderPreview(r) {
+    if (r.upcoming) {
+      return `<div class="cdm-upcoming-msg" style="min-height:100px">
+        <div class="cdm-upcoming-icon">⚔</div>
+        <div class="cdm-upcoming-label">Turno ${r.roundNumber} — Da giocare</div>
+      </div>`;
+    }
+    const STATE_LABEL = { inWar:'⚔ In guerra', warStarted:'⚔ In guerra', preparation:'🕐 Preparazione', warEnded:'✅ Terminata', ended:'✅ Terminata', ongoing:'⚔ In corso' };
+    const stateLabel = STATE_LABEL[r.state] || r.state || '—';
+    let countdownHtml = '';
+    const start = r.startTime ? parseCocApiTime(r.startTime) : null;
+    const end = r.endTime ? parseCocApiTime(r.endTime) : null;
+    const now = Date.now();
+    if (r.state === 'preparation' && start) {
+      const diff = start - now;
+      if (diff > 0) {
+        const mm = Math.ceil(diff / 60000);
+        countdownHtml = `<span class="prev-countdown">⏱ Inizio battaglia tra ${mm < 60 ? mm + ' min' : Math.floor(mm / 60) + 'h ' + (mm % 60) + 'm'}</span>`;
+      }
+    } else if (end) {
+      const diff = end - now;
+      if (diff > 0) {
+        const h = Math.floor(diff / 3600000);
+        const m = Math.floor((diff % 3600000) / 60000);
+        countdownHtml = `<span class="prev-countdown">⏱ Fine tra ${h}h ${m}m</span>`;
+      }
+    }
+    function thComp(members) {
+      if (!members?.length) return '<span style="color:var(--text-3)">—</span>';
+      const counts = {};
+      members.forEach(m => {
+        const lv = m.thLevel || 0;
+        if (lv) counts[lv] = (counts[lv] || 0) + 1;
+      });
+      const entries = Object.entries(counts).sort((a, b) => +b[0] - +a[0]);
+      if (!entries.length) return '<span style="color:var(--text-3)">—</span>';
+      const summaryText = entries.map(([lv, n]) => `TH${lv}: ${n}`).join(' · ');
+      const grid = entries.map(([lv, n]) =>
+        `<div class="prev-th-item">${thImgV(+lv)}<span class="prev-th-count">${n} pl.</span></div>`
+      ).join('');
+      return `<div class="prev-th-summary">${summaryText}</div><div class="prev-th-grid">${grid}</div>`;
+    }
+    const ourBu = cocBadgeUrl(r.clan?.badgeUrls);
+    const oppBu = cocBadgeUrl(r.opponent?.badgeUrls);
+    const ourBadge = ourBu ? `<img src="${ourBu}" class="prev-clan-badge" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<span class="prev-clan-badge-ph">🛡️</span>';
+    const oppBadge = oppBu ? `<img src="${oppBu}" class="prev-clan-badge" alt="" loading="lazy" referrerpolicy="no-referrer">` : '<span class="prev-clan-badge-ph">🛡️</span>';
+    return `<div class="prev-state-bar">
+        <span class="prev-state-label">${stateLabel}</span>
+        ${countdownHtml}
+        <span class="prev-size">👥 ${r.teamSize || '?'} vs ${r.teamSize || '?'}</span>
+      </div>
+      <div class="prev-war-split">
+        <div class="prev-war-side prev-war-side--us">
+          <div class="prev-side-header">${ourBadge}<span>${window._clanName || 'Il tuo clan'}</span></div>
+          ${thComp(r.clan?.members)}
+          <div class="prev-score">⭐ ${r.clan?.stars ?? 0} &nbsp; 💥 ${r.clan?.destruction != null ? r.clan.destruction.toFixed(1)+'%' : '0.0%'}</div>
+        </div>
+        <div class="prev-war-vs">VS</div>
+        <div class="prev-war-side prev-war-side--opp">
+          <div class="prev-side-header">${oppBadge}<span>${r.opponent?.name || 'Avversario'}</span></div>
+          ${thComp(r.opponent?.members)}
+          <div class="prev-score">⭐ ${r.opponent?.stars ?? 0} &nbsp; 💥 ${r.opponent?.destruction != null ? r.opponent.destruction.toFixed(1)+'%' : '0.0%'}</div>
+        </div>
+      </div>`;
+  }
+
+  const roundPanelsHtml   = roundSlots.map((r, i) =>
     `<div style="display:${i===0?'block':'none'}" id="cdm-rpanel-${i}">${renderRound(r, i)}</div>`
+  ).join('');
+  const previewPanelsHtml = roundSlots.map((r, i) =>
+    `<div style="display:${i===0?'block':'none'}" id="cdm-ppanel-${i}">${renderPreview(r)}</div>`
   ).join('');
 
   const leagueBadgeHtml = badgeUrl
     ? `<img src="${badgeUrl}" class="cdm-header-badge" alt="${league||''}">`
     : '';
+
+  // Default: Anteprima se live/dettagliata, altrimenti Turni
+  const defaultTab = (isLive || hasDetailedData) ? 'preview' : 'rounds';
 
   const modal = document.createElement('div');
   modal.id = 'cwl-detail-modal';
@@ -3326,10 +3525,20 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
         </div>
         <button class="cdm-close" onclick="closeCwlSeasonDetail()">✕</button>
       </div>
-      ${standingsHtml}
-      <div class="cdm-section-title" style="margin-top:1rem">Turni</div>
-      <div class="cdm-round-tabs">${roundTabsHtml}</div>
-      <div class="cdm-round-content">${roundPanelsHtml}</div>
+      <div class="cdm-modal-toolbar">
+        <button type="button" class="btn-secondary btn-sm" onclick="refreshCwlDetailModal()">🔄 Aggiorna stato</button>
+      </div>
+      <div class="cdm-mtabs">
+        <button class="cdm-mtab${defaultTab==='standings'?' cdm-mtab--active':''}" id="cdm-mtab-standings" onclick="switchCdmTab('standings')">🏆 Lega</button>
+        <button class="cdm-mtab${defaultTab==='players'?' cdm-mtab--active':''}" id="cdm-mtab-players" onclick="switchCdmTab('players')">📊 Player</button>
+        <button class="cdm-mtab${defaultTab==='rounds'?' cdm-mtab--active':''}" id="cdm-mtab-rounds" onclick="switchCdmTab('rounds')">⚔ Turni</button>
+        <button class="cdm-mtab${defaultTab==='preview'?' cdm-mtab--active':''}" id="cdm-mtab-preview" onclick="switchCdmTab('preview')">👁️ Anteprima</button>
+      </div>
+      <div id="cdm-round-sel" class="cdm-round-tabs" style="display:${(defaultTab==='rounds'||defaultTab==='preview')?'flex':'none'}">${roundSelectorHtml}</div>
+      <div id="cdm-panel-standings" style="display:${defaultTab==='standings'?'block':'none'}">${standingsContent}</div>
+      <div id="cdm-panel-players"   style="display:${defaultTab==='players'?'block':'none'}">${playersContent}</div>
+      <div id="cdm-panel-rounds"    style="display:${defaultTab==='rounds'?'block':'none'}"><div class="cdm-round-content">${roundPanelsHtml}</div></div>
+      <div id="cdm-panel-preview"   style="display:${defaultTab==='preview'?'block':'none'}">${previewPanelsHtml}</div>
     </div>`;
 
   modal.addEventListener('click', closeCwlSeasonDetail);
@@ -3337,9 +3546,29 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj) {
   requestAnimationFrame(() => modal.classList.add('cdm-overlay--visible'));
 }
 
+function _cwlAtkSwitch(pid, side) {
+  document.getElementById(`${pid}-panel-us`).style.display  = side === 'us'  ? 'block' : 'none';
+  document.getElementById(`${pid}-panel-opp`).style.display = side === 'opp' ? 'block' : 'none';
+  document.getElementById(`${pid}-btn-us`).classList.toggle('cdm-atk-sw-btn--active',  side === 'us');
+  document.getElementById(`${pid}-btn-opp`).classList.toggle('cdm-atk-sw-btn--active', side === 'opp');
+}
+
 function _cwlSelectRound(idx) {
   document.querySelectorAll('.cdm-round-tab').forEach((t, i) => t.classList.toggle('active', i === idx));
   document.querySelectorAll('[id^="cdm-rpanel-"]').forEach((p, i) => { p.style.display = i === idx ? 'block' : 'none'; });
+  document.querySelectorAll('[id^="cdm-ppanel-"]').forEach((p, i) => { p.style.display = i === idx ? 'block' : 'none'; });
+}
+
+function switchCdmTab(tab) {
+  const panels = { standings: 'cdm-panel-standings', players: 'cdm-panel-players', rounds: 'cdm-panel-rounds', preview: 'cdm-panel-preview' };
+  Object.entries(panels).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = key === tab ? 'block' : 'none';
+  });
+  document.querySelectorAll('.cdm-mtab').forEach(b => b.classList.toggle('cdm-mtab--active', b.id === `cdm-mtab-${tab}`));
+  // Show round selector only for rounds and preview tabs
+  const sel = document.getElementById('cdm-round-sel');
+  if (sel) sel.style.display = (tab === 'rounds' || tab === 'preview') ? 'flex' : 'none';
 }
 
 function closeCwlSeasonDetail() {
@@ -3347,6 +3576,18 @@ function closeCwlSeasonDetail() {
   if (!modal) return;
   modal.classList.remove('cdm-overlay--visible');
   modal.addEventListener('transitionend', () => modal.remove(), { once: true });
+}
+
+/** Ricarica dati CWL live e riapre il modal sulla stessa stagione */
+async function refreshCwlDetailModal() {
+  const season = window._cwlOpenSeason;
+  if (!season) return;
+  try {
+    await loadCwlSeasons();
+    openCwlSeasonDetail(season);
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 // ── IL MIO PROFILO ────────────────────────────────────────────────────────────

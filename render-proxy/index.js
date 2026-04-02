@@ -14,6 +14,22 @@ function parseClanTag(raw) {
 }
 function encodeTag(tag) { return encodeURIComponent(tag); }
 
+/** Tag clan confrontabili (# + maiuscolo) — API a volte omette # */
+function normClanTag(t) {
+    if (!t) return t;
+    const s = String(t).trim().toUpperCase();
+    return s.startsWith('#') ? s : '#' + s;
+}
+
+/** Town Hall da oggetto membro guerra/roster CoC API (camelCase ufficiale) */
+function memberThLevel(m) {
+    if (!m) return null;
+    const v = m.townHallLevel ?? m.townhallLevel;
+    if (v == null || v === '') return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+}
+
 function supabase() {
     // Usa SERVICE_ROLE_KEY per le scritture dal proxy (bypassa RLS — solo operazioni interne)
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
@@ -72,7 +88,7 @@ async function saveEndedWar(clanTagRaw) {
         opp_destr:      +(oppSide.destructionPercentage ?? 0).toFixed(2),
         our_members:    (ourSide.members || []).map(m => ({
             tag: m.tag, name: m.name,
-            townhallLevel: m.townhallLevel, mapPosition: m.mapPosition,
+            townhallLevel: memberThLevel(m), mapPosition: m.mapPosition,
             attacks: (m.attacks || []).map(a => ({
                 defenderTag: a.defenderTag, stars: a.stars,
                 destructionPercentage: a.destructionPercentage, order: a.order
@@ -80,7 +96,7 @@ async function saveEndedWar(clanTagRaw) {
         })),
         opp_members:    (oppSide.members || []).map(m => ({
             tag: m.tag, name: m.name,
-            townhallLevel: m.townhallLevel, mapPosition: m.mapPosition,
+            townhallLevel: memberThLevel(m), mapPosition: m.mapPosition,
             attacks: (m.attacks || []).map(a => ({
                 defenderTag: a.defenderTag, stars: a.stars,
                 destructionPercentage: a.destructionPercentage, order: a.order
@@ -116,10 +132,28 @@ async function syncMembers(clanTagRaw) {
         exp_level: m.expLevel ?? null,
         clan_rank: m.clanRank ?? null,
         league_name: m.leagueTier?.name ?? null,
-        league_icon_url: m.leagueTier?.iconUrls?.small ?? null
+        league_icon_url: m.leagueTier?.iconUrls?.small ?? null,
+        left_at: null  // membro attivo: azzera left_at (gestisce i rientri)
     }));
-    const { error } = await supabase().from('members').upsert(members, { onConflict: 'tag' });
+
+    const sb = supabase();
+
+    // Upsert membri attivi (include azzeramento left_at per i rientri)
+    const { error } = await sb.from('members').upsert(members, { onConflict: 'tag' });
     if (error) throw new Error(error.message);
+
+    // Soft delete: segna come usciti i membri non più nell'elenco API
+    const liveTags = members.map(m => m.tag);
+    if (liveTags.length > 0) {
+        const { error: delErr } = await sb
+            .from('members')
+            .update({ left_at: new Date().toISOString() })
+            .eq('clan_tag', clanTag)
+            .is('left_at', null)
+            .not('tag', 'in', `(${liveTags.join(',')})`);
+        if (delErr) throw new Error(delErr.message);
+    }
+
     return members.length;
 }
 
@@ -141,6 +175,7 @@ const LEAGUE_EN_TO_IT = {
 async function getCwlStats(clanTagRaw) {
     const COC_CLAN_TAG_RAW = parseClanTag(clanTagRaw);
     if (!COC_CLAN_TAG_RAW) throw new Error('clan_tag obbligatorio.');
+    const COC_CLAN_TAG_NORM = normClanTag(COC_CLAN_TAG_RAW);
     const COC_CLAN_TAG = encodeTag(COC_CLAN_TAG_RAW);
 
     // 1. Leaguegroup + clan info in parallelo
@@ -161,15 +196,15 @@ async function getCwlStats(clanTagRaw) {
     const leagueNameEn = clanData?.warLeague?.name || null;
     const leagueNameIt = leagueNameEn ? (LEAGUE_EN_TO_IT[leagueNameEn] || leagueNameEn) : null;
 
-    // 2. Trova il nostro clan nel gruppo
-    const myClan = (lg.clans || []).find(c => c.tag === COC_CLAN_TAG_RAW);
+    // 2. Trova il nostro clan nel gruppo (tag normalizzato — API può variare #)
+    const myClan = (lg.clans || []).find(c => normClanTag(c.tag) === COC_CLAN_TAG_NORM);
     if (!myClan) return { state: 'notInWar', players: [] };
 
     // Inizializza stats giocatori
     const stats = {};
     (myClan.members || []).forEach(m => {
         stats[m.tag] = {
-            tag: m.tag, name: m.name, th_level: m.townHallLevel,
+            tag: m.tag, name: m.name, th_level: memberThLevel(m),
             stars: 0, destruction: 0, attacks_made: 0, attacks_required: 0
         };
     });
@@ -177,7 +212,11 @@ async function getCwlStats(clanTagRaw) {
     // Inizializza classifica gruppo (tutti e 8 i clan)
     const groupMap = {};
     (lg.clans || []).forEach(c => {
-        groupMap[c.tag] = { tag: c.tag, name: c.name, stars: 0, totalDestr: 0, warCount: 0, teamSize: 0 };
+        const t = normClanTag(c.tag);
+        groupMap[t] = {
+            tag: t, name: c.name, badgeUrls: c.badgeUrls ?? null,
+            stars: 0, totalDestr: 0, warCount: 0, teamSize: 0
+        };
     });
 
     // 3. Fetch tutte le guerre in parallelo
@@ -207,21 +246,23 @@ async function getCwlStats(clanTagRaw) {
         if (!war) continue;
         const isEnded = war.state === 'warEnded' || war.state === 'ended';
 
-        // Aggiorna classifica gruppo
+        // Classifica gruppo: stelle e distruzione anche per guerre in corso (non solo ended)
         for (const side of [war.clan, war.opponent]) {
-            if (!side || !groupMap[side.tag]) continue;
-            if (isEnded) {
-                groupMap[side.tag].stars      += side.stars || 0;
-                groupMap[side.tag].totalDestr += side.destructionPercentage || 0;
-                groupMap[side.tag].warCount++;
-                groupMap[side.tag].teamSize    = groupMap[side.tag].teamSize || war.teamSize || 15;
+            if (!side?.tag) continue;
+            const tg = normClanTag(side.tag);
+            if (!groupMap[tg]) continue;
+            groupMap[tg].stars += side.stars || 0;
+            groupMap[tg].totalDestr += side.destructionPercentage || 0;
+            groupMap[tg].teamSize = groupMap[tg].teamSize || war.teamSize || 15;
+            if (isEnded || war.state === 'inWar') {
+                groupMap[tg].warCount++;
             }
         }
 
         // Aggiorna stats giocatori nostro clan
-        const ourSide = war.clan?.tag === COC_CLAN_TAG_RAW ? war.clan
-                      : war.opponent?.tag === COC_CLAN_TAG_RAW ? war.opponent
-                      : null;
+        const ourSide = war.clan?.tag && normClanTag(war.clan.tag) === COC_CLAN_TAG_NORM ? war.clan
+            : war.opponent?.tag && normClanTag(war.opponent.tag) === COC_CLAN_TAG_NORM ? war.opponent
+            : null;
         if (!ourSide) continue;
         (ourSide.members || []).forEach(m => {
             if (!stats[m.tag]) return;
@@ -234,7 +275,7 @@ async function getCwlStats(clanTagRaw) {
         });
 
         // Raccoglie dati per turno (roundsData)
-        const theirSide = war.clan?.tag === COC_CLAN_TAG_RAW ? war.opponent : war.clan;
+        const theirSide = normClanTag(war.clan?.tag) === COC_CLAN_TAG_NORM ? war.opponent : war.clan;
         let result = 'ongoing';
         if (isEnded) {
             const os = ourSide.stars || 0, ts = theirSide?.stars || 0;
@@ -249,22 +290,39 @@ async function getCwlStats(clanTagRaw) {
         // Mappa tag difensori → nome+TH per lookup negli attacchi
         const defenderMap = {};
         (theirSide?.members || []).forEach(m => {
-            defenderMap[m.tag] = { name: m.name, thLevel: m.townHallLevel };
+            defenderMap[m.tag] = { name: m.name, thLevel: memberThLevel(m) };
         });
-        // Anche i nostri membri sono possibili difensori (attacchi ricevuti)
         (ourSide.members || []).forEach(m => {
-            defenderMap[m.tag] = { name: m.name, thLevel: m.townHallLevel };
+            defenderMap[m.tag] = { name: m.name, thLevel: memberThLevel(m) };
         });
         const ourMembers = (ourSide.members || []).map(m => ({
-            tag: m.tag, name: m.name, thLevel: m.townHallLevel,
+            tag: m.tag, name: m.name, thLevel: memberThLevel(m), mapPosition: m.mapPosition ?? null,
             attacks: (m.attacks || []).map(a => ({
                 defenderTag: a.defenderTag, stars: a.stars,
                 destruction: a.destructionPercentage, order: a.order
             }))
         }));
+        const fullDefenderMap = { ...defenderMap };
+        (ourSide.members || []).forEach(m => {
+            fullDefenderMap[m.tag] = { name: m.name, thLevel: memberThLevel(m) };
+        });
+        (theirSide?.members || []).forEach(m => {
+            fullDefenderMap[m.tag] = { name: m.name, thLevel: memberThLevel(m) };
+        });
+
+        const oppMembers = (theirSide?.members || []).map(m => ({
+            tag: m.tag, name: m.name, thLevel: memberThLevel(m), mapPosition: m.mapPosition ?? null,
+            attacks: (m.attacks || []).map(a => ({
+                defenderTag: a.defenderTag, stars: a.stars,
+                destruction: a.destructionPercentage, order: a.order
+            }))
+        }));
+
         roundsData.push({
             roundNumber:      warTagToRound[wt] || (roundsData.length + 1),
             state:            war.state,
+            startTime:        war.startTime || null,
+            preparationStartTime: war.preparationStartTime || null,
             endTime:          war.endTime,
             teamSize:         war.teamSize || 15,
             attacksPerMember: war.attacksPerMember || 1,
@@ -281,20 +339,35 @@ async function getCwlStats(clanTagRaw) {
                 badgeUrls: theirSide?.badgeUrls,
                 stars: theirSide?.stars || 0,
                 destruction: +(theirSide?.destructionPercentage || 0).toFixed(2),
-                attacksUsed: (theirSide?.members || []).reduce((s, m) => s + (m.attacks?.length || 0), 0)
+                attacksUsed: oppMembers.reduce((s, m) => s + m.attacks.length, 0),
+                members: oppMembers
             },
-            defenderMap
+            defenderMap: fullDefenderMap
         });
     }
     roundsData.sort((a, b) => (a.roundNumber || 0) - (b.roundNumber || 0));
+
+    // Stemmi da ogni guerra (league group spesso non badgeUrls completi)
+    for (const rd of roundsData) {
+        for (const side of [rd.clan, rd.opponent]) {
+            if (!side?.tag) continue;
+            const tg = normClanTag(side.tag);
+            if (!groupMap[tg] || !side.badgeUrls) continue;
+            const cur = groupMap[tg].badgeUrls;
+            const hasSmall = !!(cur && cur.small);
+            if (!hasSmall) {
+                groupMap[tg].badgeUrls = { ...(cur || {}), ...side.badgeUrls };
+            }
+        }
+    }
 
     // 4. Calcola classifica finale (stelle desc → distruzione desc)
     const groupStandings = Object.values(groupMap).sort((a, b) =>
         b.stars !== a.stars ? b.stars - a.stars : b.totalDestr - a.totalDestr
     );
-    const ourIdx     = groupStandings.findIndex(c => c.tag === COC_CLAN_TAG_RAW);
+    const ourIdx = groupStandings.findIndex(c => normClanTag(c.tag) === COC_CLAN_TAG_NORM);
     const ourPosition = ourIdx >= 0 ? ourIdx + 1 : null;
-    const ourGroup    = groupMap[COC_CLAN_TAG_RAW];
+    const ourGroup = groupMap[COC_CLAN_TAG_NORM];
 
     const players = Object.values(stats).sort((a, b) =>
         b.stars !== a.stars ? b.stars - a.stars : b.destruction - a.destruction
@@ -325,7 +398,7 @@ async function getCwlStats(clanTagRaw) {
         leagueNameEn,
         leagueNameIt,
         ourPosition,
-        teamSize:      (groupMap[COC_CLAN_TAG_RAW]?.teamSize) || 15,
+        teamSize:      (groupMap[COC_CLAN_TAG_NORM]?.teamSize) || 15,
         groupStandings,
         players,
         roundsData
