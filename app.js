@@ -5614,7 +5614,7 @@ function _renderRankPlayers(el, items) {
         const cb = cocBadgeUrl(p.clan?.badgeUrls);
         const clanLabel = p.clan?.name || '—';
         const clanCell = cb
-          ? `<div class="rank-clan-cell"><img src="${cb}" alt="" class="rank-clan-badge-img" loading="lazy" referrerpolicy="no-referrer" width="28" height="28" onerror="this.outerHTML='<span class=\\'cdm-clan-badge-ph\\'>🛡️</span>'"><span>${clanLabel}</span></div>`
+          ? `<div class="rank-clan-cell"><img src="${cb}" alt="" class="rank-clan-badge-img" loading="lazy" referrerpolicy="no-referrer" width="28" height="28" data-player-tag="${String(p.tag || '').replace(/"/g,'')}" onerror="this.outerHTML='<span class=\\'cdm-clan-badge-ph\\'>🛡️</span>'"><span>${clanLabel}</span></div>`
           : `<span style="font-size:0.82rem;color:var(--text-2)">${clanLabel}</span>`;
         const atk = p.attackWins != null ? p.attackWins : '—';
         const def = p.defenseWins != null ? p.defenseWins : '—';
@@ -5635,6 +5635,41 @@ function _renderRankPlayers(el, items) {
       }).join('')}
     </tbody>
   </table></div>`;
+  _repairRankingClanBadges(el, items);
+}
+
+/**
+ * Fallback anti-anomalia: in alcuni contesti i ranking possono arrivare con badge clan uniformati.
+ * Se rileviamo "molti clan diversi ma un solo badge", ricarichiamo i badge dai profili player.
+ */
+async function _repairRankingClanBadges(container, items) {
+  try {
+    if (!container || !items || !items.length) return;
+    const withClan = items.filter(p => p?.clan?.tag);
+    if (withClan.length < 4) return;
+    const clanTags = new Set(withClan.map(p => normClanTag(p.clan.tag)).filter(Boolean));
+    const badgeSet = new Set(
+      withClan.map(p => cocBadgeUrl(p?.clan?.badgeUrls)).filter(Boolean)
+    );
+    const suspicious = clanTags.size >= 4 && badgeSet.size <= 1;
+    if (!suspicious) return;
+
+    const tasks = withClan.slice(0, 20).map(async (p) => {
+      try {
+        const tag = p.tag;
+        if (!tag) return;
+        const r = await fetch(`/api/lookup?type=player&playerTag=${encodeURIComponent(tag)}`, { cache: 'no-store' });
+        if (!r.ok) return;
+        const d = await r.json();
+        const fixed = cocBadgeUrl(d?.clan?.badgeUrls);
+        if (!fixed) return;
+        const escTag = String(tag).replace(/"/g, '');
+        const img = container.querySelector(`img.rank-clan-badge-img[data-player-tag="${escTag}"]`);
+        if (img && img.src !== fixed) img.src = fixed;
+      } catch (_) {}
+    });
+    await Promise.all(tasks);
+  } catch (_) {}
 }
 
 function _renderRankClans(el, items) {
