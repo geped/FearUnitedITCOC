@@ -1021,17 +1021,30 @@ document.getElementById("sync-btn").addEventListener("click", async () => {
   status.textContent = "Sincronizzazione in corso…";
   try {
     const res = await fetch(`/api/sync-members${clanQ()}`, { method: 'POST' });
-    const data = await res.json();
+    let data = {};
+    try {
+      data = await res.json();
+    } catch (_) {
+      throw new Error(`Risposta non valida (HTTP ${res.status}).`);
+    }
     if (!res.ok) throw new Error(data.error || "Errore server");
     status.textContent = `✓ Sincronizzati ${data.synced} membri`;
     setTimeout(() => { status.textContent = ''; }, 4000);
     loadMembers();
   } catch (err) {
-    const msg = err.message.toLowerCase().includes('row-level security') || err.message.toLowerCase().includes('rls')
-      ? 'Sincronizzazione temporaneamente non disponibile. Riprova tra qualche minuto.'
-      : '✗ Sincronizzazione fallita. Riprova più tardi.';
+    const low = String(err.message || '').toLowerCase();
+    let msg;
+    if (low.includes('row-level security') || low.includes('rls')) {
+      msg = 'Sincronizzazione temporaneamente non disponibile. Riprova tra qualche minuto.';
+    } else if (low.includes('failed to fetch') || low.includes('networkerror')) {
+      msg = '✗ Rete o server non raggiungibile. Riprova tra poco.';
+    } else if (err.message && err.message.length < 220) {
+      msg = `✗ ${err.message}`;
+    } else {
+      msg = '✗ Sincronizzazione fallita. Riprova più tardi.';
+    }
     status.textContent = msg;
-    setTimeout(() => { status.textContent = ''; }, 6000);
+    setTimeout(() => { status.textContent = ''; }, 8000);
   }
 });
 

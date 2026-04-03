@@ -190,12 +190,14 @@ async function syncMembers(clanTagRaw) {
     // Soft delete: segna come usciti i membri non più nell'elenco API
     const liveTags = members.map(m => m.tag);
     if (liveTags.length > 0) {
+        // PostgREST richiede stringhe tra virgolette nel filtro `in.(...)` (i tag contengono #)
+        const inList = `(${liveTags.map(t => `"${String(t).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')})`;
         const { error: delErr } = await sb
             .from('members')
             .update({ left_at: new Date().toISOString() })
             .eq('clan_tag', clanTag)
             .is('left_at', null)
-            .not('tag', 'in', `(${liveTags.join(',')})`);
+            .not('tag', 'in', inList);
         if (delErr) throw new Error(delErr.message);
     }
 

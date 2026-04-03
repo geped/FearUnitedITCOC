@@ -2,6 +2,9 @@
   "functions": {
     "api/lookup.js": {
       "maxDuration": 30
+    },
+    "api/sync-members.js": {
+      "maxDuration": 60
     }
   },
   "crons": [
