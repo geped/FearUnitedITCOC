@@ -4299,6 +4299,55 @@ function renderPlayerView(p, prefix) {
   _renderUnits(ids.capTroops, capTroops, 'troops');
 }
 
+// ── URL DIRETTI WIKI (Fandom) per unità non coperte da coc.guide ─────────────
+// La CoC API non restituisce iconUrls per gli eroi nuovi, equipment e pets.
+// coc.guide non ha questi contenuti → usiamo static.wikia.nocookie.net come CDN.
+const UNIT_WIKI_URL = {
+  // Eroi nuovi
+  'Minion Prince':    'https://static.wikia.nocookie.net/clashofclans/images/8/89/Minion_Prince_Icon.png/revision/latest',
+  'Dragon Duke':      'https://static.wikia.nocookie.net/clashofclans/images/2/2e/Dragon_Duke_info.png/revision/latest',
+  'Battle Copter':    'https://static.wikia.nocookie.net/clashofclans/images/4/40/Battle_Copter_Icon.png/revision/latest',
+  // Equipment Re dei Barbari
+  'Spiky Ball':       'https://static.wikia.nocookie.net/clashofclans/images/d/d9/Spiky_Ball.png/revision/latest',
+  'Snake Bracelet':   'https://static.wikia.nocookie.net/clashofclans/images/5/56/Snake_Bracelet.png/revision/latest',
+  'Stick Horse':      'https://static.wikia.nocookie.net/clashofclans/images/c/c7/Stick_Horse.png/revision/latest',
+  'Barbarian Puppet': 'https://static.wikia.nocookie.net/clashofclans/images/9/96/Barbarian_Puppet.png/revision/latest',
+  'Rage Vial':        'https://static.wikia.nocookie.net/clashofclans/images/8/89/Rage_Vial.png/revision/latest',
+  // Equipment Regina degli Arcieri
+  'Action Figure':    'https://static.wikia.nocookie.net/clashofclans/images/7/70/Action_Figure.png/revision/latest',
+  'Archer Puppet':    'https://static.wikia.nocookie.net/clashofclans/images/d/d4/Archer_Puppet.png/revision/latest',
+  // Equipment Grande Custode
+  'Fireball':         'https://static.wikia.nocookie.net/clashofclans/images/4/49/Fireball_Equipment.png/revision/latest',
+  'Lavaloon Puppet':  'https://static.wikia.nocookie.net/clashofclans/images/b/b6/Lavaloon_Puppet.png/revision/latest',
+  // Equipment Campionessa Reale
+  'Frost Flake':      'https://static.wikia.nocookie.net/clashofclans/images/4/4c/Frost_Flake.png/revision/latest',
+  'Royal Gem':        'https://static.wikia.nocookie.net/clashofclans/images/b/b9/Royal_Gem.png/revision/latest',
+  // Equipment Principe degli Sgherri
+  'Dark Crown':       'https://static.wikia.nocookie.net/clashofclans/images/7/7e/Dark_Crown.png/revision/latest',
+  'Meteor Staff':     'https://static.wikia.nocookie.net/clashofclans/images/0/07/Meteor_Staff.png/revision/latest',
+  'Henchmen Puppet':  'https://static.wikia.nocookie.net/clashofclans/images/d/dc/Henchmen_Puppet.png/revision/latest',
+  'Dark Orb':         'https://static.wikia.nocookie.net/clashofclans/images/c/cc/Dark_Orb.png/revision/latest',
+  'Metal Pants':      'https://static.wikia.nocookie.net/clashofclans/images/0/04/Metal_Pants.png/revision/latest',
+  'Noble Iron':       'https://static.wikia.nocookie.net/clashofclans/images/4/4b/Noble_Iron.png/revision/latest',
+  // Equipment Duca Drago
+  'Fire Heart':       'https://static.wikia.nocookie.net/clashofclans/images/8/86/Fire_Heart.png/revision/latest',
+  'Stun Blaster':     'https://static.wikia.nocookie.net/clashofclans/images/3/34/Stun_Blaster.png/revision/latest',
+  'Flame Blower':     'https://static.wikia.nocookie.net/clashofclans/images/8/89/Flame_Blower.png/revision/latest',
+  // Equipment altri
+  'Heroic Torch':     'https://static.wikia.nocookie.net/clashofclans/images/8/8a/Heroic_Torch.png/revision/latest',
+  // Famigli (coc.guide /pet/ non esiste → wiki per tutti)
+  'L.A.S.S.I':       'https://static.wikia.nocookie.net/clashofclans/images/5/5a/LASSI_field.png/revision/latest',
+  'Electro Owl':      'https://static.wikia.nocookie.net/clashofclans/images/8/88/Electro_Owl_field.png/revision/latest',
+  'Mighty Yak':       'https://static.wikia.nocookie.net/clashofclans/images/6/66/Mighty_Yak_field.png/revision/latest',
+  'Unicorn':          'https://static.wikia.nocookie.net/clashofclans/images/7/7e/Unicorn.png/revision/latest',
+  'Spirit Fox':       'https://static.wikia.nocookie.net/clashofclans/images/0/06/Spirit_Fox_field.png/revision/latest',
+  'Sneezy':           'https://static.wikia.nocookie.net/clashofclans/images/5/54/Sneezy1.png/revision/latest',
+  'Greedy Raven':     'https://static.wikia.nocookie.net/clashofclans/images/a/a6/Greedy_Raven1.png/revision/latest',
+  'Frosty':           'https://static.wikia.nocookie.net/clashofclans/images/8/8b/Frosty_field.png/revision/latest',
+  // Super Truppe senza copertura coc.guide
+  'Super Valkyrie':   'https://static.wikia.nocookie.net/clashofclans/images/2/25/Super_Valkyrie_Info.png/revision/latest',
+};
+
 // ── MAPPA CDN UNITÀ (API name → coc.guide category + slug) ───────────────────
 const UNIT_COC_SLUG = {
   // ── Eroi Villaggio Base ────────────────────────────────────────────────────
@@ -4499,7 +4548,7 @@ function getGhWidgetsUrl(name) {
 const UNIT_NAME_IT = {
   // Eroi
   'Barbarian King':'Re dei Barbari','Archer Queen':'Regina degli Arcieri',
-  'Grand Warden':'Grande Custode','Royal Champion':'Campione Reale',
+  'Grand Warden':'Gran Sorvegliante','Royal Champion':'Campionessa Reale',
   'Minion Prince':'Principe degli Sgherri','Dragon Duke':'Duca Drago',
   'Battle Machine':'Macchina da Battaglia','Battle Copter':'Elicottero da Battaglia','B.O.B':'B.O.B',
   // Truppe home
@@ -4534,7 +4583,7 @@ const UNIT_NAME_IT = {
   // Macchine d'assedio
   'Wall Wrecker':'Sfondamura','Battle Blimp':'Dirigibile da Battaglia',
   'Stone Slammer':'Frantumatore di Pietre','Siege Barracks':'Caserma d\'Assedio',
-  'Log Launcher':'Lancia-Tronchi','Flame Flinger':'Lanciatore di Fiamme',
+  'Log Launcher':'Lancia-Tronchi','Flame Flinger':'Sganciapietre',
   'Battle Drill':'Trivella da Battaglia',
   // Equipaggiamento — nuovi items
   'Snake Bracelet':'Bracciale Serpente','Action Figure':'Action Figure',
@@ -4576,6 +4625,7 @@ function getCocGuideUrl(name, category) {
 }
 
 function getAssetUrl(name, category) {
+  if (UNIT_WIKI_URL[name]) return UNIT_WIKI_URL[name];
   return getCocGuideUrl(name, category);
 }
 
@@ -4652,7 +4702,7 @@ function _renderEquipmentGrouped(containerId, equipment) {
     const isLocked= lvl === 0;
     return `<div class="profilo-unit-card${isMax?' profilo-unit-max':''}${isLocked?' profilo-unit-locked':''}" title="${nameIt}">
       <div class="profilo-unit-img-wrap">
-        <img src="${pair.src}" alt="${nameIt}" class="profilo-unit-img" loading="lazy" decoding="async"${_unitImgDataFbChainAttr(pair.fbChain)}
+        <img src="${pair.src}" alt="${nameIt}" class="profilo-unit-img" loading="lazy" decoding="async" referrerpolicy="no-referrer"${_unitImgDataFbChainAttr(pair.fbChain)}
           onerror="_profiloUnitImgOnError(this)">
         <div class="profilo-unit-fallback profilo-unit-fallback--neutral" style="display:none">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg">
@@ -4693,7 +4743,7 @@ function _renderUnits(containerId, units, cdnCategory) {
     const isLocked= lvl === 0;
     return `<div class="profilo-unit-card${isMax?' profilo-unit-max':''}${isLocked?' profilo-unit-locked':''}" title="${nameIt}">
       <div class="profilo-unit-img-wrap">
-        <img src="${pair.src}" alt="${nameIt}" class="profilo-unit-img" loading="lazy" decoding="async"${_unitImgDataFbChainAttr(pair.fbChain)}
+        <img src="${pair.src}" alt="${nameIt}" class="profilo-unit-img" loading="lazy" decoding="async" referrerpolicy="no-referrer"${_unitImgDataFbChainAttr(pair.fbChain)}
           onerror="_profiloUnitImgOnError(this)">
         <div class="profilo-unit-fallback profilo-unit-fallback--neutral" style="display:none">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg">
