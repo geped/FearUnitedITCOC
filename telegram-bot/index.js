@@ -41,6 +41,81 @@ function isGroupLike(ctx) {
   return t === 'group' || t === 'supergroup';
 }
 
+/** Ruoli che possono gestire il bot in gruppo e usare i menù dati clan in gruppo (come su CoCBoard). */
+function isClanLeader(user) {
+  const r = user?.user_metadata?.role || 'utente';
+  return ['admin', 'capo', 'co-capo'].includes(r);
+}
+
+const GROUP_NON_LEADER_CALLBACKS = new Set([
+  'menu',
+  'noop',
+  'nav_search',
+  'nav_rank',
+  'helpbtn',
+  'auth_guest_help',
+  'auth_logout',
+  'srch_p',
+  'srch_c',
+  'rk_p_i',
+  'rk_p_g',
+  'rk_c_i',
+  'rk_c_g',
+  'me',
+  'acct',
+  'group_clan_locked_hint',
+]);
+
+function groupCallbackAllowedForNonLeader(data) {
+  if (!data) return true;
+  if (GROUP_NON_LEADER_CALLBACKS.has(data)) return true;
+  return false;
+}
+
+function blockGroupNonLeaderCallback(ctx) {
+  if (!isGroupLike(ctx) || !ctx.callbackQuery) return false;
+  const user = ctx.cocboardUser;
+  if (!user || isClanLeader(user)) return false;
+  const d = ctx.callbackQuery.data || '';
+  if (groupCallbackAllowedForNonLeader(d)) return false;
+  ctx.answerCbQuery('Solo Capo / Co-Capo / Admin in gruppo.').catch(() => {});
+  ctx
+    .reply(
+      '🔒 <b>In gruppo</b> i dati clan (membri, CWL, bonus, guerre) sono riservati a <b>Capo</b>, <b>Co-Capo</b> e <b>Admin</b>.\n\n' +
+        '👉 Usa la <b>chat privata</b> con il bot per vedere tutto con il tuo account.',
+      { parse_mode: 'HTML', ...backMenuKb() }
+    )
+    .catch(() => {});
+  return true;
+}
+
+function blockGroupNonLeaderCommand(ctx) {
+  if (!isGroupLike(ctx) || !ctx.message?.text) return false;
+  const user = ctx.cocboardUser;
+  if (!user || isClanLeader(user)) return false;
+  const t = ctx.message.text.trim();
+  if (!t.startsWith('/')) return false;
+  const clanCmds = [
+    '/membri',
+    '/info',
+    '/cwl',
+    '/bonus',
+    '/guerre',
+    '/setclan',
+    '/logout_clan',
+    '/clan',
+  ];
+  if (!clanCmds.some((c) => t.startsWith(c))) return false;
+  ctx
+    .reply(
+      '🔒 In gruppo solo <b>Capo</b>, <b>Co-Capo</b> o <b>Admin</b> possono usare comandi dati clan.\n' +
+        'Apri la <b>chat privata</b> con il bot.',
+      { parse_mode: 'HTML' }
+    )
+    .catch(() => {});
+  return true;
+}
+
 function guardUserId(ctx) {
   return ctx.from?.id ?? ctx.callbackQuery?.from?.id;
 }
@@ -190,13 +265,21 @@ async function handlePendingMessage(ctx) {
     if (p.step === 2) {
       pendingAuth.delete(uid);
       const pwd = textRaw;
+      let loadingMsg = null;
       try {
         await ctx.deleteMessage().catch(() => {});
+        loadingMsg = await ctx.reply('⏳ <b>Accesso in corso…</b>', { parse_mode: 'HTML' });
         const data = await tauth.signInWithPasswordFromInput(p.username, pwd);
         await sb.saveAuthSession(uid, data.session, data.user);
+        if (loadingMsg?.message_id) {
+          await ctx.telegram.deleteMessage(uid, loadingMsg.message_id).catch(() => {});
+        }
         await ctx.reply('✅ <b>Accesso effettuato.</b>', { parse_mode: 'HTML' });
         await reopenMainMenu(ctx, data.user);
       } catch (e) {
+        if (loadingMsg?.message_id) {
+          await ctx.telegram.deleteMessage(uid, loadingMsg.message_id).catch(() => {});
+        }
         await ctx.reply(`❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
         await sendGuestMenu(ctx);
       }
@@ -252,7 +335,9 @@ async function handlePendingMessage(ctx) {
         return;
       }
       pendingAuth.delete(uid);
+      let loadingMsg = null;
       try {
+        loadingMsg = await ctx.reply('⏳ <b>Caricamento…</b>', { parse_mode: 'HTML' });
         const reg = await api.registerWithCoc({
           playerTag: p.tag,
           apiToken: p.apiToken,
@@ -261,9 +346,15 @@ async function handlePendingMessage(ctx) {
         });
         const sign = await tauth.signInWithEmailPassword(reg.email, p.password);
         await sb.saveAuthSession(uid, sign.session, sign.user);
+        if (loadingMsg?.message_id) {
+          await ctx.telegram.deleteMessage(uid, loadingMsg.message_id).catch(() => {});
+        }
         await ctx.reply(`✅ Registrato come <b>${fmt.escapeHtml(reg.username)}</b>.`, { parse_mode: 'HTML' });
         await reopenMainMenu(ctx, sign.user);
       } catch (e) {
+        if (loadingMsg?.message_id) {
+          await ctx.telegram.deleteMessage(uid, loadingMsg.message_id).catch(() => {});
+        }
         await ctx.reply(`❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
         await sendGuestMenu(ctx);
       }
@@ -318,23 +409,32 @@ async function sendGuestMenu(ctx) {
   }
 }
 
-async function mainMenuKeyboard(uid, user, hasClanTag) {
+async function mainMenuKeyboard(uid, user, hasClanTag, groupLike = false) {
   const rows = [];
   rows.push([
     Markup.button.callback('🔍 Cerca', 'nav_search'),
     Markup.button.callback('📊 Classifica', 'nav_rank'),
   ]);
-  if (hasClanTag) {
+  const leader = isClanLeader(user);
+  const clanRowsOk = hasClanTag && (!groupLike || leader);
+  if (clanRowsOk) {
     rows.push(
       [Markup.button.callback('👥 Membri', 'mb0'), Markup.button.callback('🏰 Info clan', 'info')],
       [Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('🎁 Bonus', 'bonus:0')],
-      [Markup.button.callback('📜 Registro guerre', 'war')]
+      [Markup.button.callback('📜 Registro guerre', 'war_menu')]
     );
     if (user?.user_metadata?.coc_tag) {
       rows.push([Markup.button.callback('👤 Il mio profilo', 'me')]);
     }
-  } else {
+  } else if (hasClanTag && groupLike && !leader) {
+    rows.push([
+      Markup.button.callback('🔒 Dati clan (solo Capo/Co-Capo/Admin)', 'group_clan_locked_hint'),
+    ]);
+  } else if (!hasClanTag) {
     rows.push([Markup.button.callback('🏰 Come impostare il clan', 'setclan_help')]);
+  }
+  if (leader && !groupLike) {
+    rows.push([Markup.button.callback('➕ Aggiungi a canale/gruppo', 'add_group_bot')]);
   }
   rows.push(
     [Markup.button.callback('⚙️ Account', 'acct')],
@@ -357,14 +457,16 @@ async function sendMainMenu(ctx) {
   const meta = user.user_metadata || {};
   const display = meta.username || (user.email || '').split('@')[0] || 'Comandante';
   const { clanTag, clanName, hasOverride } = await getClanContextAuthed(uid, user);
+  const grp = isGroupLike(ctx);
   const intro = fmt.formatAuthedMenuIntro({
     displayName: display,
     clanTag,
     clanName,
     hasClanOverride: hasOverride,
-    chatHint: isGroupLike(ctx) ? 'Sei in gruppo: i dati sono quelli del tuo account Telegram.' : '',
+    chatHint: grp ? 'Sei in gruppo: i dati sono quelli del tuo account Telegram.' : '',
+    groupClanLocked: !!(grp && clanTag && !isClanLeader(user)),
   });
-  const kb = await mainMenuKeyboard(uid, user, !!clanTag);
+  const kb = await mainMenuKeyboard(uid, user, !!clanTag, grp);
   if (ctx.callbackQuery) {
     try {
       await ctx.editMessageText(intro, { parse_mode: 'HTML', ...kb });
@@ -466,13 +568,25 @@ function parseCwlViewKey(raw) {
   return { view: 'ov', pPage: 0, rIdx: 0 };
 }
 
-function buildCwlNavKb(data, spec) {
+function warSubmenuKb() {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('🏹 War classiche', 'war:classic'),
+      Markup.button.callback('🏆 Cronologia leghe', 'war:cwl'),
+    ],
+    [Markup.button.callback('« Menù', 'menu')],
+  ]);
+}
+
+function buildCwlNavKb(data, spec, webAppUrl) {
   const { view, pPage, rIdx } = spec;
   if (!data || data.state === 'notInWar') {
     return Markup.inlineKeyboard([[Markup.button.callback('« Menù', 'menu')]]);
   }
   const pPages = fmt.getCwlPlayerPageCount(data);
   const rCount = fmt.getCwlRoundCount(data);
+  const defaultRoundIdx = fmt.getDefaultCwlRoundIndex(data);
+  const turniIdx = view === 'r' ? rIdx : defaultRoundIdx;
 
   const tab = (active, short, payload) =>
     Markup.button.callback(active ? `· ${short} ·` : short, payload);
@@ -484,7 +598,7 @@ function buildCwlNavKb(data, spec) {
     ],
     [
       tab(view === 'p', '👥 Roster', 'cwl_v:p:0'),
-      tab(view === 'r', '⚔️ Turni', `cwl_v:r:${view === 'r' ? rIdx : 0}`),
+      tab(view === 'r', '⚔️ Turni', `cwl_v:r:${turniIdx}`),
     ],
   ];
 
@@ -508,14 +622,35 @@ function buildCwlNavKb(data, spec) {
     ]);
   }
 
+  if (view === 'r' && webAppUrl) {
+    rows.push([Markup.button.webApp('🌐 Visualizza versione web', webAppUrl)]);
+  }
+
   rows.push([Markup.button.callback('« Menù', 'menu')]);
   return Markup.inlineKeyboard(rows);
 }
 
-async function loadAndShowCwl(_ctx, clanTag, viewSpec) {
+async function loadAndShowCwl(ctx, clanTag, viewSpec) {
   const data = await api.cwlStats(clanTag);
+  let webAppUrl = null;
+  if (data?.state !== 'notInWar' && viewSpec.view === 'r') {
+    const base = (process.env.COCBOARD_SITE_HOME_URL || '').trim().replace(/\/$/, '');
+    if (base && ctx?.from?.id != null) {
+      try {
+        await tauth.getValidSession(ctx.from.id);
+        const code = await sb.createWebAppHandoff(ctx.from.id);
+        const idx = fmt.getDefaultCwlRoundIndex(data);
+        const rn = (data.roundsData || [])[idx]?.roundNumber;
+        const q = new URLSearchParams({ tg_h: code });
+        if (rn != null) q.set('cwl_round', String(rn));
+        webAppUrl = `${base}/?${q.toString()}`;
+      } catch (e) {
+        console.warn('[cocboard-bot] webApp handoff', e.message || e);
+      }
+    }
+  }
   const formatted = fmt.formatCwlScreen(data, viewSpec.view, viewSpec.pPage, viewSpec.rIdx);
-  const kb = buildCwlNavKb(data, formatted);
+  const kb = buildCwlNavKb(data, formatted, webAppUrl);
   return { text: formatted.text, kb, data };
 }
 
@@ -640,6 +775,8 @@ function setupBot(bot) {
     }
     ctx.cocboardUser = session.user;
     ctx.cocboardSession = session.session;
+    if (blockGroupNonLeaderCallback(ctx)) return;
+    if (ctx.message?.text && blockGroupNonLeaderCommand(ctx)) return;
     return next();
   });
 
@@ -782,9 +919,14 @@ function setupBot(bot) {
   });
 
   bot.command('guerre', async (ctx) => {
-    await cmdNeedClan(ctx, async (clanTag) => {
-      const data = await api.warLog(clanTag);
-      await ctx.reply(fmt.formatWarLog(data), { parse_mode: 'HTML', ...backMenuKb() });
+    await cmdNeedClan(ctx, async () => {
+      await ctx.reply(
+        `${fmt.DIV}\n📜 <b>Registro guerre</b>\n${fmt.DIV}\n\n` +
+          `Come sul sito: due sezioni distinte.\n\n` +
+          `• 🏹 <b>War classiche</b> — log war normali\n` +
+          `• 🏆 <b>Cronologia leghe</b> — riepilogo stagioni CWL da API`,
+        { parse_mode: 'HTML', ...warSubmenuKb() }
+      );
     });
   });
 
@@ -1103,7 +1245,24 @@ function setupBot(bot) {
     }
   });
 
-  bot.action('war', async (ctx) => {
+  bot.action('war_menu', async (ctx) => {
+    safeAnswerCb(ctx);
+    const clanTag = await resolveClanTagForCommands(ctx.from.id, ctx.cocboardUser);
+    if (!clanTag) {
+      await ctx.answerCbQuery('Nessun clan').catch(() => {});
+      return;
+    }
+    const body =
+      `${fmt.DIV}\n📜 <b>Registro guerre</b>\n${fmt.DIV}\n\n` +
+      `Scegli (come su CoCBoard → Registri Guerre):`;
+    try {
+      await ctx.editMessageText(body, { parse_mode: 'HTML', ...warSubmenuKb() });
+    } catch (_) {
+      await ctx.reply(body, { parse_mode: 'HTML', ...warSubmenuKb() });
+    }
+  });
+
+  bot.action('war:classic', async (ctx) => {
     safeAnswerCb(ctx);
     const clanTag = await resolveClanTagForCommands(ctx.from.id, ctx.cocboardUser);
     if (!clanTag) {
@@ -1111,12 +1270,52 @@ function setupBot(bot) {
       return;
     }
     const data = await api.warLog(clanTag);
-    const text = fmt.formatWarLog(data);
+    const text = fmt.formatWarLogClassic(data);
+    const kb = Markup.inlineKeyboard([[Markup.button.callback('« Registro guerre', 'war_menu')], [Markup.button.callback('« Menù', 'menu')]]);
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
+    } catch (_) {
+      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+    }
+  });
+
+  bot.action('war:cwl', async (ctx) => {
+    safeAnswerCb(ctx);
+    const clanTag = await resolveClanTagForCommands(ctx.from.id, ctx.cocboardUser);
+    if (!clanTag) {
+      await ctx.answerCbQuery('Nessun clan').catch(() => {});
+      return;
+    }
+    const data = await api.warLog(clanTag);
+    const text = fmt.formatWarLogCwlHistory(data);
+    const kb = Markup.inlineKeyboard([[Markup.button.callback('« Registro guerre', 'war_menu')], [Markup.button.callback('« Menù', 'menu')]]);
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
+    } catch (_) {
+      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+    }
+  });
+
+  bot.action('add_group_bot', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (isGroupLike(ctx)) return;
+    if (!isClanLeader(ctx.cocboardUser)) {
+      await ctx.answerCbQuery('Solo Capo / Co-Capo / Admin.').catch(() => {});
+      return;
+    }
+    await ensureTgBotUsername(ctx.telegram);
+    const text = fmt.formatAddBotToGroupHelp({ botUsername: cachedTgBotUsername });
     try {
       await ctx.editMessageText(text, { parse_mode: 'HTML', ...backMenuKb() });
     } catch (_) {
       await ctx.reply(text, { parse_mode: 'HTML', ...backMenuKb() });
     }
+  });
+
+  bot.action('group_clan_locked_hint', async (ctx) => {
+    await ctx
+      .answerCbQuery('Solo Capo/Co-Capo/Admin in gruppo — apri il bot in privato per tutti i dati.')
+      .catch(() => {});
   });
 
   bot.action('me', async (ctx) => {

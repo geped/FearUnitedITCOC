@@ -1,5 +1,6 @@
 'use strict';
 
+const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 
 function sb() {
@@ -73,6 +74,8 @@ async function saveAuthSession(telegramUserId, session, user) {
     auth_expires_at: normSessionTimes(session),
     player_tag: prev?.player_tag ?? meta.coc_tag ?? null,
     clan_tag: prev?.clan_tag ?? null,
+    webapp_handoff_code: null,
+    webapp_handoff_expires_at: null,
     updated_at: now,
   };
   if (!prev) row.created_at = now;
@@ -152,6 +155,22 @@ async function deleteTelegramLink(telegramUserId) {
   await clearAuthSession(telegramUserId);
 }
 
+/** Codice monouso (≈10 min) per aprire il sito da Telegram Mini App con sessione esistente. */
+async function createWebAppHandoff(telegramUserId) {
+  const client = sb();
+  if (!client) throw new Error('Supabase non configurato.');
+  const row = await getFullRow(telegramUserId);
+  if (!row?.auth_refresh_token) throw new Error('Sessione non disponibile. Accedi di nuovo dal bot.');
+  const code = crypto.randomBytes(24).toString('hex');
+  const exp = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const { error } = await client
+    .from('telegram_links')
+    .update({ webapp_handoff_code: code, webapp_handoff_expires_at: exp, updated_at: new Date().toISOString() })
+    .eq('telegram_user_id', telegramUserId);
+  if (error) throw new Error(error.message);
+  return code;
+}
+
 async function fetchBonusesForClan(clanTag) {
   const client = sb();
   if (!client) return null;
@@ -180,4 +199,5 @@ module.exports = {
   clearSavedClanOnly,
   deleteTelegramLink,
   fetchBonusesForClan,
+  createWebAppHandoff,
 };

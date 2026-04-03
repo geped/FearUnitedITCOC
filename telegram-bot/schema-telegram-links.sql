@@ -25,3 +25,10 @@ CREATE INDEX IF NOT EXISTS telegram_links_clan_tag_idx ON public.telegram_links 
 ALTER TABLE public.telegram_links ENABLE ROW LEVEL SECURITY;
 
 COMMENT ON TABLE public.telegram_links IS 'Bot: sessione Auth + override clan. Nessuna policy anon.';
+
+-- Handoff una tantum: Mini App / browser Telegram → CoCBoard senza ridigitare login
+ALTER TABLE public.telegram_links ADD COLUMN IF NOT EXISTS webapp_handoff_code TEXT;
+ALTER TABLE public.telegram_links ADD COLUMN IF NOT EXISTS webapp_handoff_expires_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS telegram_links_webapp_handoff_code_idx
+  ON public.telegram_links (webapp_handoff_code)
+  WHERE webapp_handoff_code IS NOT NULL;

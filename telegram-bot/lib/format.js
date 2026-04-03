@@ -110,8 +110,19 @@ function formatGroupHelp() {
 }
 
 /** Menù dopo login Supabase */
-function formatAuthedMenuIntro({ displayName, clanTag, clanName, hasClanOverride, chatHint }) {
+function formatAuthedMenuIntro({
+  displayName,
+  clanTag,
+  clanName,
+  hasClanOverride,
+  chatHint,
+  groupClanLocked,
+}) {
   const hint = chatHint ? `\n\n📍 <i>${escapeHtml(chatHint)}</i>` : '';
+  const lock =
+    groupClanLocked ?
+      `\n\n🔒 <i>In gruppo i dati clan sono visibili solo a <b>Capo</b>, <b>Co-Capo</b> e <b>Admin</b>. Apri la chat <b>privata</b> con il bot per l’elenco completo.</i>`
+    : '';
   if (!clanTag) {
     return (
       `⚔️ <b>CoCBoard</b>\n` +
@@ -122,7 +133,8 @@ function formatAuthedMenuIntro({ displayName, clanTag, clanName, hasClanOverride
       `• Entra in un clan in game, oppure\n` +
       `• Imposta un tag: <code>/setclan #TAG</code>\n\n` +
       `Poi sblocchi: membri, CWL, bonus, guerre.` +
-      hint
+      hint +
+      lock
     );
   }
   const src = hasClanOverride ? '\n📌 <i>Clan da /setclan (override)</i>' : '\n📌 <i>Clan dal profilo villaggio</i>';
@@ -134,7 +146,8 @@ function formatAuthedMenuIntro({ displayName, clanTag, clanName, hasClanOverride
     `└ Tag <code>${escapeHtml(clanTag)}</code>${src}\n` +
     `${DIV}\n\n` +
     `Scegli una sezione qui sotto o <code>/help</code>.` +
-    hint
+    hint +
+    lock
   );
 }
 
@@ -363,6 +376,115 @@ function getCwlRoundCount(data) {
   return Math.max(0, (data?.roundsData || []).length);
 }
 
+/** Indice 0-based del turno “attivo” (come sul sito: inWar → preparation → ultimo giocato). */
+function getDefaultCwlRoundIndex(data) {
+  const rounds = data?.roundsData || [];
+  if (!rounds.length) return 0;
+  let idx = rounds.findIndex((r) => r.state === 'inWar');
+  if (idx < 0) idx = rounds.findIndex((r) => r.state === 'preparation');
+  if (idx < 0) {
+    let last = -1;
+    for (let i = 0; i < rounds.length; i++) {
+      const st = rounds[i].state;
+      if (st !== 'notInWar' && st !== 'warEnded' && st !== 'ended') last = i;
+    }
+    if (last >= 0) idx = last;
+  }
+  if (idx < 0) {
+    for (let i = rounds.length - 1; i >= 0; i--) {
+      const st = rounds[i].state;
+      if (st === 'warEnded' || st === 'ended') {
+        idx = i;
+        break;
+      }
+    }
+  }
+  return idx >= 0 ? idx : 0;
+}
+
+function filterClassicWarItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items.filter((w) => {
+    const wt = (w.warType || '').toLowerCase();
+    if (wt === 'cwl') return false;
+    if (!w.opponent?.name) return false;
+    const maxStars = (w.teamSize || 50) * 3;
+    if ((w.clan?.stars || 0) > maxStars) return false;
+    return true;
+  });
+}
+
+function filterCwlWarItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items.filter((w) => {
+    const wt = (w.warType || '').toLowerCase();
+    const maxStars = (w.teamSize || 50) * 3;
+    const isAggregated = (w.clan?.stars || 0) > maxStars;
+    return (wt === 'cwl' || !w.opponent?.name || isAggregated) && w.endTime;
+  });
+}
+
+function formatWarLogClassic(data) {
+  const items = filterClassicWarItems(data?.items || data);
+  if (!items.length) {
+    return (
+      `${DIV}\n🏹 <b>War classiche</b>\n${DIV}\n\n` +
+        `<i>Nessuna war classica nel log, oppure il registro clan non è pubblico in CoC.</i>`
+    );
+  }
+  const slice = items.slice(0, 10);
+  const lines = slice.map((w) => {
+    const c = w.clan || {};
+    const o = w.opponent || {};
+    const r = w.result ? String(w.result) : '';
+    const icon = r === 'win' ? '✅' : r === 'lose' ? '❌' : '⚖️';
+    const lbl = r === 'win' ? 'Vittoria' : r === 'lose' ? 'Sconfitta' : r === 'tie' ? 'Pareggio' : r || '—';
+    return (
+      `${icon} <b>${escapeHtml(lbl)}</b>\n` +
+      `   └ ${escapeHtml(c.name)} <b>${c.stars ?? 0}</b>★ vs <b>${o.stars ?? 0}</b>★ ${escapeHtml(o.name)}`
+    );
+  });
+  return (
+    `${DIV}\n🏹 <b>War classiche</b> <i>(max 10)</i>\n${DIV}\n${DIV2}\n\n${lines.join('\n\n')}`
+  );
+}
+
+/** Riepilogo stagioni da war-log (come tab Cronologia Leghe sul sito, versione compatta). */
+function formatWarLogCwlHistory(data) {
+  const raw = filterCwlWarItems(data?.items || data);
+  if (!raw.length) {
+    return (
+      `${DIV}\n🏆 <b>Cronologia leghe (CWL)</b>\n${DIV}\n\n` +
+        `<i>Nessuna guerra CWL nel log API, oppure registro non pubblico.</i>`
+    );
+  }
+  const warSeasonMap = {};
+  raw.forEach((w) => {
+    const s = w.endTime.slice(0, 4) + '-' + w.endTime.slice(4, 6);
+    if (!warSeasonMap[s]) {
+      warSeasonMap[s] = { wins: 0, losses: 0, draws: 0, wars: 0, stars: 0 };
+    }
+    const ws = warSeasonMap[s];
+    ws.wars++;
+    if (w.result === 'win') ws.wins++;
+    else if (w.result === 'lose') ws.losses++;
+    else ws.draws++;
+    ws.stars += w.clan?.stars || 0;
+  });
+  const seasons = Object.keys(warSeasonMap).sort((a, b) => b.localeCompare(a));
+  const lines = seasons.slice(0, 12).map((s) => {
+    const m = warSeasonMap[s];
+    return (
+      `📅 <b>${escapeHtml(s)}</b> · ${m.wars} war · ` +
+      `✅${m.wins} ❌${m.losses} ⚖️${m.draws} · ⭐${m.stars}`
+    );
+  });
+  return (
+    `${DIV}\n🏆 <b>Cronologia leghe (CWL)</b>\n${DIV}\n` +
+      `<i>Da API war-log (come sul sito). Ultime stagioni:</i>\n\n${lines.join('\n\n')}`
+  );
+}
+
 /**
  * @param {'ov'|'g'|'p'|'r'} view
  */
@@ -408,23 +530,22 @@ function formatCwl(data) {
 }
 
 function formatWarLog(data) {
-  const items = data.items || data;
-  if (!Array.isArray(items) || !items.length) {
-    return `${DIV}\n📜 <b>Registro guerre</b>\n${DIV}\n\n<i>Nessuna guerra nel log, oppure il log del clan non è pubblico nelle impostazioni CoC.</i>`;
-  }
-  const slice = items.slice(0, 10);
-  const lines = slice.map((w) => {
-    const c = w.clan || {};
-    const o = w.opponent || {};
-    const r = w.result ? String(w.result) : '';
-    const icon = r === 'win' ? '✅' : r === 'lose' ? '❌' : '⚖️';
-    const lbl = r === 'win' ? 'Vittoria' : r === 'lose' ? 'Sconfitta' : r === 'tie' ? 'Pareggio' : r || '—';
-    return (
-      `${icon} <b>${escapeHtml(lbl)}</b>\n` +
-      `   └ ${escapeHtml(c.name)} <b>${c.stars ?? 0}</b>★ vs <b>${o.stars ?? 0}</b>★ ${escapeHtml(o.name)}`
-    );
-  });
-  return `${DIV}\n📜 <b>Ultime guerre</b> <i>(max 10)</i>\n${DIV}\n${DIV2}\n\n${lines.join('\n\n')}`;
+  return formatWarLogClassic(data);
+}
+
+function formatAddBotToGroupHelp({ botUsername }) {
+  const u = botUsername ? `@${String(botUsername).replace(/^@/, '')}` : 'il bot';
+  return (
+    `${DIV}\n➕ <b>Aggiungi il bot a un gruppo / canale</b>\n${DIV}\n\n` +
+      `<b>Chi può farlo</b>\n` +
+      `Solo account CoCBoard con ruolo <b>Capo</b>, <b>Co-Capo</b> o <b>Admin</b> (come sulla dashboard).\n\n` +
+      `<b>Passi</b>\n` +
+      `1️⃣ Aggiungi ${u} al gruppo o canale (in canale: aggiungi come amministratore se richiesto).\n` +
+      `2️⃣ In <b>chat privata</b> con il bot hai già fatto login: da lì puoi usare Membri, CWL, bonus anche quando scrivi nel gruppo.\n` +
+      `3️⃣ <b>Non</b> inviare mai password o chiavi API nel gruppo.\n` +
+      `4️⃣ Per comandi rapidi: <code>/start</code> nel gruppo mostra il menù ospite; i dati clan richiedono login in privato.\n\n` +
+      `<i>Suggerimento: fissa il messaggio di benvenuto del bot per il clan.</i>`
+  );
 }
 
 function formatBonusesPage(rows, page, clanTagHint) {
@@ -591,7 +712,11 @@ module.exports = {
   formatCwlEmpty,
   getCwlPlayerPageCount,
   getCwlRoundCount,
+  getDefaultCwlRoundIndex,
   formatWarLog,
+  formatWarLogClassic,
+  formatWarLogCwlHistory,
+  formatAddBotToGroupHelp,
   formatBonuses,
   formatBonusesPage,
   formatRankings,

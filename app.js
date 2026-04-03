@@ -23,6 +23,43 @@
 
 const db = window.sb;
 
+// ── Handoff da bot Telegram (Mini App): codice monouso → sessione ─────────────
+(function readCwlRoundFromQuery() {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const cr = p.get('cwl_round');
+    if (cr != null && cr !== '') {
+      const n = parseInt(cr, 10);
+      if (n >= 1 && n <= 7) window.__cocboardOpenCwlRound = n;
+    }
+  } catch (_) {}
+})();
+(function consumeTelegramWebHandoffFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('tg_h') || params.get('h');
+    if (!code) return;
+    (async () => {
+      try {
+        const r = await fetch(`/api/lookup?type=telegram-handoff&code=${encodeURIComponent(code)}`);
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j.access_token || !j.refresh_token) {
+          console.warn('[CoCBoard] Handoff Telegram:', j.error || r.status);
+          return;
+        }
+        await db.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
+        params.delete('tg_h');
+        params.delete('h');
+        params.delete('cwl_round');
+        const qs = params.toString();
+        window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+      } catch (e) {
+        console.warn('[CoCBoard] Handoff Telegram', e);
+      }
+    })();
+  } catch (_) {}
+})();
+
 // Clan dell'utente loggato — impostati in showApp() dopo il login
 window._userClanTag    = null;  // es. '#2J2VLPP9R'
 window._clanName       = '';
@@ -773,6 +810,34 @@ async function showApp(sessionUser) {
     activateTab('admin');
   } else {
     loadMembers();
+  }
+
+  queueMicrotask(() => {
+    void applyCocboardTelegramWebDeepLink();
+  });
+}
+
+/** Dopo login: apre Registri → Cronologia leghe → modal turni (da link bot / Mini App). */
+async function applyCocboardTelegramWebDeepLink() {
+  const rn = window.__cocboardOpenCwlRound;
+  if (rn == null || !window._userClanTag) return;
+  delete window.__cocboardOpenCwlRound;
+  try {
+    activateTab('warlog');
+    const cwlBtn = document.querySelector('#tab-warlog .subtab-btn[onclick*="\'cwl\'"]');
+    document.querySelectorAll('#tab-warlog .subtab-btn').forEach((b) => b.classList.remove('active'));
+    if (cwlBtn) cwlBtn.classList.add('active');
+    const wlClassic = document.getElementById('wl-classic');
+    const wlCwl = document.getElementById('wl-cwl');
+    if (wlClassic) wlClassic.style.display = 'none';
+    if (wlCwl) wlCwl.style.display = 'block';
+    await loadCwlSeasons();
+    const merged = window._cwlMergedSeasons || [];
+    const live = merged.find((s) => s.isLive && s.hasRounds) || merged.find((s) => s.hasRounds);
+    if (!live) return;
+    openCwlSeasonDetail(live.season, { forceCdmTab: 'rounds', initialRoundNumber: rn });
+  } catch (e) {
+    console.warn('[CoCBoard] Deep link CWL web', e);
   }
 }
 
@@ -3496,7 +3561,7 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
 
 // ── Modal Dettaglio Stagione CWL ──────────────────────────────────────────────
 
-function openCwlSeasonDetail(season) {
+function openCwlSeasonDetail(season, modalExtra) {
   window._cwlOpenSeason = season;
   window._cwlModalAlienFocusTag = null;
   const rounds = (window._cwlSeasonRoundsMap || {})[season] || [];
@@ -3505,7 +3570,8 @@ function openCwlSeasonDetail(season) {
   const allMerged = window._cwlMergedSeasons || [];
   const seasonObj  = allMerged.find(s => s.season === season);
   if (seasonObj?.groupStandings) groupStandings = seasonObj.groupStandings;
-  _renderCwlDetailModal(season, rounds, groupStandings, seasonObj, null);
+  const ctx = modalExtra && typeof modalExtra === 'object' ? modalExtra : null;
+  _renderCwlDetailModal(season, rounds, groupStandings, seasonObj, ctx);
 }
 
 /** Apre il dettaglio CWL dal punto di vista di un altro clan dello stesso gruppo (solo stagione live). */
@@ -3584,6 +3650,14 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj, modalC
   if (activeRoundIdx < 0) {
     const lastPlayed = roundSlots.reduce((acc, r, i) => (!r.upcoming ? i : acc), -1);
     activeRoundIdx = lastPlayed >= 0 ? lastPlayed : 0;
+  }
+
+  if (modalContext?.initialRoundNumber != null) {
+    const want = +modalContext.initialRoundNumber;
+    if (want >= 1 && want <= TOTAL_ROUNDS) {
+      const idxFound = roundSlots.findIndex((r) => (r.roundNumber || 0) === want);
+      if (idxFound >= 0) activeRoundIdx = idxFound;
+    }
   }
 
   // ── Panel: Classifica lega ──
@@ -3844,7 +3918,10 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj, modalC
 
   // Default: Confronto se c'è un turno inWar attivo, Anteprima se live/dettagliata, altrimenti Turni
   const hasActiveWar = roundSlots[activeRoundIdx]?.state === 'inWar';
-  const defaultTab = hasActiveWar ? 'confronto' : (isLive || hasDetailedData) ? 'preview' : 'rounds';
+  let defaultTab = hasActiveWar ? 'confronto' : (isLive || hasDetailedData) ? 'preview' : 'rounds';
+  if (modalContext?.forceCdmTab) {
+    defaultTab = modalContext.forceCdmTab;
+  }
   const roundTabsVisible = defaultTab === 'rounds' || defaultTab === 'preview' || defaultTab === 'confronto';
 
   const backHdr = isAlienView
