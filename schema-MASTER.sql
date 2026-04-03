@@ -291,3 +291,12 @@ CREATE POLICY "anon_members" ON public.members
 
 -- cwl_bonuses: mantieni solo lettura per anon (dati sensibili)
 -- (anon_bonuses_read è già attiva dal fix precedente — nessuna modifica necessaria)
+
+
+-- ═══ SEZIONE 10: SOFT DELETE — Colonna left_at su members per ex-player ═══
+
+-- Aggiunge left_at: NULL = membro attivo, NOT NULL = ha lasciato il clan
+ALTER TABLE public.members ADD COLUMN IF NOT EXISTS left_at TIMESTAMPTZ DEFAULT NULL;
+
+-- Indice per query frequente (filtra attivi / ex)
+CREATE INDEX IF NOT EXISTS members_left_at_idx ON public.members(left_at);

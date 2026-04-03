@@ -25,7 +25,14 @@ module.exports = async (req, res) => {
         const r = await fetch(`${proxyUrl}${proxyPath}`, {
             headers: { 'x-sync-key': process.env.SYNC_SECRET || '' },
         });
-        const data = await r.json();
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok && data && typeof data === 'object' && data.error == null) {
+            const msg =
+                data.message ||
+                (data.reason && data.message ? `${data.reason}: ${data.message}` : data.reason) ||
+                'Errore proxy CoC';
+            data.error = typeof msg === 'string' ? msg : JSON.stringify(data);
+        }
         res.status(r.status).json(data);
     } catch (err) {
         res.status(500).json({ error: err.message });

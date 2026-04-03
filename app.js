@@ -111,11 +111,79 @@ function _playerLeagueForBadge(p) {
   return p.league || null;
 }
 
+/** Lega nei record classifica CoC (stesso schema player: leagueTier + league) */
+function _rankingPlayerLeague(p) {
+  return _playerLeagueForBadge(p);
+}
+
+function _lookupApiError(data) {
+  if (!data || typeof data !== 'object') return 'Errore API';
+  if (data.error) return String(data.error);
+  if (data.reason && data.message) return `${data.reason}: ${data.message}`;
+  if (data.reason) return String(data.reason);
+  return 'Errore API';
+}
+
+/** Profilo ridotto da tabella members (sync) se /player CoC non risponde (es. invalid IP) */
+function _profileFromMemberRow(row, meta) {
+  const tag = row.tag || '';
+  const clanTag = meta?.coc_clan_tag || row.clan_tag || null;
+  const clanName = meta?.coc_clan_name || row.clan_name || null;
+  const badgeUrl = meta?.coc_clan_badge_url || null;
+  return {
+    name: row.name,
+    tag,
+    townHallLevel: row.th_level ?? null,
+    trophies: row.trophies ?? null,
+    donations: row.donations ?? null,
+    donationsReceived: row.donations_received ?? null,
+    expLevel: row.exp_level ?? null,
+    role: row.role || null,
+    league: row.league_name
+      ? {
+          name: row.league_name,
+          iconUrls: row.league_icon_url
+            ? { small: row.league_icon_url, medium: row.league_icon_url, large: row.league_icon_url }
+            : undefined,
+        }
+      : null,
+    clan: clanTag
+      ? {
+          tag: clanTag,
+          name: clanName || 'Clan',
+          badgeUrls: badgeUrl ? { small: badgeUrl, medium: badgeUrl } : {},
+        }
+      : null,
+    heroes: [],
+    troops: [],
+    spells: [],
+    heroEquipment: [],
+    achievements: [],
+    builderHallLevel: null,
+    warStars: null,
+    attackWins: null,
+    defenseWins: null,
+    clanCapitalContributions: null,
+    builderBaseTrophies: null,
+    builderBaseBestTrophies: null,
+    _profileSource: 'roster',
+  };
+}
+
+async function _fetchMemberRowForProfile(tag) {
+  const norm = tag && String(tag).trim().toUpperCase().startsWith('#') ? String(tag).trim().toUpperCase() : '#' + String(tag || '').replace(/^#/, '').toUpperCase();
+  const { data, error } = await db.from('members').select('*').eq('tag', norm).maybeSingle();
+  if (error || !data) return null;
+  return data;
+}
+
 /** URL CDN da nome (fallback se asset API non carica nel browser) */
 function unitImgUrl(u, category) {
   if (!u) return getAssetUrl('', category);
   const coc = _cocUnitIconUrl(u);
   if (coc) return coc;
+  const gh = getGhWidgetsUrl(u.name);
+  if (gh) return gh;
   return getAssetUrl(u.name, category);
 }
 
@@ -130,25 +198,57 @@ function _cocUnitIconUrl(u) {
  * Coppia src + fallback coc.guide per <img>: se l'asset Supercell fallisce (hotlink/referrer),
  * onerror prova il secondo URL.
  */
-function _unitImgSrcPair(u, category) {
-  const slugUrl = getAssetUrl(u?.name, category);
-  const coc = _cocUnitIconUrl(u);
-  if (coc) return { src: coc, fb: slugUrl };
-  return { src: slugUrl, fb: '' };
+/**
+ * Catena fallback immagini unità: opzionale file locale (units/) → mirror GitHub clash_widgets → coc.guide.
+ * I path GitHub sono stabili (repo Zacatac3/clash_widgets, branch main).
+ */
+function _unitImgFallbackUrls(u, category) {
+  const name = u?.name;
+  const out = [];
+  const loc = UNIT_LOCAL_IMAGE && UNIT_LOCAL_IMAGE[name];
+  if (loc) {
+    const p = String(loc).replace(/^\//, '');
+    out.push(p.startsWith('http') ? p : p);
+  }
+  const gh = getGhWidgetsUrl(name);
+  if (gh) out.push(gh);
+  const guide = getCocGuideUrl(name, category);
+  if (guide) out.push(guide);
+  return out;
 }
 
-function _unitImgDataFbAttr(fb) {
-  if (!fb) return '';
-  return ` data-fb="${String(fb).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}"`;
+function _unitImgSrcPair(u, category) {
+  const chain = _unitImgFallbackUrls(u, category);
+  const coc = _cocUnitIconUrl(u);
+  if (coc) {
+    return { src: coc, fbChain: chain };
+  }
+  if (!chain.length) return { src: '', fbChain: [] };
+  return { src: chain[0], fbChain: chain.slice(1) };
+}
+
+function _unitImgDataFbChainAttr(fbChain) {
+  if (!fbChain || !fbChain.length) return '';
+  try {
+    const enc = encodeURIComponent(JSON.stringify(fbChain));
+    return ` data-fb-chain="${enc.replace(/'/g, '&#39;')}"`;
+  } catch (_) {
+    return '';
+  }
 }
 
 function _profiloUnitImgOnError(img) {
-  const fb = img.getAttribute('data-fb');
-  if (fb && !img.dataset.fbTried) {
-    img.dataset.fbTried = '1';
-    img.removeAttribute('data-fb');
-    img.src = fb;
-    return;
+  const enc = img.getAttribute('data-fb-chain');
+  if (enc) {
+    try {
+      const urls = JSON.parse(decodeURIComponent(enc));
+      const i = parseInt(img.dataset.fbI || '0', 10);
+      if (i < urls.length) {
+        img.dataset.fbI = String(i + 1);
+        img.src = urls[i];
+        return;
+      }
+    } catch (_) {}
   }
   img.style.display = 'none';
   const nx = img.nextElementSibling;
@@ -565,7 +665,12 @@ function renderClanDetails(info, div) {
     ? `<div class="clan-detail-item">${SVG_SHIELD}<span>Lv ${info.clanLevel}</span></div>`
     : '';
 
-  div.innerHTML = `<div class="clan-detail-grid">
+  const descRaw = (info.description && String(info.description).trim()) ? String(info.description).trim() : '';
+  const descHtml = descRaw
+    ? `<div class="clan-detail-desc-wrap"><div class="cc-desc clan-detail-desc">${descRaw.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div></div>`
+    : '';
+
+  div.innerHTML = `${descHtml}<div class="clan-detail-grid">
     ${leagueHtml}${locationHtml}${langHtml}${typeHtml}${trophiesHtml}${pointsHtml}${levelHtml}
   </div>`;
 }
@@ -3884,11 +3989,35 @@ async function loadProfile() {
   try {
     const r = await fetch(`/api/lookup?type=player&playerTag=${encodeURIComponent(cocTag)}`);
     const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Errore caricamento profilo');
-    _profileData = data;
-    renderProfile(data);
-    if (loading) loading.style.display = 'none';
-    if (content) content.style.display = 'block';
+    if (r.ok) {
+      _profileData = data;
+      renderProfile(data);
+      if (loading) loading.style.display = 'none';
+      if (content) content.style.display = 'block';
+      return;
+    }
+    const errMsg = _lookupApiError(data);
+    const tryRoster =
+      /accessDenied|invalidIp|invalid\s*ip|notFound|serviceUnavailable|503|502/i.test(errMsg) ||
+      r.status === 403 ||
+      r.status === 502 ||
+      r.status === 503;
+    if (tryRoster) {
+      const row = await _fetchMemberRowForProfile(cocTag);
+      if (row) {
+        const partial = _profileFromMemberRow(row, session?.user?.user_metadata || {});
+        _profileData = partial;
+        renderProfile(partial);
+        if (loading) loading.style.display = 'none';
+        if (content) content.style.display = 'block';
+        return;
+      }
+    }
+    const hint =
+      /accessDenied|invalidIp/i.test(errMsg)
+        ? ' Verifica su developer.clashofclans.com che l’IP del proxy (Render) sia nella whitelist della chiave API.'
+        : '';
+    throw new Error(errMsg + hint);
   } catch (e) {
     if (loading) loading.style.display = 'none';
     if (content) {
@@ -3924,8 +4053,13 @@ function renderPlayerView(p, prefix) {
     : '';
   const favBtnHtml = !isHome ? _favBtn('players', p.tag, p.name) : '';
 
+  const rosterNotice =
+    isHome && p._profileSource === 'roster'
+      ? `<div class="profilo-sync-notice" role="status">Profilo da roster del clan (Supabase): l’API CoC non risponde da questo server (es. <code>accessDenied.invalidIp</code>). Eroi, truppe e statistiche avanzate non sono disponibili finché l’IP del proxy non è in whitelist sulla chiave API.</div>`
+      : '';
+
   const headerEl = document.getElementById(`${prefix}-header-card`);
-  if (headerEl) headerEl.innerHTML = `
+  if (headerEl) headerEl.innerHTML = `${rosterNotice}
     <div class="profilo-hero-top">
       ${thImgV(p.townHallLevel || 1)}
       <div class="profilo-hero-info">
@@ -4009,7 +4143,9 @@ function renderPlayerView(p, prefix) {
   const isHomeV = x => !x.village || x.village === 'home';
   const heroes   = (p.heroes||[]).filter(isHomeV);
   const equipment= (p.heroEquipment||[]).filter(x=>!x.village||x.village==='home');
-  const pets     = (p.troops||[]).filter(x=>isHomeV(x)&&PETS_SET.has(x.name));
+  // I famigli arrivano in `p.pets` (non in `p.troops`).
+  // Se li filtriamo dalla lista sbagliata, la sezione famigli mostra iconcine di fallback/vuota.
+  const pets     = (p.pets||[]).filter(x=>isHomeV(x)&&PETS_SET.has(x.name));
   const troopsAll= (p.troops||[]).filter(x=>isHomeV(x)&&!PETS_SET.has(x.name)&&!SIEGE_SET.has(x.name));
   const spells   = (p.spells||[]).filter(isHomeV);
   const siege    = (p.troops||[]).filter(x=>isHomeV(x)&&SIEGE_SET.has(x.name));
@@ -4070,6 +4206,7 @@ const UNIT_COC_SLUG = {
   'Dragon Duke':        {c:'hero',  s:'dragon-duke'},
   // ── Eroi Builder / Capitale ───────────────────────────────────────────────
   'Battle Machine':     {c:'hero',  s:'battle-machine'},
+  'Battle Copter':      {c:'hero',  s:'battle-copter'},
   'B.O.B':              {c:'hero',  s:'bob'},
   // ── Truppe — slug diverso dall'auto-generazione ───────────────────────────
   'Baby Dragon':        {c:'troop', s:'babydragon'},
@@ -4198,7 +4335,61 @@ const UNIT_COC_SLUG = {
   'Fire Heart':         {c:'equipment', s:'fire-heart'},
   'Flame Blower':       {c:'equipment', s:'flame-blower'},
   'Stun Blaster':       {c:'equipment', s:'stun-blaster'},
+  // ── Truppe / incantesimi recenti (slug coc.guide; mirror GH sotto) ───────────
+  'Furnace':            {c:'troop', s:'furnace'},
+  'Meteor Golem':       {c:'troop', s:'meteor-golem'},
+  'Ice Block Spell':    {c:'spell', s:'ice-block-spell'},
+  'Totem Spell':        {c:'spell', s:'totem-spell'},
+  'Super Yeti':         {c:'troop', s:'super-yeti'},
+  'Super Valkyrie':     {c:'troop', s:'super-valkyrie'},
 };
+
+/** Path opzionale `units/...` per asset venduti in repo (sovrascrive catena se presente). */
+const UNIT_LOCAL_IMAGE = {};
+
+/**
+ * Mirror immagini da Zacatac3/clash_widgets (Assets.xcassets), path relativo alla cartella xcassets.
+ * @see https://github.com/Zacatac3/clash_widgets
+ */
+const GH_WIDGETS_BASE = 'https://raw.githubusercontent.com/Zacatac3/clash_widgets/main/clash_widgets/Assets.xcassets';
+
+const UNIT_GH_WIDGETS_PATH = {
+  'Minion Prince': 'heroes/minion_prince.imageset/100.png',
+  'Battle Copter': 'builder_base/battle_copter.imageset/300.png',
+  'Furnace': 'lab/furnace.imageset/120(3).png',
+  'Meteor Golem': 'lab/meteor_golem.imageset/120.png',
+  'Ice Block Spell': 'lab/ice_block_spell.imageset/120(6).png',
+  'Totem Spell': 'lab/totem_spell.imageset/120(9).png',
+  'L.A.S.S.I': 'pets/l_a_s_s_i.imageset/eyJwYXRoIjoic3VwZXJjZWxsXC9maWxlXC9pQnVZdFVQcGNjYnZHaEw2Njh3cy5wbmcifQ_supercell_98198naVqmJ2j4cjQuCwnkdKVCIusG1eFAFg40gXKJw.png',
+  'Mighty Yak': 'pets/mighty_yak.imageset/eyJwYXRoIjoic3VwZXJjZWxsXC9maWxlXC81ODJDWlcyZzhMc0tkYmdOWGdOYS5wbmcifQ_supercell_mz-qEWrGI4WC0oo6PrxoTJAM7XNdW7GK2ceDC44DFF0.png',
+  'Electro Owl': 'pets/electro_owl.imageset/eyJwYXRoIjoic3VwZXJjZWxsXC9maWxlXC93dVdaSkVqYlNXSmF3Z29kcDlvci5wbmcifQ_supercell_bYw4mQC4xHFAtlqyYw4tXLgm3-gKxgtliXOAFN0oqUU.png',
+  'Unicorn': 'pets/unicorn.imageset/eyJwYXRoIjoic3VwZXJjZWxsXC9maWxlXC9aSGdOTmNWRlRWUFZOZWF0ZmsyQi5wbmcifQ_supercell_QWSFErv6lnbsYREMZ6mx9eej5rUYNkjhJAfq7B9lvJQ.png',
+  'Spirit Fox': 'pets/spirit_fox.imageset/eyJwYXRoIjoic3VwZXJjZWxsXC9maWxlXC9aQkpOWFYyYWdnTmNrUWpBTGc5eS5wbmcifQ_supercell_QUOkTvJfRuEYsiXO_v2olK7OxSvgiGG-auY7wSFwbYY.png',
+  'Sneezy': 'pets/sneezy.imageset/eyJwYXRoIjoic3VwZXJjZWxsXC9maWxlXC9ROHpLVFJESHNKcnJmTkJuQ0s2My5wbmcifQ_supercell_YoJvpbIiHioEqD7d3LTqPv7EEc6O_XquWLDSkHsL450.png',
+  'Barbarian Puppet': 'equipment/barbarian_puppet.imageset/100(2).png',
+  'Rage Vial': 'equipment/rage_vial.imageset/100(3).png',
+  'Spiky Ball': 'equipment/spiky_ball.imageset/100(7).png',
+  'Snake Bracelet': 'equipment/snake_bracelet.imageset/100(8).png',
+  'Archer Puppet': 'equipment/archer_puppet.imageset/100(9).png',
+  'Action Figure': 'equipment/action_figure.imageset/100(15).png',
+  'Henchmen Puppet': 'equipment/henchmen_puppet.imageset/100(16).png',
+  'Dark Orb': 'equipment/dark_orb.imageset/100(17).png',
+  'Metal Pants': 'equipment/metal_pants.imageset/100(18).png',
+  'Noble Iron': 'equipment/noble_iron.imageset/100(19).png',
+  'Dark Crown': 'equipment/dark_crown.imageset/100(20).png',
+  'Meteor Staff': 'equipment/meteor_staff.imageset/100(21).png',
+  'Fireball': 'equipment/fireball.imageset/100(26).png',
+  'Lavaloon Puppet': 'equipment/lavaloon_puppet.imageset/100(27).png',
+  'Heroic Torch': 'equipment/heroic_torch.imageset/100(28).png',
+  'Royal Gem': 'equipment/royal_gem.imageset/100(29).png',
+  'Frost Flake': 'equipment/frost_flake.imageset/100(35).png',
+  'Stick Horse': 'equipment/stick_horse.imageset/Stick_Horse.png',
+};
+
+function getGhWidgetsUrl(name) {
+  const rel = UNIT_GH_WIDGETS_PATH[name];
+  return rel ? `${GH_WIDGETS_BASE}/${rel}` : '';
+}
 
 // ── NOMI ITALIANI UNITÀ ───────────────────────────────────────────────────────
 const UNIT_NAME_IT = {
@@ -4206,7 +4397,7 @@ const UNIT_NAME_IT = {
   'Barbarian King':'Re dei Barbari','Archer Queen':'Regina degli Arcieri',
   'Grand Warden':'Grande Custode','Royal Champion':'Campione Reale',
   'Minion Prince':'Principe degli Sgherri','Dragon Duke':'Duca Drago',
-  'Battle Machine':'Macchina da Battaglia','B.O.B':'B.O.B',
+  'Battle Machine':'Macchina da Battaglia','Battle Copter':'Elicottero da Battaglia','B.O.B':'B.O.B',
   // Truppe home
   'Barbarian':'Barbaro','Archer':'Arciera','Giant':'Gigante','Goblin':'Goblin',
   'Wall Breaker':'Spaccamuri','Balloon':'Mongolfiera','Wizard':'Mago',
@@ -4224,13 +4415,16 @@ const UNIT_NAME_IT = {
   'Electro Titan':'Titano Elettro','Root Rider':'Cavalcatore di Radici',
   'Thrower':'Lanciatore','Super Archer':'Super Arciera',
   'Super Wall Breaker':'Super Spaccamuri','Super Miner':'Super Minatore',
-  'Super Hog Rider':'Super Cavalcatore','Apprentice Warden':'Custode Apprendista',
+  'Super Hog Rider':'Super Cavalcatore','Super Yeti':'Super Yeti',
+  'Furnace':'Fornace','Meteor Golem':'Golem Meteorite',
+  'Apprentice Warden':'Custode Apprendista',
   // Incantesimi
   'Lightning Spell':'Fulmine','Healing Spell':'Guarigione','Rage Spell':'Rabbia',
   'Freeze Spell':'Congelamento','Jump Spell':'Salto','Earthquake Spell':'Terremoto',
   'Haste Spell':'Velocità','Clone Spell':'Clone','Invisibility Spell':'Invisibilità',
   'Recall Spell':'Richiamo','Bat Spell':'Pipistrelli','Skeleton Spell':'Scheletri',
   'Goblin Spell':'Goblin','Overgrowth Spell':'Ipercrescita',
+  'Ice Block Spell':'Blocco di ghiaccio','Totem Spell':'Totem',
   'Poison Spell':'Veleno',
   'Dark Spell':'Oscuro',
   // Macchine d'assedio
@@ -4264,16 +4458,21 @@ const UNIT_NAME_IT = {
 
 function _unitNameIt(name) { return UNIT_NAME_IT[name] || name; }
 
-function getAssetUrl(name, category) {
+/** Ultimo fallback: slug coc.guide (spesso 404 per contenuti nuovi). */
+function getCocGuideUrl(name, category) {
+  if (!name) return '';
   if (UNIT_COC_SLUG[name]) {
     const {c, s} = UNIT_COC_SLUG[name];
     return `https://coc.guide/static/imgs/${c}/${s}.png`;
   }
-  // Auto-generate for unmapped units with singular category names
   const CAT = {heroes:'hero',troops:'troop',spells:'spell',pets:'pet',equipment:'equipment'};
   const cat = CAT[category] || category || 'troop';
   const slug = name.toLowerCase().replace(/['.()]/g,'').replace(/\s+/g,'-').replace(/-+/g,'-');
   return `https://coc.guide/static/imgs/${cat}/${slug}.png`;
+}
+
+function getAssetUrl(name, category) {
+  return getCocGuideUrl(name, category);
 }
 
 // TODO: rimuovere se non usata altrove
@@ -4349,7 +4548,7 @@ function _renderEquipmentGrouped(containerId, equipment) {
     const isLocked= lvl === 0;
     return `<div class="profilo-unit-card${isMax?' profilo-unit-max':''}${isLocked?' profilo-unit-locked':''}" title="${nameIt}">
       <div class="profilo-unit-img-wrap">
-        <img src="${pair.src}" alt="${nameIt}" class="profilo-unit-img" loading="lazy" decoding="async"${_unitImgDataFbAttr(pair.fb)}
+        <img src="${pair.src}" alt="${nameIt}" class="profilo-unit-img" loading="lazy" decoding="async"${_unitImgDataFbChainAttr(pair.fbChain)}
           onerror="_profiloUnitImgOnError(this)">
         <div class="profilo-unit-fallback profilo-unit-fallback--neutral" style="display:none">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg">
@@ -4390,7 +4589,7 @@ function _renderUnits(containerId, units, cdnCategory) {
     const isLocked= lvl === 0;
     return `<div class="profilo-unit-card${isMax?' profilo-unit-max':''}${isLocked?' profilo-unit-locked':''}" title="${nameIt}">
       <div class="profilo-unit-img-wrap">
-        <img src="${pair.src}" alt="${nameIt}" class="profilo-unit-img" loading="lazy" decoding="async"${_unitImgDataFbAttr(pair.fb)}
+        <img src="${pair.src}" alt="${nameIt}" class="profilo-unit-img" loading="lazy" decoding="async"${_unitImgDataFbChainAttr(pair.fbChain)}
           onerror="_profiloUnitImgOnError(this)">
         <div class="profilo-unit-fallback profilo-unit-fallback--neutral" style="display:none">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg">
@@ -5411,7 +5610,12 @@ function _renderRankPlayers(el, items) {
     </tr></thead>
     <tbody>
       ${items.map((p,i) => {
-        const lbHtml = rankLeagueBadgeHtml(p.league);
+        const lbHtml = rankLeagueBadgeHtml(_rankingPlayerLeague(p));
+        const cb = p.clan?.badgeUrls?.small || p.clan?.badgeUrls?.medium || '';
+        const clanLabel = p.clan?.name || '—';
+        const clanCell = cb
+          ? `<div class="rank-clan-cell"><img src="${cb}" alt="" class="rank-clan-badge-img" loading="lazy" width="28" height="28"><span>${clanLabel}</span></div>`
+          : `<span style="font-size:0.82rem;color:var(--text-2)">${clanLabel}</span>`;
         const atk = p.attackWins != null ? p.attackWins : '—';
         const def = p.defenseWins != null ? p.defenseWins : '—';
         const rankClass = i===0?'rank-gold':i===1?'rank-silver':i===2?'rank-bronze':'';
@@ -5423,7 +5627,7 @@ function _renderRankPlayers(el, items) {
             </div>
             <div class="mono" style="font-size:0.72rem;color:var(--text-3)">${p.tag}</div>
           </td>
-          <td style="font-size:0.82rem;color:var(--text-2)">${p.clan?.name||'—'}</td>
+          <td>${clanCell}</td>
           <td class="stat-cell">${(p.trophies||0).toLocaleString('it')}</td>
           <td class="stat-cell">${atk}</td>
           <td class="stat-cell">${def}</td>

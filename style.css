@@ -829,6 +829,11 @@ h3 { font-size: 1.05rem; }
     object-fit: contain;
     flex-shrink: 0;
 }
+.clan-detail-desc-wrap {
+    padding: 0.35rem 0.9rem 0.15rem;
+    border-bottom: 1px solid var(--border);
+}
+.clan-detail-desc { margin-top: 0; white-space: pre-wrap; word-break: break-word; }
 
 /* ─────────────────────────────────────────────────────────────
    STAT CARDS (usate in sezioni CWL — non più nella tab Clan)
@@ -3380,6 +3385,23 @@ tbody tr:last-child td { border-bottom: none; }
 /* ─────────────────────────────────────────────────────────────
    PROFILO HEADER AGGIORNATO
    ───────────────────────────────────────────────────────────── */
+.profilo-sync-notice {
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--text-2);
+    background: var(--bg-2);
+    border: 1px solid var(--border-2);
+    border-radius: var(--radius-sm);
+    padding: 0.55rem 0.75rem;
+    margin-bottom: 0.75rem;
+}
+.profilo-sync-notice code {
+    font-size: 0.72rem;
+    color: var(--text-3);
+    background: var(--bg-1);
+    padding: 0.05rem 0.25rem;
+    border-radius: 3px;
+}
 .profilo-hero-top {
     display: flex;
     align-items: center;
@@ -3522,5 +3544,19 @@ tbody tr:last-child td { border-bottom: none; }
 .rank-gold   { color: #f0a500; }
 .rank-silver { color: #a8a8b8; }
 .rank-bronze { color: #cd7f32; }
+.rank-clan-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    color: var(--text-2);
+}
+.rank-clan-badge-img {
+    width: 28px;
+    height: 28px;
+    object-fit: contain;
+    flex-shrink: 0;
+    border-radius: 4px;
+}
 .wl-row-clickable { cursor: pointer; transition: background 0.12s; }
 .wl-row-clickable:hover { background: var(--gold-glow); }

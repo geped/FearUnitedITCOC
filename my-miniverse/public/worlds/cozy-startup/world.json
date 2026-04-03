@@ -374,8 +374,8 @@
     },
     {
       "id": "ergonomic_chair",
-      "x": 7,
-      "y": 9,
+      "x": 6,
+      "y": 5.5,
       "w": 1,
       "h": 1,
       "layer": "above",
@@ -411,6 +411,38 @@
       "w": 1.1,
       "h": 0.8,
       "layer": "below"
+    },
+    {
+      "id": "espresso_machine",
+      "x": 8.25,
+      "y": 2.75,
+      "w": 2.3,
+      "h": 2,
+      "layer": "below"
+    },
+    {
+      "id": "wooden_desk_single",
+      "x": 5.25,
+      "y": 4,
+      "w": 2.7,
+      "h": 2,
+      "layer": "below",
+      "anchors": [
+        {
+          "ox": 0.5,
+          "oy": 2,
+          "type": "work",
+          "name": "wooden_desk_single_18_0"
+        }
+      ]
+    },
+    {
+      "id": "ergonomic_chair",
+      "x": 14.5,
+      "y": 4.75,
+      "w": 1.4,
+      "h": 2,
+      "layer": "below"
     }
   ],
   "wanderPoints": [
@@ -430,14 +462,14 @@
     "wooden_desk_single": "world_assets/props/prop_0_wooden_desk_single.png",
     "mini_fridge": "world_assets/props/prop_6_mini_fridge.png",
     "tall_potted_plant": "world_assets/props/prop_2_tall_potted_plant.png",
+    "wooden_framed_whiteboard": "world_assets/props/prop_11_wooden_framed_whiteboard.png",
     "ergonomic_chair": "world_assets/props/prop_1_ergonomic_chair.png",
     "bookshelf_packed": "world_assets/props/prop_3_bookshelf_packed.png",
-    "wooden_framed_whiteboard": "world_assets/props/prop_11_wooden_framed_whiteboard.png",
     "low_coffee_table": "world_assets/props/prop_9_low_coffee_table.png",
-    "bean_bag_chair_light": "world_assets/props/prop_8_bean_bag_chair_light.png",
     "espresso_machine": "world_assets/props/prop_5_espresso_machine.png",
-    "bean_bag_chair_dark": "world_assets/props/prop_7_bean_bag_chair_dark.png",
+    "bean_bag_chair_light": "world_assets/props/prop_8_bean_bag_chair_light.png",
     "large_window": "world_assets/props/prop_10_large_window.png",
+    "bean_bag_chair_dark": "world_assets/props/prop_7_bean_bag_chair_dark.png",
     "area_rug_lounge": "world_assets/props/prop_12_area_rug_lounge.png"
   },
   "tiles": {
@@ -446,5 +478,27 @@
     "concrete_accent": "world_assets/tiles/concrete_accent.png",
     "tileset": "world_assets/tiles/tileset.png"
   },
-  "citizens": []
+  "citizens": [
+    {
+      "agentId": "claude-C:\\Users\\pedro\\Desktop\\Claude\\FearUnitedCoC\\my-miniverse-875223",
+      "name": "Claude (C:\\Users\\pedro\\Desktop\\Claude\\FearUnitedCoC\\my-miniverse #875223)",
+      "sprite": "Claude (C:\\Users\\pedro\\Desktop\\Claude\\FearUnitedCoC\\my-miniverse #875223)",
+      "position": "wooden_desk_single_4_0",
+      "type": "agent"
+    },
+    {
+      "agentId": "claude-C:\\Users\\pedro\\Desktop\\Claude\\FearUnitedCoC-875223",
+      "name": "Claude (C:\\Users\\pedro\\Desktop\\Claude\\FearUnitedCoC #875223)",
+      "sprite": "Claude (C:\\Users\\pedro\\Desktop\\Claude\\FearUnitedCoC #875223)",
+      "position": "wander_central_north",
+      "type": "agent"
+    },
+    {
+      "agentId": "claude-C:\\Users\\pedro\\Desktop\\Claude\\FearUnitedCoC-875223-sub-981ckf",
+      "name": "Claude (sub of C:\\Users\\pedro\\Desktop\\Claude\\FearUnitedCoC)",
+      "sprite": "Claude (sub of C:\\Users\\pedro\\Desktop\\Claude\\FearUnitedCoC)",
+      "position": "wander_central_south",
+      "type": "agent"
+    }
+  ]
 }
