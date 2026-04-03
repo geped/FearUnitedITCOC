@@ -3925,32 +3925,61 @@ function _toggleCwlConfrontoTool(roundIdx, tool) {
   });
 }
 
-/** Build planner rows for current round (mirror-first suggestion). */
+/** Build planner rows for current round — multi-factor target scoring.
+ *  Scoring factors (higher = better target):
+ *   - Already 3-starred → excluded (score -9999)
+ *   - TH proximity      → -15 per TH level gap
+ *   - Punching up       → extra -25 (harder base, risky attack)
+ *   - Stars received    → +8 per missing star (more room to contribute)
+ *   - Unattacked base   → +12 bonus (full stars available, no prior intel)
+ *   - Mirror position   → +10 bonus (CWL strategic value)
+ */
 function _buildCwlAttackPlanner(round) {
   const attacksPerMember = round?.attacksPerMember || 1;
   const us = [...(round?.clan?.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
   const them = [...(round?.opponent?.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
-  const byPos = new Map(them.map(m => [m.mapPosition, m]));
-  const unresolved = them.filter(m => !(m.bestOpponentAttack && m.bestOpponentAttack.stars >= 3));
+
+  function scoreTarget(attacker, target) {
+    const stars = target.bestOpponentAttack?.stars ?? 0;
+    if (stars >= 3) return -9999;
+    const thDiff = (attacker.thLevel || 0) - (target.thLevel || 0);
+    let score = 100;
+    score -= Math.abs(thDiff) * 15;
+    if (thDiff < 0) score -= 25;
+    score += (3 - stars) * 8;
+    if (!target.bestOpponentAttack) score += 12;
+    if (target.mapPosition === attacker.mapPosition) score += 10;
+    return score;
+  }
+
   const out = [];
   for (const a of us) {
     const done = (a.attacks || []).length;
     const missing = Math.max(0, attacksPerMember - done);
     if (missing <= 0) continue;
-    let target = byPos.get(a.mapPosition);
-    if (!target) {
-      const th = a.thLevel || 0;
-      target = unresolved
-        .slice()
-        .sort((x, y) => Math.abs((x.thLevel || 0) - th) - Math.abs((y.thLevel || 0) - th))[0] || them[0];
-    }
+
+    const ranked = them
+      .map(t => ({ target: t, score: scoreTarget(a, t) }))
+      .sort((x, y) => y.score - x.score);
+
+    const best = ranked[0]?.target || them[0];
+    const targetStars = best?.bestOpponentAttack?.stars ?? 0;
+    const targetDestPct = best?.bestOpponentAttack?.destructionPercentage ?? 0;
+    const thDelta = (a.thLevel || 0) - (best?.thLevel || 0);
+
     out.push({
       attackerName: a.name || '—',
       attackerTag: a.tag || '',
-      targetName: target?.name || '—',
-      targetTag: target?.tag || '',
+      attackerPosition: a.mapPosition ?? '?',
+      attackerThLevel: a.thLevel || 0,
+      targetName: best?.name || '—',
+      targetTag: best?.tag || '',
+      targetPosition: best?.mapPosition ?? '?',
+      targetThLevel: best?.thLevel || 0,
+      targetStars,
+      targetDestPct,
       missingAttacks: missing,
-      thDelta: (a.thLevel || 0) - (target?.thLevel || 0),
+      thDelta,
     });
   }
   return out;
@@ -4011,10 +4040,12 @@ async function refreshCwlConfrontoRound(roundIdx) {
     const hA = a ? await _getHeroLevelsSum(a.tag) : null;
     const hB = b ? await _getHeroLevelsSum(b.tag) : null;
     rows.push(`<tr>
+      <td class="cdm-cf-pos">#${i + 1}</td>
       <td class="cdm-cf-th">${a ? thImgV(a.thLevel) : '—'}</td>
       <td class="cdm-cf-name">${a ? a.name : '—'}</td>
       <td class="cdm-cf-hero">${hA != null ? hA : '—'}</td>
       <td class="cdm-cf-vs">vs</td>
+      <td class="cdm-cf-pos">#${i + 1}</td>
       <td class="cdm-cf-th">${b ? thImgV(b.thLevel) : '—'}</td>
       <td class="cdm-cf-name">${b ? b.name : '—'}</td>
       <td class="cdm-cf-hero">${hB != null ? hB : '—'}</td>
@@ -4023,8 +4054,35 @@ async function refreshCwlConfrontoRound(roundIdx) {
   const plannerRows = _buildCwlAttackPlanner(r);
   const alerts = _buildCwlOperationalAlerts(r);
   const plannerHtml = plannerRows.length
-    ? `<div class="cdm-attacks-scroll"><table class="cdm-attacks-table"><thead><tr><th>Attaccante</th><th>Target consigliato</th><th>Attacchi mancanti</th><th>Delta TH</th></tr></thead><tbody>${
-      plannerRows.map(x => `<tr><td>${x.attackerName}</td><td>${x.targetName}</td><td>${x.missingAttacks}</td><td>${x.thDelta > 0 ? '+' : ''}${x.thDelta}</td></tr>`).join('')
+    ? `<div class="cdm-attacks-scroll"><table class="cdm-attacks-table cdm-planner-table"><thead><tr>
+        <th>#</th><th></th><th>Attaccante</th>
+        <th></th>
+        <th>#</th><th></th><th>Target consigliato</th><th>Stelle attuali</th><th>Δ TH</th><th>Atk</th>
+      </tr></thead><tbody>${
+      plannerRows.map(x => {
+        const deltaClass = x.thDelta >= 2 ? 'cdm-td-easy' : x.thDelta <= -2 ? 'cdm-td-hard' : 'cdm-td-fair';
+        const deltaSign = x.thDelta > 0 ? '+' : '';
+        const starsHtml = x.targetStars >= 3
+          ? '<span class="cdm-planner-stars cdm-stars-full">⭐⭐⭐</span>'
+          : x.targetStars === 2
+          ? '<span class="cdm-planner-stars">⭐⭐☆</span>'
+          : x.targetStars === 1
+          ? '<span class="cdm-planner-stars">⭐☆☆</span>'
+          : '<span class="cdm-planner-stars cdm-stars-none">☆☆☆</span>';
+        const destHint = x.targetStars > 0 ? ` <span class="cdm-planner-destr">${x.targetDestPct.toFixed(0)}%</span>` : '';
+        return `<tr>
+          <td class="cdm-cf-pos">#${x.attackerPosition}</td>
+          <td class="cdm-cf-th">${thImgV(x.attackerThLevel)}</td>
+          <td class="cdm-cf-name">${x.attackerName}</td>
+          <td class="cdm-atk-arrow">→</td>
+          <td class="cdm-cf-pos">#${x.targetPosition}</td>
+          <td class="cdm-cf-th">${thImgV(x.targetThLevel)}</td>
+          <td class="cdm-cf-name">${x.targetName}</td>
+          <td class="cdm-planner-stars-cell">${starsHtml}${destHint}</td>
+          <td class="${deltaClass}">${deltaSign}${x.thDelta}</td>
+          <td style="text-align:center">${x.missingAttacks}</td>
+        </tr>`;
+      }).join('')
     }</tbody></table></div>`
     : '<p class="cdm-confronto-empty">Nessun attacco da pianificare per questo turno.</p>';
   const alertsHtml = `<div class="cdm-attacks-scroll"><table class="cdm-attacks-table"><thead><tr><th>Severità</th><th>Segnalazione</th></tr></thead><tbody>${
@@ -4032,9 +4090,9 @@ async function refreshCwlConfrontoRound(roundIdx) {
   }</tbody></table></div>`;
   panel.innerHTML = `<div class="cdm-attacks-scroll"><table class="cdm-confronto-table">
     <thead><tr>
-      <th>TH</th><th>Player</th><th>Σ eroi</th>
+      <th>#</th><th>TH</th><th>Player</th><th>Σ eroi</th>
       <th class="cdm-cf-vs-th">vs</th>
-      <th>TH</th><th>Player</th><th>Σ eroi</th>
+      <th>#</th><th>TH</th><th>Player</th><th>Σ eroi</th>
     </tr></thead><tbody>${rows.join('')}</tbody></table></div>
     <div class="cdm-atk-switcher" style="margin-top:.5rem">
       <button type="button" class="cdm-atk-sw-btn" id="cdm-cf-btn-planner-${roundIdx}" onclick="_toggleCwlConfrontoTool(${roundIdx}, 'planner')">Planner attacchi turno</button>

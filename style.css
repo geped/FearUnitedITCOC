@@ -2917,6 +2917,17 @@ tbody tr:last-child td { border-bottom: none; }
 .cdm-atk-stars { font-size:.85rem; white-space:nowrap; }
 .cdm-atk-destr { color:var(--text-2); font-variant-numeric:tabular-nums; }
 .cdm-atk-missed td, tr.cdm-atk-missed td { color:var(--text-3); }
+/* Planner attacchi turno — posizioni e delta TH */
+.cdm-cf-pos { font-family:'IBM Plex Mono',monospace; font-size:.72rem; color:var(--text-3); white-space:nowrap; padding-right:.25rem; }
+.cdm-planner-table { min-width:560px; }
+.cdm-planner-stars { font-size:.78rem; white-space:nowrap; }
+.cdm-planner-stars.cdm-stars-full { color:var(--text-3); }
+.cdm-planner-stars.cdm-stars-none { color:var(--text-3); }
+.cdm-planner-stars-cell { white-space:nowrap; }
+.cdm-planner-destr { font-family:'IBM Plex Mono',monospace; font-size:.7rem; color:var(--text-3); margin-left:.2rem; }
+.cdm-td-easy { color:#4caf50; font-family:'IBM Plex Mono',monospace; font-weight:700; }
+.cdm-td-hard { color:#f44336; font-family:'IBM Plex Mono',monospace; font-weight:700; }
+.cdm-td-fair { color:var(--text-2); font-family:'IBM Plex Mono',monospace; }
 .cdm-th-icon { width:18px; height:18px; object-fit:contain; flex-shrink:0; }
 
 /* ── Round tab upcoming ── */
