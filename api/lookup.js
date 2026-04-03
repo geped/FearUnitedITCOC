@@ -19,8 +19,33 @@ module.exports = async (req, res) => {
             proxyPath = `/rankings?type=${encodeURIComponent(rankType)}&locationId=${encodeURIComponent(locationId)}`;
         } else if (type === 'locations') {
             proxyPath = '/locations';
+        } else if (type === 'ping') {
+            // Keep-alive esterno verso Render: il self-ping su localhost non evita spin-down / cambio IP.
+            const authHeader = req.headers['authorization'] || '';
+            const cronSecret = process.env.CRON_SECRET || '';
+            const syncSecret = process.env.SYNC_SECRET || '';
+            const providedKey = authHeader.replace('Bearer ', '').trim();
+            if (!cronSecret && !syncSecret) {
+                return res.status(401).json({ error: 'CRON_SECRET o SYNC_SECRET non configurati.' });
+            }
+            const validCron = cronSecret && providedKey === cronSecret;
+            const validSync = syncSecret && providedKey === syncSecret;
+            if (!validCron && !validSync) {
+                return res.status(401).json({ error: 'Non autorizzato.' });
+            }
+            const started = Date.now();
+            let r;
+            try {
+                r = await fetch(`${proxyUrl}/health`, {
+                    signal: AbortSignal.timeout(20000),
+                });
+            } catch (e) {
+                return res.status(502).json({ ok: false, error: e.message || 'fetch fallita' });
+            }
+            const ms = Date.now() - started;
+            return res.status(200).json({ ok: r.ok, status: r.status, ms });
         } else {
-            return res.status(400).json({ error: 'type non valido. Usa: player, search-clans, rankings' });
+            return res.status(400).json({ error: 'type non valido. Usa: player, search-clans, rankings, locations, ping' });
         }
         const r = await fetch(`${proxyUrl}${proxyPath}`, {
             headers: { 'x-sync-key': process.env.SYNC_SECRET || '' },
