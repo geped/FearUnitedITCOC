@@ -81,12 +81,11 @@ async function handlePendingMessage(ctx) {
     }
     if (p.step === 2) {
       pendingAuth.delete(uid);
+      const pwd = textRaw;
       try {
-        const data = await tauth.signInWithPasswordFromInput(p.username, textRaw);
+        await ctx.deleteMessage().catch(() => {});
+        const data = await tauth.signInWithPasswordFromInput(p.username, pwd);
         await sb.saveAuthSession(uid, data.session, data.user);
-        try {
-          await ctx.deleteMessage();
-        } catch (_) {}
         await ctx.reply('✅ <b>Accesso effettuato.</b>', { parse_mode: 'HTML' });
         await reopenMainMenu(ctx, data.user);
       } catch (e) {
@@ -129,6 +128,7 @@ async function handlePendingMessage(ctx) {
         await ctx.reply('Password troppo corta (min 6). Riprova.');
         return;
       }
+      await ctx.deleteMessage().catch(() => {});
       p.password = textRaw;
       p.step = 4;
       await ctx.reply(
@@ -338,6 +338,89 @@ async function performFullLogout(ctx, { viaCommand }) {
   await sendGuestMenu(ctx);
 }
 
+function parseCwlViewKey(raw) {
+  if (raw === 'ov') return { view: 'ov', pPage: 0, rIdx: 0 };
+  if (raw === 'g') return { view: 'g', pPage: 0, rIdx: 0 };
+  const pm = /^p:(\d+)$/.exec(raw);
+  if (pm) return { view: 'p', pPage: Number(pm[1]), rIdx: 0 };
+  const rm = /^r:(\d+)$/.exec(raw);
+  if (rm) return { view: 'r', pPage: 0, rIdx: Number(rm[1]) };
+  return { view: 'ov', pPage: 0, rIdx: 0 };
+}
+
+function buildCwlNavKb(data, spec) {
+  const { view, pPage, rIdx } = spec;
+  if (!data || data.state === 'notInWar') {
+    return Markup.inlineKeyboard([[Markup.button.callback('« Menù', 'menu')]]);
+  }
+  const pPages = fmt.getCwlPlayerPageCount(data);
+  const rCount = fmt.getCwlRoundCount(data);
+
+  const tab = (active, short, payload) =>
+    Markup.button.callback(active ? `· ${short} ·` : short, payload);
+
+  const rows = [
+    [
+      tab(view === 'ov', '📊 Pan', 'cwl_v:ov'),
+      tab(view === 'g', '🏅 Gruppo', 'cwl_v:g'),
+    ],
+    [
+      tab(view === 'p', '👥 Roster', 'cwl_v:p:0'),
+      tab(view === 'r', '⚔️ Turni', `cwl_v:r:${view === 'r' ? rIdx : 0}`),
+    ],
+  ];
+
+  if (view === 'p' && pPages > 1) {
+    const prev = Math.max(0, pPage - 1);
+    const next = Math.min(pPages - 1, pPage + 1);
+    rows.push([
+      Markup.button.callback('◀', `cwl_v:p:${prev}`),
+      Markup.button.callback(`· ${pPage + 1}/${pPages} ·`, 'noop'),
+      Markup.button.callback('▶', `cwl_v:p:${next}`),
+    ]);
+  }
+
+  if (view === 'r' && rCount > 1) {
+    const prev = Math.max(0, rIdx - 1);
+    const next = Math.min(rCount - 1, rIdx + 1);
+    rows.push([
+      Markup.button.callback('◀ Turno', `cwl_v:r:${prev}`),
+      Markup.button.callback(`· ${rIdx + 1}/${rCount} ·`, 'noop'),
+      Markup.button.callback('Turno ▶', `cwl_v:r:${next}`),
+    ]);
+  }
+
+  rows.push([Markup.button.callback('« Menù', 'menu')]);
+  return Markup.inlineKeyboard(rows);
+}
+
+async function loadAndShowCwl(_ctx, clanTag, viewSpec) {
+  const data = await api.cwlStats(clanTag);
+  const formatted = fmt.formatCwlScreen(data, viewSpec.view, viewSpec.pPage, viewSpec.rIdx);
+  const kb = buildCwlNavKb(data, formatted);
+  return { text: formatted.text, kb, data };
+}
+
+async function sendCwlMessages(ctx, text, kb) {
+  const parts = fmt.chunkForTelegram(text);
+  for (let i = 0; i < parts.length; i++) {
+    const extra = i === parts.length - 1 ? kb : {};
+    await ctx.reply(parts[i], { parse_mode: 'HTML', ...extra });
+  }
+}
+
+async function editOrReplyCwl(ctx, text, kb) {
+  const parts = fmt.chunkForTelegram(text);
+  try {
+    await ctx.editMessageText(parts[0], { parse_mode: 'HTML', ...kb });
+  } catch (_) {
+    await ctx.reply(parts[0], { parse_mode: 'HTML', ...kb });
+  }
+  for (let i = 1; i < parts.length; i++) {
+    await ctx.reply(parts[i], { parse_mode: 'HTML' });
+  }
+}
+
 function setupBot(bot) {
   bot.use(guardMiddleware());
 
@@ -496,15 +579,8 @@ function setupBot(bot) {
 
   bot.command('cwl', async (ctx) => {
     await cmdNeedClan(ctx, async (clanTag) => {
-      const data = await api.cwlStats(clanTag);
-      const txt = fmt.formatCwl(data);
-      const parts = fmt.chunkForTelegram(txt);
-      for (let i = 0; i < parts.length; i++) {
-        await ctx.reply(parts[i], {
-          parse_mode: 'HTML',
-          ...(i === parts.length - 1 ? backMenuKb() : {}),
-        });
-      }
+      const { text, kb } = await loadAndShowCwl(ctx, clanTag, { view: 'ov', pPage: 0, rIdx: 0 });
+      await sendCwlMessages(ctx, text, kb);
     });
   });
 
@@ -692,15 +768,21 @@ function setupBot(bot) {
       await ctx.answerCbQuery('Nessun clan').catch(() => {});
       return;
     }
-    const data = await api.cwlStats(clanTag);
-    const txt = fmt.formatCwl(data);
-    const parts = fmt.chunkForTelegram(txt);
-    try {
-      await ctx.editMessageText(parts[0], { parse_mode: 'HTML', ...backMenuKb() });
-    } catch (_) {
-      await ctx.reply(parts[0], { parse_mode: 'HTML', ...backMenuKb() });
+    const { text, kb } = await loadAndShowCwl(ctx, clanTag, { view: 'ov', pPage: 0, rIdx: 0 });
+    await editOrReplyCwl(ctx, text, kb);
+  });
+
+  bot.action(/^cwl_v:(.+)$/, async (ctx) => {
+    safeAnswerCb(ctx);
+    const clanTag = await resolveClanTagForCommands(ctx.from.id, ctx.cocboardUser);
+    if (!clanTag) {
+      await ctx.answerCbQuery('Nessun clan').catch(() => {});
+      return;
     }
-    for (let i = 1; i < parts.length; i++) await ctx.reply(parts[i], { parse_mode: 'HTML' });
+    const key = ctx.match[1];
+    const spec = parseCwlViewKey(key);
+    const { text, kb } = await loadAndShowCwl(ctx, clanTag, spec);
+    await editOrReplyCwl(ctx, text, kb);
   });
 
   bot.action('bonus', async (ctx) => {

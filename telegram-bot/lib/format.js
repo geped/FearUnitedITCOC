@@ -106,30 +106,235 @@ function formatMembersPage(items, page, clanTagHint) {
   return { text: `${head}\n\n${lines.join('\n')}`, page: p, pages };
 }
 
-function formatCwl(data) {
-  if (!data || data.state === 'notInWar') {
-    return `${DIV}\n🏆 <b>CWL</b>\n${DIV}\n\n<i>Nessuna guerra lega attiva o clan fuori dalla CWL.</i>`;
-  }
+const CWL_PLAYERS_PER_PAGE = 8;
+const CWL_ROUND_ATTACK_LINES = 18;
+
+const CWL_STATE_IT = {
+  notInWar: 'Nessuna CWL attiva',
+  preparation: 'Preparazione gruppo',
+  inWar: 'CWL in corso',
+  ended: 'CWL terminata',
+  warEnded: 'Guerra terminata',
+};
+
+const CWL_ROUND_RESULT_IT = {
+  win: 'Vittoria',
+  lose: 'Sconfitta',
+  draw: 'Pareggio',
+  ongoing: 'In corso',
+  preparation: 'Preparazione',
+};
+
+function cwlPlayerAvgDestruction(p) {
+  const made = p.attacks_made || 0;
+  if (made <= 0) return '—';
+  return `${(p.destruction / made).toFixed(1)}%`;
+}
+
+function cwlGroupAvgDest(s) {
+  const w = s.warCount || 0;
+  if (w <= 0) return '—';
+  return `${(s.totalDestr / w).toFixed(1)}%`;
+}
+
+function formatCwlEmpty() {
+  return `${DIV}\n🏆 <b>CWL</b>\n${DIV}\n\n<i>Nessuna guerra lega attiva o clan fuori dalla CWL.</i>`;
+}
+
+/** Panoramica: stagione, stato lega, posizione, formazione (come card live sul sito). */
+function formatCwlOverview(data) {
+  if (!data || data.state === 'notInWar') return formatCwlEmpty();
+  const st = CWL_STATE_IT[data.state] || data.state || '—';
   const lines = [
     `${DIV}`,
     `🏆 <b>CWL live</b> · ${escapeHtml(data.leagueNameIt || data.leagueNameEn || 'Lega')}`,
     `${DIV}`,
-    `📅 Stagione <code>${escapeHtml(data.season || '—')}</code> · stato <b>${escapeHtml(data.state || '—')}</b>`,
+    `📅 Stagione <code>${escapeHtml(data.season || '—')}</code>`,
+    `📌 Stato lega: <b>${escapeHtml(st)}</b>`,
+    `👥 Formazione: <b>${data.teamSize ?? '—'}</b> vs <b>${data.teamSize ?? '—'}</b>`,
   ];
-  if (data.ourPosition != null) {
-    lines.push(`🥇 Posizione gruppo: <b>${data.ourPosition}</b> / ${data.groupStandings?.length || '?'}`);
+  if (data.ourPosition != null && (data.groupStandings || []).length) {
+    lines.push(
+      `🥇 <b>Posizione nel gruppo:</b> ${data.ourPosition} / ${data.groupStandings.length}`
+    );
   }
-  const top = (data.players || []).slice(0, 15);
-  if (top.length) {
-    lines.push('');
-    lines.push(`⭐ <b>Migliori stelle (roster)</b>`);
-    top.forEach((pl, i) => {
-      lines.push(
-        `${i + 1}. ${escapeHtml(pl.name)} — ${pl.stars ?? 0}★ · ${(pl.destruction ?? 0).toFixed?.(1) ?? pl.destruction}%`
-      );
-    });
+  const rounds = data.roundsData || [];
+  lines.push(`⚔️ <b>Turni war</b> nel dato: <b>${rounds.length}</b> / 7`);
+  const nPl = (data.players || []).length;
+  if (nPl) lines.push(`📋 Giocatori nel roster: <b>${nPl}</b>`);
+  lines.push('');
+  lines.push(`<i>Usa i pulsanti: Gruppo, Roster, Turni — come sulla dashboard CoCBoard.</i>`);
+  return lines.join('\n');
+}
+
+/** Classifica gruppo (8 clan): stelle e distruzione media come sul sito. */
+function formatCwlGroup(data) {
+  if (!data || data.state === 'notInWar') return formatCwlEmpty();
+  const gs = data.groupStandings || [];
+  if (!gs.length) {
+    return `${DIV}\n🏅 <b>Classifica gruppo</b>\n${DIV}\n\n<i>Nessun dato classifica.</i>`;
+  }
+  const lines = [
+    `${DIV}`,
+    `🏅 <b>Classifica gruppo CWL</b>`,
+    `📅 <code>${escapeHtml(data.season || '—')}</code> · ${escapeHtml(data.leagueNameIt || data.leagueNameEn || '')}`,
+    `${DIV}`,
+    `<i>Ordine: stelle, poi distruzione media sui turni giocati.</i>`,
+    '',
+  ];
+  gs.forEach((c, i) => {
+    const us = data.ourPosition === i + 1 ? ' ⭐' : '';
+    const nm = escapeHtml(c.name || c.tag || '—');
+    lines.push(
+      `${i + 1}. ${nm}${us}\n   ${c.stars ?? 0}★ · media ${cwlGroupAvgDest(c)} distruzione`
+    );
+  });
+  return lines.join('\n');
+}
+
+/** Roster con stelle, distruzione media per attacco, attacchi fatti/richiesti (come tabella bonus live). */
+function formatCwlPlayersPage(data, page) {
+  if (!data || data.state === 'notInWar') return formatCwlEmpty();
+  const players = data.players || [];
+  if (!players.length) {
+    return `${DIV}\n👥 <b>Roster CWL</b>\n${DIV}\n\n<i>Nessun giocatore nel roster.</i>`;
+  }
+  const pages = Math.max(1, Math.ceil(players.length / CWL_PLAYERS_PER_PAGE));
+  const p = Math.min(Math.max(0, page), pages - 1);
+  const slice = players.slice(p * CWL_PLAYERS_PER_PAGE, (p + 1) * CWL_PLAYERS_PER_PAGE);
+  const lines = [
+    `${DIV}`,
+    `👥 <b>Roster CWL</b> · live`,
+    `📄 Pagina <b>${p + 1}</b> / <b>${pages}</b> · ${players.length} giocatori`,
+    `${DIV}`,
+    `<i>Stelle totali · distr. media/attacco · attacchi fatti/richiesti · TH</i>`,
+    '',
+  ];
+  slice.forEach((pl, i) => {
+    const idx = p * CWL_PLAYERS_PER_PAGE + i + 1;
+    const th = pl.th_level != null ? `TH${pl.th_level}` : 'TH?';
+    const atk =
+      pl.attacks_required > 0
+        ? `${pl.attacks_made ?? 0}/${pl.attacks_required}`
+        : `${pl.attacks_made ?? 0}/—`;
+    lines.push(
+      `${idx}. <b>${escapeHtml(pl.name)}</b> (${th})\n   ${pl.stars ?? 0}★ · ${cwlPlayerAvgDestruction(pl)} · ${atk}`
+    );
+  });
+  return lines.join('\n');
+}
+
+function formatWarStateIt(s) {
+  if (s === 'preparation') return 'Preparazione';
+  if (s === 'inWar') return 'In guerra';
+  if (s === 'warEnded' || s === 'ended') return 'Terminata';
+  return s || '—';
+}
+
+/** Dettaglio turno: avversario, risultato, stelle, attacchi (riepilogo come card war sul sito). */
+function formatCwlRoundDetail(data, roundIdx) {
+  if (!data || data.state === 'notInWar') return formatCwlEmpty();
+  const rounds = data.roundsData || [];
+  if (!rounds.length) {
+    return `${DIV}\n⚔️ <b>Turni CWL</b>\n${DIV}\n\n<i>Nessun dettaglio guerra disponibile.</i>`;
+  }
+  const rMax = rounds.length - 1;
+  const idx = Math.min(Math.max(0, roundIdx), rMax);
+  const rd = rounds[idx];
+  const rn = rd.roundNumber ?? idx + 1;
+  const resIt = CWL_ROUND_RESULT_IT[rd.result] || rd.result || '—';
+  const c = rd.clan || {};
+  const o = rd.opponent || {};
+  const lines = [
+    `${DIV}`,
+    `⚔️ <b>Turno ${rn}</b> / ${rounds.length} · ${formatWarStateIt(rd.state)}`,
+    `${DIV}`,
+    `🛡️ <b>Noi</b> ${escapeHtml(c.name || '')} <code>${escapeHtml(c.tag || '')}</code>`,
+    `⚔️ <b>Loro</b> ${escapeHtml(o.name || '')} <code>${escapeHtml(o.tag || '')}</code>`,
+    '',
+    `📊 <b>${c.stars ?? 0}</b>★ (${c.destruction ?? 0}% distr.) vs <b>${o.stars ?? 0}</b>★ (${o.destruction ?? 0}%)`,
+    `🎯 Risultato: <b>${escapeHtml(resIt)}</b>`,
+    `🔢 Attacchi usati: ${c.attacksUsed ?? 0} vs ${o.attacksUsed ?? 0} · ${rd.attacksPerMember || 1}/giocatore`,
+    '',
+  ];
+
+  const atkLines = [];
+  const defMap = rd.defenderMap || {};
+  const pushAttacks = (members, label) => {
+    for (const m of members || []) {
+      for (const a of m.attacks || []) {
+        const d = defMap[a.defenderTag] || {};
+        atkLines.push(
+          `${label} <b>${escapeHtml(m.name)}</b> → ${escapeHtml(d.name || a.defenderTag || '?')}: ${a.stars ?? 0}★ ${a.destruction ?? 0}%`
+        );
+      }
+    }
+  };
+  pushAttacks(c.members, '📍');
+  pushAttacks(o.members, '🛡️');
+  if (atkLines.length) {
+    lines.push(`<b>Attacchi</b> <i>(max ${CWL_ROUND_ATTACK_LINES})</i>`, '');
+    atkLines.slice(0, CWL_ROUND_ATTACK_LINES).forEach((l) => lines.push(l));
+    if (atkLines.length > CWL_ROUND_ATTACK_LINES) {
+      lines.push(`\n<i>… altri ${atkLines.length - CWL_ROUND_ATTACK_LINES} attacchi non mostrati</i>`);
+    }
+  } else {
+    lines.push('<i>Nessun attacco registrato in questo turno.</i>');
   }
   return lines.join('\n');
+}
+
+function getCwlPlayerPageCount(data) {
+  const n = (data?.players || []).length;
+  return Math.max(1, Math.ceil(n / CWL_PLAYERS_PER_PAGE));
+}
+
+function getCwlRoundCount(data) {
+  return Math.max(0, (data?.roundsData || []).length);
+}
+
+/**
+ * @param {'ov'|'g'|'p'|'r'} view
+ */
+function formatCwlScreen(data, view, pPage, rIdx) {
+  if (!data || data.state === 'notInWar') {
+    return { text: formatCwlEmpty(), view: 'ov', pPage: 0, rIdx: 0 };
+  }
+  const pPages = getCwlPlayerPageCount(data);
+  const rCount = getCwlRoundCount(data);
+  const pClamped = Math.min(Math.max(0, pPage), pPages - 1);
+  const rClamped = rCount ? Math.min(Math.max(0, rIdx), rCount - 1) : 0;
+  let text;
+  switch (view) {
+    case 'g':
+      text = formatCwlGroup(data);
+      break;
+    case 'p':
+      text = formatCwlPlayersPage(data, pClamped);
+      break;
+    case 'r':
+      text = formatCwlRoundDetail(data, rClamped);
+      break;
+    default:
+      text = formatCwlOverview(data);
+      view = 'ov';
+  }
+  return { text, view, pPage: pClamped, rIdx: rClamped };
+}
+
+/** Compat: un solo blocco testo (es. /cwl da comando). */
+function formatCwl(data) {
+  if (!data || data.state === 'notInWar') return formatCwlEmpty();
+  const parts = [formatCwlOverview(data), '', formatCwlGroup(data)];
+  const pPages = getCwlPlayerPageCount(data);
+  for (let p = 0; p < pPages; p++) {
+    parts.push('', formatCwlPlayersPage(data, p));
+  }
+  const rCount = getCwlRoundCount(data);
+  for (let i = 0; i < rCount; i++) {
+    parts.push('', formatCwlRoundDetail(data, i));
+  }
+  return parts.join('\n');
 }
 
 function formatWarLog(data) {
@@ -218,6 +423,7 @@ function chunkForTelegram(html) {
 
 module.exports = {
   MEMBERS_PER_PAGE,
+  CWL_PLAYERS_PER_PAGE,
   DIV,
   escapeHtml,
   parseTagArg,
@@ -228,6 +434,10 @@ module.exports = {
   formatClanInfo,
   formatMembersPage,
   formatCwl,
+  formatCwlScreen,
+  formatCwlEmpty,
+  getCwlPlayerPageCount,
+  getCwlRoundCount,
   formatWarLog,
   formatBonuses,
   formatPlayerSummary,
