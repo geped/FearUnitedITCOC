@@ -42,6 +42,51 @@ function cocHeaders() {
     return { Authorization: `Bearer ${process.env.COC_API_TOKEN}` };
 }
 
+/**
+ * L'API `/locations/.../rankings/players` (e builder-base) può riusare lo stesso `badgeUrls`
+ * per clan con `tag` diversi. Arricchiamo con GET /v1/clans/{tag}.
+ */
+async function enrichRankingPlayerClanBadges(items) {
+    if (!items || !Array.isArray(items) || !items.length) return;
+    const tagSet = new Set();
+    for (const pl of items) {
+        const raw = pl.clan && pl.clan.tag;
+        if (raw) tagSet.add(normClanTag(raw));
+    }
+    const badgeKeys = new Set(
+        items.map((pl) => {
+            const bu = pl.clan && pl.clan.badgeUrls;
+            return bu ? (bu.small || bu.medium || bu.large || '') : '';
+        }).filter(Boolean)
+    );
+    if (tagSet.size < 2 || badgeKeys.size > 1) return;
+
+    const clanBadgeMap = {};
+    const tags = [...tagSet];
+    const chunkSize = 10;
+    const headers = cocHeaders();
+    for (let i = 0; i < tags.length; i += chunkSize) {
+        const chunk = tags.slice(i, i + chunkSize);
+        await Promise.all(
+            chunk.map(async (ct) => {
+                try {
+                    const cr = await fetch(
+                        `https://api.clashofclans.com/v1/clans/${encodeTag(ct)}`,
+                        { headers }
+                    );
+                    const cd = await cr.json();
+                    if (cr.ok && cd.badgeUrls) clanBadgeMap[ct] = cd.badgeUrls;
+                } catch (_) {}
+            })
+        );
+    }
+    for (const pl of items) {
+        if (!pl.clan || !pl.clan.tag) continue;
+        const k = normClanTag(pl.clan.tag);
+        if (clanBadgeMap[k]) pl.clan.badgeUrls = clanBadgeMap[k];
+    }
+}
+
 // ── SYNC MEMBERS ────────────────────────────────────────────────────────────
 
 // ── SALVA WAR CONCLUSA ──────────────────────────────────────────────────────
@@ -703,6 +748,9 @@ app.get('/rankings', authMiddleware, async (req, res) => {
         const r = await fetch(url, { headers: cocHeaders() });
         const data = await r.json();
         if (!r.ok) return res.status(r.status).json({ error: data.reason || 'CoC API error' });
+        if ((type === 'players' || type === 'players-builder-base') && data.items) {
+            await enrichRankingPlayerClanBadges(data.items);
+        }
         res.json(data);
     } catch (err) {
         res.status(500).json({ error: err.message });

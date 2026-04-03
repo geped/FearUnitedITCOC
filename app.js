@@ -5730,36 +5730,43 @@ function _renderRankPlayers(el, items) {
 }
 
 /**
- * Fallback anti-anomalia: in alcuni contesti i ranking possono arrivare con badge clan uniformati.
- * Se rileviamo "molti clan diversi ma un solo badge", ricarichiamo i badge dai profili player.
+ * Fallback anti-anomalia: i ranking possono arrivare con lo stesso badge per clan diversi (bug/limitazione API).
+ * Se almeno 2 clan distinti ma al massimo 1 URL badge, carichiamo gli stemmi da /api/clan-info (un fetch per tag).
  */
 async function _repairRankingClanBadges(container, items) {
   try {
     if (!container || !items || !items.length) return;
     const withClan = items.filter(p => p?.clan?.tag);
-    if (withClan.length < 4) return;
+    if (withClan.length < 2) return;
     const clanTags = new Set(withClan.map(p => normClanTag(p.clan.tag)).filter(Boolean));
     const badgeSet = new Set(
       withClan.map(p => cocBadgeUrl(p?.clan?.badgeUrls)).filter(Boolean)
     );
-    const suspicious = clanTags.size >= 4 && badgeSet.size <= 1;
+    const suspicious = clanTags.size >= 2 && badgeSet.size <= 1;
     if (!suspicious) return;
 
-    const tasks = withClan.slice(0, 20).map(async (p) => {
-      try {
-        const tag = p.tag;
-        if (!tag) return;
-        const r = await fetch(`/api/lookup?type=player&playerTag=${encodeURIComponent(tag)}`, { cache: 'no-store' });
-        if (!r.ok) return;
-        const d = await r.json();
-        const fixed = cocBadgeUrl(d?.clan?.badgeUrls);
-        if (!fixed) return;
-        const escTag = String(tag).replace(/"/g, '');
-        const img = container.querySelector(`img.rank-clan-badge-img[data-player-tag="${escTag}"]`);
-        if (img && img.src !== fixed) img.src = fixed;
-      } catch (_) {}
-    });
-    await Promise.all(tasks);
+    const tagToBadge = {};
+    const uniqueTags = [...clanTags].slice(0, 40);
+    await Promise.all(
+      uniqueTags.map(async (ct) => {
+        try {
+          const r = await fetch(`/api/clan-info?clanTag=${encodeURIComponent(ct)}`, { cache: 'no-store' });
+          if (!r.ok) return;
+          const d = await r.json();
+          const bu = cocBadgeUrl(d?.badgeUrls);
+          if (bu) tagToBadge[normClanTag(ct)] = bu;
+        } catch (_) {}
+      })
+    );
+
+    for (const p of items) {
+      const ct = p?.clan?.tag ? normClanTag(p.clan.tag) : '';
+      const fixed = ct && tagToBadge[ct];
+      if (!fixed || !p.tag) continue;
+      const escTag = String(p.tag).replace(/"/g, '');
+      const img = container.querySelector(`img.rank-clan-badge-img[data-player-tag="${escTag}"]`);
+      if (img) img.src = fixed;
+    }
   } catch (_) {}
 }
 
