@@ -23,17 +23,21 @@ function _buildCwlAttackPlanner(round) {
     return score;
   }
 
+  const assignedTags = new Set();
   const out = [];
   for (const a of us) {
     const done = (a.attacks || []).length;
     const missing = Math.max(0, attacksPerMember - done);
     if (missing <= 0) continue;
 
-    const ranked = them
+    const available = them.filter(t => !assignedTags.has(t.tag));
+    const ranked = available
       .map(t => ({ target: t, score: scoreTarget(a, t) }))
       .sort((x, y) => y.score - x.score);
 
-    const best = ranked[0]?.target || them[0];
+    const best = ranked[0]?.target ?? available[0] ?? them[0];
+    if (best?.tag) assignedTags.add(best.tag);
+
     const targetStars = best?.bestOpponentAttack?.stars ?? 0;
     const targetDestPct = best?.bestOpponentAttack?.destructionPercentage ?? 0;
     const thDelta = (a.thLevel || 0) - (best?.thLevel || 0);
@@ -142,6 +146,24 @@ test('planner: include posizione attaccante e target nel risultato', () => {
   assert.equal(rows[0].targetPosition, 3);
   assert.equal(rows[0].attackerThLevel, 14);
   assert.equal(rows[0].targetThLevel, 14);
+});
+
+test('planner: ogni target assegnato a un solo attaccante (unicità)', () => {
+  const members = (tags, names) => tags.map((tag, i) => ({
+    tag, name: names[i], thLevel: 15, mapPosition: i + 1, attacks: [],
+  }));
+  const round = {
+    state: 'inWar',
+    attacksPerMember: 1,
+    clan: { members: members(['#A','#B','#C'], ['Alpha','Beta','Gamma']) },
+    opponent: { members: members(['#X','#Y','#Z'], ['Xray','Yankee','Zulu']) },
+  };
+
+  const rows = _buildCwlAttackPlanner(round);
+  assert.equal(rows.length, 3);
+  const targetTags = rows.map(r => r.targetTag);
+  const unique = new Set(targetTags);
+  assert.equal(unique.size, 3, `target duplicati: ${targetTags}`);
 });
 
 test('alerts: segnala attacchi mancanti quando il turno è live', () => {

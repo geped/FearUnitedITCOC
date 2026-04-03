@@ -3926,8 +3926,10 @@ function _toggleCwlConfrontoTool(roundIdx, tool) {
 }
 
 /** Build planner rows for current round — multi-factor target scoring.
+ *  Each target is assigned to at most one attacker (greedy unique assignment).
  *  Scoring factors (higher = better target):
  *   - Already 3-starred → excluded (score -9999)
+ *   - Already assigned  → excluded
  *   - TH proximity      → -15 per TH level gap
  *   - Punching up       → extra -25 (harder base, risky attack)
  *   - Stars received    → +8 per missing star (more room to contribute)
@@ -3952,17 +3954,22 @@ function _buildCwlAttackPlanner(round) {
     return score;
   }
 
+  const assignedTags = new Set();
   const out = [];
   for (const a of us) {
     const done = (a.attacks || []).length;
     const missing = Math.max(0, attacksPerMember - done);
     if (missing <= 0) continue;
 
-    const ranked = them
+    // Pick best unassigned target (fallback to any unassigned if all 3-starred)
+    const available = them.filter(t => !assignedTags.has(t.tag));
+    const ranked = available
       .map(t => ({ target: t, score: scoreTarget(a, t) }))
       .sort((x, y) => y.score - x.score);
 
-    const best = ranked[0]?.target || them[0];
+    const best = ranked[0]?.target ?? available[0] ?? them[0];
+    if (best?.tag) assignedTags.add(best.tag);
+
     const targetStars = best?.bestOpponentAttack?.stars ?? 0;
     const targetDestPct = best?.bestOpponentAttack?.destructionPercentage ?? 0;
     const thDelta = (a.thLevel || 0) - (best?.thLevel || 0);
