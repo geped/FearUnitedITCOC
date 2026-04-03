@@ -208,6 +208,23 @@ function formatAuthedMenuIntro({
   );
 }
 
+/** Menù ospite in gruppo/canale COLLEGATO a un clan (nessun login). */
+function formatLinkedGroupGuestIntro({ clanTag, clanName, botUsername }) {
+  const privUrl = botUsername ? `https://t.me/${String(botUsername).replace(/^@/, '')}` : '';
+  const loginHint = privUrl
+    ? `\n\n🔐 Per <b>Bonus</b> e <b>versione web</b>: <a href="${privUrl}">accedi in privato</a>.`
+    : '\n\n🔐 Per Bonus e versione web: accedi in chat privata con il bot.';
+  return (
+    `⚔️ <b>CoCBoard</b>\n` +
+    `${DIV2}\n` +
+    `🏠 <b>${escapeHtml(clanName || clanTag)}</b>\n` +
+    `└ Tag <code>${escapeHtml(clanTag)}</code>\n` +
+    `${DIV}\n\n` +
+    `📖 Dati clan pubblici — scegli una sezione.` +
+    loginHint
+  );
+}
+
 function formatTutorialStep(step) {
   if (step === 1) {
     return (
@@ -615,26 +632,24 @@ function formatWarLog(data) {
 
 function formatAddBotToGroupHelp({ botUsername, clanTag, linkToken }) {
   const u = botUsername ? `@${String(botUsername).replace(/^@/, '')}` : 'il bot';
-  const tagLine = clanTag ? `\n🏷 <b>Clan da collegare:</b> <code>${escapeHtml(clanTag)}</code>\n` : '';
-  const tokBlock =
-    linkToken ?
-      `\n${DIV2}\n🔑 <b>Il tuo TOKEN</b> (≈1h, un uso):\n<code>${escapeHtml(linkToken)}</code>\n\n` +
-        `Nel gruppo/canale (dopo aver aggiunto il bot come <b>amministratore</b>), scrivi:\n` +
-        `<code>/linkclan ${escapeHtml(linkToken)}</code>\n`
+  const tagLine = clanTag ? `\n🏷 <b>Clan:</b> <code>${escapeHtml(clanTag)}</code>\n` : '';
+  const tokBlock = linkToken
+    ? `\n${DIV2}\n` +
+      `📋 <b>Copia e incolla nel gruppo:</b>\n\n` +
+      `<code>/linkclan ${escapeHtml(linkToken)}</code>\n\n` +
+      `<i>Tocca il comando qui sopra per copiarlo, poi incollalo nella chat del gruppo/canale.</i>\n` +
+      `<i>Token valido ≈1 ora, un solo uso.</i>\n`
     : '';
   return (
     `${DIV}\n➕ <b>Collegare il bot a gruppo / canale</b>\n${DIV}\n` +
-      tagLine +
-      `\n<b>Requisiti</b>\n` +
-      `• Ruolo sito: <b>Capo</b>, <b>Co-Capo</b> o <b>Admin</b>\n` +
-      `• Il clan sopra deve essere quello della chat che stai collegando\n\n` +
-      `<b>Passi</b>\n` +
-      `1️⃣ Aggiungi ${u} al gruppo o canale e rendilo <b>amministratore</b> (lettura messaggi, invio messaggi).\n` +
-      `2️⃣ Invia il comando qui sotto <b>in quella chat</b> (non in privato).\n` +
-      `3️⃣ I membri del clan (registrati con API CoC) vedranno i menù in quella chat dopo il collegamento.\n` +
-      `4️⃣ Password e chiave API <b>mai</b> nel gruppo — solo in privato.\n` +
-      tokBlock +
-      `\n<i>Per scollegare (solo leader):</i> <code>/unlinkclan</code> <i>nel gruppo.</i>`
+    tagLine +
+    `\n<b>Passi</b>\n` +
+    `1️⃣ Aggiungi ${u} al gruppo o canale e rendilo <b>amministratore</b>.\n` +
+    `2️⃣ Copia il comando qui sotto e incollalo <b>in quella chat</b>.\n` +
+    `3️⃣ Il bot elimina il messaggio e conferma il collegamento.\n` +
+    `4️⃣ Tutti nel gruppo potranno consultare membri, CWL e guerre.\n` +
+    tokBlock +
+    `\n<i>Per scollegare (solo leader):</i> <code>/unlinkclan</code> <i>nel gruppo.</i>`
   );
 }
 
@@ -809,6 +824,7 @@ module.exports = {
   formatAddBotToGroupHelp,
   formatGroupMenuBanner,
   formatGroupClanGateLong,
+  formatLinkedGroupGuestIntro,
   formatTutorialStep,
   formatBonuses,
   formatBonusesPage,

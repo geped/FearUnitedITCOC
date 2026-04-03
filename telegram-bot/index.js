@@ -94,46 +94,25 @@ function isClanHeavyCallback(data) {
   return true;
 }
 
-async function getGroupChatGate(ctx, uid, user) {
+/** In gruppo collegato tutti leggono dati clan; solo «nolink» blocca. */
+async function getGroupChatGate(ctx) {
   if (!isLinkedChatContext(ctx)) {
     return { allowClanMenus: true, reason: 'private' };
   }
   const linked = await sb.getTelegramChatLink(ctx.chat.id).catch(() => null);
-  const userClan = await resolveClanTagForCommands(uid, user);
   if (!linked) {
-    return {
-      allowClanMenus: false,
-      reason: 'nolink',
-      isLeader: isClanLeader(user),
-    };
+    return { allowClanMenus: false, reason: 'nolink' };
   }
-  if (!normClanTagEq(userClan, linked.clan_tag)) {
-    return {
-      allowClanMenus: false,
-      reason: 'wrongclan',
-      linkedTag: linked.clan_tag,
-      yourTag: userClan,
-    };
-  }
-  if (!isEligibleGroupClanViewer(user)) {
-    return { allowClanMenus: false, reason: 'noteligible' };
-  }
-  return { allowClanMenus: true, reason: 'ok' };
+  return { allowClanMenus: true, reason: 'ok', linkedTag: linked.clan_tag };
 }
 
 async function blockGroupClanCallback(ctx) {
   if (!isLinkedChatContext(ctx) || !ctx.callbackQuery) return false;
   const d = ctx.callbackQuery.data || '';
   if (!isClanHeavyCallback(d)) return false;
-  const user = ctx.cocboardUser;
-  if (!user) return false;
-  const gate = await getGroupChatGate(ctx, ctx.from.id, user);
+  const gate = await getGroupChatGate(ctx);
   if (gate.allowClanMenus) return false;
-  const short =
-    gate.reason === 'nolink' ? 'Chat non collegata al clan' :
-    gate.reason === 'wrongclan' ? 'Clan diverso da questa chat' :
-    'Profilo non idoneo';
-  await ctx.answerCbQuery(short).catch(() => {});
+  await ctx.answerCbQuery('Chat non collegata al clan').catch(() => {});
   await ctx.reply(fmt.formatGroupClanGateLong(gate), { parse_mode: 'HTML', ...backMenuKb() }).catch(() => {});
   return true;
 }
@@ -143,23 +122,46 @@ async function blockGroupClanCommand(ctx) {
   const t = ctx.message.text.trim();
   if (!t.startsWith('/')) return false;
   if (t.startsWith('/linkclan') || t.startsWith('/unlinkclan')) return false;
-  const clanCmds = [
-    '/membri',
-    '/info',
-    '/cwl',
-    '/bonus',
-    '/guerre',
-    '/setclan',
-    '/logout_clan',
-    '/clan',
-  ];
+  const clanCmds = ['/membri', '/info', '/cwl', '/bonus', '/guerre', '/setclan', '/logout_clan', '/clan'];
   if (!clanCmds.some((c) => t.startsWith(c))) return false;
-  const user = ctx.cocboardUser;
-  if (!user) return false;
-  const gate = await getGroupChatGate(ctx, ctx.from.id, user);
+  const gate = await getGroupChatGate(ctx);
   if (gate.allowClanMenus) return false;
   await ctx.reply(fmt.formatGroupClanGateLong(gate), { parse_mode: 'HTML' }).catch(() => {});
   return true;
+}
+
+/** Gruppo → linked clan; privato → clan utente loggato. */
+async function resolveEffectiveClanContext(ctx) {
+  if (isLinkedChatContext(ctx)) {
+    const linked = await sb.getTelegramChatLink(ctx.chat.id).catch(() => null);
+    if (linked?.clan_tag) {
+      let clanName = linked.clan_tag;
+      try { const i = await api.clanInfo(linked.clan_tag); clanName = i.name || linked.clan_tag; } catch (_) {}
+      return { clanTag: linked.clan_tag, clanName, hasOverride: false };
+    }
+  }
+  if (ctx.cocboardUser && ctx.from?.id) {
+    return getClanContextAuthed(ctx.from.id, ctx.cocboardUser);
+  }
+  return { clanTag: null, clanName: null, hasOverride: false };
+}
+
+async function resolveEffectiveClanTag(ctx) {
+  return (await resolveEffectiveClanContext(ctx)).clanTag;
+}
+
+/** Callback che sono lettura dati clan (ammessi per ospiti in gruppi collegati). */
+function isGroupClanReadCallback(d) {
+  if (!d) return false;
+  if (d === 'info' || d === 'cwl' || d === 'war_menu' || d === 'menu') return true;
+  if (/^mb\d+$/.test(d)) return true;
+  if (d.startsWith('cwl_v:')) return true;
+  if (d.startsWith('war:')) return true;
+  return false;
+}
+
+function isGroupClanReadCommand(t) {
+  return ['/membri', '/info', '/cwl', '/guerre', '/start'].some((c) => t.startsWith(c));
 }
 
 async function answerCbLoading(ctx, text = '⏳ Caricamento…') {
@@ -546,6 +548,10 @@ function guardMiddleware() {
 
 async function sendGuestMenu(ctx) {
   await ensureTgBotUsername(ctx.telegram);
+  if (isLinkedChatContext(ctx)) {
+    const linked = await sb.getTelegramChatLink(ctx.chat.id).catch(() => null);
+    if (linked?.clan_tag) return sendLinkedGroupGuestMenu(ctx, linked.clan_tag);
+  }
   const group = isLinkedChatContext(ctx);
   const text = group
     ? fmt.formatGuestWelcomeGroup(privateChatUrl(cachedTgBotUsername))
@@ -562,6 +568,30 @@ async function sendGuestMenu(ctx) {
   }
 }
 
+async function sendLinkedGroupGuestMenu(ctx, clanTag) {
+  let clanName = clanTag;
+  try { const info = await api.clanInfo(clanTag); clanName = info.name || clanTag; } catch (_) {}
+  await ensureTgBotUsername(ctx.telegram);
+  const intro = fmt.formatLinkedGroupGuestIntro({ clanTag, clanName, botUsername: cachedTgBotUsername });
+  const rows = [
+    [Markup.button.callback('👥 Membri', 'mb0'), Markup.button.callback('🏰 Info clan', 'info')],
+    [Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')],
+    [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
+  ];
+  const url = privateChatUrl(cachedTgBotUsername);
+  if (url) {
+    rows.push([Markup.button.url('🔐 Accedi per Bonus e Web App (privato)', url)]);
+  }
+  rows.push([Markup.button.callback('❓ Aiuto', 'helpbtn')]);
+  const kb = Markup.inlineKeyboard(rows);
+  if (ctx.callbackQuery) {
+    try { await ctx.editMessageText(intro, { parse_mode: 'HTML', ...kb }); }
+    catch (_) { await ctx.reply(intro, { parse_mode: 'HTML', ...kb }); }
+  } else {
+    await ctx.reply(intro, { parse_mode: 'HTML', ...kb });
+  }
+}
+
 async function buildWebAppHandoffUrl(ctx, extraParams = {}) {
   const base = (process.env.COCBOARD_SITE_HOME_URL || '').trim().replace(/\/$/, '');
   if (!base || !ctx.from?.id) return null;
@@ -574,25 +604,27 @@ async function buildWebAppHandoffUrl(ctx, extraParams = {}) {
   return `${base}/?${q.toString()}`;
 }
 
-async function mainMenuKeyboard(ctx, uid, user, hasClanTag) {
+async function mainMenuKeyboard(ctx, user, hasClanTag) {
   const rows = [];
   rows.push([
     Markup.button.callback('🔍 Cerca', 'nav_search'),
     Markup.button.callback('📊 Classifica', 'nav_rank'),
   ]);
-  const leader = isClanLeader(user);
+  const leader = user ? isClanLeader(user) : false;
   const grp = isLinkedChatContext(ctx);
   let showClanRows = !!hasClanTag;
-  if (grp && user) {
-    const g = await getGroupChatGate(ctx, uid, user);
+  if (grp) {
+    const g = await getGroupChatGate(ctx);
     showClanRows = g.allowClanMenus;
   }
   if (showClanRows) {
     rows.push(
       [Markup.button.callback('👥 Membri', 'mb0'), Markup.button.callback('🏰 Info clan', 'info')],
-      [Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('🎁 Bonus', 'bonus:0')],
-      [Markup.button.callback('📜 Registro guerre', 'war_menu')]
+      [Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')]
     );
+    if (!grp || leader) {
+      rows.push([Markup.button.callback('🎁 Bonus', 'bonus:0')]);
+    }
     if (user?.user_metadata?.coc_tag) {
       rows.push([Markup.button.callback('👤 Il mio profilo', 'me')]);
     }
@@ -610,7 +642,8 @@ async function mainMenuKeyboard(ctx, uid, user, hasClanTag) {
   if (!grp && user) {
     try {
       const wu = await buildWebAppHandoffUrl(ctx, { open_tab: 'members' });
-      if (wu) rows.push([Markup.button.webApp('🌐 Visualizza versione web', wu)]);
+      if (wu && String(wu).startsWith('https://'))
+        rows.push([Markup.button.webApp('🌐 Visualizza versione web', wu)]);
     } catch (_) {}
   }
   const site = process.env.COCBOARD_SITE_HOME_URL;
@@ -628,21 +661,17 @@ async function sendMainMenu(ctx) {
 
   const meta = user.user_metadata || {};
   const display = meta.username || (user.email || '').split('@')[0] || 'Comandante';
-  const { clanTag, clanName, hasOverride } = await getClanContextAuthed(uid, user);
+  const { clanTag, clanName, hasOverride } = await resolveEffectiveClanContext(ctx);
   const grp = isLinkedChatContext(ctx);
-  let groupGate = null;
-  if (grp) {
-    groupGate = await getGroupChatGate(ctx, uid, user);
-  }
   const intro = fmt.formatAuthedMenuIntro({
     displayName: display,
     clanTag,
     clanName,
     hasClanOverride: hasOverride,
-    chatHint: grp ? 'Sei in gruppo o canale: stesso account Telegram del login in privato.' : '',
-    groupMenuBanner: groupGate ? fmt.formatGroupMenuBanner(groupGate) : '',
+    chatHint: grp ? 'Sei in gruppo o canale.' : '',
+    groupMenuBanner: '',
   });
-  const kb = await mainMenuKeyboard(ctx, uid, user, !!clanTag);
+  const kb = await mainMenuKeyboard(ctx, user, !!clanTag);
   if (ctx.callbackQuery) {
     try {
       await ctx.editMessageText(intro, { parse_mode: 'HTML', ...kb });
@@ -810,13 +839,20 @@ function buildCwlNavKb(data, spec, webAppUrl) {
 async function loadAndShowCwl(ctx, clanTag, viewSpec) {
   const data = await api.cwlStats(clanTag);
   let webAppUrl = null;
-  if (data?.state !== 'notInWar' && viewSpec.view === 'r' && ctx?.from?.id != null) {
+  if (
+    data?.state !== 'notInWar' &&
+    viewSpec.view === 'r' &&
+    ctx?.from?.id != null &&
+    !isLinkedChatContext(ctx) &&
+    ctx.cocboardUser
+  ) {
     try {
       const idx = fmt.getDefaultCwlRoundIndex(data);
       const rn = (data.roundsData || [])[idx]?.roundNumber;
       const extra = {};
       if (rn != null) extra.cwl_round = String(rn);
       webAppUrl = await buildWebAppHandoffUrl(ctx, extra);
+      if (webAppUrl && !String(webAppUrl).startsWith('https://')) webAppUrl = null;
     } catch (e) {
       console.warn('[cocboard-bot] webApp handoff', e.message || e);
     }
@@ -960,25 +996,37 @@ function setupBot(bot) {
     if (isPublicCallbackData(d)) return next();
 
     const session = await tauth.getValidSession(uid);
-    if (!session) {
-      if (ctx.callbackQuery) {
-        await ctx.answerCbQuery('🔒 Accedi per il clan / bonus / CWL.').catch(() => {});
-        await ensureTgBotUsername(ctx.telegram);
-        const gkb = isLinkedChatContext(ctx) ? buildGroupGuestKb(cachedTgBotUsername) : buildPrivateGuestKb();
-        await ctx.reply(fmt.formatGuestSnack(), { parse_mode: 'HTML', ...gkb }).catch(() => {});
-        return;
+    if (session) {
+      ctx.cocboardUser = session.user;
+      ctx.cocboardSession = session.session;
+      if (await blockGroupClanCallback(ctx)) return;
+      if (ctx.message?.text && (await blockGroupClanCommand(ctx))) return;
+      return next();
+    }
+    // Guest in linked group: allow clan-read callbacks/commands
+    if (isLinkedChatContext(ctx)) {
+      const linked = await sb.getTelegramChatLink(ctx.chat.id).catch(() => null);
+      if (linked?.clan_tag) {
+        ctx.cocboardLinkedClanTag = linked.clan_tag;
+        const cbData = ctx.callbackQuery?.data || '';
+        const cmdTxt = (ctx.message?.text || '').trim();
+        if (isGroupClanReadCallback(cbData) || isGroupClanReadCommand(cmdTxt)) {
+          return next();
+        }
       }
-      if (ctx.message && ctx.message.text) {
-        await sendGuestMenu(ctx);
-        return;
-      }
+    }
+    if (ctx.callbackQuery) {
+      await ctx.answerCbQuery('🔒 Accedi per questa funzione.').catch(() => {});
+      await ensureTgBotUsername(ctx.telegram);
+      const gkb = isLinkedChatContext(ctx) ? buildGroupGuestKb(cachedTgBotUsername) : buildPrivateGuestKb();
+      await ctx.reply(fmt.formatGuestSnack(), { parse_mode: 'HTML', ...gkb }).catch(() => {});
       return;
     }
-    ctx.cocboardUser = session.user;
-    ctx.cocboardSession = session.session;
-    if (await blockGroupClanCallback(ctx)) return;
-    if (ctx.message?.text && (await blockGroupClanCommand(ctx))) return;
-    return next();
+    if (ctx.message && ctx.message.text) {
+      await sendGuestMenu(ctx);
+      return;
+    }
+    return;
   });
 
   bot.start(async (ctx) => {
@@ -988,6 +1036,10 @@ function setupBot(bot) {
       if (sess) {
         ctx.cocboardUser = sess.user;
         return await sendMainMenu(ctx);
+      }
+      if (isLinkedChatContext(ctx)) {
+        const linked = await sb.getTelegramChatLink(ctx.chat.id).catch(() => null);
+        if (linked?.clan_tag) return await sendLinkedGroupGuestMenu(ctx, linked.clan_tag);
       }
       return await sendGuestMenu(ctx);
     } catch (e) {
@@ -1108,8 +1160,14 @@ function setupBot(bot) {
       return;
     }
     try {
+      await ctx.deleteMessage().catch(() => {});
       await sb.upsertTelegramChatLink(ctx.chat.id, clanTag, uid, ctx.chat.type);
-      await ctx.reply(`✅ Chat collegata al clan <code>${fmt.escapeHtml(clanTag)}</code>.`, { parse_mode: 'HTML' });
+      await ctx.reply(
+        `✅ Chat collegata al clan <code>${fmt.escapeHtml(clanTag)}</code>.\n\n` +
+          `Ora chiunque nel gruppo può consultare <b>Membri</b>, <b>CWL</b>, <b>Guerre</b> senza login.\n` +
+          `Usa <code>/start</code> per aprire il menù.`,
+        { parse_mode: 'HTML' }
+      );
     } catch (e) {
       await ctx.reply(`❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
     }
@@ -1173,7 +1231,7 @@ function setupBot(bot) {
   });
 
   async function cmdNeedClan(ctx, fn) {
-    const tag = await resolveClanTagForCommands(ctx.from.id, ctx.cocboardUser);
+    const tag = await resolveEffectiveClanTag(ctx);
     if (!tag) {
       await ctx.reply(
         '⚠️ Nessun clan disponibile. Usa <code>/setclan #TAG</code> o assicurati di essere in un clan in game.',
@@ -1207,6 +1265,10 @@ function setupBot(bot) {
   });
 
   bot.command('bonus', async (ctx) => {
+    if (isLinkedChatContext(ctx) && (!ctx.cocboardUser || !isClanLeader(ctx.cocboardUser))) {
+      await ctx.reply('🔐 <b>Bonus</b> nel gruppo: accedi come <b>Capo</b>, <b>Co-Capo</b> o <b>Admin</b> (in privato).', { parse_mode: 'HTML' });
+      return;
+    }
     await cmdNeedClan(ctx, async (clanTag) => {
       let rows = null;
       try {
@@ -1336,9 +1398,15 @@ function setupBot(bot) {
   bot.action('menu', async (ctx) => {
     safeAnswerCb(ctx);
     const sess = await tauth.getValidSession(ctx.from.id);
-    if (!sess) return sendGuestMenu(ctx);
-    ctx.cocboardUser = sess.user;
-    return sendMainMenu(ctx);
+    if (sess) {
+      ctx.cocboardUser = sess.user;
+      return sendMainMenu(ctx);
+    }
+    if (isLinkedChatContext(ctx)) {
+      const linked = await sb.getTelegramChatLink(ctx.chat.id).catch(() => null);
+      if (linked?.clan_tag) return sendLinkedGroupGuestMenu(ctx, linked.clan_tag);
+    }
+    return sendGuestMenu(ctx);
   });
 
   bot.action('setclan_help', async (ctx) => {
@@ -1566,9 +1634,9 @@ function setupBot(bot) {
   bot.action(/^mb(\d+)$/, async (ctx) => {
     await answerCbLoading(ctx);
     const page = Number(ctx.match[1]) || 0;
-    const clanTag = await resolveClanTagForCommands(ctx.from.id, ctx.cocboardUser);
+    const clanTag = await resolveEffectiveClanTag(ctx);
     if (!clanTag) {
-      await ctx.answerCbQuery('Imposta clan').catch(() => {});
+      await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
       return;
     }
     const data = await api.clanMembers(clanTag);
@@ -1582,9 +1650,9 @@ function setupBot(bot) {
 
   bot.action('info', async (ctx) => {
     await answerCbLoading(ctx);
-    const clanTag = await resolveClanTagForCommands(ctx.from.id, ctx.cocboardUser);
+    const clanTag = await resolveEffectiveClanTag(ctx);
     if (!clanTag) {
-      await ctx.answerCbQuery('Nessun clan').catch(() => {});
+      await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
       return;
     }
     const info = await api.clanInfo(clanTag);
@@ -1598,9 +1666,9 @@ function setupBot(bot) {
 
   bot.action('cwl', async (ctx) => {
     await answerCbLoading(ctx);
-    const clanTag = await resolveClanTagForCommands(ctx.from.id, ctx.cocboardUser);
+    const clanTag = await resolveEffectiveClanTag(ctx);
     if (!clanTag) {
-      await ctx.answerCbQuery('Nessun clan').catch(() => {});
+      await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
       return;
     }
     const { text, kb } = await loadAndShowCwl(ctx, clanTag, { view: 'ov', pPage: 0, rIdx: 0 });
@@ -1609,9 +1677,9 @@ function setupBot(bot) {
 
   bot.action(/^cwl_v:(.+)$/, async (ctx) => {
     await answerCbLoading(ctx);
-    const clanTag = await resolveClanTagForCommands(ctx.from.id, ctx.cocboardUser);
+    const clanTag = await resolveEffectiveClanTag(ctx);
     if (!clanTag) {
-      await ctx.answerCbQuery('Nessun clan').catch(() => {});
+      await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
       return;
     }
     const key = ctx.match[1];
@@ -1622,8 +1690,12 @@ function setupBot(bot) {
 
   bot.action(/^bonus:(\d+)$/, async (ctx) => {
     await answerCbLoading(ctx);
+    if (isLinkedChatContext(ctx) && (!ctx.cocboardUser || !isClanLeader(ctx.cocboardUser))) {
+      await ctx.answerCbQuery('🔐 Bonus: accedi come Capo/Co-Capo/Admin').catch(() => {});
+      return;
+    }
     const page = Number(ctx.match[1]) || 0;
-    const clanTag = await resolveClanTagForCommands(ctx.from.id, ctx.cocboardUser);
+    const clanTag = await resolveEffectiveClanTag(ctx);
     if (!clanTag) {
       await ctx.answerCbQuery('Nessun clan').catch(() => {});
       return;
@@ -1645,9 +1717,9 @@ function setupBot(bot) {
 
   bot.action('war_menu', async (ctx) => {
     safeAnswerCb(ctx);
-    const clanTag = await resolveClanTagForCommands(ctx.from.id, ctx.cocboardUser);
+    const clanTag = await resolveEffectiveClanTag(ctx);
     if (!clanTag) {
-      await ctx.answerCbQuery('Nessun clan').catch(() => {});
+      await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
       return;
     }
     const body =
@@ -1662,9 +1734,9 @@ function setupBot(bot) {
 
   bot.action('war:classic', async (ctx) => {
     await answerCbLoading(ctx);
-    const clanTag = await resolveClanTagForCommands(ctx.from.id, ctx.cocboardUser);
+    const clanTag = await resolveEffectiveClanTag(ctx);
     if (!clanTag) {
-      await ctx.answerCbQuery('Nessun clan').catch(() => {});
+      await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
       return;
     }
     const data = await api.warLog(clanTag);
@@ -1679,9 +1751,9 @@ function setupBot(bot) {
 
   bot.action('war:cwl', async (ctx) => {
     await answerCbLoading(ctx);
-    const clanTag = await resolveClanTagForCommands(ctx.from.id, ctx.cocboardUser);
+    const clanTag = await resolveEffectiveClanTag(ctx);
     if (!clanTag) {
-      await ctx.answerCbQuery('Nessun clan').catch(() => {});
+      await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
       return;
     }
     const data = await api.warLog(clanTag);
