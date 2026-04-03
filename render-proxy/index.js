@@ -722,4 +722,16 @@ app.get('/locations', authMiddleware, async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Proxy listening on port ${PORT}`));
+app.listen(PORT, () => {
+    console.log(`Proxy listening on port ${PORT}`);
+
+    // Self-ping ogni 14 minuti per evitare lo spin-down di Render free tier.
+    // Senza questo, dopo 15 min di inattività Render dorme e al risveglio
+    // può cambiare IP, invalidando la whitelist della CoC API key.
+    const KEEP_ALIVE_MS = 14 * 60 * 1000;
+    setInterval(() => {
+        fetch(`http://localhost:${PORT}/health`)
+            .then(() => console.log('[keep-alive] ping ok', new Date().toISOString()))
+            .catch(err => console.warn('[keep-alive] ping failed:', err.message));
+    }, KEEP_ALIVE_MS);
+});
