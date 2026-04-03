@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/lookup.js": {
+      "maxDuration": 30
+    }
+  },
   "crons": [
     {
       "path": "/api/sync-members",

@@ -33,17 +33,33 @@ module.exports = async (req, res) => {
             if (!validCron && !validSync) {
                 return res.status(401).json({ error: 'Non autorizzato.' });
             }
+            // Render cold start può superare 20s; cron-job.org ha max 30s sul client → due tentativi brevi.
             const started = Date.now();
+            const perAttemptMs = 13000;
             let r;
-            try {
-                r = await fetch(`${proxyUrl}/health`, {
-                    signal: AbortSignal.timeout(20000),
+            let lastErr;
+            let attempts = 0;
+            for (let attempt = 0; attempt < 2; attempt++) {
+                attempts = attempt + 1;
+                try {
+                    r = await fetch(`${proxyUrl}/health`, {
+                        signal: AbortSignal.timeout(perAttemptMs),
+                    });
+                    lastErr = null;
+                    break;
+                } catch (e) {
+                    lastErr = e;
+                }
+            }
+            if (!r) {
+                return res.status(502).json({
+                    ok: false,
+                    error: lastErr?.message || 'fetch fallita',
+                    hint: 'Render cold start o timeout; il prossimo run di solito va a buon fine.',
                 });
-            } catch (e) {
-                return res.status(502).json({ ok: false, error: e.message || 'fetch fallita' });
             }
             const ms = Date.now() - started;
-            return res.status(200).json({ ok: r.ok, status: r.status, ms });
+            return res.status(200).json({ ok: r.ok, status: r.status, ms, attempts });
         } else {
             return res.status(400).json({ error: 'type non valido. Usa: player, search-clans, rankings, locations, ping' });
         }
