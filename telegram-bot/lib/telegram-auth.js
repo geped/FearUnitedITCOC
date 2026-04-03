@@ -33,6 +33,13 @@ function anonClient() {
   });
 }
 
+function normalizeSignInPayload(data) {
+  if (!data?.session) return null;
+  const user = data.user ?? data.session?.user;
+  if (!user?.id) return null;
+  return { session: data.session, user };
+}
+
 async function signInWithEmailPassword(email, password) {
   const client = anonClient();
   let { data, error } = await client.auth.signInWithPassword({ email, password });
@@ -40,11 +47,18 @@ async function signInWithEmailPassword(email, password) {
     const fallback = email.replace('@cocboard.internal', '@fearunited.internal');
     if (fallback !== email) {
       const r2 = await client.auth.signInWithPassword({ email: fallback, password });
-      if (!r2.error) return r2;
+      if (!r2.error) {
+        const norm = normalizeSignInPayload(r2.data);
+        if (norm) return norm;
+      }
     }
     throw new Error(error.message.includes('Invalid') ? 'Credenziali errate.' : error.message);
   }
-  return data;
+  const norm = normalizeSignInPayload(data);
+  if (!norm) {
+    throw new Error('Login incompleto: nessun profilo utente nella risposta.');
+  }
+  return norm;
 }
 
 async function signInWithPasswordFromInput(rawUsername, password) {
@@ -66,7 +80,8 @@ async function getValidSession(telegramUserId) {
         refresh_token: row.auth_refresh_token,
       });
       if (!error && data?.session) {
-        return { user: data.session.user, session: data.session };
+        const u = data.user ?? data.session?.user;
+        if (u?.id) return { user: u, session: data.session };
       }
     }
 
@@ -79,8 +94,15 @@ async function getValidSession(telegramUserId) {
       } catch (_) {}
       return null;
     }
-    await db.saveAuthSession(telegramUserId, ref.session, ref.session.user);
-    return { user: ref.session.user, session: ref.session };
+    const userAfter = ref.user ?? ref.session?.user;
+    if (!userAfter?.id) {
+      try {
+        await db.clearAuthSession(telegramUserId);
+      } catch (_) {}
+      return null;
+    }
+    await db.saveAuthSession(telegramUserId, ref.session, userAfter);
+    return { user: userAfter, session: ref.session };
   } catch (e) {
     const c = e && e.cause;
     console.error(

@@ -56,7 +56,8 @@ async function resolveClanTagForCommands(telegramUserId, user) {
 }
 
 async function handlePendingMessage(ctx) {
-  const uid = ctx.from.id;
+  const uid = ctx.from?.id;
+  if (uid == null) return;
   const textRaw = (ctx.message.text || '').trim();
   if (textRaw === '/cancel') {
     pendingAuth.delete(uid);
@@ -311,12 +312,18 @@ async function refreshWebhookDropPending(telegram) {
 }
 
 async function performFullLogout(ctx, { viaCommand }) {
+  const uid = ctx.from?.id;
+  if (uid == null) {
+    if (viaCommand) await ctx.reply('⚠️ Comando non applicabile.').catch(() => {});
+    else await ctx.answerCbQuery('Errore: mittente sconosciuto').catch(() => {});
+    return;
+  }
   try {
-    await sb.clearAuthSession(ctx.from.id);
+    await sb.clearAuthSession(uid);
   } catch (e) {
     console.error('[cocboard-bot] clearAuthSession', e.message || e);
   }
-  pendingAuth.delete(ctx.from.id);
+  pendingAuth.delete(uid);
   await refreshWebhookDropPending(ctx.telegram);
   if (viaCommand) {
     await ctx
@@ -374,6 +381,7 @@ function setupBot(bot) {
   });
 
   bot.start(async (ctx) => {
+    if (!ctx.from?.id) return;
     try {
       const sess = await tauth.getValidSession(ctx.from.id);
       if (sess) {
@@ -392,6 +400,7 @@ function setupBot(bot) {
   });
 
   bot.command('help', async (ctx) => {
+    if (!ctx.from?.id) return;
     const sess = await tauth.getValidSession(ctx.from.id);
     if (!sess) {
       await ctx.reply(fmt.formatGuestHelp(), { parse_mode: 'HTML', ...buildGuestKb() });
@@ -419,6 +428,7 @@ function setupBot(bot) {
   });
 
   bot.command('esci', async (ctx) => {
+    if (!ctx.from?.id) return;
     try {
       await performFullLogout(ctx, { viaCommand: true });
     } catch (e) {

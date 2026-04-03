@@ -56,9 +56,15 @@ function normSessionTimes(session) {
 async function saveAuthSession(telegramUserId, session, user) {
   const client = sb();
   if (!client) throw new Error('Supabase non configurato.');
+  if (!session?.access_token || !session?.refresh_token) {
+    throw new Error('Sessione incompleta (mancano i token).');
+  }
+  if (!user?.id) {
+    throw new Error('Profilo utente mancante dopo il login (user.id).');
+  }
   const prev = await getFullRow(telegramUserId);
   const now = new Date().toISOString();
-  const meta = user?.user_metadata || {};
+  const meta = user.user_metadata || {};
   const row = {
     telegram_user_id: telegramUserId,
     supabase_user_id: user.id,
