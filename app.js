@@ -3901,6 +3901,81 @@ function switchCdmTab(tab) {
   if (tab === 'confronto') refreshCwlConfrontoRound(window._cwlModalRoundIdx || 0);
 }
 
+function _toggleCwlConfrontoTool(roundIdx, tool) {
+  const all = ['planner', 'alerts'];
+  all.forEach(t => {
+    const el = document.getElementById(`cdm-cf-${t}-${roundIdx}`);
+    const btn = document.getElementById(`cdm-cf-btn-${t}-${roundIdx}`);
+    const active = t === tool && el?.style.display !== 'block';
+    if (el) el.style.display = active ? 'block' : 'none';
+    if (btn) btn.classList.toggle('cdm-atk-sw-btn--active', active);
+  });
+}
+
+/** Build planner rows for current round (mirror-first suggestion). */
+function _buildCwlAttackPlanner(round) {
+  const attacksPerMember = round?.attacksPerMember || 1;
+  const us = [...(round?.clan?.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const them = [...(round?.opponent?.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const byPos = new Map(them.map(m => [m.mapPosition, m]));
+  const unresolved = them.filter(m => !(m.bestOpponentAttack && m.bestOpponentAttack.stars >= 3));
+  const out = [];
+  for (const a of us) {
+    const done = (a.attacks || []).length;
+    const missing = Math.max(0, attacksPerMember - done);
+    if (missing <= 0) continue;
+    let target = byPos.get(a.mapPosition);
+    if (!target) {
+      const th = a.thLevel || 0;
+      target = unresolved
+        .slice()
+        .sort((x, y) => Math.abs((x.thLevel || 0) - th) - Math.abs((y.thLevel || 0) - th))[0] || them[0];
+    }
+    out.push({
+      attackerName: a.name || '—',
+      attackerTag: a.tag || '',
+      targetName: target?.name || '—',
+      targetTag: target?.tag || '',
+      missingAttacks: missing,
+      thDelta: (a.thLevel || 0) - (target?.thLevel || 0),
+    });
+  }
+  return out;
+}
+
+/** Build operational alerts for the round. */
+function _buildCwlOperationalAlerts(round) {
+  const alerts = [];
+  const attacksPerMember = round?.attacksPerMember || 1;
+  const us = [...(round?.clan?.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const themByPos = new Map((round?.opponent?.members || []).map(m => [m.mapPosition, m]));
+  const missing = us.reduce((acc, m) => acc + Math.max(0, attacksPerMember - ((m.attacks || []).length)), 0);
+  if (missing > 0) {
+    alerts.push({
+      code: 'missing-attacks',
+      severity: missing >= 3 ? 'high' : 'medium',
+      message: `Attacchi ancora da fare: ${missing}.`,
+    });
+  }
+  let strongMismatch = 0;
+  us.forEach(m => {
+    const opp = themByPos.get(m.mapPosition);
+    if (!opp) return;
+    if (Math.abs((m.thLevel || 0) - (opp.thLevel || 0)) >= 2) strongMismatch++;
+  });
+  if (strongMismatch > 0) {
+    alerts.push({
+      code: 'th-mismatch',
+      severity: strongMismatch >= 3 ? 'high' : 'low',
+      message: `Mirror con mismatch TH forti: ${strongMismatch}.`,
+    });
+  }
+  if (!alerts.length) {
+    alerts.push({ code: 'ok', severity: 'ok', message: 'Nessuna anomalia operativa rilevata.' });
+  }
+  return alerts;
+}
+
 /** Tabella confronto TH / player / somma eroi (villaggio principale) per mappa vs avversario */
 async function refreshCwlConfrontoRound(roundIdx) {
   const slots = window._cwlModalRoundSlots;
@@ -3932,12 +4007,28 @@ async function refreshCwlConfrontoRound(roundIdx) {
       <td class="cdm-cf-hero">${hB != null ? hB : '—'}</td>
     </tr>`);
   }
+  const plannerRows = _buildCwlAttackPlanner(r);
+  const alerts = _buildCwlOperationalAlerts(r);
+  const plannerHtml = plannerRows.length
+    ? `<div class="cdm-attacks-scroll"><table class="cdm-attacks-table"><thead><tr><th>Attaccante</th><th>Target consigliato</th><th>Attacchi mancanti</th><th>Delta TH</th></tr></thead><tbody>${
+      plannerRows.map(x => `<tr><td>${x.attackerName}</td><td>${x.targetName}</td><td>${x.missingAttacks}</td><td>${x.thDelta > 0 ? '+' : ''}${x.thDelta}</td></tr>`).join('')
+    }</tbody></table></div>`
+    : '<p class="cdm-confronto-empty">Nessun attacco da pianificare per questo turno.</p>';
+  const alertsHtml = `<div class="cdm-attacks-scroll"><table class="cdm-attacks-table"><thead><tr><th>Severità</th><th>Segnalazione</th></tr></thead><tbody>${
+    alerts.map(a => `<tr><td>${a.severity === 'high' ? '🔴 Alta' : a.severity === 'medium' ? '🟠 Media' : a.severity === 'low' ? '🟡 Bassa' : '🟢 OK'}</td><td>${a.message}</td></tr>`).join('')
+  }</tbody></table></div>`;
   panel.innerHTML = `<div class="cdm-attacks-scroll"><table class="cdm-confronto-table">
     <thead><tr>
       <th>TH</th><th>Player</th><th>Σ eroi</th>
       <th class="cdm-cf-vs-th">vs</th>
       <th>TH</th><th>Player</th><th>Σ eroi</th>
-    </tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+    </tr></thead><tbody>${rows.join('')}</tbody></table></div>
+    <div class="cdm-atk-switcher" style="margin-top:.5rem">
+      <button type="button" class="cdm-atk-sw-btn" id="cdm-cf-btn-planner-${roundIdx}" onclick="_toggleCwlConfrontoTool(${roundIdx}, 'planner')">Planner attacchi turno</button>
+      <button type="button" class="cdm-atk-sw-btn" id="cdm-cf-btn-alerts-${roundIdx}" onclick="_toggleCwlConfrontoTool(${roundIdx}, 'alerts')">Alert operativi</button>
+    </div>
+    <div id="cdm-cf-planner-${roundIdx}" style="display:none;margin-top:.45rem">${plannerHtml}</div>
+    <div id="cdm-cf-alerts-${roundIdx}" style="display:none;margin-top:.45rem">${alertsHtml}</div>`;
 }
 
 function closeCwlSeasonDetail() {
