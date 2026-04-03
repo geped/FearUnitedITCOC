@@ -2718,6 +2718,13 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .cdm-overlay--visible .cdm-box { transform:translateY(0); }
 
+/* Round tabs — scrollabili orizzontalmente */
+.cdm-round-tabs {
+  overflow-x:auto; -webkit-overflow-scrolling:touch;
+  scrollbar-width:none; flex-wrap:nowrap !important;
+}
+.cdm-round-tabs::-webkit-scrollbar { display:none; }
+
 /* Header */
 .cdm-header {
   display:flex; align-items:flex-start; justify-content:space-between;
@@ -2947,11 +2954,42 @@ tbody tr:last-child td { border-bottom: none; }
 .cdm-upcoming-label { font-size:1rem; font-weight:600; color:var(--text-2); }
 .cdm-upcoming-sub { font-size:.8rem; }
 
-@media (max-width:520px) {
-  .cdm-box { padding:.85rem .7rem; }
-  .cdm-war-header { grid-template-columns:1fr auto 1fr; gap:.4rem; }
-  .cdm-war-clan-name { max-width:90px; font-size:.75rem; }
-  .cdm-header-badge { width:42px; height:42px; }
+@media (max-width:600px) {
+  /* Full-screen modal su mobile */
+  .cdm-overlay { padding:0; align-items:flex-end; }
+  .cdm-box {
+    border-radius:16px 16px 0 0; max-width:100%; margin:0;
+    padding:1rem .85rem; max-height:92svh; overflow-y:auto;
+  }
+  /* Tab bar scrollabile, non a capo */
+  .cdm-mtabs {
+    overflow-x:auto; -webkit-overflow-scrolling:touch;
+    flex-wrap:nowrap; padding:.4rem .5rem 0;
+    scrollbar-width:none;
+  }
+  .cdm-mtabs::-webkit-scrollbar { display:none; }
+  .cdm-mtab { font-size:.75rem; padding:.3rem .5rem .35rem; white-space:nowrap; }
+  /* Header più compatto */
+  .cdm-header { gap:.5rem; margin-bottom:.65rem; }
+  .cdm-header-badge { width:38px; height:38px; }
+  .cdm-header-season { font-size:.92rem; }
+  /* Confronto table: font ridotto su mobile */
+  .cdm-confronto-table { font-size:.72rem; }
+  .cdm-attacks-table  { font-size:.72rem; }
+  .cdm-cf-name { max-width:80px; }
+  .cdm-planner-table { min-width:480px; }
+  /* Switcher noi/avversario — stack */
+  .cdm-atk-switcher { flex-wrap:wrap; }
+  .cdm-atk-sw-btn { max-width:none; flex:1 1 auto; text-align:center; }
+  /* Standing row più compatta */
+  .cdm-standing-row { gap:.4rem; padding:.45rem .5rem; }
+  .cdm-clan-name { font-size:.82rem; }
+}
+@media (max-width:400px) {
+  .cdm-box { padding:.75rem .6rem; }
+  .cdm-header-badge { width:30px; height:30px; }
+  .cdm-war-header { grid-template-columns:1fr auto 1fr; gap:.3rem; }
+  .cdm-war-clan-name { max-width:75px; font-size:.7rem; }
 }
 
 /* ─────────────────────────────────────────────────────────────

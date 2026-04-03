@@ -3578,6 +3578,14 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj, modalC
     roundSlots = rounds.slice(0, TOTAL_ROUNDS);
   }
 
+  // Auto-select the active round (inWar → preparation → last non-upcoming)
+  let activeRoundIdx = roundSlots.findIndex(r => r.state === 'inWar');
+  if (activeRoundIdx < 0) activeRoundIdx = roundSlots.findIndex(r => r.state === 'preparation');
+  if (activeRoundIdx < 0) {
+    const lastPlayed = roundSlots.reduce((acc, r, i) => (!r.upcoming ? i : acc), -1);
+    activeRoundIdx = lastPlayed >= 0 ? lastPlayed : 0;
+  }
+
   // ── Panel: Classifica lega ──
   let standingsContent = '<p style="color:var(--text-3);padding:.5rem;font-size:.85rem">Dati classifica non disponibili per questa stagione.</p>';
   if (groupStandings?.length) {
@@ -3636,7 +3644,7 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj, modalC
     return `<span class="cdm-rdot ${rc}" aria-hidden="true"></span>`;
   };
   const roundSelectorHtml = roundSlots.map((r, i) => {
-    const cls = `cdm-round-tab${i === 0 ? ' active' : ''}${r.upcoming ? ' cdm-round-tab--upcoming' : ''}`;
+    const cls = `cdm-round-tab${i === activeRoundIdx ? ' active' : ''}${r.upcoming ? ' cdm-round-tab--upcoming' : ''}`;
     return `<button type="button" class="${cls}" onclick="_cwlSelectRound(${i})" id="cdm-tab-${i}">${roundDot(r)} T${r.roundNumber || i + 1}</button>`;
   }).join('');
 
@@ -3812,13 +3820,13 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj, modalC
   }
 
   const roundPanelsHtml   = roundSlots.map((r, i) =>
-    `<div style="display:${i===0?'block':'none'}" id="cdm-rpanel-${i}">${renderRound(r, i)}</div>`
+    `<div style="display:${i===activeRoundIdx?'block':'none'}" id="cdm-rpanel-${i}">${renderRound(r, i)}</div>`
   ).join('');
   const previewPanelsHtml = roundSlots.map((r, i) =>
-    `<div style="display:${i===0?'block':'none'}" id="cdm-ppanel-${i}">${renderPreview(r)}</div>`
+    `<div style="display:${i===activeRoundIdx?'block':'none'}" id="cdm-ppanel-${i}">${renderPreview(r)}</div>`
   ).join('');
   const confrontoPanelsHtml = roundSlots.map((r, i) =>
-    `<div style="display:${i===0?'block':'none'}" id="cdm-cpanel-${i}" class="cdm-confronto-slot"><p class="cdm-confronto-placeholder" style="color:var(--text-3);font-size:0.85rem;padding:0.5rem">Seleziona la scheda Confronto per caricare i dati.</p></div>`
+    `<div style="display:${i===activeRoundIdx?'block':'none'}" id="cdm-cpanel-${i}" class="cdm-confronto-slot"><p class="cdm-confronto-placeholder" style="color:var(--text-3);font-size:0.85rem;padding:0.5rem">Seleziona la scheda Confronto per caricare i dati.</p></div>`
   ).join('');
 
   const leagueBadgeHtml = badgeUrl
@@ -3834,8 +3842,9 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj, modalC
     sync: '<svg class="cdm-ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4V1L7 6l5 5V7c2.76 0 5 2.24 5 5 0 1.13-.4 2.16-1.03 3l1.46 1.46A7.93 7.93 0 0 0 20 12c0-2.21-.9-4.22-2.35-5.65zM12 19c-2.76 0-5-2.24-5-5 0-1.13.4-2.16 1.03-3L6.57 9.54A7.93 7.93 0 0 0 4 12c0 3.31 2.69 6 6 6v3l5-5-5-5v3z"/></svg>'
   };
 
-  // Default: Anteprima se live/dettagliata, altrimenti Turni
-  const defaultTab = (isLive || hasDetailedData) ? 'preview' : 'rounds';
+  // Default: Confronto se c'è un turno inWar attivo, Anteprima se live/dettagliata, altrimenti Turni
+  const hasActiveWar = roundSlots[activeRoundIdx]?.state === 'inWar';
+  const defaultTab = hasActiveWar ? 'confronto' : (isLive || hasDetailedData) ? 'preview' : 'rounds';
   const roundTabsVisible = defaultTab === 'rounds' || defaultTab === 'preview' || defaultTab === 'confronto';
 
   const backHdr = isAlienView
@@ -3881,8 +3890,15 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj, modalC
   modal.addEventListener('click', closeCwlSeasonDetail);
   document.body.appendChild(modal);
   window._cwlModalRoundSlots = roundSlots;
-  window._cwlModalRoundIdx = 0;
-  requestAnimationFrame(() => modal.classList.add('cdm-overlay--visible'));
+  window._cwlModalRoundIdx = activeRoundIdx;
+  requestAnimationFrame(() => {
+    modal.classList.add('cdm-overlay--visible');
+    // Scroll the active round tab into view
+    const activeTab = document.getElementById(`cdm-tab-${activeRoundIdx}`);
+    activeTab?.scrollIntoView({ block: 'nearest', inline: 'center' });
+    // Load confronto data if opening on that tab
+    if (defaultTab === 'confronto') refreshCwlConfrontoRound(activeRoundIdx);
+  });
 }
 
 function _cwlAtkSwitch(pid, side) {
