@@ -11,10 +11,6 @@
     {
       "path": "/api/auto-save-wars",
       "schedule": "0 20 * * *"
-    },
-    {
-      "path": "/api/lookup?type=ping",
-      "schedule": "*/10 * * * *"
     }
   ]
 }
