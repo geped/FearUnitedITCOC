@@ -5611,10 +5611,10 @@ function _renderRankPlayers(el, items) {
     <tbody>
       ${items.map((p,i) => {
         const lbHtml = rankLeagueBadgeHtml(_rankingPlayerLeague(p));
-        const cb = p.clan?.badgeUrls?.small || p.clan?.badgeUrls?.medium || '';
+        const cb = cocBadgeUrl(p.clan?.badgeUrls);
         const clanLabel = p.clan?.name || '—';
         const clanCell = cb
-          ? `<div class="rank-clan-cell"><img src="${cb}" alt="" class="rank-clan-badge-img" loading="lazy" width="28" height="28"><span>${clanLabel}</span></div>`
+          ? `<div class="rank-clan-cell"><img src="${cb}" alt="" class="rank-clan-badge-img" loading="lazy" referrerpolicy="no-referrer" width="28" height="28" onerror="this.outerHTML='<span class=\\'cdm-clan-badge-ph\\'>🛡️</span>'"><span>${clanLabel}</span></div>`
           : `<span style="font-size:0.82rem;color:var(--text-2)">${clanLabel}</span>`;
         const atk = p.attackWins != null ? p.attackWins : '—';
         const def = p.defenseWins != null ? p.defenseWins : '—';
@@ -5644,13 +5644,13 @@ function _renderRankClans(el, items) {
     </tr></thead>
     <tbody>
       ${items.map((c,i) => {
-        const badge = c.badgeUrls?.small||'';
+        const badge = cocBadgeUrl(c.badgeUrls);
         const rankClass = i===0?'rank-gold':i===1?'rank-silver':i===2?'rank-bronze':'';
         return `<tr class="cc-member-row" onclick="openRankClan('${c.tag.replace(/'/g,"\\'")}')">
           <td class="stat-cell"><span class="rank-num ${rankClass}">${c.rank??i+1}</span></td>
           <td>
             <div style="display:flex;align-items:center;gap:0.4rem">
-              ${badge?`<img src="${badge}" class="cerca-clan-badge" style="width:28px;height:28px">`:'' }
+              ${badge?`<img src="${badge}" class="cerca-clan-badge" style="width:28px;height:28px" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<span class=\\'cdm-clan-badge-ph\\'>🛡️</span>'">`:'' }
               <div>
                 <div style="font-weight:600">${c.name}</div>
                 <div class="mono" style="font-size:0.72rem;color:var(--text-3)">${c.tag}</div>
