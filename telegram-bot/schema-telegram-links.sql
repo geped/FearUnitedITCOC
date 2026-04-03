@@ -32,3 +32,5 @@ ALTER TABLE public.telegram_links ADD COLUMN IF NOT EXISTS webapp_handoff_expire
 CREATE INDEX IF NOT EXISTS telegram_links_webapp_handoff_code_idx
   ON public.telegram_links (webapp_handoff_code)
   WHERE webapp_handoff_code IS NOT NULL;
+
+ALTER TABLE public.telegram_links ADD COLUMN IF NOT EXISTS tutorial_completed_at TIMESTAMPTZ;

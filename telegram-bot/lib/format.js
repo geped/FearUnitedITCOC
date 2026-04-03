@@ -109,6 +109,66 @@ function formatGroupHelp() {
   );
 }
 
+/** Banner sotto al menù in gruppo/canale in base al collegamento chat↔clan. */
+function formatGroupMenuBanner(gate) {
+  if (!gate || gate.reason === 'private' || gate.reason === 'ok') return '';
+  if (gate.reason === 'nolink') {
+    if (gate.isLeader) {
+      return (
+        `\n\n🔗 <i>Questa chat non è collegata a un clan. In <b>privato</b>: «Aggiungi a canale/gruppo», poi invia qui <code>/linkclan TOKEN</code>.</i>`
+      );
+    }
+    return (
+      `\n\n🔗 <i>Chiedi a <b>Capo</b>/<b>Co-Capo</b>/<b>Admin</b> di collegare il bot (privato → Aggiungi a canale/gruppo).</i>`
+    );
+  }
+  if (gate.reason === 'wrongclan') {
+    return (
+      `\n\n⚠️ <i>Questa chat è del clan <code>${escapeHtml(gate.linkedTag || '')}</code>; il tuo profilo è su <code>${escapeHtml(gate.yourTag || '—')}</code>.</i>`
+    );
+  }
+  if (gate.reason === 'noteligible') {
+    return `\n\n🔒 <i>Account non riconosciuto come membro clan (registrati con API CoC in privato).</i>`;
+  }
+  return '';
+}
+
+function formatGroupClanGateLong(gate) {
+  if (!gate) return `${DIV}\n⚠️ Accesso dati clan non disponibile.\n${DIV}`;
+  if (gate.reason === 'nolink') {
+    if (gate.isLeader) {
+      return (
+        `${DIV}\n🔗 <b>Collega questa chat al clan</b>\n${DIV}\n\n` +
+        `1. Apri il bot in <b>chat privata</b>\n` +
+        `2. Menù → <b>Aggiungi a canale/gruppo</b> e segui i passi\n` +
+        `3. Aggiungi il bot qui come <b>admin</b>\n` +
+        `4. Invia in questa chat: <code>/linkclan TOKEN</code> (token che ti dà il bot)\n\n` +
+        `<i>TOKEN valido ~1 ora, un solo uso.</i>`
+      );
+    }
+    return (
+      `${DIV}\n🔗 <b>Chat non collegata</b>\n${DIV}\n\n` +
+        `I dati clan compariranno quando un <b>Capo</b>, <b>Co-Capo</b> o <b>Admin</b> completa il collegamento dal bot in privato.`
+    );
+  }
+  if (gate.reason === 'wrongclan') {
+    return (
+      `${DIV}\n⚠️ <b>Clan diverso</b>\n${DIV}\n\n` +
+      `Questa chat è per <code>${escapeHtml(gate.linkedTag || '')}</code>.\n` +
+      `Il tuo profilo CoCBoard è su <code>${escapeHtml(gate.yourTag || '—')}</code>.\n\n` +
+      `<i>Apri il bot in privato se serve cambiare contesto.</i>`
+    );
+  }
+  if (gate.reason === 'noteligible') {
+    return (
+      `${DIV}\n🔒 <b>Profilo non idoneo</b>\n${DIV}\n\n` +
+        `Serve un account registrato con <b>chiave API CoC</b> e villaggio nel clan.\n` +
+        `Registrati in <b>chat privata</b> con il bot.`
+    );
+  }
+  return `${DIV}\n⚠️ Operazione non disponibile.\n${DIV}`;
+}
+
 /** Menù dopo login Supabase */
 function formatAuthedMenuIntro({
   displayName,
@@ -116,13 +176,10 @@ function formatAuthedMenuIntro({
   clanName,
   hasClanOverride,
   chatHint,
-  groupClanLocked,
+  groupMenuBanner,
 }) {
   const hint = chatHint ? `\n\n📍 <i>${escapeHtml(chatHint)}</i>` : '';
-  const lock =
-    groupClanLocked ?
-      `\n\n🔒 <i>In gruppo i dati clan sono visibili solo a <b>Capo</b>, <b>Co-Capo</b> e <b>Admin</b>. Apri la chat <b>privata</b> con il bot per l’elenco completo.</i>`
-    : '';
+  const banner = groupMenuBanner ? groupMenuBanner : '';
   if (!clanTag) {
     return (
       `⚔️ <b>CoCBoard</b>\n` +
@@ -134,7 +191,7 @@ function formatAuthedMenuIntro({
       `• Imposta un tag: <code>/setclan #TAG</code>\n\n` +
       `Poi sblocchi: membri, CWL, bonus, guerre.` +
       hint +
-      lock
+      banner
     );
   }
   const src = hasClanOverride ? '\n📌 <i>Clan da /setclan (override)</i>' : '\n📌 <i>Clan dal profilo villaggio</i>';
@@ -147,7 +204,30 @@ function formatAuthedMenuIntro({
     `${DIV}\n\n` +
     `Scegli una sezione qui sotto o <code>/help</code>.` +
     hint +
-    lock
+    banner
+  );
+}
+
+function formatTutorialStep(step) {
+  if (step === 1) {
+    return (
+      `📚 <b>CoCBoard — passo 1/3</b>\n\n` +
+      `🔍 <b>Cerca</b> e <b>Classifica</b> funzionano anche senza clan.\n\n` +
+      `<i><code>/skip</code> in chat per saltare il tutorial.</i>`
+    );
+  }
+  if (step === 2) {
+    return (
+      `📚 <b>Passo 2/3</b>\n\n` +
+      `Nel <b>gruppo o canale</b> i dati clan (membri, CWL, bonus…) servono che un <b>Capo / Co-Capo / Admin</b> abbia collegato la chat con <code>/linkclan</code> (dopo «Aggiungi a canale/gruppo» in privato).\n\n` +
+      `<i><code>/skip</code> per saltare.</i>`
+    );
+  }
+  return (
+    `📚 <b>Passo 3/3</b>\n\n` +
+    `📖 <code>/help</code> per i comandi · <b>Logout</b> nel menù.\n` +
+    `Dopo login in <b>privato</b>, tornando in gruppo sei già riconosciuto.\n\n` +
+    `Tocca <b>Apri menù</b> oppure <code>/skip</code>.`
   );
 }
 
@@ -533,18 +613,28 @@ function formatWarLog(data) {
   return formatWarLogClassic(data);
 }
 
-function formatAddBotToGroupHelp({ botUsername }) {
+function formatAddBotToGroupHelp({ botUsername, clanTag, linkToken }) {
   const u = botUsername ? `@${String(botUsername).replace(/^@/, '')}` : 'il bot';
+  const tagLine = clanTag ? `\n🏷 <b>Clan da collegare:</b> <code>${escapeHtml(clanTag)}</code>\n` : '';
+  const tokBlock =
+    linkToken ?
+      `\n${DIV2}\n🔑 <b>Il tuo TOKEN</b> (≈1h, un uso):\n<code>${escapeHtml(linkToken)}</code>\n\n` +
+        `Nel gruppo/canale (dopo aver aggiunto il bot come <b>amministratore</b>), scrivi:\n` +
+        `<code>/linkclan ${escapeHtml(linkToken)}</code>\n`
+    : '';
   return (
-    `${DIV}\n➕ <b>Aggiungi il bot a un gruppo / canale</b>\n${DIV}\n\n` +
-      `<b>Chi può farlo</b>\n` +
-      `Solo account CoCBoard con ruolo <b>Capo</b>, <b>Co-Capo</b> o <b>Admin</b> (come sulla dashboard).\n\n` +
+    `${DIV}\n➕ <b>Collegare il bot a gruppo / canale</b>\n${DIV}\n` +
+      tagLine +
+      `\n<b>Requisiti</b>\n` +
+      `• Ruolo sito: <b>Capo</b>, <b>Co-Capo</b> o <b>Admin</b>\n` +
+      `• Il clan sopra deve essere quello della chat che stai collegando\n\n` +
       `<b>Passi</b>\n` +
-      `1️⃣ Aggiungi ${u} al gruppo o canale (in canale: aggiungi come amministratore se richiesto).\n` +
-      `2️⃣ In <b>chat privata</b> con il bot hai già fatto login: da lì puoi usare Membri, CWL, bonus anche quando scrivi nel gruppo.\n` +
-      `3️⃣ <b>Non</b> inviare mai password o chiavi API nel gruppo.\n` +
-      `4️⃣ Per comandi rapidi: <code>/start</code> nel gruppo mostra il menù ospite; i dati clan richiedono login in privato.\n\n` +
-      `<i>Suggerimento: fissa il messaggio di benvenuto del bot per il clan.</i>`
+      `1️⃣ Aggiungi ${u} al gruppo o canale e rendilo <b>amministratore</b> (lettura messaggi, invio messaggi).\n` +
+      `2️⃣ Invia il comando qui sotto <b>in quella chat</b> (non in privato).\n` +
+      `3️⃣ I membri del clan (registrati con API CoC) vedranno i menù in quella chat dopo il collegamento.\n` +
+      `4️⃣ Password e chiave API <b>mai</b> nel gruppo — solo in privato.\n` +
+      tokBlock +
+      `\n<i>Per scollegare (solo leader):</i> <code>/unlinkclan</code> <i>nel gruppo.</i>`
   );
 }
 
@@ -717,6 +807,9 @@ module.exports = {
   formatWarLogClassic,
   formatWarLogCwlHistory,
   formatAddBotToGroupHelp,
+  formatGroupMenuBanner,
+  formatGroupClanGateLong,
+  formatTutorialStep,
   formatBonuses,
   formatBonusesPage,
   formatRankings,

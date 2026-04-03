@@ -34,6 +34,12 @@ const db = window.sb;
     }
   } catch (_) {}
 })();
+(function readOpenTabFromQuery() {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('open_tab') === 'members') window.__cocboardOpenTab = 'members';
+  } catch (_) {}
+})();
 (function consumeTelegramWebHandoffFromUrl() {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -51,6 +57,7 @@ const db = window.sb;
         params.delete('tg_h');
         params.delete('h');
         params.delete('cwl_round');
+        params.delete('open_tab');
         const qs = params.toString();
         window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
       } catch (e) {
@@ -813,8 +820,26 @@ async function showApp(sessionUser) {
   }
 
   queueMicrotask(() => {
-    void applyCocboardTelegramWebDeepLink();
+    void applyCocboardTelegramWebDeepLinks();
   });
+}
+
+/** Dopo login: priorità a deep link CWL; altrimenti tab Clan (handoff bot con <code>open_tab=members</code>). */
+async function applyCocboardTelegramWebDeepLinks() {
+  try {
+    const rn = window.__cocboardOpenCwlRound;
+    if (rn != null && window._userClanTag) {
+      await applyCocboardTelegramWebDeepLink();
+      return;
+    }
+    const ot = window.__cocboardOpenTab;
+    if (ot === 'members' && window._userClanTag) {
+      delete window.__cocboardOpenTab;
+      activateTab('members');
+    }
+  } catch (e) {
+    console.warn('[CoCBoard] Deep link web (tab / CWL)', e);
+  }
 }
 
 /** Dopo login: apre Registri → Cronologia leghe → modal turni (da link bot / Mini App). */

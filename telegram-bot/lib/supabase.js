@@ -76,6 +76,7 @@ async function saveAuthSession(telegramUserId, session, user) {
     clan_tag: prev?.clan_tag ?? null,
     webapp_handoff_code: null,
     webapp_handoff_expires_at: null,
+    tutorial_completed_at: prev?.tutorial_completed_at ?? null,
     updated_at: now,
   };
   if (!prev) row.created_at = now;
@@ -156,6 +157,92 @@ async function deleteTelegramLink(telegramUserId) {
 }
 
 /** Codice monouso (≈10 min) per aprire il sito da Telegram Mini App con sessione esistente. */
+async function markTutorialCompleted(telegramUserId) {
+  const client = sb();
+  if (!client) return;
+  const now = new Date().toISOString();
+  await client
+    .from('telegram_links')
+    .update({ tutorial_completed_at: now, updated_at: now })
+    .eq('telegram_user_id', telegramUserId);
+}
+
+/** chatId: ctx.chat.id (number) */
+async function getTelegramChatLink(chatId) {
+  const client = sb();
+  if (!client) return null;
+  const id = typeof chatId === 'bigint' ? Number(chatId) : Number(chatId);
+  const { data, error } = await client.from('telegram_chat_links').select('*').eq('telegram_chat_id', id).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data || null;
+}
+
+async function upsertTelegramChatLink(chatId, clanTag, linkedByTelegramUserId, chatType) {
+  const client = sb();
+  if (!client) throw new Error('Supabase non configurato.');
+  const id = Number(chatId);
+  const norm = String(clanTag || '').trim().toUpperCase();
+  const tag = norm.startsWith('#') ? norm : `#${norm}`;
+  const now = new Date().toISOString();
+  const { data: ex } = await client.from('telegram_chat_links').select('created_at').eq('telegram_chat_id', id).maybeSingle();
+  const createdAt = ex?.created_at || now;
+  const { error } = await client.from('telegram_chat_links').upsert(
+    {
+      telegram_chat_id: id,
+      clan_tag: tag,
+      linked_by_telegram_user_id: linkedByTelegramUserId ?? null,
+      chat_type: chatType || null,
+      updated_at: now,
+      created_at: createdAt,
+    },
+    { onConflict: 'telegram_chat_id' }
+  );
+  if (error) throw new Error(error.message);
+}
+
+async function deleteTelegramChatLink(chatId) {
+  const client = sb();
+  if (!client) throw new Error('Supabase non configurato.');
+  const { error } = await client.from('telegram_chat_links').delete().eq('telegram_chat_id', Number(chatId));
+  if (error) throw new Error(error.message);
+}
+
+async function createPendingChatLink(telegramUserId, clanTagRaw) {
+  const client = sb();
+  if (!client) throw new Error('Supabase non configurato.');
+  const norm = String(clanTagRaw || '').trim().toUpperCase();
+  const tag = norm.startsWith('#') ? norm : `#${norm}`;
+  const token = crypto.randomBytes(5).toString('hex');
+  const exp = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  await client.from('telegram_pending_chat_links').delete().eq('telegram_user_id', telegramUserId);
+  const { error } = await client.from('telegram_pending_chat_links').insert({
+    token,
+    telegram_user_id: telegramUserId,
+    clan_tag: tag,
+    expires_at: exp,
+  });
+  if (error) throw new Error(error.message);
+  return token;
+}
+
+/** Ritorna clan_tag se valido; consuma il token. */
+async function consumePendingChatLink(token, telegramUserId) {
+  const client = sb();
+  if (!client) throw new Error('Supabase non configurato.');
+  const t = String(token || '').trim().toLowerCase();
+  if (t.length < 8) return null;
+  const { data, error } = await client.from('telegram_pending_chat_links').select('*').eq('token', t).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  if (Number(data.telegram_user_id) !== Number(telegramUserId)) return null;
+  if (new Date(data.expires_at).getTime() < Date.now()) {
+    await client.from('telegram_pending_chat_links').delete().eq('token', t);
+    return null;
+  }
+  await client.from('telegram_pending_chat_links').delete().eq('token', t);
+  return data.clan_tag;
+}
+
 async function createWebAppHandoff(telegramUserId) {
   const client = sb();
   if (!client) throw new Error('Supabase non configurato.');
@@ -200,4 +287,10 @@ module.exports = {
   deleteTelegramLink,
   fetchBonusesForClan,
   createWebAppHandoff,
+  markTutorialCompleted,
+  getTelegramChatLink,
+  upsertTelegramChatLink,
+  deleteTelegramChatLink,
+  createPendingChatLink,
+  consumePendingChatLink,
 };
