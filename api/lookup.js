@@ -19,6 +19,9 @@ module.exports = async (req, res) => {
             proxyPath = `/rankings?type=${encodeURIComponent(rankType)}&locationId=${encodeURIComponent(locationId)}`;
         } else if (type === 'locations') {
             proxyPath = '/locations';
+        } else if (type === 'proxy-ip') {
+            // IP pubblico in uscita del proxy Render (quello da whitelist su developer.clashofclans.com)
+            proxyPath = '/myip';
         } else if (type === 'ping') {
             // Keep-alive esterno verso Render: il self-ping su localhost non evita spin-down / cambio IP.
             const authHeader = req.headers['authorization'] || '';
@@ -55,7 +58,7 @@ module.exports = async (req, res) => {
             const ms = Date.now() - started;
             return res.status(200).json({ ok: r.ok, status: r.status, ms });
         } else {
-            return res.status(400).json({ error: 'type non valido. Usa: player, search-clans, rankings, locations, ping' });
+            return res.status(400).json({ error: 'type non valido. Usa: player, search-clans, rankings, locations, proxy-ip, ping' });
         }
         const r = await fetch(`${proxyUrl}${proxyPath}`, {
             headers: { 'x-sync-key': process.env.SYNC_SECRET || '' },
