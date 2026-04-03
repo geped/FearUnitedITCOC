@@ -1,0 +1,19 @@
+{
+  "name": "cocboard-telegram-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bot Telegram per CoCBoard: stessi dati del sito via API Vercel + Supabase.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "express": "^4.21.0",
+    "telegraf": "^4.16.3"
+  }
+}

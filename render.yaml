@@ -1,0 +1,31 @@
+# Blueprint Render — solo bot Telegram (cartella telegram-bot/).
+# Dashboard: New → Blueprint → connetti repo → importa questo file.
+# Poi imposta le variabili "secret" nella UI (TELEGRAM_BOT_TOKEN, Supabase, ecc.).
+
+services:
+  - type: web
+    name: cocboard-telegram-bot
+    runtime: node
+    region: frankfurt
+    plan: free
+    rootDir: telegram-bot
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: COCBOARD_API_BASE
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET_TOKEN
+        sync: false
+      - key: DEFAULT_CLAN_TAG
+        value: "#2J2VLPP9R"
+      - key: COCBOARD_SITE_HOME_URL
+        sync: false
