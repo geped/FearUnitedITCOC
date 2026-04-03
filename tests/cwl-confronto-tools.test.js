@@ -23,6 +23,9 @@ function _buildCwlAttackPlanner(round) {
     return score;
   }
 
+  const usWarRank = new Map(us.map((m, i) => [m.tag, i + 1]));
+  const themWarRank = new Map(them.map((m, i) => [m.tag, i + 1]));
+
   const assignedTags = new Set();
   const out = [];
   for (const a of us) {
@@ -45,11 +48,11 @@ function _buildCwlAttackPlanner(round) {
     out.push({
       attackerName: a.name || '—',
       attackerTag: a.tag || '',
-      attackerPosition: a.mapPosition ?? '?',
+      attackerPosition: usWarRank.get(a.tag) ?? '?',
       attackerThLevel: a.thLevel || 0,
       targetName: best?.name || '—',
       targetTag: best?.tag || '',
-      targetPosition: best?.mapPosition ?? '?',
+      targetPosition: themWarRank.get(best?.tag) ?? '?',
       targetThLevel: best?.thLevel || 0,
       targetStars,
       targetDestPct,
@@ -125,25 +128,26 @@ test('planner: evita target già 3-stellati, preferisce base vergine', () => {
   assert.equal(rows[0].targetStars, 0);
 });
 
-test('planner: include posizione attaccante e target nel risultato', () => {
+test('planner: posizione è war rank (1…N) non mapPosition raw', () => {
+  // mapPosition alto (es. 25) ma sono l'unico in guerra → war rank = 1
   const round = {
     state: 'inWar',
     attacksPerMember: 1,
     clan: {
       members: [
-        { tag: '#A', name: 'Alpha', thLevel: 14, mapPosition: 3, attacks: [] },
+        { tag: '#A', name: 'Alpha', thLevel: 14, mapPosition: 25, attacks: [] },
       ],
     },
     opponent: {
       members: [
-        { tag: '#X', name: 'Xray', thLevel: 14, mapPosition: 3 },
+        { tag: '#X', name: 'Xray', thLevel: 14, mapPosition: 22 },
       ],
     },
   };
 
   const rows = _buildCwlAttackPlanner(round);
-  assert.equal(rows[0].attackerPosition, 3);
-  assert.equal(rows[0].targetPosition, 3);
+  assert.equal(rows[0].attackerPosition, 1, 'war rank deve essere 1, non 25');
+  assert.equal(rows[0].targetPosition, 1, 'war rank deve essere 1, non 22');
   assert.equal(rows[0].attackerThLevel, 14);
   assert.equal(rows[0].targetThLevel, 14);
 });

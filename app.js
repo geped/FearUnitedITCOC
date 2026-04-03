@@ -3941,6 +3941,10 @@ function _buildCwlAttackPlanner(round) {
   const us = [...(round?.clan?.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
   const them = [...(round?.opponent?.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
 
+  // War rank = position within THIS war (1…N), regardless of clan roster position
+  const usWarRank = new Map(us.map((m, i) => [m.tag, i + 1]));
+  const themWarRank = new Map(them.map((m, i) => [m.tag, i + 1]));
+
   function scoreTarget(attacker, target) {
     const stars = target.bestOpponentAttack?.stars ?? 0;
     if (stars >= 3) return -9999;
@@ -3950,7 +3954,8 @@ function _buildCwlAttackPlanner(round) {
     if (thDiff < 0) score -= 25;
     score += (3 - stars) * 8;
     if (!target.bestOpponentAttack) score += 12;
-    if (target.mapPosition === attacker.mapPosition) score += 10;
+    // Mirror bonus: same war rank (not raw mapPosition)
+    if (usWarRank.get(attacker.tag) === themWarRank.get(target.tag)) score += 10;
     return score;
   }
 
@@ -3977,11 +3982,11 @@ function _buildCwlAttackPlanner(round) {
     out.push({
       attackerName: a.name || '—',
       attackerTag: a.tag || '',
-      attackerPosition: a.mapPosition ?? '?',
+      attackerPosition: usWarRank.get(a.tag) ?? '?',
       attackerThLevel: a.thLevel || 0,
       targetName: best?.name || '—',
       targetTag: best?.tag || '',
-      targetPosition: best?.mapPosition ?? '?',
+      targetPosition: themWarRank.get(best?.tag) ?? '?',
       targetThLevel: best?.thLevel || 0,
       targetStars,
       targetDestPct,
