@@ -56,6 +56,11 @@ async function searchClans(q) {
   return fetchJson('/api/lookup', { type: 'search-clans', q });
 }
 
+/** Classifiche CoC (stesso endpoint del sito: Italia vs globale). */
+async function rankings(rankType, locationId) {
+  return fetchJson('/api/lookup', { type: 'rankings', rankType, locationId });
+}
+
 /** Stessa registrazione del sito (POST /api/register-with-coc). */
 async function registerWithCoc({ playerTag, apiToken, password, email }) {
   const url = new URL('/api/register-with-coc', apiBase() + '/');
@@ -88,5 +93,6 @@ module.exports = {
   warLog,
   lookupPlayer,
   searchClans,
+  rankings,
   registerWithCoc,
 };

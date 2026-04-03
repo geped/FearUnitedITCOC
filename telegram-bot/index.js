@@ -13,17 +13,83 @@ const PORT = Number(process.env.PORT) || 3001;
 
 /** Wizard registrazione / login (testo multi-step) */
 const pendingAuth = new Map();
+/** Cerca giocatore/clan (testo) — anche senza login */
+const pendingSearch = new Map();
 
-function buildGuestKb() {
+let cachedTgBotUsername = (process.env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '');
+
+async function ensureTgBotUsername(telegram) {
+  if (cachedTgBotUsername) return cachedTgBotUsername;
+  try {
+    const me = await telegram.getMe();
+    cachedTgBotUsername = (me.username || '').replace(/^@/, '');
+  } catch (_) {}
+  return cachedTgBotUsername;
+}
+
+function privateChatUrl(username) {
+  const u = (username || '').replace(/^@/, '');
+  return u ? `https://t.me/${u}` : '';
+}
+
+function chatKind(ctx) {
+  return ctx.chat?.type || 'private';
+}
+
+function isGroupLike(ctx) {
+  const t = chatKind(ctx);
+  return t === 'group' || t === 'supergroup';
+}
+
+function guardUserId(ctx) {
+  return ctx.from?.id ?? ctx.callbackQuery?.from?.id;
+}
+
+function isPublicCallbackData(d) {
+  if (!d) return false;
+  return (
+    d === 'menu' ||
+    d === 'nav_search' ||
+    d === 'nav_rank' ||
+    d === 'srch_p' ||
+    d === 'srch_c' ||
+    d === 'rk_p_i' ||
+    d === 'rk_p_g' ||
+    d === 'rk_c_i' ||
+    d === 'rk_c_g' ||
+    d === 'noop'
+  );
+}
+
+/** Ospite in chat privata: niente Logout (non sei dentro). */
+function buildPrivateGuestKb() {
   const rows = [
     [Markup.button.callback('🔑 Accedi', 'auth_login')],
     [Markup.button.callback('📝 Registrati', 'auth_register')],
-    [Markup.button.callback('🚪 Logout — cancella sessione', 'auth_logout')],
+    [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
     [Markup.button.callback('ℹ️ Come funziona', 'auth_guest_help')],
   ];
   const site = process.env.COCBOARD_SITE_HOME_URL;
   if (site && String(site).trim()) {
     rows.push([Markup.button.url('🌐 Apri il sito CoCBoard', String(site).trim())]);
+  }
+  return Markup.inlineKeyboard(rows);
+}
+
+/** Gruppo: login solo in privato; cerca/classifica pubbliche. */
+function buildGroupGuestKb(botUsername) {
+  const rows = [];
+  const url = privateChatUrl(botUsername);
+  if (url) {
+    rows.push([Markup.button.url('🔐 Accedi / Registrati (privato)', url)]);
+  }
+  rows.push(
+    [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
+    [Markup.button.callback('ℹ️ Guida gruppo', 'auth_guest_help')]
+  );
+  const site = process.env.COCBOARD_SITE_HOME_URL;
+  if (site && String(site).trim()) {
+    rows.push([Markup.button.url('🌐 Sito CoCBoard', String(site).trim())]);
   }
   return Markup.inlineKeyboard(rows);
 }
@@ -55,9 +121,51 @@ async function resolveClanTagForCommands(telegramUserId, user) {
   return c.clanTag;
 }
 
+async function handlePendingSearch(ctx) {
+  const uid = ctx.from?.id;
+  if (uid == null) return;
+  const p = pendingSearch.get(uid);
+  if (!p) return;
+  const textRaw = (ctx.message?.text || '').trim();
+  if (textRaw === '/cancel') {
+    pendingSearch.delete(uid);
+    await ctx.reply('Ricerca annullata.', backMenuKb());
+    return;
+  }
+  if (!textRaw || textRaw.startsWith('/')) return;
+  pendingSearch.delete(uid);
+  try {
+    if (p.kind === 'player') {
+      const tag = fmt.parseTagArg(textRaw);
+      if (!tag) {
+        await ctx.reply('Tag non valido. Esempio: <code>#2ABC</code>', { parse_mode: 'HTML', ...backMenuKb() });
+        return;
+      }
+      const data = await api.lookupPlayer(tag);
+      await ctx.reply(fmt.formatPlayerSummary(data), { parse_mode: 'HTML', ...backMenuKb() });
+      return;
+    }
+    if (p.kind === 'clan') {
+      if (textRaw.length < 3) {
+        await ctx.reply('Scrivi almeno 3 caratteri per il nome del clan.', backMenuKb());
+        return;
+      }
+      const data = await api.searchClans(textRaw);
+      const txt = fmt.formatClanSearch(data.items || []);
+      await ctx.reply(txt, { parse_mode: 'HTML', ...backMenuKb() });
+    }
+  } catch (e) {
+    await ctx.reply(`❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML', ...backMenuKb() });
+  }
+}
+
 async function handlePendingMessage(ctx) {
   const uid = ctx.from?.id;
   if (uid == null) return;
+  if (isGroupLike(ctx)) {
+    await ctx.reply(fmt.formatPrivateOnlyWizard(), { parse_mode: 'HTML' });
+    return;
+  }
   const textRaw = (ctx.message.text || '').trim();
   if (textRaw === '/cancel') {
     pendingAuth.delete(uid);
@@ -176,8 +284,8 @@ function safeAnswerCb(ctx) {
 
 function guardMiddleware() {
   return async (ctx, next) => {
-    const uid = ctx.from?.id;
-    if (uid == null) return;
+    const uid = guardUserId(ctx);
+    if (uid == null) return next();
     if (!isUserAllowed(uid)) {
       if (ctx.callbackQuery) await ctx.answerCbQuery('Accesso non autorizzato.').catch(() => {});
       else await ctx.reply('Accesso non autorizzato.').catch(() => {});
@@ -193,8 +301,12 @@ function guardMiddleware() {
 }
 
 async function sendGuestMenu(ctx) {
-  const text = fmt.formatGuestWelcome();
-  const kb = buildGuestKb();
+  await ensureTgBotUsername(ctx.telegram);
+  const group = isGroupLike(ctx);
+  const text = group
+    ? fmt.formatGuestWelcomeGroup(privateChatUrl(cachedTgBotUsername))
+    : fmt.formatGuestWelcomePrivate();
+  const kb = group ? buildGroupGuestKb(cachedTgBotUsername) : buildPrivateGuestKb();
   if (ctx.callbackQuery) {
     try {
       await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
@@ -208,10 +320,14 @@ async function sendGuestMenu(ctx) {
 
 async function mainMenuKeyboard(uid, user, hasClanTag) {
   const rows = [];
+  rows.push([
+    Markup.button.callback('🔍 Cerca', 'nav_search'),
+    Markup.button.callback('📊 Classifica', 'nav_rank'),
+  ]);
   if (hasClanTag) {
     rows.push(
       [Markup.button.callback('👥 Membri', 'mb0'), Markup.button.callback('🏰 Info clan', 'info')],
-      [Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('🎁 Bonus', 'bonus')],
+      [Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('🎁 Bonus', 'bonus:0')],
       [Markup.button.callback('📜 Registro guerre', 'war')]
     );
     if (user?.user_metadata?.coc_tag) {
@@ -246,6 +362,7 @@ async function sendMainMenu(ctx) {
     clanTag,
     clanName,
     hasClanOverride: hasOverride,
+    chatHint: isGroupLike(ctx) ? 'Sei in gruppo: i dati sono quelli del tuo account Telegram.' : '',
   });
   const kb = await mainMenuKeyboard(uid, user, !!clanTag);
   if (ctx.callbackQuery) {
@@ -302,7 +419,7 @@ async function refreshWebhookDropPending(telegram) {
   try {
     await telegram.setWebhook(url, {
       secret_token: secretToken || undefined,
-      allowed_updates: ['message', 'callback_query'],
+      allowed_updates: ['message', 'callback_query', 'my_chat_member'],
       drop_pending_updates: true,
     });
     console.log('[cocboard-bot] setWebhook(drop_pending_updates) dopo logout');
@@ -324,6 +441,7 @@ async function performFullLogout(ctx, { viaCommand }) {
     console.error('[cocboard-bot] clearAuthSession', e.message || e);
   }
   pendingAuth.delete(uid);
+  pendingSearch.delete(uid);
   await refreshWebhookDropPending(ctx.telegram);
   if (viaCommand) {
     await ctx
@@ -421,6 +539,49 @@ async function editOrReplyCwl(ctx, text, kb) {
   }
 }
 
+function buildBonusKb(page, pages) {
+  const row = [];
+  if (page > 0) row.push(Markup.button.callback('◀', `bonus:${page - 1}`));
+  row.push(Markup.button.callback(`· ${page + 1}/${pages} ·`, 'noop'));
+  if (page < pages - 1) row.push(Markup.button.callback('▶', `bonus:${page + 1}`));
+  return Markup.inlineKeyboard([row, [Markup.button.callback('« Menù', 'menu')]]);
+}
+
+function rankPickKb() {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('⭐ Gioc. Italia', 'rk_p_i'),
+      Markup.button.callback('⭐ Gioc. Mondo', 'rk_p_g'),
+    ],
+    [
+      Markup.button.callback('🏰 Clan Italia', 'rk_c_i'),
+      Markup.button.callback('🏰 Clan Mondo', 'rk_c_g'),
+    ],
+    [Markup.button.callback('« Menù', 'menu')],
+  ]);
+}
+
+function searchPickKb() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('👤 Villaggio (#tag)', 'srch_p'), Markup.button.callback('🏰 Clan (nome)', 'srch_c')],
+    [Markup.button.callback('« Menù', 'menu')],
+  ]);
+}
+
+async function replyRanking(ctx, rankType, locationId, areaLabel) {
+  const data = await api.rankings(rankType, locationId);
+  const txt = fmt.formatRankings(data, rankType, areaLabel);
+  const kb = Markup.inlineKeyboard([
+    [Markup.button.callback('« Classifiche', 'nav_rank')],
+    [Markup.button.callback('« Menù', 'menu')],
+  ]);
+  try {
+    await ctx.editMessageText(txt, { parse_mode: 'HTML', ...kb });
+  } catch (_) {
+    await ctx.reply(txt, { parse_mode: 'HTML', ...kb });
+  }
+}
+
 function setupBot(bot) {
   bot.use(guardMiddleware());
 
@@ -429,10 +590,15 @@ function setupBot(bot) {
     const txt = (ctx.message?.text || '').trim();
     if (txt === '/start') {
       pendingAuth.delete(ctx.from.id);
+      pendingSearch.delete(ctx.from.id);
       return next();
     }
     if (pendingAuth.has(ctx.from.id) && ctx.message?.text && !txt.startsWith('/')) {
       await handlePendingMessage(ctx);
+      return;
+    }
+    if (pendingSearch.has(ctx.from.id) && ctx.message?.text && !txt.startsWith('/')) {
+      await handlePendingSearch(ctx);
       return;
     }
     return next();
@@ -442,14 +608,28 @@ function setupBot(bot) {
     const uid = ctx.from?.id;
     if (uid == null) return next();
     const t = (ctx.message?.text || '').trim();
-    if (t.startsWith('/start') || t.startsWith('/help')) return next();
+    if (
+      t.startsWith('/start') ||
+      t.startsWith('/help') ||
+      t.startsWith('/player') ||
+      t.startsWith('/cerca_clan') ||
+      t.startsWith('/cerca') ||
+      t.startsWith('/classifica')
+    ) {
+      return next();
+    }
     if (ctx.callbackQuery?.data?.startsWith('auth_')) return next();
+    if (pendingSearch.has(uid)) return next();
+    const d = ctx.callbackQuery?.data || '';
+    if (isPublicCallbackData(d)) return next();
 
     const session = await tauth.getValidSession(uid);
     if (!session) {
       if (ctx.callbackQuery) {
-        await ctx.answerCbQuery('🔒 Accedi prima').catch(() => {});
-        await ctx.reply(fmt.formatGuestSnack(), { parse_mode: 'HTML', ...buildGuestKb() }).catch(() => {});
+        await ctx.answerCbQuery('🔒 Accedi per il clan / bonus / CWL.').catch(() => {});
+        await ensureTgBotUsername(ctx.telegram);
+        const gkb = isGroupLike(ctx) ? buildGroupGuestKb(cachedTgBotUsername) : buildPrivateGuestKb();
+        await ctx.reply(fmt.formatGuestSnack(), { parse_mode: 'HTML', ...gkb }).catch(() => {});
         return;
       }
       if (ctx.message && ctx.message.text) {
@@ -486,26 +666,29 @@ function setupBot(bot) {
     if (!ctx.from?.id) return;
     const sess = await tauth.getValidSession(ctx.from.id);
     if (!sess) {
-      await ctx.reply(fmt.formatGuestHelp(), { parse_mode: 'HTML', ...buildGuestKb() });
+      await ensureTgBotUsername(ctx.telegram);
+      const text = isGroupLike(ctx) ? fmt.formatGroupHelp() : fmt.formatGuestHelp();
+      const kb = isGroupLike(ctx) ? buildGroupGuestKb(cachedTgBotUsername) : buildPrivateGuestKb();
+      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
       return;
     }
-    const u = sess.user;
     const lines = [
       `${fmt.DIV}`,
-      `❓ <b>Comandi</b>`,
+      `📖 <b>Aiuto CoCBoard</b>`,
       `${fmt.DIV}`,
       '',
-      `🏰 <b>Clan</b>`,
-      `<code>/setclan #TAG</code> — altro clan (override)\n<code>/logout_clan</code> — rimuovi override`,
+      `🔍 <b>Cerca e classifica</b> (anche senza clan)`,
+      `Pulsanti <b>Cerca</b> e <b>Classifica</b>, oppure <code>/player</code> · <code>/cerca_clan</code>`,
       '',
-      `📊 <b>Dati</b>`,
+      `🏰 <b>Clan</b>`,
+      `<code>/setclan #TAG</code> — altro clan\n<code>/logout_clan</code> — rimuovi override`,
+      '',
+      `📊 <b>Dati clan</b>`,
       `<code>/membri</code> · <code>/info</code> · <code>/cwl</code> · <code>/bonus</code> · <code>/guerre</code>`,
       '',
-      `🔍 <code>/player #TAG</code> · <code>/cerca_clan nome</code>`,
+      `🚪 <code>/esci</code> o <b>Logout</b> nel menù`,
       '',
-      `🚪 <code>/esci</code> o tasto <b>Logout</b> — chiudi sessione e svuota coda messaggi`,
-      '',
-      `<code>/start</code> — menù`,
+      `<code>/start</code> — menù principale`,
     ];
     await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
   });
@@ -592,14 +775,9 @@ function setupBot(bot) {
       } catch (_) {
         rows = null;
       }
-      const txt = fmt.formatBonuses(rows || []);
-      const parts = fmt.chunkForTelegram(txt);
-      for (let i = 0; i < parts.length; i++) {
-        await ctx.reply(parts[i], {
-          parse_mode: 'HTML',
-          ...(i === parts.length - 1 ? backMenuKb() : {}),
-        });
-      }
+      const { text, page, pages } = fmt.formatBonusesPage(rows || [], 0, clanTag);
+      const kb = pages > 1 ? buildBonusKb(page, pages) : backMenuKb();
+      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
     });
   });
 
@@ -631,6 +809,14 @@ function setupBot(bot) {
     await ctx.reply(fmt.formatClanSearch(data.items || []), { parse_mode: 'HTML', ...backMenuKb() });
   });
 
+  bot.command('cerca', async (ctx) => {
+    await ctx.reply(fmt.formatSearchMenuIntro(), { parse_mode: 'HTML', ...searchPickKb() });
+  });
+
+  bot.command('classifica', async (ctx) => {
+    await ctx.reply(fmt.formatRankMenuIntro(), { parse_mode: 'HTML', ...rankPickKb() });
+  });
+
   bot.command('clan', async (ctx) => {
     await ctx.reply(
       `Usa <code>/setclan #TAG</code> per il clan da mostrare,\no <code>/cerca_clan nome</code> per cercare.`,
@@ -640,6 +826,19 @@ function setupBot(bot) {
 
   bot.action('auth_login', async (ctx) => {
     safeAnswerCb(ctx);
+    if (isGroupLike(ctx)) {
+      await ensureTgBotUsername(ctx.telegram);
+      const url = privateChatUrl(cachedTgBotUsername);
+      if (url) {
+        await ctx.reply(`🔐 <b>Accedi in privato</b>\n\n<a href="${url}">Apri la chat con il bot</a>`, {
+          parse_mode: 'HTML',
+        });
+      } else {
+        await ctx.reply(fmt.formatPrivateOnlyWizard(), { parse_mode: 'HTML' });
+      }
+      return;
+    }
+    pendingSearch.delete(ctx.from.id);
     pendingAuth.set(ctx.from.id, { kind: 'login', step: 1 });
     await ctx.reply(
       '🔑 <b>Accedi</b> (come su CoCBoard)\n\n' +
@@ -650,6 +849,19 @@ function setupBot(bot) {
 
   bot.action('auth_register', async (ctx) => {
     safeAnswerCb(ctx);
+    if (isGroupLike(ctx)) {
+      await ensureTgBotUsername(ctx.telegram);
+      const url = privateChatUrl(cachedTgBotUsername);
+      if (url) {
+        await ctx.reply(`🔐 <b>Registrati in privato</b>\n\n<a href="${url}">Apri la chat con il bot</a>`, {
+          parse_mode: 'HTML',
+        });
+      } else {
+        await ctx.reply(fmt.formatPrivateOnlyWizard(), { parse_mode: 'HTML' });
+      }
+      return;
+    }
+    pendingSearch.delete(ctx.from.id);
     pendingAuth.set(ctx.from.id, { kind: 'reg', step: 1 });
     await ctx.reply(
       '📝 <b>Registrati</b>\n\nInvia il <b>tag giocatore</b> (es. <code>#2ABC</code>).',
@@ -659,10 +871,13 @@ function setupBot(bot) {
 
   bot.action('auth_guest_help', async (ctx) => {
     safeAnswerCb(ctx);
+    await ensureTgBotUsername(ctx.telegram);
+    const text = isGroupLike(ctx) ? fmt.formatGroupHelp() : fmt.formatGuestHelp();
+    const kb = isGroupLike(ctx) ? buildGroupGuestKb(cachedTgBotUsername) : buildPrivateGuestKb();
     try {
-      await ctx.editMessageText(fmt.formatGuestHelp(), { parse_mode: 'HTML', ...buildGuestKb() });
+      await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
     } catch (_) {
-      await ctx.reply(fmt.formatGuestHelp(), { parse_mode: 'HTML', ...buildGuestKb() });
+      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
     }
   });
 
@@ -717,15 +932,95 @@ function setupBot(bot) {
 
   bot.action('helpbtn', async (ctx) => {
     safeAnswerCb(ctx);
+    const body =
+      `${fmt.DIV}\n📖 <b>Aiuto rapido</b>\n${fmt.DIV}\n\n` +
+      `• <b>Cerca / Classifica</b> — pulsanti nel menù\n` +
+      `• <code>/setclan</code> · <code>/player</code> · <code>/cerca_clan</code>\n` +
+      `• <code>/esci</code> — logout\n` +
+      `• Comando completo: <code>/help</code>`;
     await ctx
-      .editMessageText(
-        `${fmt.DIV}\n🔍 <b>Aiuto</b>\n${fmt.DIV}\n\n` +
-          `<code>/setclan</code> · <code>/player</code> · <code>/cerca_clan</code>\n<code>/esci</code> · <code>/help</code>`,
-        { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('« Menù', 'menu')]]) }
-      )
+      .editMessageText(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('« Menù', 'menu')]]) })
       .catch(async () => {
-        await ctx.reply('Usa /help');
+        await ctx.reply(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('« Menù', 'menu')]]) });
       });
+  });
+
+  bot.action('nav_search', async (ctx) => {
+    safeAnswerCb(ctx);
+    const intro = fmt.formatSearchMenuIntro();
+    try {
+      await ctx.editMessageText(intro, { parse_mode: 'HTML', ...searchPickKb() });
+    } catch (_) {
+      await ctx.reply(intro, { parse_mode: 'HTML', ...searchPickKb() });
+    }
+  });
+
+  bot.action('nav_rank', async (ctx) => {
+    safeAnswerCb(ctx);
+    const intro = fmt.formatRankMenuIntro();
+    try {
+      await ctx.editMessageText(intro, { parse_mode: 'HTML', ...rankPickKb() });
+    } catch (_) {
+      await ctx.reply(intro, { parse_mode: 'HTML', ...rankPickKb() });
+    }
+  });
+
+  bot.action('srch_p', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!ctx.from?.id) return;
+    pendingAuth.delete(ctx.from.id);
+    pendingSearch.set(ctx.from.id, { kind: 'player' });
+    await ctx.reply(
+      '👤 Invia il <b>tag villaggio</b> (es. <code>#2ABC</code>).\n<code>/cancel</code> per annullare.',
+      { parse_mode: 'HTML' }
+    );
+  });
+
+  bot.action('srch_c', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!ctx.from?.id) return;
+    pendingAuth.delete(ctx.from.id);
+    pendingSearch.set(ctx.from.id, { kind: 'clan' });
+    await ctx.reply(
+      '🏰 Invia <b>parte del nome</b> del clan (min. 3 caratteri).\n<code>/cancel</code> per annullare.',
+      { parse_mode: 'HTML' }
+    );
+  });
+
+  bot.action('rk_p_i', async (ctx) => {
+    safeAnswerCb(ctx);
+    try {
+      await replyRanking(ctx, 'players', fmt.RANK_LOCATION_ITALY, 'Italia');
+    } catch (e) {
+      await ctx.reply(`❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML', ...rankPickKb() }).catch(() => {});
+    }
+  });
+
+  bot.action('rk_p_g', async (ctx) => {
+    safeAnswerCb(ctx);
+    try {
+      await replyRanking(ctx, 'players', fmt.RANK_LOCATION_GLOBAL, 'Mondo');
+    } catch (e) {
+      await ctx.reply(`❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML', ...rankPickKb() }).catch(() => {});
+    }
+  });
+
+  bot.action('rk_c_i', async (ctx) => {
+    safeAnswerCb(ctx);
+    try {
+      await replyRanking(ctx, 'clans', fmt.RANK_LOCATION_ITALY, 'Italia');
+    } catch (e) {
+      await ctx.reply(`❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML', ...rankPickKb() }).catch(() => {});
+    }
+  });
+
+  bot.action('rk_c_g', async (ctx) => {
+    safeAnswerCb(ctx);
+    try {
+      await replyRanking(ctx, 'clans', fmt.RANK_LOCATION_GLOBAL, 'Mondo');
+    } catch (e) {
+      await ctx.reply(`❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML', ...rankPickKb() }).catch(() => {});
+    }
   });
 
   bot.action(/^mb(\d+)$/, async (ctx) => {
@@ -785,8 +1080,9 @@ function setupBot(bot) {
     await editOrReplyCwl(ctx, text, kb);
   });
 
-  bot.action('bonus', async (ctx) => {
+  bot.action(/^bonus:(\d+)$/, async (ctx) => {
     safeAnswerCb(ctx);
+    const page = Number(ctx.match[1]) || 0;
     const clanTag = await resolveClanTagForCommands(ctx.from.id, ctx.cocboardUser);
     if (!clanTag) {
       await ctx.answerCbQuery('Nessun clan').catch(() => {});
@@ -798,14 +1094,13 @@ function setupBot(bot) {
     } catch (_) {
       rows = null;
     }
-    const txt = fmt.formatBonuses(rows || []);
-    const parts = fmt.chunkForTelegram(txt);
+    const { text, page: p, pages } = fmt.formatBonusesPage(rows || [], page, clanTag);
+    const kb = pages > 1 ? buildBonusKb(p, pages) : backMenuKb();
     try {
-      await ctx.editMessageText(parts[0], { parse_mode: 'HTML', ...backMenuKb() });
+      await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
     } catch (_) {
-      await ctx.reply(parts[0], { parse_mode: 'HTML', ...backMenuKb() });
+      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
     }
-    for (let i = 1; i < parts.length; i++) await ctx.reply(parts[i], { parse_mode: 'HTML' });
   });
 
   bot.action('war', async (ctx) => {
@@ -838,6 +1133,18 @@ function setupBot(bot) {
     } catch (_) {
       await ctx.reply(text, { parse_mode: 'HTML', ...backMenuKb() });
     }
+  });
+
+  bot.on('my_chat_member', async (ctx) => {
+    try {
+      const chat = ctx.chat;
+      if (!chat || (chat.type !== 'group' && chat.type !== 'supergroup')) return;
+      const me = await ctx.telegram.getMe();
+      const nn = ctx.myChatMember?.new_chat_member;
+      if (nn?.user?.id !== me.id) return;
+      if (nn.status !== 'member' && nn.status !== 'administrator') return;
+      await ctx.reply(fmt.formatGroupBotAdded(), { parse_mode: 'HTML' });
+    } catch (_) {}
   });
 
   bot.catch((err, ctx) => {
@@ -931,9 +1238,13 @@ async function main() {
       console.log(`Listening 0.0.0.0:${listenPort} webhook POST ${path}`);
       await bot.telegram.setWebhook(hookUrl, {
         secret_token: secretToken || undefined,
-        allowed_updates: ['message', 'callback_query'],
+        allowed_updates: ['message', 'callback_query', 'my_chat_member'],
         drop_pending_updates: true,
       });
+      try {
+        const me = await bot.telegram.getMe();
+        if (me.username) cachedTgBotUsername = me.username.replace(/^@/, '');
+      } catch (_) {}
       console.log('Webhook set:', hookUrl);
     });
   } else {
@@ -941,6 +1252,10 @@ async function main() {
       'Avvio long polling. Per webhook: TELEGRAM_WEBHOOK_* o deploy Render (RENDER_EXTERNAL_URL).'
     );
     await bot.launch();
+    try {
+      const me = await bot.telegram.getMe();
+      if (me.username) cachedTgBotUsername = me.username.replace(/^@/, '');
+    } catch (_) {}
     process.once('SIGINT', () => bot.stop('SIGINT'));
     process.once('SIGTERM', () => bot.stop('SIGTERM'));
   }
