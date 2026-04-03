@@ -19,18 +19,55 @@ function parseTagArg(text) {
   return t.startsWith('#') ? t : `#${t}`;
 }
 
-/** Intestazione menù principale */
-function formatMainMenuIntro({ clanLabel, clanTag, isCustomClan, defaultTag }) {
-  const clanLine = isCustomClan
-    ? `🏠 <b>Il tuo clan</b>\n<code>${escapeHtml(clanTag)}</code> · ${clanLabel}`
-    : `🏠 <b>Clan predefinito</b>\n<code>${escapeHtml(defaultTag)}</code> · ${clanLabel}\n<i>Usa 🔐 Account → Login per il tuo.</i>`;
+/** Schermata iniziale: nessun accesso senza account (come il sito). */
+function formatGuestWelcome() {
   return (
     `⚔️ <b>CoCBoard</b>\n` +
-    `<i>Dashboard clan su Telegram</i>\n\n` +
+    `<i>Stessi account del sito web.</i>\n\n` +
     `${DIV}\n` +
-    `${clanLine}\n` +
+    `🔒 <b>Accesso richiesto</b>\n` +
     `${DIV}\n\n` +
-    `Scegli un’azione qui sotto o usa <code>/help</code>.`
+    `Per usare il bot devi <b>accedere</b> o <b>registrarti</b> con le stesse credenziali della dashboard.\n\n` +
+    `<i>Durante Accedi/Registrati scrivi <code>/cancel</code> per annullare.</i>`
+  );
+}
+
+function formatGuestSnack() {
+  return '🔒 Accedi o registrati con i pulsanti qui sotto.';
+}
+
+function formatGuestHelp() {
+  return (
+    `${DIV}\n❓ <b>Aiuto</b> (ospite)\n${DIV}\n\n` +
+    `• <b>Accedi</b> — nome utente / tag <code>#...</code> / email + password (come su cocboard)\n` +
+    `• <b>Registrati</b> — tag giocatore + chiave API in-game + password (come sul sito)\n` +
+    `• Poi avrai membro, CWL, bonus e guerre sul <b>tuo</b> clan profilo.\n` +
+    `• <b>Logout</b> — cancella sessione sul bot, annulla wizard e svuota messaggi in coda su Telegram.\n\n` +
+    `<code>/start</code> — torna a questo schermo`
+  );
+}
+
+/** Menù dopo login Supabase */
+function formatAuthedMenuIntro({ displayName, clanTag, clanName, hasClanOverride }) {
+  if (!clanTag) {
+    return (
+      `⚔️ <b>CoCBoard</b>\n` +
+      `${DIV}\n` +
+      `👋 Ciao <b>${escapeHtml(displayName || 'giocatore')}</b>\n` +
+      `${DIV}\n\n` +
+      `⚠️ <b>Nessun clan</b> sul profilo.\n` +
+      `Entra in un clan in game oppure imposta un tag con:\n<code>/setclan #TAG</code>\n\n` +
+      `Poi potrai usare membro, CWL, bonus e guerre.`
+    );
+  }
+  const src = hasClanOverride ? ' (override /setclan)' : ' (dal profilo CoC)';
+  return (
+    `⚔️ <b>CoCBoard</b>\n` +
+    `${DIV}\n` +
+    `👋 <b>${escapeHtml(displayName || 'Comandante')}</b>\n` +
+    `🏠 <b>${escapeHtml(clanName || clanTag)}</b> <code>${escapeHtml(clanTag)}</code>${src}\n` +
+    `${DIV}\n\n` +
+    `Scegli un’azione o <code>/help</code>.`
   );
 }
 
@@ -143,29 +180,28 @@ function formatClanSearch(items) {
   return `${DIV}\n🔍 <b>Risultati</b>\n${DIV}\n\n${lines.join('\n')}`;
 }
 
-function formatLoginHelp(defaultTag) {
+function formatSetclanHelp() {
   return (
-    `${DIV}\n🔐 <b>Login clan</b>\n${DIV}\n\n` +
-    `Imposta il <b>tag del clan</b> che vuoi gestire (stessi dati del sito per quel tag).\n\n` +
-    `1️⃣ Comando:\n<code>/login #TAGCLAN</code>\n\n` +
-    `2️⃣ Esempio:\n<code>/login #2ABC0XYZ</code>\n\n` +
-    `Fino al login usi il clan predefinito del bot:\n<code>${escapeHtml(defaultTag)}</code>\n\n` +
-    `<i>Bonus CWL in elenco sono quelli salvati su Supabase per quel tag (se presenti).</i>`
+    `${DIV}\n🏰 <b>Clan da visualizzare</b>\n${DIV}\n\n` +
+    `Se sul profilo non hai un clan o vuoi vedere <b>un altro</b> tag:\n\n` +
+    `<code>/setclan #TAGCLAN</code>\n\n` +
+    `<code>/logout_clan</code> — rimuovi solo l’override e torni al clan del profilo account.\n\n` +
+    `<i>I bonus in elenco sono quelli presenti su Supabase per quel tag.</i>`
   );
 }
 
-function formatAccountPanel({ playerTag, clanTag, defaultTag }) {
-  const p = playerTag ? `<code>${escapeHtml(playerTag)}</code>` : '<i>non collegato</i>';
-  const c = clanTag ? `<code>${escapeHtml(clanTag)}</code>` : `<i>predefinito ${escapeHtml(defaultTag)}</i>`;
+function formatAccountPanel({ username, cocTag, profileClanTag, savedClanOverride }) {
+  const p = cocTag ? `<code>${escapeHtml(cocTag)}</code>` : '<i>—</i>';
+  const base = profileClanTag ? `<code>${escapeHtml(profileClanTag)}</code>` : '<i>nessuno sul profilo</i>';
+  const ov = savedClanOverride ? `<code>${escapeHtml(savedClanOverride)}</code>` : '<i>nessuno</i>';
   return (
-    `${DIV}\n⚙️ <b>Account</b>\n${DIV}\n\n` +
-    `🏠 <b>Clan attivo</b>\n${c}\n\n` +
-    `👤 <b>Villaggio (profilo)</b>\n${p}\n\n` +
-    `Comandi:\n` +
-    `<code>/login #CLAN</code> — cambia clan\n` +
-    `<code>/logout_clan</code> — torna al predefinito\n` +
-    `<code>/link #GIOCATORE</code> — collega villaggio\n` +
-    `<code>/unlink</code> — rimuovi villaggio e preferenze`
+    `${DIV}\n⚙️ <b>Account CoCBoard</b>\n${DIV}\n\n` +
+    `👤 Utente: <b>${escapeHtml(username || '—')}</b>\n` +
+    `🎯 Villaggio: ${p}\n` +
+    `🏠 Clan profilo: ${base}\n` +
+    `📌 Override bot: ${ov}\n\n` +
+    `<code>/setclan #TAG</code> · <code>/logout_clan</code>\n` +
+    `<code>/esci</code> — logout da questo bot`
   );
 }
 
@@ -185,7 +221,10 @@ module.exports = {
   DIV,
   escapeHtml,
   parseTagArg,
-  formatMainMenuIntro,
+  formatGuestWelcome,
+  formatGuestSnack,
+  formatGuestHelp,
+  formatAuthedMenuIntro,
   formatClanInfo,
   formatMembersPage,
   formatCwl,
@@ -193,7 +232,7 @@ module.exports = {
   formatBonuses,
   formatPlayerSummary,
   formatClanSearch,
-  formatLoginHelp,
+  formatSetclanHelp,
   formatAccountPanel,
   chunkForTelegram,
 };

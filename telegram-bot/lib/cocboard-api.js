@@ -32,12 +32,6 @@ async function fetchJson(path, searchParams = {}) {
   return data;
 }
 
-function getDefaultClanTag() {
-  const t = process.env.DEFAULT_CLAN_TAG || '#2J2VLPP9R';
-  const s = String(t).trim().toUpperCase();
-  return s.startsWith('#') ? s : `#${s}`;
-}
-
 async function clanMembers(clanTag) {
   return fetchJson('/api/clan-members', { clanTag });
 }
@@ -62,13 +56,37 @@ async function searchClans(q) {
   return fetchJson('/api/lookup', { type: 'search-clans', q });
 }
 
+/** Stessa registrazione del sito (POST /api/register-with-coc). */
+async function registerWithCoc({ playerTag, apiToken, password, email }) {
+  const url = new URL('/api/register-with-coc', apiBase() + '/');
+  const r = await fetch(url.href, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      playerTag,
+      apiToken,
+      password,
+      ...(email ? { email } : {}),
+    }),
+    signal: AbortSignal.timeout(60000),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const msg = typeof data.error === 'string' ? data.error : `HTTP ${r.status}`;
+    const err = new Error(msg);
+    err.status = r.status;
+    throw err;
+  }
+  return data;
+}
+
 module.exports = {
   fetchJson,
-  getDefaultClanTag,
   clanMembers,
   clanInfo,
   cwlStats,
   warLog,
   lookupPlayer,
   searchClans,
+  registerWithCoc,
 };

@@ -23,9 +23,9 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
       - key: TELEGRAM_WEBHOOK_SECRET_TOKEN
         sync: false
-      - key: DEFAULT_CLAN_TAG
-        value: "#2J2VLPP9R"
       - key: COCBOARD_SITE_HOME_URL
         sync: false
