@@ -692,10 +692,10 @@ async function refreshPrivateReplyKeyboard(ctx) {
     }
   };
   try {
-    await sendAnchor('\u2060');
+    await sendAnchor('·');
   } catch (_) {
     try {
-      await sendAnchor('·');
+      await sendAnchor('\u2060');
     } catch (_) {}
   }
 }

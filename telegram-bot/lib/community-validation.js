@@ -98,6 +98,25 @@ function containsFakeVerificationMarker(text) {
   return FAKE_VERIFICATION_CHARS_RE.test(String(text || ''));
 }
 
+/** Link ufficiale profilo giocatore CoC (tag senza # nell’URL). */
+function buildOpenPlayerProfileUrl(displayTag, lang = 'it') {
+  const raw = String(displayTag || '')
+    .trim()
+    .toUpperCase()
+    .replace(/^#/, '');
+  if (!/^[0-9A-Z]{3,15}$/.test(raw)) return null;
+  const l = String(lang || 'it').toLowerCase();
+  const loc = /^[a-z]{2}$/.test(l) ? l : 'it';
+  return `https://link.clashofclans.com/${loc}?action=OpenPlayerProfile&tag=${raw}`;
+}
+
+/** Per attributo href in parse_mode HTML (Telegram richiede &amp;). */
+function escapeTelegramHtmlHref(url) {
+  return String(url || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;');
+}
+
 /**
  * Regole messaggi in chat globale (solo testo visibile agli altri).
  * @returns {{ ok: true } | { ok: false, reason: string }}
@@ -160,6 +179,8 @@ module.exports = {
   msUntilNextEpochBoundary,
   formatCountdownIt,
   containsFakeVerificationMarker,
+  buildOpenPlayerProfileUrl,
+  escapeTelegramHtmlHref,
   validateGlobalChatMessageBody,
   checkGlobalChatRateLimit,
   GLOBAL_CHAT_RATE_MAX,

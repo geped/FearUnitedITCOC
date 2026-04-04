@@ -24,22 +24,30 @@ function guestTelegramLabel(from) {
 }
 
 /**
- * Contenuto messaggio inoltrato agli altri in chat globale.
- * Profilo verificato + condivisione dettagli: seconda riga in corsivo (Telegram non offre font più piccolo).
+ * Intestazione + messaggio: una sola riga per nome, ✅, tag (link se verificato+condivisione), TH e XP; poi a capo il testo.
  */
 function formatGlobalLine(displayName, displayTag, body, displayVerified, meta = {}) {
   const shareDetails = meta.shareVerifiedDetails === true;
   const th = meta.thLevel;
   const exp = meta.expLevel;
   const badge = displayVerified ? ' ✅' : '';
-  let header = `<b>${escapeHtml(displayName)}</b>${badge}`;
+  const namePart = `<b>${escapeHtml(displayName)}</b>${badge}`;
+  let tail = '';
   if (displayVerified && shareDetails) {
-    const tagShown = displayTag ? escapeHtml(displayTag) : '—';
-    const thShown = th != null && Number.isFinite(Number(th)) ? `TH${Number(th)}` : '—';
-    const xpShown = exp != null && Number.isFinite(Number(exp)) ? `(${Number(exp)} xp)` : '(— xp)';
-    header += `\n<i>${tagShown} | ${escapeHtml(thShown)} | ${escapeHtml(xpShown)}</i>`;
+    const tagRaw = displayTag ? String(displayTag).trim() : '';
+    const profUrl = tagRaw ? cv.buildOpenPlayerProfileUrl(tagRaw) : null;
+    const tagHtml = tagRaw
+      ? profUrl
+        ? `<a href="${cv.escapeTelegramHtmlHref(profUrl)}">${escapeHtml(tagRaw)}</a>`
+        : escapeHtml(tagRaw)
+      : '—';
+    const thPart = th != null && Number.isFinite(Number(th)) ? `TH${Number(th)}` : '—';
+    const xpPart = exp != null && Number.isFinite(Number(exp)) ? `${Number(exp)} xp` : '— xp';
+    tail = ` ${tagHtml} | ${escapeHtml(thPart)} | ${escapeHtml(xpPart)}`;
+  } else if (!displayVerified && displayTag) {
+    tail = ` <code>${escapeHtml(String(displayTag))}</code>`;
   }
-  return `${header}\n${escapeHtml(body)}`;
+  return `${namePart}${tail}\n${escapeHtml(body)}`;
 }
 
 function escapeHtml(s) {
@@ -176,9 +184,9 @@ async function buildGlobalHubBodyHtml(subscriberRow) {
   const share = verified && sub.share_verified_details !== false && sub.share_verified_details !== 'false';
   const verifiedLine = verified
     ? share
-      ? '\n✅ <i>Profilo CoCBoard — in chat mostri anche tag, TH ed XP (se noti nel database).</i>'
-      : '\n✅ <i>Profilo CoCBoard — in chat mostri solo nome e spunta (dettagli nascosti).</i>'
-    : '\n<i>Ospite: nome + tag testuale (non verificato; non usare simboli ✅ nel nome).</i>';
+      ? '\n✅ <i>Profilo CoCBoard — in chat: stessa riga con tag (link profilo), TH ed XP se disponibili.</i>'
+      : '\n✅ <i>Profilo CoCBoard — in chat solo nome e spunta (dettagli nascosti).</i>'
+    : '\n<i>Ospite: in chat nome e tag su una riga (non verificato; non usare ✅ nel nome).</i>';
   return (
     `🌍 <b>Chat globale</b>\n\n` +
     `Nome mostrato: <b>${escapeHtml(sub.display_name)}</b>${tagPart}${verifiedLine}\n\n` +
@@ -240,8 +248,17 @@ function globalHubEditErrorKind(e) {
  */
 async function ensureGlobalHubMessage(telegram, telegramUserId, opts = {}) {
   const allowCreate = opts.allowCreate === true;
-  const sub = await sbc.getGlobalSubscriber(telegramUserId);
-  if (!sub || !sub.active) return;
+  let sub = opts.subscriberOverride;
+  if (!sub) {
+    sub = await sbc.getGlobalSubscriber(telegramUserId);
+  }
+  if (!sub || !sub.active) {
+    if (!opts.subscriberOverride) {
+      await sleep(80);
+      sub = await sbc.getGlobalSubscriber(telegramUserId);
+    }
+    if (!sub || !sub.active) return;
+  }
   const curE = cv.currentEpochIndex();
   if (Number(sub.epoch_index) !== curE) return;
   const text = await buildGlobalHubBodyHtml(sub);
@@ -312,7 +329,7 @@ async function purgeGlobalWindowTelegramMessages(telegram) {
   }
 }
 
-async function sendGlobalEnteredMessage(ctx) {
+async function sendGlobalEnteredMessage(ctx, opts = {}) {
   const uid = ctx.from?.id;
   if (uid == null) return;
   try {
@@ -320,7 +337,10 @@ async function sendGlobalEnteredMessage(ctx) {
   } catch (_) {
     await ctx.reply('✅ <b>Chat globale</b> — sei dentro.', { parse_mode: 'HTML' }).catch(() => {});
   }
-  await ensureGlobalHubMessage(ctx.telegram, uid, { allowCreate: true });
+  await ensureGlobalHubMessage(ctx.telegram, uid, {
+    allowCreate: true,
+    subscriberOverride: opts.subscriberOverride,
+  });
   await refreshPrivateReplyKeyboardRef(ctx);
 }
 
@@ -343,9 +363,9 @@ async function promptGlobalProfileShareChoice(ctx, tauth) {
   const body =
     `👤 <b>Profilo CoCBoard</b>\n\n` +
     `Come vuoi apparire agli altri in <b>chat globale</b>?\n\n` +
-    `• <b>Sì</b> — sotto al nome compare una riga con <i>tag villaggio, livello TH ed esperienza</i> ` +
-    `(se il bot li trova nel database del clan sincronizzato).\n` +
-    `• <b>No</b> — gli altri vedono solo il <b>nome</b> e la spunta ✅ (nessun tag/TH/XP).`;
+    `• <b>Sì</b> — sulla <b>stessa riga</b> del nome: tag (link al profilo in gioco), TH ed esperienza ` +
+    `(se noti nel database membri).\n` +
+    `• <b>No</b> — solo <b>nome</b> e spunta ✅, senza tag/TH/XP.`;
   try {
     await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
   } catch (_) {
@@ -393,7 +413,12 @@ async function finalizeJoinGlobalVerified(ctx, tauth, shareGameDetails) {
     cachedThLevel: th,
     cachedExpLevel: exp,
   });
-  await sendGlobalEnteredMessage(ctx);
+  let subFresh = await sbc.getGlobalSubscriber(uid).catch(() => null);
+  if (!subFresh?.active) {
+    await sleep(80);
+    subFresh = await sbc.getGlobalSubscriber(uid).catch(() => null);
+  }
+  await sendGlobalEnteredMessage(ctx, { subscriberOverride: subFresh || undefined });
 }
 
 async function joinGlobalAsCocboardProfile(ctx, tauth) {
@@ -530,17 +555,15 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
     return true;
   }
 
-  if (ctx.message && !txt.startsWith('/')) {
-    const ag = await sbc.isActiveInGlobalChat(uid).catch(() => false);
-    if (ag && ctx.message.photo) {
-      await ctx.reply('In chat globale invia solo testo.');
-      return true;
-    }
-  }
-
   if (pendingCommunity.has(uid)) {
     const st = pendingCommunity.get(uid);
     if (st.kind === 'global_manual_tag') {
+      if (ctx.message?.photo) {
+        await ctx.reply('Per entrare invia <b>solo testo</b> su una riga: <code>nomeInGioco#TAG</code>.', {
+          parse_mode: 'HTML',
+        });
+        return true;
+      }
       if (!ctx.message?.text || txt.startsWith('/')) return true;
       pendingCommunity.delete(uid);
       const parsed = parseGlobalManualDisplayLine(txt);
@@ -549,10 +572,21 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
         pendingCommunity.set(uid, { kind: 'global_manual_tag' });
         return true;
       }
-      await sbc.tickGlobalEpochIfNeeded().catch(() => {});
-      await sbc.upsertGlobalSubscriber(uid, parsed.displayName, parsed.displayTag, { displayVerified: false });
+      try {
+        await sbc.tickGlobalEpochIfNeeded().catch(() => {});
+        await sbc.upsertGlobalSubscriber(uid, parsed.displayName, parsed.displayTag, { displayVerified: false });
+      } catch (e) {
+        pendingCommunity.set(uid, { kind: 'global_manual_tag' });
+        await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
+        return true;
+      }
+      let subFresh = await sbc.getGlobalSubscriber(uid).catch(() => null);
+      if (!subFresh?.active) {
+        await sleep(80);
+        subFresh = await sbc.getGlobalSubscriber(uid).catch(() => null);
+      }
       await ctx.reply('✅ <b>Chat globale</b> — sei dentro.', { parse_mode: 'HTML' });
-      await ensureGlobalHubMessage(ctx.telegram, uid, { allowCreate: true });
+      await ensureGlobalHubMessage(ctx.telegram, uid, { allowCreate: true, subscriberOverride: subFresh || undefined });
       await rk(ctx);
       return true;
     }
@@ -657,6 +691,14 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
     }
   }
 
+  if (ctx.message && !txt.startsWith('/')) {
+    const ag = await sbc.isActiveInGlobalChat(uid).catch(() => false);
+    if (ag && ctx.message.photo) {
+      await ctx.reply('In chat globale invia solo testo.');
+      return true;
+    }
+  }
+
   if (ctx.message && !txt.startsWith('/') && !ctx.message.photo) {
     const active = await sbc.isActiveInGlobalChat(uid).catch(() => false);
     if (active) {
@@ -743,7 +785,9 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
         try {
           const msg = await ctx.telegram.sendMessage(tid, line, { parse_mode: 'HTML', disable_web_page_preview: true });
           if (msg?.message_id) await sbc.insertGlobalEphemeralDelivery(tid, msg.message_id, inserted.epoch_index);
-        } catch (_) {}
+        } catch (e) {
+          console.warn('[cocboard-bot] global broadcast sendMessage:', tid, e?.response?.description || e.message || e);
+        }
       }
       await ensureGlobalHubMessage(ctx.telegram, uid, { allowCreate: false }).catch(() => {});
       return true;
