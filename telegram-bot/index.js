@@ -1157,6 +1157,10 @@ function setupBot(bot) {
       pendingSearch.delete(ctx.from.id);
       pendingLinkWizard.delete(ctx.from.id);
       pendingCommunity.delete(ctx.from.id);
+      // Obbligatorio qui: questo ramo faceva next() prima del blocco leaveGlobalIfActive sotto.
+      if (ctx.chat?.type === 'private') {
+        await leaveGlobalIfActive(ctx, { notify: true });
+      }
       return next();
     }
     if (pendingLinkWizard.has(ctx.from.id) && ctx.message?.text) {
