@@ -44,6 +44,21 @@ function formatGuestWelcomePrivate() {
  * Gruppo / supergruppo: niente password qui (visibile a tutti).
  * @param {string} [privateChatUrl] es. https://t.me/BotName
  */
+/** Ruolo in-game CoC API → etichetta italiana (mai «Admin» sito). */
+function mapCoCRoleToItalian(role) {
+  if (!role) return '';
+  const r = String(role).toLowerCase().replace(/\s+/g, '');
+  const map = {
+    leader: 'Capo',
+    coleader: 'Co-capo',
+    'co-leader': 'Co-capo',
+    elder: 'Anziano',
+    member: 'Membro',
+    admin: 'Anziano', // API CoC usa "admin" per l'anziano in clan
+  };
+  return map[r] || escapeHtml(String(role));
+}
+
 function formatGuestWelcomeGroup(privateChatUrl) {
   const open =
     privateChatUrl && String(privateChatUrl).trim()
@@ -58,7 +73,7 @@ function formatGuestWelcomeGroup(privateChatUrl) {
     `📌 <b>Dopo il login in privato</b>\n` +
     `Potrai usare <b>nel gruppo</b> anche membro, CWL, bonus e guerre sul tuo clan (stesso account Telegram).\n` +
     open +
-    `\n\n<i>Comandi: <code>/start</code> · <code>/help</code></i>`
+    `\n\n<i>Comandi: <code>/cocboard</code> · <code>/cerca</code> · <code>/help</code></i>`
   );
 }
 
@@ -74,9 +89,12 @@ function formatGroupBotAdded() {
   return (
     `👋 <b>CoCBoard</b> è nel gruppo.\n` +
     `${DIV2}\n\n` +
-    `• In <b>gruppo</b>: Cerca, Classifica, e (dopo login in <b>privato</b>) dati sul tuo clan.\n` +
-    `• <b>Login / registrazione</b>: solo in chat privata con il bot.\n\n` +
-    `<i>Gli admin possono fissare questo messaggio.</i>`
+    `📌 <b>Come si usa</b>\n` +
+    `• Usa i <b>pulsanti</b> qui sotto oppure i comandi che iniziano con <code>/</code> (es. <code>/cerca</code>, <code>/classifica</code>).\n` +
+    `• Apri il menù con <code>/cocboard</code> (evita conflitti con altri bot su <code>/start</code>).\n\n` +
+    `🔐 <b>Login e password</b> solo in <b>chat privata</b> con il bot — mai nel gruppo.\n\n` +
+    `🔗 Dopo che un Capo/Co-Capo collega il clan con il token, qui si vedono anche Membri, CWL e guerre.\n\n` +
+    `<i>Chi gestisce il gruppo può fissare questo messaggio.</i>`
   );
 }
 
@@ -95,7 +113,7 @@ function formatGuestHelp() {
     `Membri, CWL live, bonus, guerre, cerca, classifica, profilo.\n\n` +
     `<b>Logout</b> (solo se sei dentro)\n` +
     `Dal menù principale: cancella sessione sul bot.\n\n` +
-    `<code>/start</code> menù · <code>/cancel</code> annulla procedura`
+    `<code>/start</code> o <code>/cocboard</code> menù · <code>/cancel</code> annulla procedura`
   );
 }
 
@@ -105,7 +123,7 @@ function formatGroupHelp() {
     `• <b>Cerca / Classifica</b> — anche senza login.\n` +
     `• <b>Clan, CWL, bonus</b> — dopo <b>Accedi in chat privata</b>, usa i pulsanti anche qui.\n` +
     `• Non inviare <b>password</b> in gruppo: usa la chat privata con il bot.\n\n` +
-    `<code>/start</code> — aggiorna il benvenuto`
+    `<code>/cocboard</code> — menù · <code>/cerca</code> · <code>/classifica</code>`
   );
 }
 
@@ -274,8 +292,8 @@ function formatMembersPage(items, page, clanTagHint) {
   const slice = sorted.slice(p * MEMBERS_PER_PAGE, (p + 1) * MEMBERS_PER_PAGE);
   const lines = slice.map((m) => {
     const th = m.townHallLevel != null ? `TH${m.townHallLevel}` : 'TH?';
-    const role = m.role ? ` · ${escapeHtml(String(m.role))}` : '';
-    return `${m.clanRank ?? '—'}. ${escapeHtml(m.name)} — ${th} | ${m.trophies ?? 0}🏆${role}`;
+    const roleIt = m.role ? ` · ${mapCoCRoleToItalian(m.role)}` : '';
+    return `${m.clanRank ?? '—'}. ${escapeHtml(m.name)} — ${th} | ${m.trophies ?? 0}🏆${roleIt}`;
   });
   const head =
     `${DIV}\n👥 <b>Elenco membri</b>\n${DIV}\n` +
@@ -637,7 +655,7 @@ function formatAddBotToGroupHelp({ botUsername, clanTag, linkToken }) {
     ? `\n${DIV2}\n` +
       `📋 <b>Copia e incolla nel gruppo:</b>\n\n` +
       `<code>/linkclan ${escapeHtml(linkToken)}</code>\n\n` +
-      `<i>Tocca il comando qui sopra per copiarlo, poi incollalo nella chat del gruppo/canale.</i>\n` +
+      `<i><b>Clicca per copiare</b> il comando qui sopra, poi incollalo nella chat del gruppo/canale.</i>\n` +
       `<i>Token valido ≈1 ora, un solo uso.</i>\n`
     : '';
   return (
@@ -648,9 +666,92 @@ function formatAddBotToGroupHelp({ botUsername, clanTag, linkToken }) {
     `2️⃣ Copia il comando qui sotto e incollalo <b>in quella chat</b>.\n` +
     `3️⃣ Il bot elimina il messaggio e conferma il collegamento.\n` +
     `4️⃣ Tutti nel gruppo potranno consultare membri, CWL e guerre.\n` +
+    `5️⃣ Massimo <b>3</b> gruppi/canali collegati per lo stesso clan.\n` +
     tokBlock +
     `\n<i>Per scollegare (solo leader):</i> <code>/unlinkclan</code> <i>nel gruppo.</i>`
   );
+}
+
+const MONTHS_IT = [
+  'gennaio',
+  'febbraio',
+  'marzo',
+  'aprile',
+  'maggio',
+  'giugno',
+  'luglio',
+  'agosto',
+  'settembre',
+  'ottobre',
+  'novembre',
+  'dicembre',
+];
+
+/** season 'YYYY-MM' → Stagione aprile '26 */
+function formatSeasonLabelIt(season) {
+  if (!season || typeof season !== 'string') return '—';
+  const m = /^(\d{4})-(\d{2})$/.exec(season.trim());
+  if (!m) return escapeHtml(season);
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  if (mo < 1 || mo > 12) return escapeHtml(season);
+  const yy = String(y).slice(-2);
+  return `Stagione ${MONTHS_IT[mo - 1]} '${yy}`;
+}
+
+function rowReceivedBonus(h) {
+  return h.bonus_assigned === true || Number(h.bonus_score) > 0;
+}
+
+/** Testi aggiuntivi per bonus Telegram: storico per stagione + classifica riceventi. */
+function formatBonusHistoryBySeason(historyRows, maxSeasons = 14) {
+  const rows = (historyRows || []).filter(rowReceivedBonus);
+  if (!rows.length) {
+    return `${DIV2}\n📅 <b>Storico bonus per stagione</b>\n\n<i>Nessun dato in cwl_history per questo clan.</i>`;
+  }
+  const bySeason = new Map();
+  for (const h of rows) {
+    const s = h.season;
+    if (!s) continue;
+    if (!bySeason.has(s)) bySeason.set(s, []);
+    bySeason.get(s).push(h);
+  }
+  const seasons = [...bySeason.keys()].sort((a, b) => b.localeCompare(a)).slice(0, maxSeasons);
+  const parts = [`${DIV2}\n📅 <b>Storico bonus (per stagione)</b>\n`];
+  for (const s of seasons) {
+    const list = bySeason.get(s) || [];
+    const lines = list
+      .slice()
+      .sort((a, b) => (b.bonus_score ?? 0) - (a.bonus_score ?? 0))
+      .map((h) => {
+        const sc = h.bonus_score != null ? h.bonus_score : '—';
+        const asg = h.bonus_assigned ? ' ✓' : '';
+        return `   • ${escapeHtml(h.player_name)} — bonus <b>${sc}</b>${asg}`;
+      });
+    parts.push(`\n<b>${formatSeasonLabelIt(s)}</b>\n${lines.join('\n')}`);
+  }
+  return parts.join('\n');
+}
+
+function formatBonusReceiversLeaderboard(historyRows, topN = 18) {
+  const rows = (historyRows || []).filter(rowReceivedBonus);
+  if (!rows.length) {
+    return `${DIV2}\n🏆 <b>Chi ha ricevuto più bonus</b>\n\n<i>Nessun dato.</i>`;
+  }
+  const agg = new Map();
+  for (const h of rows) {
+    const name = h.player_name || '—';
+    if (!agg.has(name)) agg.set(name, { count: 0, seasons: new Set() });
+    const o = agg.get(name);
+    o.count += 1;
+    if (h.season) o.seasons.add(h.season);
+  }
+  const sorted = [...agg.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, topN);
+  const lines = sorted.map(([name, o], i) => {
+    const when = [...o.seasons].sort((a, b) => b.localeCompare(a)).slice(0, 8).map(formatSeasonLabelIt).join(', ');
+    return `${i + 1}. <b>${escapeHtml(name)}</b> — <b>${o.count}</b> volte\n   └ ${when || '—'}`;
+  });
+  return `${DIV2}\n🏆 <b>Classifica riceventi bonus</b>\n\n<i>Colonna «quando»: stagioni in cui risulta bonus (da storico).</i>\n\n${lines.join('\n\n')}`;
 }
 
 function formatBonusesPage(rows, page, clanTagHint) {
@@ -724,7 +825,7 @@ function formatPlayerSummary(p) {
     `⭐ Esperienza · <b>${p.expLevel ?? '—'}</b>`,
   ];
   if (p.clan?.name) lines.push(`⚔️ Clan · ${escapeHtml(p.clan.name)} <code>${escapeHtml(p.clan.tag || '')}</code>`);
-  if (p.role) lines.push(`👔 Ruolo · <i>${escapeHtml(p.role)}</i>`);
+  if (p.role) lines.push(`👔 Ruolo in clan · <i>${mapCoCRoleToItalian(p.role)}</i>`);
   return lines.join('\n');
 }
 
@@ -743,7 +844,9 @@ function formatSearchMenuIntro() {
     `${DIV}\n🔍 <b>Cerca</b>\n${DIV}\n\n` +
     `Scegli il tipo e poi invia il testo richiesto.\n\n` +
     `• <b>Villaggio</b> — tag tipo <code>#2ABC</code>\n` +
-    `• <b>Clan</b> — parte del nome (min. 3 caratteri)`
+    `• <b>Clan</b> — parte del nome (min. 3 caratteri)\n\n` +
+    `Oppure in chat: <code>/player #TAG</code> e <code>/cerca_clan nome</code>.\n\n` +
+    `<i>In privato, con login, puoi aprire anche la <b>versione web</b> (Mini App).</i>`
   );
 }
 
@@ -828,6 +931,10 @@ module.exports = {
   formatTutorialStep,
   formatBonuses,
   formatBonusesPage,
+  formatBonusHistoryBySeason,
+  formatBonusReceiversLeaderboard,
+  mapCoCRoleToItalian,
+  formatSeasonLabelIt,
   formatRankings,
   formatPlayerSummary,
   formatClanSearch,

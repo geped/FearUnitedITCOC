@@ -37,7 +37,8 @@ const db = window.sb;
 (function readOpenTabFromQuery() {
   try {
     const p = new URLSearchParams(window.location.search);
-    if (p.get('open_tab') === 'members') window.__cocboardOpenTab = 'members';
+    const ot = p.get('open_tab');
+    if (ot === 'members' || ot === 'cerca' || ot === 'cwl' || ot === 'login') window.__cocboardOpenTab = ot;
   } catch (_) {}
 })();
 (function consumeTelegramWebHandoffFromUrl() {
@@ -833,6 +834,27 @@ async function applyCocboardTelegramWebDeepLinks() {
       return;
     }
     const ot = window.__cocboardOpenTab;
+    if (!ot) return;
+    if (ot === 'login') {
+      delete window.__cocboardOpenTab;
+      const ls = document.getElementById('login-screen');
+      const app = document.getElementById('app');
+      const nc = document.getElementById('no-clan-screen');
+      if (ls) ls.style.display = 'flex';
+      if (app) app.style.display = 'none';
+      if (nc) nc.style.display = 'none';
+      return;
+    }
+    if (ot === 'cerca') {
+      delete window.__cocboardOpenTab;
+      activateTab('cerca');
+      return;
+    }
+    if (ot === 'cwl' && window._userClanTag) {
+      delete window.__cocboardOpenTab;
+      activateTab('cwl');
+      return;
+    }
     if (ot === 'members' && window._userClanTag) {
       delete window.__cocboardOpenTab;
       activateTab('members');

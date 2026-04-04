@@ -225,6 +225,20 @@ async function createPendingChatLink(telegramUserId, clanTagRaw) {
   return token;
 }
 
+/** Legge clan_tag dal token senza consumarlo (stesse regole di validità di consume). */
+async function peekPendingChatLink(token, telegramUserId) {
+  const client = sb();
+  if (!client) return null;
+  const t = String(token || '').trim().toLowerCase();
+  if (t.length < 8) return null;
+  const { data, error } = await client.from('telegram_pending_chat_links').select('*').eq('token', t).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  if (Number(data.telegram_user_id) !== Number(telegramUserId)) return null;
+  if (new Date(data.expires_at).getTime() < Date.now()) return null;
+  return data.clan_tag;
+}
+
 /** Ritorna clan_tag se valido; consuma il token. */
 async function consumePendingChatLink(token, telegramUserId) {
   const client = sb();
@@ -272,6 +286,37 @@ async function fetchBonusesForClan(clanTag) {
   return rows;
 }
 
+function normClanTagSql(clanTagRaw) {
+  const s = String(clanTagRaw || '').trim().toUpperCase();
+  return s.startsWith('#') ? s : `#${s}`;
+}
+
+/** Max 3 chat diverse per clan; stessa chat può ri-collegare lo stesso clan. */
+async function canLinkChatToClan(chatId, clanTagRaw) {
+  const client = sb();
+  if (!client) return true;
+  const tag = normClanTagSql(clanTagRaw);
+  const id = Number(chatId);
+  const { data, error } = await client.from('telegram_chat_links').select('telegram_chat_id').eq('clan_tag', tag);
+  if (error) throw new Error(error.message);
+  const list = data || [];
+  if (list.some((r) => Number(r.telegram_chat_id) === id)) return true;
+  return list.length < 3;
+}
+
+async function fetchCwlHistoryBonusRows(clanTagRaw) {
+  const client = sb();
+  if (!client) return [];
+  const tag = normClanTagSql(clanTagRaw);
+  const { data, error } = await client
+    .from('cwl_history')
+    .select('player_name, season, bonus_score, bonus_assigned')
+    .eq('clan_tag', tag)
+    .order('season', { ascending: false });
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
 module.exports = {
   sb,
   getFullRow,
@@ -292,5 +337,8 @@ module.exports = {
   upsertTelegramChatLink,
   deleteTelegramChatLink,
   createPendingChatLink,
+  peekPendingChatLink,
   consumePendingChatLink,
+  canLinkChatToClan,
+  fetchCwlHistoryBonusRows,
 };
