@@ -291,6 +291,16 @@ function normClanTagSql(clanTagRaw) {
   return s.startsWith('#') ? s : `#${s}`;
 }
 
+/** Elenco chat_id collegate a un clan (per pruning lato Telegram). */
+async function listTelegramChatIdsForClan(clanTagRaw) {
+  const client = sb();
+  if (!client) return [];
+  const tag = normClanTagSql(clanTagRaw);
+  const { data, error } = await client.from('telegram_chat_links').select('telegram_chat_id').eq('clan_tag', tag);
+  if (error) throw new Error(error.message);
+  return (data || []).map((r) => Number(r.telegram_chat_id));
+}
+
 /** Max 3 chat diverse per clan; stessa chat può ri-collegare lo stesso clan. */
 async function canLinkChatToClan(chatId, clanTagRaw) {
   const client = sb();
@@ -340,5 +350,6 @@ module.exports = {
   peekPendingChatLink,
   consumePendingChatLink,
   canLinkChatToClan,
+  listTelegramChatIdsForClan,
   fetchCwlHistoryBonusRows,
 };

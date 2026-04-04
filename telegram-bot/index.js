@@ -59,6 +59,60 @@ function normClanTagEq(a, b) {
   return xa === yb;
 }
 
+/** Errore API Telegram: chat inesistente o bot non più membro → riga su DB da eliminare. */
+function isTelegramChatStaleError(err) {
+  const code = err?.response?.error_code;
+  const desc = String(err?.response?.description || err?.message || '').toLowerCase();
+  if (code === 429) return false;
+  if (code === 400) {
+    if (desc.includes('not found')) return true;
+    if (desc.includes('chat not found')) return true;
+    if (desc.includes('peer_id_invalid')) return true;
+    return false;
+  }
+  if (code === 403) {
+    if (desc.includes('bot is not a member')) return true;
+    if (desc.includes('not a member of')) return true;
+    if (desc.includes('kicked')) return true;
+    return false;
+  }
+  return false;
+}
+
+/** Rimuove da Supabase i collegamenti a gruppi/canali eliminati o da cui il bot è uscito. */
+async function pruneStaleTelegramChatLinksForClan(telegram, clanTagRaw) {
+  let ids;
+  try {
+    ids = await sb.listTelegramChatIdsForClan(clanTagRaw);
+  } catch (_) {
+    return;
+  }
+  if (!ids.length) return;
+  let me;
+  try {
+    me = await telegram.getMe();
+  } catch (_) {
+    return;
+  }
+  const botId = me.id;
+  for (const chatId of ids) {
+    try {
+      await telegram.getChat(chatId);
+    } catch (e) {
+      if (isTelegramChatStaleError(e)) await sb.deleteTelegramChatLink(chatId).catch(() => {});
+      continue;
+    }
+    try {
+      const member = await telegram.getChatMember(chatId, botId);
+      if (member.status === 'left' || member.status === 'kicked') {
+        await sb.deleteTelegramChatLink(chatId).catch(() => {});
+      }
+    } catch (e) {
+      if (isTelegramChatStaleError(e)) await sb.deleteTelegramChatLink(chatId).catch(() => {});
+    }
+  }
+}
+
 /** Callback che non richiedono dati clan (gruppo/canale). */
 const GROUP_LIGHT_CALLBACKS = new Set([
   'menu',
@@ -1224,11 +1278,13 @@ function setupBot(bot) {
       return;
     }
     try {
+      await pruneStaleTelegramChatLinksForClan(ctx.telegram, clanTag);
       const can = await sb.canLinkChatToClan(ctx.chat.id, clanTag);
       if (!can) {
         await ctx.reply(
           '⚠️ Massimo <b>3</b> gruppi/canali collegati per questo clan.\n' +
-            'Scollegane uno con <code>/unlinkclan</code> in una chat già collegata, poi riprova.',
+            'Scollegane uno con <code>/unlinkclan</code> in una chat ancora attiva, oppure riprova: ' +
+            'i gruppi eliminati o da cui il bot è stato tolto vengono rimossi automaticamente dal conteggio.',
           { parse_mode: 'HTML' }
         );
         return;
@@ -1906,11 +1962,16 @@ function setupBot(bot) {
   bot.on('my_chat_member', async (ctx) => {
     try {
       const chat = ctx.chat;
-      if (!chat || (chat.type !== 'group' && chat.type !== 'supergroup')) return;
+      if (!chat || !['group', 'supergroup', 'channel'].includes(chat.type)) return;
       const me = await ctx.telegram.getMe();
       const nn = ctx.myChatMember?.new_chat_member;
       if (nn?.user?.id !== me.id) return;
+      if (nn.status === 'left' || nn.status === 'kicked') {
+        await sb.deleteTelegramChatLink(chat.id).catch(() => {});
+        return;
+      }
       if (nn.status !== 'member' && nn.status !== 'administrator') return;
+      if (chat.type !== 'group' && chat.type !== 'supergroup') return;
       await ctx.reply(fmt.formatGroupBotAdded(), {
         parse_mode: 'HTML',
         ...Markup.inlineKeyboard([
