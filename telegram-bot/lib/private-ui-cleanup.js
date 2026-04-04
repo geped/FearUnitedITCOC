@@ -63,6 +63,13 @@ function callbackSkipsUiWipe(data) {
   return false;
 }
 
+/** @type {((telegramUserId: number) => void) | null} */
+let onBeforePrivateUiWipe = null;
+
+function setOnBeforePrivateUiWipe(fn) {
+  onBeforePrivateUiWipe = typeof fn === 'function' ? fn : null;
+}
+
 /**
  * In chat privata: elimina tutte le bolle UI tracciate + messaggi relay chat globale (DB ephemeral).
  * Chiamare prima di aprire una nuova sezione (comando /, quasi tutti i callback).
@@ -71,6 +78,12 @@ async function wipePrivateConversationUi(telegram, telegramUserId) {
   if (telegramUserId == null) return;
   const chatId = Number(telegramUserId);
   if (!Number.isFinite(chatId)) return;
+
+  if (onBeforePrivateUiWipe) {
+    try {
+      onBeforePrivateUiWipe(chatId);
+    } catch (_) {}
+  }
 
   const tracked = privateUiMessageIds.get(chatId);
   privateUiMessageIds.delete(chatId);
@@ -103,4 +116,5 @@ module.exports = {
   attachPrivateUiTracking,
   callbackSkipsUiWipe,
   wipePrivateConversationUi,
+  setOnBeforePrivateUiWipe,
 };

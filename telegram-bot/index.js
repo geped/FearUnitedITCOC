@@ -621,6 +621,7 @@ async function showTutorialMessage(ctx, step) {
   }
   rows.push([Markup.button.callback('⏭ Salta tutorial', 'tut:skip')]);
   await ctx.reply(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) });
+  if (ctx.chat?.type === 'private') await refreshPrivateReplyKeyboard(ctx);
 }
 
 async function reopenMainMenu(ctx, user) {
@@ -636,6 +637,103 @@ async function reopenMainMenu(ctx, user) {
     } catch (_) {}
   }
   await sendMainMenu(ctx);
+}
+
+/** Etichette tastiera reply (chat privata) — devono coincidere con l’handler testo. */
+const PRIVATE_RK_MENU = 'Menu principale';
+const PRIVATE_RK_HELP = 'Help';
+const PRIVATE_RK_EXIT_GLOBAL = 'Esci dalla chat globale';
+const PRIVATE_RK_CANCEL_RECRUIT = 'Annulla reclutamento';
+
+/** Ultimo messaggio usato solo per tenere visibile la reply keyboard (stesso uid → sostituito a ogni refresh). */
+const privateReplyKeyboardAnchorIds = new Map();
+
+privateUi.setOnBeforePrivateUiWipe((uid) => {
+  privateReplyKeyboardAnchorIds.delete(uid);
+});
+
+async function buildPrivateReplyKeyboardMarkup(uid) {
+  const rows = [[Markup.button.text(PRIVATE_RK_MENU), Markup.button.text(PRIVATE_RK_HELP)]];
+  if (await sbcCommunity.isActiveInGlobalChat(uid).catch(() => false)) {
+    rows.push([Markup.button.text(PRIVATE_RK_EXIT_GLOBAL)]);
+  }
+  const p = pendingCommunity.get(uid);
+  if (p?.kind === 'recruit_guided' || p?.kind === 'recruit_body') {
+    rows.push([Markup.button.text(PRIVATE_RK_CANCEL_RECRUIT)]);
+  }
+  return Markup.keyboard(rows).resize().persistent(true);
+}
+
+async function refreshPrivateReplyKeyboard(ctx) {
+  if (ctx.chat?.type !== 'private' || ctx.from?.id == null) return;
+  const uid = ctx.from.id;
+  const chatId = ctx.chat.id;
+  const prev = privateReplyKeyboardAnchorIds.get(uid);
+  if (prev != null) {
+    try {
+      await ctx.telegram.deleteMessage(chatId, prev);
+    } catch (_) {}
+    privateReplyKeyboardAnchorIds.delete(uid);
+  }
+  let kb;
+  try {
+    kb = await buildPrivateReplyKeyboardMarkup(uid);
+  } catch (_) {
+    return;
+  }
+  const sendAnchor = async (text) => {
+    const msg = await ctx.telegram.sendMessage(chatId, text, { reply_markup: kb.reply_markup });
+    if (msg?.message_id) {
+      privateReplyKeyboardAnchorIds.set(uid, msg.message_id);
+      privateUi.notePrivateUiMessage(uid, msg.message_id);
+    }
+  };
+  try {
+    await sendAnchor('\u2060');
+  } catch (_) {
+    try {
+      await sendAnchor('·');
+    } catch (_) {}
+  }
+}
+
+async function dispatchHelpCommand(ctx) {
+  if (!ctx.from?.id) return;
+  const sess = await tauth.getValidSession(ctx.from.id);
+  if (!sess) {
+    await ensureTgBotUsername(ctx.telegram);
+    const text = isLinkedChatContext(ctx) ? fmt.formatGroupHelp() : fmt.formatGuestHelp();
+    const kb = isLinkedChatContext(ctx) ? buildGroupGuestKb(cachedTgBotUsername) : buildPrivateGuestKb();
+    await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+    if (ctx.chat?.type === 'private') await refreshPrivateReplyKeyboard(ctx);
+    return;
+  }
+  const lines = [
+    `${fmt.DIV}`,
+    `📖 <b>Aiuto CoCBoard</b>`,
+    `${fmt.DIV}`,
+    '',
+    `🔍 <b>Cerca e classifica</b> (anche senza account)`,
+    `Pulsanti nel menù o <code>/player</code> · <code>/cerca_clan</code>`,
+    '',
+    `💬 <b>Community</b> (anche ospite)`,
+    `Chat globale e reclutamento dal menù.`,
+    '',
+    `🏰 <b>Clan</b>`,
+    `<code>/setclan #TAG</code> — altro clan\n<code>/logout_clan</code> — rimuovi override`,
+    '',
+    `📊 <b>Dati clan</b>`,
+    `<code>/membri</code> · <code>/info</code> · <code>/cwl</code> · <code>/bonus</code> · <code>/guerre</code>`,
+    '',
+    `🚪 <code>/esci</code> o <b>Logout</b> nel menù`,
+    '',
+    `🔗 <b>Gruppo / canale</b> (Capo / Co-Capo / Admin)`,
+    `Menù → <b>Aggiungi a canale/gruppo</b>, poi in chat: <code>/linkclan TOKEN</code> · <code>/unlinkclan</code>`,
+    '',
+    `<code>/cocboard</code> — menù (gruppo/canale consigliato) · <code>/start</code> — menù (privato)`,
+  ];
+  await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
+  if (ctx.chat?.type === 'private') await refreshPrivateReplyKeyboard(ctx);
 }
 
 function safeAnswerCb(ctx) {
@@ -682,6 +780,7 @@ async function sendGuestMenu(ctx) {
   } else {
     await ctx.reply(text, { parse_mode: 'HTML', ...kb });
   }
+  if (!group) await refreshPrivateReplyKeyboard(ctx);
 }
 
 async function sendLinkedGroupGuestMenu(ctx, clanTag) {
@@ -814,6 +913,7 @@ async function sendMainMenu(ctx) {
   } else {
     await ctx.reply(intro, { parse_mode: 'HTML', ...kb });
   }
+  if (!grp && ctx.chat?.type === 'private') await refreshPrivateReplyKeyboard(ctx);
 }
 
 function backMenuKb() {
@@ -1134,6 +1234,9 @@ async function replyRanking(ctx, rankType, locationId, areaLabel) {
 }
 
 function setupBot(bot) {
+  /** Assegnato dopo la definizione di handleCocboardCommand (scorciatoie tastiera reply). */
+  let handlePrivateReplyKeyboardShortcuts = null;
+
   bot.use(guardMiddleware());
 
   /** Chat privata: traccia reply/sendMessage e edit* (menù aggiornati con callback senza nuove reply). */
@@ -1176,6 +1279,9 @@ function setupBot(bot) {
   bot.use(async (ctx, next) => {
     if (!ctx.from) return next();
     const txt = (ctx.message?.text || '').trim();
+    if (ctx.chat?.type === 'private' && ctx.message?.text && handlePrivateReplyKeyboardShortcuts) {
+      if (await handlePrivateReplyKeyboardShortcuts(ctx, txt)) return;
+    }
     if (txt === '/start' || txt === '/cocboard') {
       pendingAuth.delete(ctx.from.id);
       pendingSearch.delete(ctx.from.id);
@@ -1331,44 +1437,68 @@ function setupBot(bot) {
     }
   }
 
+  const earlyCommDeps = {
+    isLinkedChatContext,
+    sendMainMenu,
+    sendGuestMenu,
+    backMenuKb,
+    tauth,
+  };
+
+  handlePrivateReplyKeyboardShortcuts = async (ctx, raw) => {
+    const t = raw.trim();
+    if (t === PRIVATE_RK_MENU) {
+      await privateUi.wipePrivateConversationUi(ctx.telegram, ctx.from.id);
+      pendingAuth.delete(ctx.from.id);
+      pendingSearch.delete(ctx.from.id);
+      pendingLinkWizard.delete(ctx.from.id);
+      pendingCommunity.delete(ctx.from.id);
+      await leaveGlobalIfActive(ctx, { notify: true });
+      await handleCocboardCommand(ctx);
+      return true;
+    }
+    if (t === PRIVATE_RK_HELP) {
+      await privateUi.wipePrivateConversationUi(ctx.telegram, ctx.from.id);
+      await dispatchHelpCommand(ctx);
+      return true;
+    }
+    if (t === PRIVATE_RK_EXIT_GLOBAL) {
+      const active = await sbcCommunity.isActiveInGlobalChat(ctx.from.id).catch(() => false);
+      if (!active) {
+        await ctx.reply('ℹ️ Non sei in <b>chat globale</b>.', { parse_mode: 'HTML' }).catch(() => {});
+        await refreshPrivateReplyKeyboard(ctx);
+        return true;
+      }
+      await privateUi.wipePrivateConversationUi(ctx.telegram, ctx.from.id);
+      const prev = ctx.message.text;
+      ctx.message.text = '/esci_chat_global';
+      const handled = await comm.tryHandleEarlyMessage(ctx, pendingCommunity, earlyCommDeps);
+      ctx.message.text = prev;
+      return handled;
+    }
+    if (t === PRIVATE_RK_CANCEL_RECRUIT) {
+      const p = pendingCommunity.get(ctx.from.id);
+      if (!p || (p.kind !== 'recruit_guided' && p.kind !== 'recruit_body')) {
+        await ctx.reply('ℹ️ Nessuna <b>bozza reclutamento</b> attiva da annullare.', { parse_mode: 'HTML' }).catch(() => {});
+        await refreshPrivateReplyKeyboard(ctx);
+        return true;
+      }
+      await privateUi.wipePrivateConversationUi(ctx.telegram, ctx.from.id);
+      const prev = ctx.message.text;
+      ctx.message.text = '/annulla_reclutamento';
+      const handled = await comm.tryHandleEarlyMessage(ctx, pendingCommunity, earlyCommDeps);
+      ctx.message.text = prev;
+      return handled;
+    }
+    return false;
+  };
+
   bot.start(handleCocboardCommand);
   bot.command('cocboard', handleCocboardCommand);
 
   bot.command('help', async (ctx) => {
     if (!ctx.from?.id) return;
-    const sess = await tauth.getValidSession(ctx.from.id);
-    if (!sess) {
-      await ensureTgBotUsername(ctx.telegram);
-      const text = isLinkedChatContext(ctx) ? fmt.formatGroupHelp() : fmt.formatGuestHelp();
-      const kb = isLinkedChatContext(ctx) ? buildGroupGuestKb(cachedTgBotUsername) : buildPrivateGuestKb();
-      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
-      return;
-    }
-    const lines = [
-      `${fmt.DIV}`,
-      `📖 <b>Aiuto CoCBoard</b>`,
-      `${fmt.DIV}`,
-      '',
-      `🔍 <b>Cerca e classifica</b> (anche senza account)`,
-      `Pulsanti nel menù o <code>/player</code> · <code>/cerca_clan</code>`,
-      '',
-      `💬 <b>Community</b> (anche ospite)`,
-      `Chat globale e reclutamento dal menù.`,
-      '',
-      `🏰 <b>Clan</b>`,
-      `<code>/setclan #TAG</code> — altro clan\n<code>/logout_clan</code> — rimuovi override`,
-      '',
-      `📊 <b>Dati clan</b>`,
-      `<code>/membri</code> · <code>/info</code> · <code>/cwl</code> · <code>/bonus</code> · <code>/guerre</code>`,
-      '',
-      `🚪 <code>/esci</code> o <b>Logout</b> nel menù`,
-      '',
-      `🔗 <b>Gruppo / canale</b> (Capo / Co-Capo / Admin)`,
-      `Menù → <b>Aggiungi a canale/gruppo</b>, poi in chat: <code>/linkclan TOKEN</code> · <code>/unlinkclan</code>`,
-      '',
-      `<code>/cocboard</code> — menù (gruppo/canale consigliato) · <code>/start</code> — menù (privato)`,
-    ];
-    await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' });
+    await dispatchHelpCommand(ctx);
   });
 
   bot.command('esci', async (ctx) => {
@@ -2263,6 +2393,7 @@ function setupBot(bot) {
     sendMainMenu,
     sendGuestMenu,
     backMenuKb,
+    refreshPrivateReplyKeyboard,
   });
 
   bot.catch((err, ctx) => {

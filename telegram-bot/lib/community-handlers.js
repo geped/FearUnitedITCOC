@@ -1,6 +1,9 @@
 'use strict';
 
 const { Markup } = require('telegraf');
+
+/** Impostato da registerCommunityHandlers: aggiorna tastiera reply in chat privata. */
+let refreshPrivateReplyKeyboardRef = async () => {};
 const sbc = require('./supabase-community');
 const cv = require('./community-validation');
 const tgh = require('./telegram-html');
@@ -288,6 +291,7 @@ async function sendGlobalEnteredMessage(ctx) {
     await ctx.reply('✅ <b>Chat globale</b> — sei dentro.', { parse_mode: 'HTML' }).catch(() => {});
   }
   await ensureGlobalHubMessage(ctx.telegram, uid, { allowCreate: true });
+  await refreshPrivateReplyKeyboardRef(ctx);
 }
 
 async function joinGlobalAsCocboardProfile(ctx, tauth) {
@@ -402,6 +406,7 @@ function formatGuidedPreviewHtml(st) {
 }
 
 async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContext, sendMainMenu, sendGuestMenu, backMenuKb, tauth }) {
+  const rk = refreshPrivateReplyKeyboardRef;
   const uid = ctx.from?.id;
   if (uid == null || ctx.chat?.type !== 'private' || isLinkedChatContext(ctx)) return false;
 
@@ -431,6 +436,7 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
   if (low === '/annulla_reclutamento' || low.startsWith('/annulla_reclutamento@')) {
     pendingCommunity.delete(uid);
     await ctx.reply('Bozza reclutamento annullata.', { parse_mode: 'HTML', ...recruitHubKb() });
+    await rk(ctx);
     return true;
   }
 
@@ -457,6 +463,7 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
       await sbc.upsertGlobalSubscriber(uid, parsed.displayName, parsed.displayTag, { displayVerified: false });
       await ctx.reply('✅ <b>Chat globale</b> — sei dentro.', { parse_mode: 'HTML' });
       await ensureGlobalHubMessage(ctx.telegram, uid, { allowCreate: true });
+      await rk(ctx);
       return true;
     }
 
@@ -555,6 +562,7 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
         bodyHtml = tgh.messageToHtml(ctx.message);
       }
       await submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFileId, uid, subLabel });
+      await rk(ctx);
       return true;
     }
   }
@@ -636,10 +644,13 @@ async function sendCommunityMenu(ctx) {
   } catch (_) {
     await ctx.reply(text, { parse_mode: 'HTML', ...kb });
   }
+  await refreshPrivateReplyKeyboardRef(ctx);
 }
 
 function registerCommunityHandlers(bot, deps) {
   const { pendingCommunity, isLinkedChatContext, tauth, sendMainMenu, sendGuestMenu, backMenuKb } = deps;
+  refreshPrivateReplyKeyboardRef =
+    typeof deps.refreshPrivateReplyKeyboard === 'function' ? deps.refreshPrivateReplyKeyboard : async () => {};
 
   bot.action('comm_hub', async (ctx) => {
     if (isLinkedChatContext(ctx)) return;
@@ -679,6 +690,7 @@ function registerCommunityHandlers(bot, deps) {
     } catch (_) {
       await ctx.reply(body, { parse_mode: 'HTML', ...kb });
     }
+    await refreshPrivateReplyKeyboardRef(ctx);
   });
 
   bot.action('comm_global_leave', async (ctx) => {
@@ -740,6 +752,7 @@ function registerCommunityHandlers(bot, deps) {
     } catch (_) {
       await ctx.reply(body, { parse_mode: 'HTML', ...kb });
     }
+    await refreshPrivateReplyKeyboardRef(ctx);
   });
 
   bot.action('comm_postauth_global_join', async (ctx) => {
@@ -775,6 +788,7 @@ function registerCommunityHandlers(bot, deps) {
         { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('« Indietro — Chat globale', 'comm_global')]]) }
       )
       .catch(() => {});
+    await refreshPrivateReplyKeyboardRef(ctx);
   });
 
   bot.action('comm_recruit', async (ctx) => {
@@ -796,6 +810,7 @@ function registerCommunityHandlers(bot, deps) {
     } catch (_) {
       await ctx.reply(text, { parse_mode: 'HTML', ...recruitHubKb() });
     }
+    await refreshPrivateReplyKeyboardRef(ctx);
   });
 
   bot.action('comm_recruit_list', async (ctx) => {
@@ -810,6 +825,7 @@ function registerCommunityHandlers(bot, deps) {
         await ctx.editMessageText(text, { parse_mode: 'HTML', ...introKb }).catch(async () => {
           await ctx.reply(text, { parse_mode: 'HTML', ...introKb });
         });
+        await refreshPrivateReplyKeyboardRef(ctx);
         return;
       }
       await ctx
@@ -841,8 +857,10 @@ function registerCommunityHandlers(bot, deps) {
         });
         if (uid != null && endMsg?.message_id) privateUi.notePrivateUiMessage(uid, endMsg.message_id);
       } catch (_) {}
+      await refreshPrivateReplyKeyboardRef(ctx);
     } catch (e) {
       await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML', ...recruitHubKb() });
+      await refreshPrivateReplyKeyboardRef(ctx);
     }
   });
 
@@ -962,6 +980,7 @@ function registerCommunityHandlers(bot, deps) {
     } catch (_) {
       await ctx.reply(text, { parse_mode: 'HTML', ...recruitSendKb() });
     }
+    await refreshPrivateReplyKeyboardRef(ctx);
   });
 
   bot.action('comm_recruit_quick', async (ctx) => {
@@ -989,6 +1008,7 @@ function registerCommunityHandlers(bot, deps) {
         ...Markup.inlineKeyboard([[Markup.button.callback('« Indietro', 'comm_recruit_send')]]),
       });
     }
+    await refreshPrivateReplyKeyboardRef(ctx);
   });
 
   bot.action('comm_recruit_guided', async (ctx) => {
@@ -1004,6 +1024,7 @@ function registerCommunityHandlers(bot, deps) {
         { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('« Indietro', 'comm_recruit_send')]]) }
       )
       .catch(() => {});
+    await refreshPrivateReplyKeyboardRef(ctx);
   });
 
   bot.action('recg_skip_link', async (ctx) => {
@@ -1019,6 +1040,7 @@ function registerCommunityHandlers(bot, deps) {
     pendingCommunity.set(uid, st);
     await ctx.answerCbQuery('OK').catch(() => {});
     await ctx.reply('📝 Invia il <b>messaggio di presentazione</b> del clan.', { parse_mode: 'HTML' });
+    await refreshPrivateReplyKeyboardRef(ctx);
   });
 
   bot.action('recg_skip_media', async (ctx) => {
@@ -1034,6 +1056,7 @@ function registerCommunityHandlers(bot, deps) {
     pendingCommunity.set(uid, st);
     await ctx.answerCbQuery('OK').catch(() => {});
     await ctx.reply(formatGuidedPreviewHtml(st), { parse_mode: 'HTML', ...guidedPreviewKb() });
+    await refreshPrivateReplyKeyboardRef(ctx);
   });
 
   bot.action('recg_confirm', async (ctx) => {
@@ -1057,6 +1080,7 @@ function registerCommunityHandlers(bot, deps) {
       uid,
       subLabel,
     });
+    await refreshPrivateReplyKeyboardRef(ctx);
   });
 
   bot.action('recg_cancel', async (ctx) => {
@@ -1065,6 +1089,7 @@ function registerCommunityHandlers(bot, deps) {
     if (uid != null) pendingCommunity.delete(uid);
     await ctx.answerCbQuery('Annullato').catch(() => {});
     await ctx.reply('Bozza guidata annullata.', { parse_mode: 'HTML', ...recruitSendKb() });
+    await refreshPrivateReplyKeyboardRef(ctx);
   });
 
   bot.action(/^rva:(\d+)$/, async (ctx) => {
