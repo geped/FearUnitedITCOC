@@ -3,6 +3,7 @@
 const { Markup } = require('telegraf');
 const sbc = require('./supabase-community');
 const cv = require('./community-validation');
+const tgh = require('./telegram-html');
 
 function displayFromUser(user) {
   const meta = user?.user_metadata || {};
@@ -22,6 +23,103 @@ function escapeHtml(s) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
+}
+
+/** Limite caption Telegram (HTML); sotto questa soglia usiamo un solo messaggio (foto + testo). */
+const TG_CAPTION_HTML_MAX = 1024;
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function submissionBodyHtmlPart(sub) {
+  if (sub.body_html && String(sub.body_html).trim()) return sub.body_html;
+  return escapeHtml(sub.body_text || '');
+}
+
+function buildApprovedPostTextFromSubmission(sub, expDate) {
+  const link = sub.clan_profile_url;
+  const bodyPart = submissionBodyHtmlPart(sub);
+  return (
+    `📣 <b>Reclutamento</b> (pubblicato dal bot)\n` +
+    `⏳ <i>Fino a:</i> ${escapeHtml(expDate.toLocaleString('it-IT', { timeZone: 'UTC' }))} UTC\n` +
+    `👤 <i>Presentato come:</i> ${escapeHtml(sub.submitter_display)}\n\n` +
+    bodyPart +
+    `\n\n🔗 <a href="${escapeHtml(link)}">Apri profilo clan (CoC)</a>`
+  );
+}
+
+async function broadcastRecruitmentDelivers(telegram, postText, photoFileId) {
+  const userIds = await sbc.listRecruitmentFeedUserIds();
+  const delivered = [];
+  const singlePhoto = Boolean(photoFileId && postText.length <= TG_CAPTION_HTML_MAX);
+  for (const chatId of userIds) {
+    try {
+      if (singlePhoto) {
+        const m = await telegram.sendPhoto(chatId, photoFileId, {
+          caption: postText,
+          parse_mode: 'HTML',
+        });
+        if (m?.message_id) delivered.push({ chat_id: chatId, message_id: m.message_id });
+      } else if (photoFileId) {
+        const m1 = await telegram.sendMessage(chatId, postText, {
+          parse_mode: 'HTML',
+          disable_web_page_preview: false,
+        });
+        if (m1?.message_id) delivered.push({ chat_id: chatId, message_id: m1.message_id });
+        const m2 = await telegram.sendPhoto(chatId, photoFileId, {
+          caption: '📣 Immagine allegata all’annuncio di reclutamento.',
+        });
+        if (m2?.message_id) delivered.push({ chat_id: chatId, message_id: m2.message_id });
+      } else {
+        const msg = await telegram.sendMessage(chatId, postText, {
+          parse_mode: 'HTML',
+          disable_web_page_preview: false,
+        });
+        if (msg?.message_id) delivered.push({ chat_id: chatId, message_id: msg.message_id });
+      }
+    } catch (_) {}
+    await sleep(35);
+  }
+  return delivered;
+}
+
+async function sendOneActivePostToChat(telegram, chatId, row, ownerDeleteKb) {
+  const extra = ownerDeleteKb ? { reply_markup: ownerDeleteKb.reply_markup } : {};
+  const text = row.post_text || '';
+  try {
+    if (row.photo_file_id) {
+      if (text.length <= TG_CAPTION_HTML_MAX) {
+        await telegram.sendPhoto(chatId, row.photo_file_id, {
+          caption: text,
+          parse_mode: 'HTML',
+          ...extra,
+        });
+        return;
+      }
+      const m1 = await telegram.sendMessage(chatId, text, {
+        parse_mode: 'HTML',
+        disable_web_page_preview: false,
+        ...extra,
+      });
+      await telegram.sendPhoto(chatId, row.photo_file_id, {
+        caption: '📣 Immagine allegata all’annuncio.',
+      });
+      return { m1 };
+    }
+    await telegram.sendMessage(chatId, text, {
+      parse_mode: 'HTML',
+      disable_web_page_preview: false,
+      ...extra,
+    });
+  } catch (e) {
+    await telegram
+      .sendMessage(chatId, `⚠️ Annuncio #${row.id}: errore invio (${escapeHtml(String(e.message || '')).slice(0, 80)}).`, {
+        parse_mode: 'HTML',
+      })
+      .catch(() => {});
+  }
+  return null;
 }
 
 function globalRoomInlineKb() {
@@ -50,7 +148,7 @@ async function sendGlobalEnteredMessage(ctx, introHtml) {
   }
 }
 
-async function submitRecruitmentToModerators(ctx, { bodyText, photoFileId, uid, subLabel }) {
+async function submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFileId, uid, subLabel }) {
   const v = cv.recruitmentTextValid(bodyText);
   if (!v.ok) {
     await ctx.reply(`❌ ${v.reason}`, { parse_mode: 'HTML' });
@@ -62,9 +160,11 @@ async function submitRecruitmentToModerators(ctx, { bodyText, photoFileId, uid, 
     await ctx.reply('❌ Troppi invii nelle ultime 24h. Riprova più tardi.');
     return false;
   }
+  const htmlStore =
+    bodyHtml && String(bodyHtml).trim() ? bodyHtml : tgh.messageEntitiesToHtml(bodyText, []);
   let sid;
   try {
-    sid = await sbc.insertRecruitmentSubmission(uid, subLabel, bodyText, v.link, photoFileId);
+    sid = await sbc.insertRecruitmentSubmission(uid, subLabel, bodyText, v.link, photoFileId, htmlStore);
   } catch (e) {
     await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
     return false;
@@ -77,7 +177,8 @@ async function submitRecruitmentToModerators(ctx, { bodyText, photoFileId, uid, 
     );
     return true;
   }
-  const shortPreview = escapeHtml(bodyText.slice(0, 500));
+  const previewPart =
+    htmlStore.length > 1200 ? `${htmlStore.slice(0, 1197)}…` : htmlStore;
   const modKb = Markup.inlineKeyboard([
     [Markup.button.callback('✅ Approva', `rva:${sid}`), Markup.button.callback('❌ Rifiuta', `rvr:${sid}`)],
   ]);
@@ -87,7 +188,7 @@ async function submitRecruitmentToModerators(ctx, { bodyText, photoFileId, uid, 
         oid,
         `📋 <b>Reclutamento</b> bozza <code>#${sid}</code>\n` +
           `Da: ${escapeHtml(subLabel)}\n\n` +
-          `${shortPreview}${bodyText.length > 500 ? '…' : ''}\n\n` +
+          `${previewPart}\n\n` +
           `<b>Link estratto:</b>\n<code>${escapeHtml(v.link)}</code>`,
         { parse_mode: 'HTML', ...modKb }
       )
@@ -126,20 +227,32 @@ function guidedPreviewKb() {
   ]);
 }
 
-function buildGuidedDraftBody(st) {
+function buildGuidedDraftPlain(st) {
   const raw = String(st.clan_tag_raw || '').replace(/^#/, '').toUpperCase();
   const tagHash = `#${raw}`;
   const link = st.clan_link || cv.buildOfficialClanLinkFromTag(raw);
   return `${st.presentation.trim()}\n\n🏷 Tag clan: ${tagHash}\n🔗 ${link}`;
 }
 
+function buildGuidedDraftHtml(st) {
+  const raw = String(st.clan_tag_raw || '').replace(/^#/, '').toUpperCase();
+  const tagHash = `#${raw}`;
+  const link = st.clan_link || cv.buildOfficialClanLinkFromTag(raw);
+  const pres = st.presentation_html || escapeHtml(st.presentation);
+  return (
+    `${pres}\n\n🏷 Tag clan: <code>${escapeHtml(tagHash)}</code>\n` +
+    `🔗 <a href="${escapeHtml(link)}">Apri link clan (CoC)</a>`
+  );
+}
+
 function formatGuidedPreviewHtml(st) {
   const raw = String(st.clan_tag_raw || '').replace(/^#/, '').toUpperCase();
   const tagHash = `#${raw}`;
-  const link = st.clan_link || cv.buildOfficialClanLinkFromTag(st.clan_tag_raw);
+  const link = st.clan_link || cv.buildOfficialClanLinkFromTag(raw);
+  const pres = st.presentation_html || escapeHtml(st.presentation);
   return (
     `📎 <b>Anteprima bozza</b>\n\n` +
-    `${escapeHtml(st.presentation)}\n\n` +
+    `${pres}\n\n` +
     `🏷 <code>${escapeHtml(tagHash)}</code>\n` +
     `🔗 <a href="${escapeHtml(link)}">Apri link clan (CoC)</a>` +
     `${st.photo_file_id ? '\n\n📷 <i>Con immagine allegata</i>' : ''}`
@@ -244,6 +357,7 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
           return true;
         }
         st.presentation = txt.slice(0, 3000);
+        st.presentation_html = tgh.messageEntitiesToHtml(txt, ctx.message.entities || []);
         st.step = 'media';
         pendingCommunity.set(uid, st);
         await ctx.reply(
@@ -288,7 +402,13 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
       const sess = await tauth.getValidSession(uid);
       const disp = sess?.user ? displayFromUser(sess.user) : { name: 'Utente', tag: '' };
       const subLabel = disp.tag ? `${disp.name} (${disp.tag})` : disp.name;
-      await submitRecruitmentToModerators(ctx, { bodyText, photoFileId, uid, subLabel });
+      let bodyHtml;
+      if (ctx.message.photo) {
+        bodyHtml = tgh.messageEntitiesToHtml(bodyText, ctx.message.caption_entities || []);
+      } else {
+        bodyHtml = tgh.messageToHtml(ctx.message);
+      }
+      await submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFileId, uid, subLabel });
       return true;
     }
   }
@@ -333,24 +453,33 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
   return false;
 }
 
-function communityMenuKb() {
-  return Markup.inlineKeyboard([
+function communityMenuKb(forTelegramUserId) {
+  const rows = [
     [Markup.button.callback('🌍 Chat globale', 'comm_global')],
     [Markup.button.callback('📣 Reclutamento', 'comm_recruit')],
-    [Markup.button.callback('« Menù', 'menu')],
-  ]);
+  ];
+  if (forTelegramUserId != null && cv.isBotOwnerTelegramUser(forTelegramUserId)) {
+    rows.push([Markup.button.callback('✅ Approva post', 'comm_owner_queue')]);
+  }
+  rows.push([Markup.button.callback('« Menù', 'menu')]);
+  return Markup.inlineKeyboard(rows);
+}
+
+function ownerQueueBackKb() {
+  return Markup.inlineKeyboard([[Markup.button.callback('« Community', 'comm_hub')]]);
 }
 
 async function sendCommunityMenu(ctx) {
+  const uid = ctx.from?.id;
   const text =
     `${escapeHtml('───')}\n💬 <b>Community CoCBoard</b>\n${escapeHtml('───')}\n\n` +
     `• <b>Chat globale</b> — messaggi effimeri (finestre di 5 minuti UTC, stesso reset per tutti).\n` +
     `• <b>Reclutamento</b> — annunci approvati dal proprietario del bot, visibili 24h nel feed.\n\n` +
     `<i>Richiede accesso. Nessuna chat diretta tra giocatori.</i>`;
   try {
-    await ctx.editMessageText(text, { parse_mode: 'HTML', ...communityMenuKb() });
+    await ctx.editMessageText(text, { parse_mode: 'HTML', ...communityMenuKb(uid) });
   } catch (_) {
-    await ctx.reply(text, { parse_mode: 'HTML', ...communityMenuKb() });
+    await ctx.reply(text, { parse_mode: 'HTML', ...communityMenuKb(uid) });
   }
 }
 
@@ -492,34 +621,130 @@ function registerCommunityHandlers(bot, deps) {
   bot.action('comm_recruit_list', async (ctx) => {
     if (isLinkedChatContext(ctx)) return;
     safeCb(ctx);
+    const uid = ctx.from?.id;
     try {
-      const rows = await sbc.listActiveRecruitmentPosts(8);
-      let body;
+      const rows = await sbc.listActiveRecruitmentPosts(12);
+      const introKb = Markup.inlineKeyboard([[Markup.button.callback('« Indietro', 'comm_recruit')]]);
       if (!rows.length) {
-        body = '<i>Nessun annuncio attivo al momento (o scaduti).</i>';
-      } else {
-        const parts = rows.map((r, i) => {
-          const plain = String(r.post_text || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-          const snip = plain.length > 220 ? `${plain.slice(0, 217)}…` : plain;
-          const until = new Date(r.expires_at).toLocaleString('it-IT', { timeZone: 'UTC' });
-          return `<b>${i + 1}.</b> (fino ${escapeHtml(until)} UTC)\n${escapeHtml(snip)}`;
+        const text = '📋 <b>Annunci attivi</b>\n\n<i>Nessun annuncio attivo al momento.</i>';
+        await ctx.editMessageText(text, { parse_mode: 'HTML', ...introKb }).catch(async () => {
+          await ctx.reply(text, { parse_mode: 'HTML', ...introKb });
         });
-        body = parts.join('\n\n');
+        return;
       }
-      const text = `📋 <b>Annunci attivi</b>\n\n${body}`;
-      await ctx.editMessageText(text, {
-        parse_mode: 'HTML',
-        disable_web_page_preview: true,
-        ...Markup.inlineKeyboard([[Markup.button.callback('« Indietro', 'comm_recruit')]]),
-      }).catch(async () => {
-        await ctx.reply(text, {
-          parse_mode: 'HTML',
-          disable_web_page_preview: true,
-          ...Markup.inlineKeyboard([[Markup.button.callback('« Indietro', 'comm_recruit')]]),
+      await ctx
+        .editMessageText(
+          `📋 <b>Annunci attivi</b>\n\n<i>Seguono <b>${rows.length}</b> messaggi (uno per annuncio), con formattazione originale.</i>`,
+          { parse_mode: 'HTML', ...introKb }
+        )
+        .catch(async () => {
+          await ctx.reply(
+            `📋 <b>Annunci attivi</b>\n\n<i>Seguono ${rows.length} messaggi.</i>`,
+            { parse_mode: 'HTML', ...introKb }
+          );
         });
-      });
+      const chatId = ctx.chat.id;
+      for (const row of rows) {
+        const ownerKb =
+          uid != null && cv.isBotOwnerTelegramUser(uid)
+            ? Markup.inlineKeyboard([[Markup.button.callback('🗑 Rimuovi annuncio', `rad:${row.id}`)]])
+            : null;
+        await sendOneActivePostToChat(ctx.telegram, chatId, row, ownerKb);
+        await sleep(45);
+      }
     } catch (e) {
       await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML', ...recruitHubKb() });
+    }
+  });
+
+  bot.action('comm_owner_queue', async (ctx) => {
+    if (isLinkedChatContext(ctx)) return;
+    if (!cv.isBotOwnerTelegramUser(ctx.from?.id)) {
+      await ctx.answerCbQuery('Non autorizzato.').catch(() => {});
+      return;
+    }
+    safeCb(ctx);
+    try {
+      const list = await sbc.listPendingRecruitmentSubmissions(20);
+      const introKb = ownerQueueBackKb();
+      if (!list.length) {
+        const t = '✅ <b>Approva post</b>\n\n<i>Nessuna bozza in attesa.</i>';
+        await ctx.editMessageText(t, { parse_mode: 'HTML', ...introKb }).catch(async () => {
+          await ctx.reply(t, { parse_mode: 'HTML', ...introKb });
+        });
+        return;
+      }
+      await ctx
+        .editMessageText(
+          `✅ <b>Approva post</b>\n\n<i>${list.length} bozza/e in attesa. Dettagli nei messaggi seguenti.</i>`,
+          { parse_mode: 'HTML', ...introKb }
+        )
+        .catch(async () => {
+          await ctx.reply(
+            `✅ <b>Approva post</b>\n\n<i>${list.length} bozza/e in attesa.</i>`,
+            { parse_mode: 'HTML', ...introKb }
+          );
+        });
+      const chatId = ctx.chat.id;
+      for (const sub of list) {
+        const part = submissionBodyHtmlPart(sub);
+        const kb = Markup.inlineKeyboard([
+          [Markup.button.callback('✅ Approva', `rva:${sub.id}`), Markup.button.callback('❌ Rifiuta', `rvr:${sub.id}`)],
+        ]);
+        const head = `📋 Bozza <code>#${sub.id}</code>\nDa: ${escapeHtml(sub.submitter_display)}\n\n`;
+        const tail = `\n\n🔗 <code>${escapeHtml(sub.clan_profile_url)}</code>`;
+        const combined = `${head}${part}${tail}`;
+        if (sub.photo_file_id && combined.length <= TG_CAPTION_HTML_MAX) {
+          await ctx.telegram
+            .sendPhoto(chatId, sub.photo_file_id, { caption: combined, parse_mode: 'HTML', ...kb })
+            .catch(() => {});
+        } else {
+          await ctx.telegram
+            .sendMessage(chatId, combined, { parse_mode: 'HTML', ...kb })
+            .catch(() => {});
+          if (sub.photo_file_id) {
+            await ctx.telegram
+              .sendPhoto(chatId, sub.photo_file_id, { caption: '📷 Allegato alla bozza.' })
+              .catch(() => {});
+          }
+        }
+        await sleep(45);
+      }
+    } catch (e) {
+      await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML', ...ownerQueueBackKb() });
+    }
+  });
+
+  bot.action(/^rad:(\d+)$/, async (ctx) => {
+    if (!cv.isBotOwnerTelegramUser(ctx.from?.id)) {
+      await ctx.answerCbQuery('Non autorizzato.').catch(() => {});
+      return;
+    }
+    safeCb(ctx);
+    const postId = Number(ctx.match[1]);
+    try {
+      const row = await sbc.getRecruitmentPostById(postId);
+      if (!row) {
+        await ctx.answerCbQuery('Annuncio non trovato.').catch(() => {});
+        return;
+      }
+      const ids = Array.isArray(row.delivered_message_ids) ? row.delivered_message_ids : [];
+      for (const entry of ids) {
+        if (entry?.chat_id != null && entry?.message_id != null) {
+          try {
+            await ctx.telegram.deleteMessage(entry.chat_id, entry.message_id);
+          } catch (_) {}
+          await sleep(30);
+        }
+      }
+      await sbc.deleteRecruitmentPostRow(postId);
+      await ctx.answerCbQuery('Rimosso').catch(() => {});
+      try {
+        await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      } catch (_) {}
+      await ctx.reply(`🗑 Annuncio <code>#${postId}</code> rimosso dal feed.`, { parse_mode: 'HTML' });
+    } catch (e) {
+      await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
     }
   });
 
@@ -622,13 +847,15 @@ function registerCommunityHandlers(bot, deps) {
       await ctx.answerCbQuery('Niente da confermare.').catch(() => {});
       return;
     }
-    const bodyText = buildGuidedDraftBody(st);
+    const bodyText = buildGuidedDraftPlain(st);
+    const bodyHtml = buildGuidedDraftHtml(st);
     pendingCommunity.delete(uid);
     const sess = await tauth.getValidSession(uid);
     const disp = sess?.user ? displayFromUser(sess.user) : { name: 'Utente', tag: '' };
     const subLabel = disp.tag ? `${disp.name} (${disp.tag})` : disp.name;
     await submitRecruitmentToModerators(ctx, {
       bodyText,
+      bodyHtml,
       photoFileId: st.photo_file_id,
       uid,
       subLabel,
@@ -659,37 +886,8 @@ function registerCommunityHandlers(bot, deps) {
     const exp = new Date(Date.now() + cv.RECRUIT_TTL_MS);
     const expStr = exp.toISOString();
     const approvedAt = new Date().toISOString();
-    const link = sub.clan_profile_url;
-    const postText =
-      `📣 <b>Reclutamento</b> (pubblicato dal bot)\n` +
-      `⏳ <i>Fino a:</i> ${escapeHtml(exp.toLocaleString('it-IT', { timeZone: 'UTC' }))} UTC\n` +
-      `👤 <i>Presentato come:</i> ${escapeHtml(sub.submitter_display)}\n\n` +
-      escapeHtml(sub.body_text) +
-      `\n\n🔗 <a href="${escapeHtml(link)}">Apri profilo clan (CoC)</a>`;
-    const userIds = await sbc.listRecruitmentFeedUserIds();
-    const delivered = [];
-    for (const chatId of userIds) {
-      try {
-        if (sub.photo_file_id) {
-          const m1 = await ctx.telegram.sendMessage(chatId, postText, {
-            parse_mode: 'HTML',
-            disable_web_page_preview: false,
-          });
-          if (m1?.message_id) delivered.push({ chat_id: chatId, message_id: m1.message_id });
-          const m2 = await ctx.telegram.sendPhoto(chatId, sub.photo_file_id, {
-            caption: '📣 Immagine allegata all’annuncio di reclutamento.',
-          });
-          if (m2?.message_id) delivered.push({ chat_id: chatId, message_id: m2.message_id });
-        } else {
-          const msg = await ctx.telegram.sendMessage(chatId, postText, {
-            parse_mode: 'HTML',
-            disable_web_page_preview: false,
-          });
-          if (msg?.message_id) delivered.push({ chat_id: chatId, message_id: msg.message_id });
-        }
-      } catch (_) {}
-      await sleep(35);
-    }
+    const postText = buildApprovedPostTextFromSubmission(sub, exp);
+    const delivered = await broadcastRecruitmentDelivers(ctx.telegram, postText, sub.photo_file_id);
     await sbc.insertRecruitmentPost(sid, postText, sub.photo_file_id, approvedAt, expStr, delivered);
     await ctx.answerCbQuery('Approvato e inviato.').catch(() => {});
     try {
@@ -735,10 +933,6 @@ function safeCb(ctx) {
   try {
     ctx.answerCbQuery().catch(() => {});
   } catch (_) {}
-}
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
 }
 
 module.exports = {

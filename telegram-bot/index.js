@@ -1127,7 +1127,12 @@ function setupBot(bot) {
     }
     if (ctx.callbackQuery?.data?.startsWith('auth_')) return next();
     const cbDataEarly = ctx.callbackQuery?.data || '';
-    if (/^rva:\d+$/.test(cbDataEarly) || /^rvr:\d+$/.test(cbDataEarly)) {
+    if (
+      /^rva:\d+$/.test(cbDataEarly) ||
+      /^rvr:\d+$/.test(cbDataEarly) ||
+      cbDataEarly === 'comm_owner_queue' ||
+      /^rad:\d+$/.test(cbDataEarly)
+    ) {
       if (cv.isBotOwnerTelegramUser(ctx.from?.id)) return next();
     }
     if (pendingSearch.has(uid)) return next();

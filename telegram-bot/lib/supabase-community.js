@@ -124,13 +124,16 @@ async function listRecruitmentFeedUserIds() {
   return (data || []).map((r) => Number(r.telegram_user_id));
 }
 
-async function insertRecruitmentSubmission(submitterId, display, bodyText, clanUrl, photoFileId) {
+async function insertRecruitmentSubmission(submitterId, display, bodyText, clanUrl, photoFileId, bodyHtml) {
   const c = client();
   if (!c) throw new Error('Supabase non configurato.');
+  const html =
+    bodyHtml != null && String(bodyHtml).trim() ? String(bodyHtml).slice(0, 12000) : null;
   const row = {
     submitter_telegram_user_id: Number(submitterId),
     submitter_display: String(display).slice(0, 160),
     body_text: String(bodyText),
+    body_html: html,
     clan_profile_url: String(clanUrl).slice(0, 512),
     photo_file_id: photoFileId ? String(photoFileId).slice(0, 256) : null,
     status: 'pending',
@@ -224,12 +227,37 @@ async function listActiveRecruitmentPosts(limit = 10) {
   const now = new Date().toISOString();
   const { data, error } = await c
     .from('telegram_recruitment_posts')
-    .select('id, post_text, approved_at, expires_at, submission_id')
+    .select('id, post_text, photo_file_id, approved_at, expires_at, submission_id')
     .gt('expires_at', now)
     .order('approved_at', { ascending: false })
     .limit(limit);
   if (error) throw new Error(error.message);
   return data || [];
+}
+
+async function listPendingRecruitmentSubmissions(limit = 25) {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from('telegram_recruitment_submissions')
+    .select('*')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+async function getRecruitmentPostById(postId) {
+  const c = client();
+  if (!c) return null;
+  const { data, error } = await c
+    .from('telegram_recruitment_posts')
+    .select('*')
+    .eq('id', Number(postId))
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data || null;
 }
 
 module.exports = {
@@ -251,4 +279,6 @@ module.exports = {
   countSubmissionsSince,
   countActiveGlobalSubscribers,
   listActiveRecruitmentPosts,
+  listPendingRecruitmentSubmissions,
+  getRecruitmentPostById,
 };

@@ -73,3 +73,7 @@ ALTER TABLE public.telegram_recruitment_posts ENABLE ROW LEVEL SECURITY;
 COMMENT ON TABLE public.telegram_global_chat_subscribers IS 'Bot: utenti in chat globale effimera (epoch 5 min UTC).';
 COMMENT ON TABLE public.telegram_global_chat_messages IS 'Bot: messaggi chat globale (cancellati a cambio epoch).';
 COMMENT ON TABLE public.telegram_recruitment_submissions IS 'Bot: bozze reclutamento in attesa approvazione owner.';
+
+-- Migrazione: formattazione Telegram (grassetto, ecc.) preservata in anteprima/pubblicazione
+ALTER TABLE public.telegram_recruitment_submissions ADD COLUMN IF NOT EXISTS body_html TEXT;
+COMMENT ON COLUMN public.telegram_recruitment_submissions.body_html IS 'Testo annuncio in HTML (stili Telegram); se null si usa body_text escaped.';
