@@ -1280,7 +1280,15 @@ function setupBot(bot) {
     if (!ctx.from) return next();
     const txt = (ctx.message?.text || '').trim();
     if (ctx.chat?.type === 'private' && ctx.message?.text && handlePrivateReplyKeyboardShortcuts) {
-      if (await handlePrivateReplyKeyboardShortcuts(ctx, txt)) return;
+      const userTapMid = ctx.message.message_id;
+      const userTapChatId = ctx.chat.id;
+      const handledKb = await handlePrivateReplyKeyboardShortcuts(ctx, txt);
+      if (handledKb && userTapMid != null) {
+        try {
+          await ctx.telegram.deleteMessage(userTapChatId, userTapMid);
+        } catch (_) {}
+      }
+      if (handledKb) return;
     }
     if (txt === '/start' || txt === '/cocboard') {
       pendingAuth.delete(ctx.from.id);
