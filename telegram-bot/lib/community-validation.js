@@ -86,6 +86,64 @@ function formatCountdownIt(ms) {
   return `${m}m ${String(s).padStart(2, '0')}s`;
 }
 
+/** Ospiti non possono usare caratteri che imitano la spunta verificata del bot. */
+const FAKE_VERIFICATION_CHARS_RE = /✅|✔️|☑|\u2705|\u2713|\u2714/;
+
+/** Link / reclutamento / tag villaggio nel corpo del messaggio (vietato in chat globale). */
+const GLOBAL_BODY_URL_RE = /https?:\/\/|\bwww\.|t\.me\/|telegram\.me\//i;
+const GLOBAL_BODY_COC_RE = /link\.clashofclans\.com|openclanprofile|play\.google\.com\/store|apps\.apple\.com/i;
+const GLOBAL_BODY_INGAME_TAG_RE = /#[0-9A-Z]{8,15}(?![0-9A-Z])/i;
+
+function containsFakeVerificationMarker(text) {
+  return FAKE_VERIFICATION_CHARS_RE.test(String(text || ''));
+}
+
+/**
+ * Regole messaggi in chat globale (solo testo visibile agli altri).
+ * @returns {{ ok: true } | { ok: false, reason: string }}
+ */
+function validateGlobalChatMessageBody(text) {
+  const t = String(text || '');
+  if (GLOBAL_BODY_URL_RE.test(t)) {
+    return { ok: false, reason: 'Non sono ammessi link o indirizzi web nella chat globale.' };
+  }
+  if (GLOBAL_BODY_COC_RE.test(t)) {
+    return { ok: false, reason: 'Non sono ammessi link di gioco, store o profili clan nella chat globale.' };
+  }
+  if (GLOBAL_BODY_INGAME_TAG_RE.test(t)) {
+    return {
+      ok: false,
+      reason:
+        'Nel messaggio non inserire tag villaggio/clan (es. <code>#XXXXXXXX</code>). Il tag è già mostrato nell’intestazione se verificato.',
+    };
+  }
+  return { ok: true };
+}
+
+const GLOBAL_CHAT_RATE_MAX = 12;
+const GLOBAL_CHAT_RATE_WINDOW_MS = 60 * 1000;
+
+/** @type {Map<number, number[]>} */
+const globalChatRateBuckets = new Map();
+
+/**
+ * Limite messaggi per minuto (anti-spam).
+ * @returns {{ ok: true } | { ok: false, reason: string }}
+ */
+function checkGlobalChatRateLimit(telegramUserId) {
+  const uid = Number(telegramUserId);
+  if (!Number.isFinite(uid)) return { ok: true };
+  const now = Date.now();
+  let arr = globalChatRateBuckets.get(uid) || [];
+  arr = arr.filter((ts) => now - ts < GLOBAL_CHAT_RATE_WINDOW_MS);
+  if (arr.length >= GLOBAL_CHAT_RATE_MAX) {
+    return { ok: false, reason: 'Stai inviando troppi messaggi. Attendi un minuto e riprova.' };
+  }
+  arr.push(now);
+  globalChatRateBuckets.set(uid, arr);
+  return { ok: true };
+}
+
 module.exports = {
   EPOCH_SEC,
   RECRUIT_TTL_MS,
@@ -101,4 +159,8 @@ module.exports = {
   buildOfficialClanLinkFromTag,
   msUntilNextEpochBoundary,
   formatCountdownIt,
+  containsFakeVerificationMarker,
+  validateGlobalChatMessageBody,
+  checkGlobalChatRateLimit,
+  GLOBAL_CHAT_RATE_MAX,
 };

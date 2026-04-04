@@ -111,10 +111,31 @@ async function wipePrivateConversationUi(telegram, telegramUserId) {
   }
 }
 
+/** Solo relay chat globale (e testi utente tracciati): utile all’uscita dalla stanza senza wipe menù. */
+async function purgeGlobalEphemeralOnly(telegram, telegramUserId) {
+  if (telegramUserId == null) return;
+  const chatId = Number(telegramUserId);
+  if (!Number.isFinite(chatId)) return;
+  let ephemeralRows = [];
+  try {
+    ephemeralRows = await sbc.consumeGlobalEphemeralDeliveriesForChat(chatId);
+  } catch (_) {
+    ephemeralRows = [];
+  }
+  for (const row of ephemeralRows) {
+    if (row?.message_id == null) continue;
+    try {
+      await telegram.deleteMessage(Number(row.chat_id), Number(row.message_id));
+    } catch (_) {}
+    await sleep(14);
+  }
+}
+
 module.exports = {
   notePrivateUiMessage,
   attachPrivateUiTracking,
   callbackSkipsUiWipe,
   wipePrivateConversationUi,
+  purgeGlobalEphemeralOnly,
   setOnBeforePrivateUiWipe,
 };

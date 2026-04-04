@@ -23,11 +23,23 @@ function guestTelegramLabel(from) {
   return (n || `id:${from.id}`).slice(0, 160);
 }
 
-/** Solo contenuto messaggio utente (niente footer stanza: sta nel messaggio fisso hub). */
-function formatGlobalLine(displayName, displayTag, body, displayVerified) {
-  const tagPart = displayTag ? ` <code>${escapeHtml(displayTag)}</code>` : '';
+/**
+ * Contenuto messaggio inoltrato agli altri in chat globale.
+ * Profilo verificato + condivisione dettagli: seconda riga in corsivo (Telegram non offre font più piccolo).
+ */
+function formatGlobalLine(displayName, displayTag, body, displayVerified, meta = {}) {
+  const shareDetails = meta.shareVerifiedDetails === true;
+  const th = meta.thLevel;
+  const exp = meta.expLevel;
   const badge = displayVerified ? ' ✅' : '';
-  return `<b>${escapeHtml(displayName)}</b>${badge}${tagPart}\n${escapeHtml(body)}`;
+  let header = `<b>${escapeHtml(displayName)}</b>${badge}`;
+  if (displayVerified && shareDetails) {
+    const tagShown = displayTag ? escapeHtml(displayTag) : '—';
+    const thShown = th != null && Number.isFinite(Number(th)) ? `TH${Number(th)}` : '—';
+    const xpShown = exp != null && Number.isFinite(Number(exp)) ? `(${Number(exp)} xp)` : '(— xp)';
+    header += `\n<i>${tagShown} | ${escapeHtml(thShown)} | ${escapeHtml(xpShown)}</i>`;
+  }
+  return `${header}\n${escapeHtml(body)}`;
 }
 
 function escapeHtml(s) {
@@ -160,10 +172,13 @@ async function buildGlobalHubBodyHtml(subscriberRow) {
   const n = await sbc.countActiveGlobalSubscribers(epoch);
   const sub = subscriberRow;
   const tagPart = sub.display_tag ? ` <code>${escapeHtml(sub.display_tag)}</code>` : '';
-  const verifiedLine =
-    sub.display_verified === true || sub.display_verified === 'true'
-      ? '\n✅ <i>Profilo CoCBoard (verificato)</i>'
-      : '\n<i>Ospite: nome + tag testuale (non verificato)</i>';
+  const verified = sub.display_verified === true || sub.display_verified === 'true';
+  const share = verified && sub.share_verified_details !== false && sub.share_verified_details !== 'false';
+  const verifiedLine = verified
+    ? share
+      ? '\n✅ <i>Profilo CoCBoard — in chat mostri anche tag, TH ed XP (se noti nel database).</i>'
+      : '\n✅ <i>Profilo CoCBoard — in chat mostri solo nome e spunta (dettagli nascosti).</i>'
+    : '\n<i>Ospite: nome + tag testuale (non verificato; non usare simboli ✅ nel nome).</i>';
   return (
     `🌍 <b>Chat globale</b>\n\n` +
     `Nome mostrato: <b>${escapeHtml(sub.display_name)}</b>${tagPart}${verifiedLine}\n\n` +
@@ -175,6 +190,14 @@ async function buildGlobalHubBodyHtml(subscriberRow) {
 /** Formato: <code>nomeInGioco#XXXXXXXXX</code> — parte tag = <code>#</code> + 9 caratteri (10 in tutto). Solo formalità, nessuna verifica API CoC. */
 function parseGlobalManualDisplayLine(raw) {
   const t = String(raw || '').trim();
+  if (cv.containsFakeVerificationMarker(t)) {
+    return {
+      ok: false,
+      reason:
+        'Non usare simboli tipo ✅ nel nome: imitano la verifica riservata ai profili CoCBoard. ' +
+        'Inserisci solo il <b>nome in gioco</b> e il <b>tag</b> nel formato <code>nome#TAG</code>.',
+    };
+  }
   const hashIdx = t.indexOf('#');
   if (hashIdx < 1) {
     return {
@@ -187,6 +210,13 @@ function parseGlobalManualDisplayLine(raw) {
   const tagPart = t.slice(hashIdx).replace(/\s+/g, '').toUpperCase();
   if (!displayName) {
     return { ok: false, reason: 'Inserisci il nome prima del <code>#</code>.' };
+  }
+  if (cv.containsFakeVerificationMarker(displayName)) {
+    return {
+      ok: false,
+      reason:
+        'Nel nome non sono ammessi simboli di “verificato” (✅ ecc.). Usa il nome pulito come in gioco.',
+    };
   }
   if (!/^#[0-9A-Z]{9}$/.test(tagPart)) {
     return {
@@ -294,7 +324,7 @@ async function sendGlobalEnteredMessage(ctx) {
   await refreshPrivateReplyKeyboardRef(ctx);
 }
 
-async function joinGlobalAsCocboardProfile(ctx, tauth) {
+async function promptGlobalProfileShareChoice(ctx, tauth) {
   const uid = ctx.from?.id;
   if (uid == null) return;
   const sess = await tauth.getValidSession(uid);
@@ -305,10 +335,69 @@ async function joinGlobalAsCocboardProfile(ctx, tauth) {
     return;
   }
   ctx.cocboardUser = sess.user;
+  const kb = Markup.inlineKeyboard([
+    [Markup.button.callback('📊 Sì: tag, TH ed XP in chat', 'comm_gprof_sf')],
+    [Markup.button.callback('🔒 No: solo nome e spunta ✅', 'comm_gprof_sm')],
+    [Markup.button.callback('« Indietro — Chat globale', 'comm_global')],
+  ]);
+  const body =
+    `👤 <b>Profilo CoCBoard</b>\n\n` +
+    `Come vuoi apparire agli altri in <b>chat globale</b>?\n\n` +
+    `• <b>Sì</b> — sotto al nome compare una riga con <i>tag villaggio, livello TH ed esperienza</i> ` +
+    `(se il bot li trova nel database del clan sincronizzato).\n` +
+    `• <b>No</b> — gli altri vedono solo il <b>nome</b> e la spunta ✅ (nessun tag/TH/XP).`;
+  try {
+    await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
+  } catch (_) {
+    await ctx.reply(body, { parse_mode: 'HTML', ...kb }).catch(() => {});
+  }
+  await refreshPrivateReplyKeyboardRef(ctx);
+}
+
+async function finalizeJoinGlobalVerified(ctx, tauth, shareGameDetails) {
+  const uid = ctx.from?.id;
+  if (uid == null) return;
+  const mod = await sbc.getGlobalModerationRow(uid);
+  const bl = sbc.globalModerationBlocked(mod);
+  if (bl.blocked && bl.kind === 'banned') {
+    await ctx
+      .reply(
+        '🚫 Non puoi entrare in <b>chat globale</b>: account segnalato per violazioni ripetute delle regole.',
+        { parse_mode: 'HTML' }
+      )
+      .catch(() => {});
+    return;
+  }
+  const sess = await tauth.getValidSession(uid);
+  if (!sess) {
+    await ctx
+      .reply('Sessione non attiva. Usa <b>Accedi</b> dal menù e riprova.', { parse_mode: 'HTML' })
+      .catch(() => {});
+    return;
+  }
+  ctx.cocboardUser = sess.user;
   const { name, tag } = displayFromUser(sess.user);
+  let th = null;
+  let exp = null;
+  if (shareGameDetails && tag) {
+    const m = await sbc.getMemberThExpByPlayerTag(tag).catch(() => null);
+    if (m) {
+      th = m.th_level ?? null;
+      exp = m.exp_level ?? null;
+    }
+  }
   await sbc.tickGlobalEpochIfNeeded().catch(() => {});
-  await sbc.upsertGlobalSubscriber(uid, name, tag || null, { displayVerified: true });
+  await sbc.upsertGlobalSubscriber(uid, name, tag || null, {
+    displayVerified: true,
+    shareVerifiedDetails: shareGameDetails,
+    cachedThLevel: th,
+    cachedExpLevel: exp,
+  });
   await sendGlobalEnteredMessage(ctx);
+}
+
+async function joinGlobalAsCocboardProfile(ctx, tauth) {
+  await promptGlobalProfileShareChoice(ctx, tauth);
 }
 
 async function submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFileId, uid, subLabel }) {
@@ -420,6 +509,7 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
         await ctx.telegram.deleteMessage(uid, subLeave.hub_message_id);
       } catch (_) {}
     }
+    await privateUi.purgeGlobalEphemeralOnly(ctx.telegram, uid).catch(() => {});
     await sbc.deactivateGlobalSubscriber(uid);
     pendingCommunity.delete(uid);
     await ctx.reply('👋 Hai lasciato la <b>chat globale</b>.', { parse_mode: 'HTML' });
@@ -570,6 +660,23 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
   if (ctx.message && !txt.startsWith('/') && !ctx.message.photo) {
     const active = await sbc.isActiveInGlobalChat(uid).catch(() => false);
     if (active) {
+      const modRow = await sbc.getGlobalModerationRow(uid).catch(() => null);
+      const bl = sbc.globalModerationBlocked(modRow);
+      if (bl.blocked) {
+        if (bl.kind === 'banned') {
+          await ctx.reply('🚫 Sei <b>bannato</b> dalla chat globale.', { parse_mode: 'HTML' });
+        } else if (bl.until) {
+          await ctx.reply(
+            `🔇 Sei in <b>mute</b> fino a ${escapeHtml(
+              new Date(bl.until).toLocaleString('it-IT', { timeZone: 'UTC' })
+            )} UTC.`,
+            { parse_mode: 'HTML' }
+          );
+        } else {
+          await ctx.reply('🔇 Non puoi scrivere in chat globale in questo momento.', { parse_mode: 'HTML' });
+        }
+        return true;
+      }
       await sbc.tickGlobalEpochIfNeeded().catch(() => {});
       const still = await sbc.isActiveInGlobalChat(uid).catch(() => false);
       if (!still) {
@@ -584,6 +691,25 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
       }
       const sub = await sbc.getGlobalSubscriber(uid);
       if (!sub) return true;
+      const verified = sub.display_verified === true || sub.display_verified === 'true';
+      const share = verified && sub.share_verified_details !== false && sub.share_verified_details !== 'false';
+      if (!verified && cv.containsFakeVerificationMarker(body)) {
+        const warn = await sbc.recordGlobalChatViolation(uid);
+        await ctx.reply(warn, { parse_mode: 'HTML' });
+        return true;
+      }
+      const rules = cv.validateGlobalChatMessageBody(body);
+      if (!rules.ok) {
+        const warn = await sbc.recordGlobalChatViolation(uid);
+        await ctx.reply(`${warn}\n\n❌ ${rules.reason}`, { parse_mode: 'HTML' });
+        return true;
+      }
+      const rate = cv.checkGlobalChatRateLimit(uid);
+      if (!rate.ok) {
+        const warn = await sbc.recordGlobalChatViolation(uid);
+        await ctx.reply(`${warn}\n\n❌ ${rate.reason}`, { parse_mode: 'HTML' });
+        return true;
+      }
       const label = sub.display_tag ? `${sub.display_name} ${sub.display_tag}` : sub.display_name;
       let inserted;
       try {
@@ -592,9 +718,26 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
         await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
         return true;
       }
+      try {
+        if (ctx.message?.message_id != null) {
+          await sbc.insertGlobalEphemeralDelivery(uid, ctx.message.message_id, inserted.epoch_index);
+        }
+      } catch (_) {}
+      let th = sub.cached_th_level ?? null;
+      let exp = sub.cached_exp_level ?? null;
+      if (share && sub.display_tag) {
+        const m = await sbc.getMemberThExpByPlayerTag(sub.display_tag).catch(() => null);
+        if (m) {
+          th = m.th_level ?? th;
+          exp = m.exp_level ?? exp;
+        }
+      }
+      const line = formatGlobalLine(sub.display_name, sub.display_tag || '', body, verified, {
+        shareVerifiedDetails: share,
+        thLevel: th,
+        expLevel: exp,
+      });
       const targets = await sbc.listGlobalBroadcastTargets(inserted.epoch_index, uid, inserted.created_at);
-      const verified = sub.display_verified === true || sub.display_verified === 'true';
-      const line = formatGlobalLine(sub.display_name, sub.display_tag || '', body, verified);
       for (const t of targets) {
         const tid = Number(t.telegram_user_id);
         try {
@@ -668,6 +811,18 @@ function registerCommunityHandlers(bot, deps) {
     safeCb(ctx);
     const uid = ctx.from?.id;
     if (uid == null) return;
+    const mod = await sbc.getGlobalModerationRow(uid).catch(() => null);
+    const bl = sbc.globalModerationBlocked(mod);
+    if (bl.blocked && bl.kind === 'banned') {
+      await ctx
+        .reply(
+          '🚫 Non puoi usare la <b>chat globale</b>: questo account è stato bannato per violazioni ripetute.',
+          { parse_mode: 'HTML' }
+        )
+        .catch(() => {});
+      await refreshPrivateReplyKeyboardRef(ctx);
+      return;
+    }
     const sess = await tauth.getValidSession(uid);
     if (sess) ctx.cocboardUser = sess.user;
     const rows = [
@@ -682,9 +837,9 @@ function registerCommunityHandlers(bot, deps) {
     const kb = Markup.inlineKeyboard(rows);
     const body =
       `🌍 <b>Chat globale</b>\n\n` +
-      `• <b>Profilo CoCBoard</b> — dopo accesso: nome e tag dall’account (compare ✅ <i>verificato</i> in chat).\n` +
-      `• <b>Senza account</b> — una riga <code>nomeInGioco#TAG</code> (es. <code>GIOCATORE#2J2VLPP9R</code>): il tag deve essere <b>10</b> caratteri (<code>#</code> + 9), solo formalità (nessun controllo API CoC).\n\n` +
-      `<i>Dopo l’ingresso vedi quante persone ci sono in stanza.</i>`;
+      `• <b>Profilo CoCBoard</b> — dopo accesso scegli se mostrare in chat anche <i>tag, TH ed XP</i> (dal database membri) oppure solo <b>nome + ✅</b>.\n` +
+      `• <b>Senza account</b> — riga <code>nomeInGioco#TAG</code> (es. <code>GIOCATORE#2J2VLPP9R</code>): <code>#</code> + 9 caratteri; nel nome <b>non</b> usare simboli tipo ✅ (imitano la verifica).\n\n` +
+      `<i>In stanza valgono regole anti-spam e anti-link (vedi Guida). Uscendo, i messaggi della stanza vengono cancellati in questa chat.</i>`;
     try {
       await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
     } catch (_) {
@@ -704,6 +859,7 @@ function registerCommunityHandlers(bot, deps) {
         await ctx.telegram.deleteMessage(uid, subLeave.hub_message_id);
       } catch (_) {}
     }
+    await privateUi.purgeGlobalEphemeralOnly(ctx.telegram, uid).catch(() => {});
     await sbc.deactivateGlobalSubscriber(uid);
     pendingCommunity.delete(uid);
     const sess = await tauth.getValidSession(uid);
@@ -771,7 +927,19 @@ function registerCommunityHandlers(bot, deps) {
       await ctx.answerCbQuery('Usa Accedi / Registrati.').catch(() => {});
       return;
     }
-    await joinGlobalAsCocboardProfile(ctx, tauth);
+    await promptGlobalProfileShareChoice(ctx, tauth);
+  });
+
+  bot.action('comm_gprof_sf', async (ctx) => {
+    if (isLinkedChatContext(ctx)) return;
+    safeCb(ctx);
+    await finalizeJoinGlobalVerified(ctx, tauth, true);
+  });
+
+  bot.action('comm_gprof_sm', async (ctx) => {
+    if (isLinkedChatContext(ctx)) return;
+    safeCb(ctx);
+    await finalizeJoinGlobalVerified(ctx, tauth, false);
   });
 
   bot.action('comm_gman', async (ctx) => {

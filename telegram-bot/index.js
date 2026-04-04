@@ -251,6 +251,8 @@ function isCommunityOpenGuestCallback(d) {
     d === 'comm_gman' ||
     d === 'comm_gauth' ||
     d === 'comm_gprof' ||
+    d === 'comm_gprof_sf' ||
+    d === 'comm_gprof_sm' ||
     d === 'comm_postauth_global_join' ||
     d === 'comm_global_leave' ||
     d === 'comm_global_status' ||
@@ -451,6 +453,7 @@ async function leaveGlobalIfActive(ctx, opts = {}) {
       await ctx.telegram.deleteMessage(uid, Number(sub.hub_message_id));
     } catch (_) {}
   }
+  await privateUi.purgeGlobalEphemeralOnly(ctx.telegram, uid).catch(() => {});
   await sbcCommunity.deactivateGlobalSubscriber(uid).catch(() => {});
   pendingCommunity.delete(uid);
   if (notify) {
@@ -985,6 +988,13 @@ async function performFullLogout(ctx, { viaCommand }) {
   pendingLinkWizard.delete(uid);
   pendingCommunity.delete(uid);
   postAuthGlobalResume.delete(uid);
+  const subG = await sbcCommunity.getGlobalSubscriber(uid).catch(() => null);
+  if (subG?.hub_message_id != null) {
+    try {
+      await ctx.telegram.deleteMessage(uid, Number(subG.hub_message_id));
+    } catch (_) {}
+  }
+  await privateUi.purgeGlobalEphemeralOnly(ctx.telegram, uid).catch(() => {});
   await sbcCommunity.deactivateGlobalSubscriber(uid).catch(() => {});
   await refreshWebhookDropPending(ctx.telegram);
   if (viaCommand) {

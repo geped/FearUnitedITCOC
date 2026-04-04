@@ -32,6 +32,15 @@ async function upsertGlobalSubscriber(telegramUserId, displayName, displayTag, o
   const now = new Date().toISOString();
   const existing = await getGlobalSubscriber(telegramUserId);
   const displayVerified = opts.displayVerified === true;
+  const shareVerifiedDetails = displayVerified ? opts.shareVerifiedDetails !== false : false;
+  const th =
+    opts.cachedThLevel != null && Number.isFinite(Number(opts.cachedThLevel))
+      ? Number(opts.cachedThLevel)
+      : null;
+  const exp =
+    opts.cachedExpLevel != null && Number.isFinite(Number(opts.cachedExpLevel))
+      ? Number(opts.cachedExpLevel)
+      : null;
   const { error } = await c.rpc('cocboard_upsert_global_chat_subscriber', {
     p_telegram_user_id: Number(telegramUserId),
     p_display_name: String(displayName || '').slice(0, 120),
@@ -43,6 +52,9 @@ async function upsertGlobalSubscriber(telegramUserId, displayName, displayTag, o
     p_hub_message_id: existing?.hub_message_id != null ? Number(existing.hub_message_id) : null,
     p_hub_epoch_index: existing?.hub_epoch_index != null ? Number(existing.hub_epoch_index) : null,
     p_display_verified: displayVerified,
+    p_share_verified_details: shareVerifiedDetails,
+    p_cached_th_level: th,
+    p_cached_exp_level: exp,
   });
   if (error) throw new Error(error.message);
 }
@@ -336,6 +348,108 @@ async function getRecruitmentPostById(postId) {
   return data || null;
 }
 
+/** Normalizza tag giocatore per confronto con members.tag (formato API CoC: #XXX). */
+function normPlayerTagForMembers(tagRaw) {
+  let t = String(tagRaw || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '');
+  if (!t) return null;
+  if (!t.startsWith('#')) t = `#${t}`;
+  if (!/^#[0-9A-Z]{3,15}$/.test(t)) return null;
+  return t;
+}
+
+async function getMemberThExpByPlayerTag(tagRaw) {
+  const c = client();
+  if (!c) return null;
+  const t = normPlayerTagForMembers(tagRaw);
+  if (!t) return null;
+  const tryTag = async (tag) => {
+    const { data, error } = await c.from('members').select('th_level, exp_level').eq('tag', tag).maybeSingle();
+    if (error) return null;
+    return data || null;
+  };
+  let row = await tryTag(t);
+  if (row) return row;
+  const noHash = t.replace(/^#/, '');
+  row = await tryTag(noHash);
+  return row || null;
+}
+
+async function getGlobalModerationRow(telegramUserId) {
+  const c = client();
+  if (!c) return null;
+  const { data, error } = await c
+    .from('telegram_global_moderation')
+    .select('*')
+    .eq('telegram_user_id', Number(telegramUserId))
+    .maybeSingle();
+  if (error) return null;
+  return data || null;
+}
+
+function globalModerationBlocked(row) {
+  if (!row) return { blocked: false };
+  if (row.banned === true || row.banned === 'true') return { blocked: true, kind: 'banned' };
+  const mu = row.muted_until;
+  if (mu && new Date(mu).getTime() > Date.now()) return { blocked: true, kind: 'muted', until: mu };
+  return { blocked: false };
+}
+
+/** Incrementa strike e applica mute/ban; ritorna messaggio utente in italiano. */
+async function recordGlobalChatViolation(telegramUserId) {
+  const c = client();
+  if (!c) return '⚠️ Regola della chat violata.';
+  const uid = Number(telegramUserId);
+  const now = new Date();
+  const row = await getGlobalModerationRow(uid);
+  let banned = row?.banned === true || row?.banned === 'true';
+  const strikes = (row?.strike_count || 0) + 1;
+  let mutedUntil = null;
+  const existingMute =
+    row?.muted_until && new Date(row.muted_until).getTime() > now.getTime() ? new Date(row.muted_until) : null;
+
+  if (!banned && strikes >= 6) banned = true;
+
+  if (banned) {
+    mutedUntil = null;
+  } else if (strikes >= 5) {
+    mutedUntil = new Date(now.getTime() + 72 * 3600 * 1000);
+  } else if (strikes >= 4) {
+    mutedUntil = new Date(now.getTime() + 24 * 3600 * 1000);
+  } else if (strikes >= 3) {
+    mutedUntil = new Date(now.getTime() + 6 * 3600 * 1000);
+  } else if (existingMute) {
+    mutedUntil = existingMute;
+  }
+
+  const payload = {
+    telegram_user_id: uid,
+    strike_count: strikes,
+    muted_until: mutedUntil ? mutedUntil.toISOString() : null,
+    banned,
+    updated_at: now.toISOString(),
+  };
+  const { error } = await c.from('telegram_global_moderation').upsert(payload, { onConflict: 'telegram_user_id' });
+  if (error) return '⚠️ Regola della chat violata.';
+  if (banned) {
+    await deactivateGlobalSubscriber(uid).catch(() => {});
+    return (
+      '🚫 <b>Ban dalla chat globale.</b> Troppi strike: non puoi più entrare in stanza. ' +
+      'Per ricorsi scrivi allo staff del bot.'
+    );
+  }
+  if (mutedUntil && strikes >= 3) {
+    return (
+      `⚠️ <b>Avviso moderazione</b> (strike ${strikes}). ` +
+      `Sei in <b>mute</b> fino a ${mutedUntil.toLocaleString('it-IT', { timeZone: 'UTC' })} UTC. ` +
+      'Niente link, tag promozionali o spam in chat.'
+    );
+  }
+  return `⚠️ <b>Avviso moderazione</b> (strike ${strikes}/5). Leggi le regole in Guida: niente link, reclutamento o falsi simboli di verifica.`;
+}
+
 module.exports = {
   tickGlobalEpochIfNeeded,
   upsertGlobalSubscriber,
@@ -363,4 +477,8 @@ module.exports = {
   listPendingRecruitmentSubmissions,
   countPendingRecruitmentSubmissions,
   getRecruitmentPostById,
+  getMemberThExpByPlayerTag,
+  getGlobalModerationRow,
+  globalModerationBlocked,
+  recordGlobalChatViolation,
 };

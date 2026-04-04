@@ -26,7 +26,9 @@ Esegui nel SQL Editor Supabase, in ordine:
 
 1. **[`schema-telegram-links.sql`](./schema-telegram-links.sql)** — sessione Auth + override clan  
 2. **[`schema-community-chat.sql`](./schema-community-chat.sql)** — chat globale, reclutamento, colonne hub  
-3. **[`schema-community-subscriber-rpc.sql`](./schema-community-subscriber-rpc.sql)** — RPC per iscrizioni chat globale (evita errori PostgREST «schema cache» su `hub_epoch_index`) + `display_verified`
+3. **[`schema-community-subscriber-rpc.sql`](./schema-community-subscriber-rpc.sql)** — RPC iscrizioni chat globale + `display_verified`, privacy dettagli verificati, moderazione (`telegram_global_moderation`)
+
+Se avevi già eseguito una versione **vecchia** del punto 3 (solo 10 parametri nell’RPC), applica anche **[`schema-global-share-moderation.sql`](./schema-global-share-moderation.sql)** per allineare colonne e funzione.
 
 ## Comandi utili (dopo login)
 
