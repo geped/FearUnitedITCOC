@@ -29,3 +29,5 @@ services:
         sync: false
       - key: COCBOARD_SITE_HOME_URL
         sync: false
+      - key: BOT_OWNER_TELEGRAM_IDS
+        sync: false

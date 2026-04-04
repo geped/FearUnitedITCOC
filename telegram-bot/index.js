@@ -8,6 +8,9 @@ const api = require('./lib/cocboard-api');
 const sb = require('./lib/supabase');
 const fmt = require('./lib/format');
 const tauth = require('./lib/telegram-auth');
+const sbcCommunity = require('./lib/supabase-community');
+const cv = require('./lib/community-validation');
+const comm = require('./lib/community-handlers');
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -17,6 +20,8 @@ const pendingAuth = new Map();
 const pendingSearch = new Map();
 /** Wizard collegamento chat ↔ clan (solo privato) */
 const pendingLinkWizard = new Map();
+/** Wizard community: tag manuale chat globale, bozza reclutamento */
+const pendingCommunity = new Map();
 
 let cachedTgBotUsername = (process.env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '');
 
@@ -658,6 +663,9 @@ async function mainMenuKeyboard(ctx, user, hasClanTag) {
   ]);
   const leader = user ? isClanLeader(user) : false;
   const grp = isLinkedChatContext(ctx);
+  if (!grp && user) {
+    rows.push([Markup.button.callback('💬 Community', 'comm_hub')]);
+  }
   let showClanRows = !!hasClanTag;
   if (grp) {
     const g = await getGroupChatGate(ctx);
@@ -794,6 +802,8 @@ async function performFullLogout(ctx, { viaCommand }) {
   pendingAuth.delete(uid);
   pendingSearch.delete(uid);
   pendingLinkWizard.delete(uid);
+  pendingCommunity.delete(uid);
+  await sbcCommunity.deactivateGlobalSubscriber(uid).catch(() => {});
   await refreshWebhookDropPending(ctx.telegram);
   if (viaCommand) {
     await ctx
@@ -1010,6 +1020,8 @@ async function registerBotCommands(telegram) {
       { command: 'help', description: 'Aiuto' },
       { command: 'cerca', description: 'Cerca villaggio o clan' },
       { command: 'classifica', description: 'Classifiche trofei' },
+      { command: 'esci_chat_global', description: 'Esci dalla chat globale' },
+      { command: 'annulla_reclutamento', description: 'Annulla bozza reclutamento' },
     ];
     const grp = [
       { command: 'cocboard', description: 'Menù CoCBoard' },
@@ -1049,6 +1061,7 @@ function setupBot(bot) {
       pendingAuth.delete(ctx.from.id);
       pendingSearch.delete(ctx.from.id);
       pendingLinkWizard.delete(ctx.from.id);
+      pendingCommunity.delete(ctx.from.id);
       return next();
     }
     if (pendingLinkWizard.has(ctx.from.id) && ctx.message?.text) {
@@ -1084,6 +1097,13 @@ function setupBot(bot) {
       await handlePendingSearch(ctx);
       return;
     }
+    const handledComm = await comm.tryHandleEarlyMessage(ctx, pendingCommunity, {
+      isLinkedChatContext,
+      sendMainMenu,
+      backMenuKb,
+      tauth,
+    });
+    if (handledComm) return;
     return next();
   });
 
@@ -1106,6 +1126,10 @@ function setupBot(bot) {
       return next();
     }
     if (ctx.callbackQuery?.data?.startsWith('auth_')) return next();
+    const cbDataEarly = ctx.callbackQuery?.data || '';
+    if (/^rva:\d+$/.test(cbDataEarly) || /^rvr:\d+$/.test(cbDataEarly)) {
+      if (cv.isBotOwnerTelegramUser(ctx.from?.id)) return next();
+    }
     if (pendingSearch.has(uid)) return next();
     const d = ctx.callbackQuery?.data || '';
     if (isPublicCallbackData(d)) return next();
@@ -1528,6 +1552,7 @@ function setupBot(bot) {
 
   bot.action('menu', async (ctx) => {
     safeAnswerCb(ctx);
+    if (ctx.from?.id != null) pendingCommunity.delete(ctx.from.id);
     const sess = await tauth.getValidSession(ctx.from.id);
     if (sess) {
       ctx.cocboardUser = sess.user;
@@ -1982,11 +2007,40 @@ function setupBot(bot) {
     } catch (_) {}
   });
 
+  comm.registerCommunityHandlers(bot, {
+    pendingCommunity,
+    isLinkedChatContext,
+    tauth,
+    sendMainMenu,
+    backMenuKb,
+  });
+
   bot.catch((err, ctx) => {
     console.error(err);
     const msg = err?.message || 'Errore sconosciuto';
     ctx.reply(`❌ Errore: ${msg}`).catch(() => {});
   });
+}
+
+async function runCommunityMaintenance(bot) {
+  try {
+    await sbcCommunity.tickGlobalEpochIfNeeded();
+    const expired = await sbcCommunity.listExpiredRecruitmentPosts();
+    for (const row of expired) {
+      const ids = Array.isArray(row.delivered_message_ids) ? row.delivered_message_ids : [];
+      for (const entry of ids) {
+        if (entry?.chat_id != null && entry?.message_id != null) {
+          try {
+            await bot.telegram.deleteMessage(entry.chat_id, entry.message_id);
+          } catch (_) {}
+          await new Promise((r) => setTimeout(r, 30));
+        }
+      }
+      await sbcCommunity.deleteRecruitmentPostRow(row.id);
+    }
+  } catch (e) {
+    console.warn('[cocboard-bot] community maintenance', e.message || e);
+  }
 }
 
 /** Telegraf confronta req.url col path esatto: senza questa, `/path/` non matcha e l’update viene scartato (in chat: silenzio). */
@@ -2044,6 +2098,11 @@ async function main() {
 
   const bot = new Telegraf(token);
   setupBot(bot);
+
+  runCommunityMaintenance(bot).catch(() => {});
+  setInterval(() => {
+    runCommunityMaintenance(bot).catch(() => {});
+  }, 60_000);
 
   const webhookDomain = pickWebhookDomain();
   const webhookSecretPath = pickWebhookPath();
