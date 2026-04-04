@@ -12,10 +12,10 @@ function displayFromUser(user) {
   return { name: name.slice(0, 120), tag: tag ? (tag.startsWith('#') ? tag : `#${tag}`).slice(0, 32) : '' };
 }
 
-function formatGlobalLine(displayName, displayTag, body, statusFooterHtml) {
+/** Solo contenuto messaggio utente (niente footer stanza: sta nel messaggio fisso hub). */
+function formatGlobalLine(displayName, displayTag, body) {
   const tagPart = displayTag ? ` <code>${escapeHtml(displayTag)}</code>` : '';
-  const foot = statusFooterHtml ? `\n\n${statusFooterHtml}` : '';
-  return `<b>${escapeHtml(displayName)}</b>${tagPart}\n${escapeHtml(body)}${foot}`;
+  return `<b>${escapeHtml(displayName)}</b>${tagPart}\n${escapeHtml(body)}`;
 }
 
 function escapeHtml(s) {
@@ -122,30 +122,106 @@ async function sendOneActivePostToChat(telegram, chatId, row, ownerDeleteKb) {
   return null;
 }
 
-function globalRoomInlineKb() {
+function globalHubKeyboard() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('🚪 Esci dalla chat → menù CoCBoard', 'comm_global_leave')],
-    [Markup.button.callback('🔄 Stato stanza (utenti + countdown)', 'comm_global_status')],
+    [
+      Markup.button.callback('🚪 Esci', 'comm_global_leave'),
+      Markup.button.callback('🔄 Aggiorna', 'comm_global_status'),
+    ],
+    [Markup.button.callback('« Menù', 'menu'), Markup.button.callback('« Community', 'comm_hub')],
   ]);
 }
 
-async function buildGlobalStatusFooterHtml() {
+async function buildGlobalHubBodyHtml(subscriberRow) {
   await sbc.tickGlobalEpochIfNeeded().catch(() => {});
   const epoch = cv.currentEpochIndex();
   const n = await sbc.countActiveGlobalSubscribers(epoch);
   const ms = cv.msUntilNextEpochBoundary();
   const cd = cv.formatCountdownIt(ms);
-  return `<i>👥 ${n} in stanza · ⏱ Azzeramento finestra tra ${escapeHtml(cd)} (UTC)</i>`;
+  const sub = subscriberRow;
+  const tagPart = sub.display_tag ? ` <code>${escapeHtml(sub.display_tag)}</code>` : '';
+  return (
+    `🌍 <b>Chat globale</b> <i>(finestra UTC)</i>\n\n` +
+    `Nome mostrato: <b>${escapeHtml(sub.display_name)}</b>${tagPart}\n\n` +
+    `👥 <b>${n}</b> in stanza\n` +
+    `⏱ Azzeramento tra <b>${escapeHtml(cd)}</b> (UTC)\n\n` +
+    `<i>I messaggi di questa finestra vengono rimossi automaticamente al reset. Invia solo testo.</i>`
+  );
 }
 
-async function sendGlobalEnteredMessage(ctx, introHtml) {
-  const foot = await buildGlobalStatusFooterHtml();
-  const text = `${introHtml}\n\n${foot}\n\n<i>Messaggi: solo testo. Usa i pulsanti sotto per uscire o aggiornare il conteggio.</i>`;
-  try {
-    await ctx.editMessageText(text, { parse_mode: 'HTML', ...globalRoomInlineKb() });
-  } catch (_) {
-    await ctx.reply(text, { parse_mode: 'HTML', ...globalRoomInlineKb() });
+async function ensureGlobalHubMessage(telegram, telegramUserId) {
+  const sub = await sbc.getGlobalSubscriber(telegramUserId);
+  if (!sub || !sub.active) return;
+  const curE = cv.currentEpochIndex();
+  if (Number(sub.epoch_index) !== curE) return;
+  const text = await buildGlobalHubBodyHtml(sub);
+  const kb = globalHubKeyboard();
+  const chatId = telegramUserId;
+  const extra = { parse_mode: 'HTML', reply_markup: kb.reply_markup };
+  if (sub.hub_message_id) {
+    try {
+      await telegram.editMessageText(chatId, sub.hub_message_id, undefined, text, extra);
+      if (Number(sub.hub_epoch_index) !== curE) {
+        await sbc.setGlobalSubscriberHub(telegramUserId, sub.hub_message_id, curE);
+      }
+      return;
+    } catch (_) {}
   }
+  const msg = await telegram.sendMessage(chatId, text, extra);
+  if (msg?.message_id) {
+    await sbc.setGlobalSubscriberHub(telegramUserId, msg.message_id, curE);
+  }
+}
+
+async function refreshGlobalHubForUser(telegram, telegramUserId) {
+  await ensureGlobalHubMessage(telegram, telegramUserId);
+}
+
+/** Dopo tick epoch: cancella su Telegram le bolle della finestra precedente e hub obsoleti. */
+async function purgeGlobalWindowTelegramMessages(telegram) {
+  const cur = cv.currentEpochIndex();
+  let rows = [];
+  try {
+    rows = await sbc.consumeGlobalEphemeralDeliveriesBeforeEpoch(cur);
+  } catch (_) {
+    rows = [];
+  }
+  for (const r of rows) {
+    if (r.chat_id != null && r.message_id != null) {
+      try {
+        await telegram.deleteMessage(r.chat_id, r.message_id);
+      } catch (_) {}
+      await sleep(25);
+    }
+  }
+}
+
+async function refreshAllGlobalHubMessages(bot) {
+  const telegram = bot.telegram;
+  await sbc.tickGlobalEpochIfNeeded().catch(() => {});
+  await purgeGlobalWindowTelegramMessages(telegram);
+  const cur = cv.currentEpochIndex();
+  let ids = [];
+  try {
+    ids = await sbc.listActiveGlobalSubscriberIds(cur);
+  } catch (_) {
+    ids = [];
+  }
+  for (const uid of ids) {
+    await ensureGlobalHubMessage(telegram, uid).catch(() => {});
+    await sleep(30);
+  }
+}
+
+async function sendGlobalEnteredMessage(ctx) {
+  const uid = ctx.from?.id;
+  if (uid == null) return;
+  try {
+    await ctx.editMessageText('✅ <b>Chat globale</b> — sei dentro.', { parse_mode: 'HTML' });
+  } catch (_) {
+    await ctx.reply('✅ <b>Chat globale</b> — sei dentro.', { parse_mode: 'HTML' }).catch(() => {});
+  }
+  await ensureGlobalHubMessage(ctx.telegram, uid);
 }
 
 async function submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFileId, uid, subLabel }) {
@@ -267,6 +343,12 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
   const low = txt.split(/\s+/)[0].toLowerCase();
 
   if (low === '/esci_chat_global' || low.startsWith('/esci_chat_global@')) {
+    const subLeave = await sbc.getGlobalSubscriber(uid).catch(() => null);
+    if (subLeave?.hub_message_id) {
+      try {
+        await ctx.telegram.deleteMessage(uid, subLeave.hub_message_id);
+      } catch (_) {}
+    }
     await sbc.deactivateGlobalSubscriber(uid);
     pendingCommunity.delete(uid);
     await ctx.reply('👋 Hai lasciato la <b>chat globale</b>.', { parse_mode: 'HTML', ...backMenuKb() });
@@ -302,14 +384,8 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
       const displayName = `Player ${displayTag}`;
       await sbc.tickGlobalEpochIfNeeded().catch(() => {});
       await sbc.upsertGlobalSubscriber(uid, displayName, displayTag);
-      const intro =
-        `✅ Sei nella <b>chat globale</b>.\n\n` +
-        `Nome mostrato: <b>${escapeHtml(displayName)}</b> <code>${escapeHtml(displayTag)}</code>\n\n` +
-        `• Vedi solo messaggi inviati <b>dopo</b> il tuo ingresso in questa finestra.\n` +
-        `• La finestra si azzera per <b>tutti</b> ogni 5 minuti (UTC).`;
-      await ctx.reply(intro, { parse_mode: 'HTML', ...globalRoomInlineKb() });
-      const foot = await buildGlobalStatusFooterHtml();
-      await ctx.reply(foot, { parse_mode: 'HTML' });
+      await ctx.reply('✅ <b>Chat globale</b> — sei dentro.', { parse_mode: 'HTML' });
+      await ensureGlobalHubMessage(ctx.telegram, uid);
       return true;
     }
 
@@ -438,14 +514,20 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
         await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
         return true;
       }
-      const foot = await buildGlobalStatusFooterHtml();
       const targets = await sbc.listGlobalBroadcastTargets(inserted.epoch_index, uid, inserted.created_at);
-      const line = formatGlobalLine(sub.display_name, sub.display_tag || '', body, foot);
+      const line = formatGlobalLine(sub.display_name, sub.display_tag || '', body);
       for (const t of targets) {
-        const tid = t.telegram_user_id;
-        await ctx.telegram.sendMessage(tid, line, { parse_mode: 'HTML', disable_web_page_preview: true }).catch(() => {});
+        const tid = Number(t.telegram_user_id);
+        try {
+          const msg = await ctx.telegram.sendMessage(tid, line, { parse_mode: 'HTML', disable_web_page_preview: true });
+          if (msg?.message_id) await sbc.insertGlobalEphemeralDelivery(tid, msg.message_id, inserted.epoch_index);
+        } catch (_) {}
       }
-      await ctx.reply(`✅ Inviato.\n\n${foot}`, { parse_mode: 'HTML', ...globalRoomInlineKb() });
+      try {
+        const okMsg = await ctx.reply('✅ Inviato.', { parse_mode: 'HTML' });
+        if (okMsg?.message_id) await sbc.insertGlobalEphemeralDelivery(uid, okMsg.message_id, inserted.epoch_index);
+      } catch (_) {}
+      await refreshGlobalHubForUser(ctx.telegram, uid).catch(() => {});
       return true;
     }
   }
@@ -533,6 +615,12 @@ function registerCommunityHandlers(bot, deps) {
     safeCb(ctx);
     const uid = ctx.from?.id;
     if (uid == null) return;
+    const subLeave = await sbc.getGlobalSubscriber(uid).catch(() => null);
+    if (subLeave?.hub_message_id) {
+      try {
+        await ctx.telegram.deleteMessage(uid, subLeave.hub_message_id);
+      } catch (_) {}
+    }
     await sbc.deactivateGlobalSubscriber(uid);
     pendingCommunity.delete(uid);
     const sess = await tauth.getValidSession(uid);
@@ -547,7 +635,6 @@ function registerCommunityHandlers(bot, deps) {
 
   bot.action('comm_global_status', async (ctx) => {
     if (isLinkedChatContext(ctx)) return;
-    safeCb(ctx);
     const uid = ctx.from?.id;
     if (uid == null) return;
     const active = await sbc.isActiveInGlobalChat(uid).catch(() => false);
@@ -555,8 +642,8 @@ function registerCommunityHandlers(bot, deps) {
       await ctx.answerCbQuery('Non sei in chat globale.').catch(() => {});
       return;
     }
-    const foot = await buildGlobalStatusFooterHtml();
-    await ctx.reply(`📊 <b>Stato stanza</b>\n\n${foot}`, { parse_mode: 'HTML', ...globalRoomInlineKb() });
+    await refreshGlobalHubForUser(ctx.telegram, uid).catch(() => {});
+    await ctx.answerCbQuery('Stanza aggiornata.').catch(() => {});
   });
 
   bot.action('comm_gprof', async (ctx) => {
@@ -569,12 +656,7 @@ function registerCommunityHandlers(bot, deps) {
     const { name, tag } = displayFromUser(sess.user);
     await sbc.tickGlobalEpochIfNeeded().catch(() => {});
     await sbc.upsertGlobalSubscriber(uid, name, tag || null);
-    const intro =
-      `✅ Sei nella <b>chat globale</b>.\n\n` +
-      `Nome mostrato: <b>${escapeHtml(name)}</b>${tag ? ` <code>${escapeHtml(tag)}</code>` : ''}\n\n` +
-      `• Vedi solo messaggi dopo il tuo ingresso in questa finestra.\n` +
-      `• Reset globale ogni 5 min (UTC).`;
-    await sendGlobalEnteredMessage(ctx, intro);
+    await sendGlobalEnteredMessage(ctx);
   });
 
   bot.action('comm_gman', async (ctx) => {
@@ -941,4 +1023,6 @@ module.exports = {
   communityMenuKb,
   registerCommunityHandlers,
   displayFromUser,
+  purgeGlobalWindowTelegramMessages,
+  refreshAllGlobalHubMessages,
 };

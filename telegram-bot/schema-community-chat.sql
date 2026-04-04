@@ -71,7 +71,29 @@ ALTER TABLE public.telegram_recruitment_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.telegram_recruitment_posts ENABLE ROW LEVEL SECURITY;
 
 COMMENT ON TABLE public.telegram_global_chat_subscribers IS 'Bot: utenti in chat globale effimera (epoch 5 min UTC).';
+
+-- Messaggi inviati dal bot nella DM (chat globale): cancellati a fine finestra
+CREATE TABLE IF NOT EXISTS public.telegram_global_ephemeral_deliveries (
+  id           BIGSERIAL PRIMARY KEY,
+  chat_id      BIGINT NOT NULL,
+  message_id   BIGINT NOT NULL,
+  epoch_index  BIGINT NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS telegram_global_ephem_epoch_idx
+  ON public.telegram_global_ephemeral_deliveries (epoch_index);
+
+ALTER TABLE public.telegram_global_chat_subscribers ADD COLUMN IF NOT EXISTS hub_message_id BIGINT;
+ALTER TABLE public.telegram_global_chat_subscribers ADD COLUMN IF NOT EXISTS hub_epoch_index BIGINT;
+
+COMMENT ON COLUMN public.telegram_global_chat_subscribers.hub_message_id IS 'Messaggio fisso stanza (countdown + pulsanti); aggiornato via edit.';
+COMMENT ON COLUMN public.telegram_global_chat_subscribers.hub_epoch_index IS 'Epoch della finestra in cui è stato creato l’hub; se < epoch corrente, hub va eliminato.';
+
+ALTER TABLE public.telegram_global_ephemeral_deliveries ENABLE ROW LEVEL SECURITY;
+
 COMMENT ON TABLE public.telegram_global_chat_messages IS 'Bot: messaggi chat globale (cancellati a cambio epoch).';
+COMMENT ON TABLE public.telegram_global_ephemeral_deliveries IS 'Bot: message_id DM da cancellare al reset finestra (bolla chat).';
 COMMENT ON TABLE public.telegram_recruitment_submissions IS 'Bot: bozze reclutamento in attesa approvazione owner.';
 
 -- Migrazione: formattazione Telegram (grassetto, ecc.) preservata in anteprima/pubblicazione

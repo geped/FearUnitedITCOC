@@ -2030,6 +2030,7 @@ function setupBot(bot) {
 async function runCommunityMaintenance(bot) {
   try {
     await sbcCommunity.tickGlobalEpochIfNeeded();
+    await comm.purgeGlobalWindowTelegramMessages(bot.telegram);
     const expired = await sbcCommunity.listExpiredRecruitmentPosts();
     for (const row of expired) {
       const ids = Array.isArray(row.delivered_message_ids) ? row.delivered_message_ids : [];
@@ -2108,6 +2109,10 @@ async function main() {
   setInterval(() => {
     runCommunityMaintenance(bot).catch(() => {});
   }, 60_000);
+  comm.refreshAllGlobalHubMessages(bot).catch(() => {});
+  setInterval(() => {
+    comm.refreshAllGlobalHubMessages(bot).catch(() => {});
+  }, 15_000);
 
   const webhookDomain = pickWebhookDomain();
   const webhookSecretPath = pickWebhookPath();
