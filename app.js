@@ -38,7 +38,7 @@ const db = window.sb;
   try {
     const p = new URLSearchParams(window.location.search);
     const ot = p.get('open_tab');
-    const allowed = new Set(['members', 'cerca', 'cwl', 'login', 'warlog', 'profilo', 'rankings', 'bonus']);
+    const allowed = new Set(['members', 'cerca', 'cwl', 'cwl_warlog', 'login', 'warlog', 'profilo', 'rankings', 'bonus']);
     if (allowed.has(ot)) window.__cocboardOpenTab = ot;
   } catch (_) {}
 })();
@@ -829,7 +829,13 @@ async function showApp(sessionUser) {
 /** Dopo login: priorità a deep link CWL; altrimenti tab Clan (handoff bot con <code>open_tab=members</code>). */
 async function applyCocboardTelegramWebDeepLinks() {
   try {
+    const otFirst = window.__cocboardOpenTab;
     const rn = window.__cocboardOpenCwlRound;
+    if ((otFirst === 'cwl_warlog' || otFirst === 'cwl') && window._userClanTag) {
+      delete window.__cocboardOpenTab;
+      await applyCocboardTelegramWebDeepLinkWarlogRounds(rn != null ? rn : undefined);
+      return;
+    }
     if (rn != null && window._userClanTag) {
       await applyCocboardTelegramWebDeepLink();
       return;
@@ -851,7 +857,7 @@ async function applyCocboardTelegramWebDeepLinks() {
       activateTab('cerca');
       return;
     }
-    if ((ot === 'cwl' || ot === 'bonus') && window._userClanTag) {
+    if (ot === 'bonus' && window._userClanTag) {
       delete window.__cocboardOpenTab;
       activateTab('cwl');
       return;
@@ -885,6 +891,16 @@ async function applyCocboardTelegramWebDeepLink() {
   const rn = window.__cocboardOpenCwlRound;
   if (rn == null || !window._userClanTag) return;
   delete window.__cocboardOpenCwlRound;
+  await applyCocboardTelegramWebDeepLinkWarlogRounds(rn);
+}
+
+/**
+ * Registri guerre → Cronologia leghe CWL → stagione (live se c’è) → tab Turni;
+ * opzionale `initialRound` = numero turno 1–7 (altrimenti turno attivo automatico).
+ */
+async function applyCocboardTelegramWebDeepLinkWarlogRounds(initialRound) {
+  if (!window._userClanTag) return;
+  delete window.__cocboardOpenCwlRound;
   try {
     activateTab('warlog');
     const cwlBtn = document.querySelector('#tab-warlog .subtab-btn[onclick*="\'cwl\'"]');
@@ -898,9 +914,13 @@ async function applyCocboardTelegramWebDeepLink() {
     const merged = window._cwlMergedSeasons || [];
     const live = merged.find((s) => s.isLive && s.hasRounds) || merged.find((s) => s.hasRounds);
     if (!live) return;
-    openCwlSeasonDetail(live.season, { forceCdmTab: 'rounds', initialRoundNumber: rn });
+    const extra = { forceCdmTab: 'rounds' };
+    if (initialRound != null && initialRound >= 1 && initialRound <= 7) {
+      extra.initialRoundNumber = initialRound;
+    }
+    openCwlSeasonDetail(live.season, extra);
   } catch (e) {
-    console.warn('[CoCBoard] Deep link CWL web', e);
+    console.warn('[CoCBoard] Deep link CWL warlog / turni', e);
   }
 }
 

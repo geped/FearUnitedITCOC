@@ -12,10 +12,18 @@ function displayFromUser(user) {
   return { name: name.slice(0, 120), tag: tag ? (tag.startsWith('#') ? tag : `#${tag}`).slice(0, 32) : '' };
 }
 
+function guestTelegramLabel(from) {
+  if (!from) return 'Ospite';
+  if (from.username) return `@${String(from.username).slice(0, 100)}`;
+  const n = [from.first_name, from.last_name].filter(Boolean).join(' ').trim();
+  return (n || `id:${from.id}`).slice(0, 160);
+}
+
 /** Solo contenuto messaggio utente (niente footer stanza: sta nel messaggio fisso hub). */
-function formatGlobalLine(displayName, displayTag, body) {
+function formatGlobalLine(displayName, displayTag, body, displayVerified) {
   const tagPart = displayTag ? ` <code>${escapeHtml(displayTag)}</code>` : '';
-  return `<b>${escapeHtml(displayName)}</b>${tagPart}\n${escapeHtml(body)}`;
+  const badge = displayVerified ? ' <b>✓</b>' : '';
+  return `<b>${escapeHtml(displayName)}</b>${badge}${tagPart}\n${escapeHtml(body)}`;
 }
 
 function escapeHtml(s) {
@@ -138,15 +146,19 @@ async function buildGlobalHubBodyHtml(subscriberRow) {
   const n = await sbc.countActiveGlobalSubscribers(epoch);
   const sub = subscriberRow;
   const tagPart = sub.display_tag ? ` <code>${escapeHtml(sub.display_tag)}</code>` : '';
+  const verifiedLine =
+    sub.display_verified === true || sub.display_verified === 'true'
+      ? '\n✓ <i>Profilo CoCBoard (verificato)</i>'
+      : '\n<i>Ospite: nome + tag testuale (non verificato)</i>';
   return (
     `🌍 <b>Chat globale</b>\n\n` +
-    `Nome mostrato: <b>${escapeHtml(sub.display_name)}</b>${tagPart}\n\n` +
+    `Nome mostrato: <b>${escapeHtml(sub.display_name)}</b>${tagPart}${verifiedLine}\n\n` +
     `👥 <b>${n}</b> in stanza\n\n` +
     `<i>Solo chi è in stanza riceve i messaggi. La sessione si aggiorna in automatico. Invia solo testo. Usa <b>Aggiorna</b> per aggiornare il contatore.</i>`
   );
 }
 
-/** Formato: <code>nomeInGioco#XXXXXXXXX</code> — tag villaggio = # + 9 caratteri (10 con #). */
+/** Formato: <code>nomeInGioco#XXXXXXXXX</code> — parte tag = <code>#</code> + 9 caratteri (10 in tutto). Solo formalità, nessuna verifica API CoC. */
 function parseGlobalManualDisplayLine(raw) {
   const t = String(raw || '').trim();
   const hashIdx = t.indexOf('#');
@@ -154,19 +166,19 @@ function parseGlobalManualDisplayLine(raw) {
     return {
       ok: false,
       reason:
-        'Formato: <code>nomeInGioco#TAG</code> (es. se in gioco sei <b>GIOCATORE</b> con tag <code>#2J2VLPP9R</code> → <code>GIOCATORE#2J2VLPP9R</code>). Il tag deve essere <b>#</b> seguito da <b>9</b> lettere/numeri.',
+        'Formato: <code>nomeInGioco#TAG</code> (es. <code>GIOCATORE#2J2VLPP9R</code>). Dopo il <code>#</code> servono <b>9</b> caratteri → il tag è <b>10</b> caratteri in tutto (incluso <code>#</code>).',
     };
   }
   const displayName = t.slice(0, hashIdx).trim();
   const tagPart = t.slice(hashIdx).replace(/\s+/g, '').toUpperCase();
   if (!displayName) {
-    return { ok: false, reason: 'Inserisci il nome prima del <code>#</code> (come nel gioco).' };
+    return { ok: false, reason: 'Inserisci il nome prima del <code>#</code>.' };
   }
   if (!/^#[0-9A-Z]{9}$/.test(tagPart)) {
     return {
       ok: false,
       reason:
-        'Il tag villaggio deve essere <code>#</code> + esattamente 9 caratteri (lettere/numeri), es. <code>#2J2VLPP9R</code>.',
+        'Il tag deve iniziare con <code>#</code> ed essere lungo <b>10</b> caratteri in tutto (es. <code>#2J2VLPP9R</code>). Non verifichiamo il villaggio in gioco.',
     };
   }
   return { ok: true, displayName: displayName.slice(0, 120), displayTag: tagPart };
@@ -265,6 +277,23 @@ async function sendGlobalEnteredMessage(ctx) {
     await ctx.reply('✅ <b>Chat globale</b> — sei dentro.', { parse_mode: 'HTML' }).catch(() => {});
   }
   await ensureGlobalHubMessage(ctx.telegram, uid, { allowCreate: true });
+}
+
+async function joinGlobalAsCocboardProfile(ctx, tauth) {
+  const uid = ctx.from?.id;
+  if (uid == null) return;
+  const sess = await tauth.getValidSession(uid);
+  if (!sess) {
+    await ctx
+      .reply('Sessione non attiva. Usa <b>Accedi</b> dal menù e riprova.', { parse_mode: 'HTML' })
+      .catch(() => {});
+    return;
+  }
+  ctx.cocboardUser = sess.user;
+  const { name, tag } = displayFromUser(sess.user);
+  await sbc.tickGlobalEpochIfNeeded().catch(() => {});
+  await sbc.upsertGlobalSubscriber(uid, name, tag || null, { displayVerified: true });
+  await sendGlobalEnteredMessage(ctx);
 }
 
 async function submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFileId, uid, subLabel }) {
@@ -414,18 +443,13 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
         return true;
       }
       await sbc.tickGlobalEpochIfNeeded().catch(() => {});
-      await sbc.upsertGlobalSubscriber(uid, parsed.displayName, parsed.displayTag);
+      await sbc.upsertGlobalSubscriber(uid, parsed.displayName, parsed.displayTag, { displayVerified: false });
       await ctx.reply('✅ <b>Chat globale</b> — sei dentro.', { parse_mode: 'HTML' });
       await ensureGlobalHubMessage(ctx.telegram, uid, { allowCreate: true });
       return true;
     }
 
     if (st.kind === 'recruit_guided') {
-      const sess = await tauth.getValidSession(uid);
-      if (!sess) {
-        pendingCommunity.delete(uid);
-        return false;
-      }
       if (st.step === 'tag') {
         if (!ctx.message?.text || txt.startsWith('/')) return true;
         const norm = cv.normClanTagForUrl(txt);
@@ -507,8 +531,12 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
       }
       pendingCommunity.delete(uid);
       const sess = await tauth.getValidSession(uid);
-      const disp = sess?.user ? displayFromUser(sess.user) : { name: 'Utente', tag: '' };
-      const subLabel = disp.tag ? `${disp.name} (${disp.tag})` : disp.name;
+      const disp = sess?.user ? displayFromUser(sess.user) : null;
+      const subLabel = disp
+        ? disp.tag
+          ? `${disp.name} (${disp.tag})`
+          : disp.name
+        : guestTelegramLabel(ctx.from);
       let bodyHtml;
       if (ctx.message.photo) {
         bodyHtml = tgh.messageEntitiesToHtml(bodyText, ctx.message.caption_entities || []);
@@ -546,7 +574,8 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
         return true;
       }
       const targets = await sbc.listGlobalBroadcastTargets(inserted.epoch_index, uid, inserted.created_at);
-      const line = formatGlobalLine(sub.display_name, sub.display_tag || '', body);
+      const verified = sub.display_verified === true || sub.display_verified === 'true';
+      const line = formatGlobalLine(sub.display_name, sub.display_tag || '', body, verified);
       for (const t of targets) {
         const tid = Number(t.telegram_user_id);
         try {
@@ -587,8 +616,8 @@ async function sendCommunityMenu(ctx) {
   const uid = ctx.from?.id;
   const text =
     `${escapeHtml('───')}\n💬 <b>Community CoCBoard</b>\n${escapeHtml('───')}\n\n` +
-    `• <b>Chat globale</b> — aperta a tutti; i messaggi li vedono solo gli utenti nella stanza.\n` +
-    `• <b>Reclutamento</b> — richiede accesso CoCBoard per inviare annunci; visibili 24h nel feed dopo approvazione.\n\n` +
+    `• <b>Chat globale</b> — aperta a tutti; in stanza solo chi è dentro; ✓ se usi il profilo CoCBoard.\n` +
+    `• <b>Reclutamento</b> — annunci visibili a tutti; invio bozza anche senza account (come <b>ospite Telegram</b>); 24h nel feed dopo approvazione.\n\n` +
     `<i>Nessuna chat diretta tra giocatori.</i>`;
   const kb = await communityMenuKb(uid);
   try {
@@ -620,17 +649,19 @@ function registerCommunityHandlers(bot, deps) {
     const sess = await tauth.getValidSession(uid);
     if (sess) ctx.cocboardUser = sess.user;
     const rows = [
-      [Markup.button.callback('👤 Nome da profilo CoCBoard', 'comm_gprof')],
+      [
+        sess
+          ? Markup.button.callback('👤 Nome da profilo CoCBoard', 'comm_gprof')
+          : Markup.button.callback('👤 Nome da profilo (Accedi / Registrati)', 'comm_gauth'),
+      ],
       [Markup.button.callback('✏️ Nome in gioco + tag (testo)', 'comm_gman')],
       [Markup.button.callback('« Indietro — Community', 'comm_hub')],
     ];
     const kb = Markup.inlineKeyboard(rows);
     const body =
       `🌍 <b>Chat globale</b>\n\n` +
-      `• <b>Profilo CoCBoard</b> — se sei registrato, usa nome e tag dall’account.\n` +
-      `• <b>Senza account</b> — invia una riga così:\n` +
-      `<code>nomeInGioco#TAG</code> (es. <code>GIOCATORE#2J2VLPP9R</code>)\n` +
-      `Il tag è <code>#</code> + 9 caratteri come in gioco.\n\n` +
+      `• <b>Profilo CoCBoard</b> — dopo accesso: nome e tag dall’account (compare ✓ <i>verificato</i> in chat).\n` +
+      `• <b>Senza account</b> — una riga <code>nomeInGioco#TAG</code> (es. <code>GIOCATORE#2J2VLPP9R</code>): il tag deve essere <b>10</b> caratteri (<code>#</code> + 9), solo formalità (nessun controllo API CoC).\n\n` +
       `<i>Dopo l’ingresso vedi quante persone ci sono in stanza.</i>`;
     try {
       await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
@@ -675,17 +706,48 @@ function registerCommunityHandlers(bot, deps) {
     await ctx.answerCbQuery('Stanza aggiornata.').catch(() => {});
   });
 
+  bot.action('comm_gauth', async (ctx) => {
+    if (isLinkedChatContext(ctx)) return;
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    const sess = await tauth.getValidSession(uid);
+    if (sess) {
+      ctx.cocboardUser = sess.user;
+      return joinGlobalAsCocboardProfile(ctx, tauth);
+    }
+    const kb = Markup.inlineKeyboard([
+      [Markup.button.callback('🔑 Accedi', 'auth_login_for_global'), Markup.button.callback('📝 Registrati', 'auth_register_for_global')],
+      [Markup.button.callback('« Indietro — Chat globale', 'comm_global')],
+    ]);
+    const body =
+      `👤 <b>Nome da profilo CoCBoard</b>\n\n` +
+      `Per entrare in chat con il nome dell’account (e la spunta ✓ <i>verificato</i>) devi <b>accedere o registrarti</b>.\n\n` +
+      `Dopo l’accesso ti chiederemo se entrare in chat globale o aprire il menù principale.`;
+    try {
+      await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
+    } catch (_) {
+      await ctx.reply(body, { parse_mode: 'HTML', ...kb });
+    }
+  });
+
+  bot.action('comm_postauth_global_join', async (ctx) => {
+    if (isLinkedChatContext(ctx)) return;
+    safeCb(ctx);
+    await joinGlobalAsCocboardProfile(ctx, tauth);
+  });
+
   bot.action('comm_gprof', async (ctx) => {
     if (isLinkedChatContext(ctx)) return;
     safeCb(ctx);
     const uid = ctx.from?.id;
     if (uid == null) return;
     const sess = await tauth.getValidSession(uid);
-    if (!sess) return;
-    const { name, tag } = displayFromUser(sess.user);
-    await sbc.tickGlobalEpochIfNeeded().catch(() => {});
-    await sbc.upsertGlobalSubscriber(uid, name, tag || null);
-    await sendGlobalEnteredMessage(ctx);
+    if (!sess) {
+      await ctx.answerCbQuery('Usa Accedi / Registrati.').catch(() => {});
+      return;
+    }
+    await joinGlobalAsCocboardProfile(ctx, tauth);
   });
 
   bot.action('comm_gman', async (ctx) => {
@@ -710,10 +772,7 @@ function registerCommunityHandlers(bot, deps) {
     const uid = ctx.from?.id;
     if (uid == null) return;
     const sess = await tauth.getValidSession(uid);
-    if (!sess) {
-      await ctx.answerCbQuery('Accedi prima.').catch(() => {});
-      return;
-    }
+    if (sess) ctx.cocboardUser = sess.user;
     await sbc.ensureRecruitmentSubscriber(uid);
     pendingCommunity.delete(uid);
     const text =
@@ -868,7 +927,7 @@ function registerCommunityHandlers(bot, deps) {
     const uid = ctx.from?.id;
     if (uid == null) return;
     const sess = await tauth.getValidSession(uid);
-    if (!sess) return;
+    if (sess) ctx.cocboardUser = sess.user;
     pendingCommunity.delete(uid);
     const text =
       `✉️ <b>Invia annuncio</b>\n\n` +
@@ -965,8 +1024,8 @@ function registerCommunityHandlers(bot, deps) {
     const bodyHtml = buildGuidedDraftHtml(st);
     pendingCommunity.delete(uid);
     const sess = await tauth.getValidSession(uid);
-    const disp = sess?.user ? displayFromUser(sess.user) : { name: 'Utente', tag: '' };
-    const subLabel = disp.tag ? `${disp.name} (${disp.tag})` : disp.name;
+    const disp = sess?.user ? displayFromUser(sess.user) : null;
+    const subLabel = disp ? (disp.tag ? `${disp.name} (${disp.tag})` : disp.name) : guestTelegramLabel(ctx.from);
     await submitRecruitmentToModerators(ctx, {
       bodyText,
       bodyHtml,
@@ -1055,5 +1114,6 @@ module.exports = {
   communityMenuKb,
   registerCommunityHandlers,
   displayFromUser,
+  joinGlobalAsCocboardProfile,
   purgeGlobalWindowTelegramMessages,
 };

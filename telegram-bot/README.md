@@ -1,6 +1,6 @@
 # CoCBoard — Bot Telegram
 
-Stesso **account Supabase Auth** del sito: senza **Accedi** o **Registrati** nessuno può usare le funzioni del bot. Il clan mostrato viene dal **profilo CoC** su metadata (`coc_clan_tag`), con override opzionale tramite `/setclan #TAG`.
+Stesso **account Supabase Auth** del sito per il menù completo e le **Mini App (web)**. Da **ospite** restano disponibili Cerca, Classifica e **Community** (chat globale + reclutamento). Il clan mostrato dopo login viene dal **profilo CoC** (`coc_clan_tag`), con override `/setclan #TAG`.
 
 Guida passo-passo su tutti i servizi: **[`DEPLOY-COCBOARD-BOT.md`](./DEPLOY-COCBOARD-BOT.md)**.
 
@@ -22,7 +22,11 @@ Webhook: su Render vengono usati `RENDER_EXTERNAL_URL` e path `/tg/cocboard-webh
 
 ## Database
 
-Esegui **[`schema-telegram-links.sql`](./schema-telegram-links.sql)** nel SQL Editor Supabase (sessione Auth + override clan).
+Esegui nel SQL Editor Supabase, in ordine:
+
+1. **[`schema-telegram-links.sql`](./schema-telegram-links.sql)** — sessione Auth + override clan  
+2. **[`schema-community-chat.sql`](./schema-community-chat.sql)** — chat globale, reclutamento, colonne hub  
+3. **[`schema-community-subscriber-rpc.sql`](./schema-community-subscriber-rpc.sql)** — RPC per iscrizioni chat globale (evita errori PostgREST «schema cache» su `hub_epoch_index`) + `display_verified`
 
 ## Comandi utili (dopo login)
 

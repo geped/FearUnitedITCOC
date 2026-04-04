@@ -103,3 +103,6 @@ COMMENT ON TABLE public.telegram_recruitment_submissions IS 'Bot: bozze reclutam
 -- Migrazione: formattazione Telegram (grassetto, ecc.) preservata in anteprima/pubblicazione
 ALTER TABLE public.telegram_recruitment_submissions ADD COLUMN IF NOT EXISTS body_html TEXT;
 COMMENT ON COLUMN public.telegram_recruitment_submissions.body_html IS 'Testo annuncio in HTML (stili Telegram); se null si usa body_text escaped.';
+
+-- Aggiornamenti su colonne hub / RPC: esegui anche telegram-bot/schema-community-subscriber-rpc.sql
+-- (funzioni SECURITY DEFINER + colonna display_verified; evita errori PostgREST «schema cache» su hub_epoch_index).

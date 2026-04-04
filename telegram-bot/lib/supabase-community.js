@@ -25,56 +25,50 @@ async function tickGlobalEpochIfNeeded() {
     .lt('epoch_index', cur);
 }
 
-async function upsertGlobalSubscriber(telegramUserId, displayName, displayTag) {
+async function upsertGlobalSubscriber(telegramUserId, displayName, displayTag, opts = {}) {
   const c = client();
   if (!c) throw new Error('Supabase non configurato.');
   const epoch = currentEpochIndex();
   const now = new Date().toISOString();
   const existing = await getGlobalSubscriber(telegramUserId);
-  const row = {
-    telegram_user_id: Number(telegramUserId),
-    display_name: String(displayName || '').slice(0, 120),
-    display_tag: displayTag ? String(displayTag).slice(0, 32) : null,
-    epoch_index: epoch,
-    joined_at: now,
-    active: true,
-    updated_at: now,
-    hub_message_id: existing?.hub_message_id != null ? Number(existing.hub_message_id) : null,
-    hub_epoch_index: existing?.hub_epoch_index != null ? Number(existing.hub_epoch_index) : null,
-  };
-  const { error } = await c.from('telegram_global_chat_subscribers').upsert(row, { onConflict: 'telegram_user_id' });
+  const displayVerified = opts.displayVerified === true;
+  const { error } = await c.rpc('cocboard_upsert_global_chat_subscriber', {
+    p_telegram_user_id: Number(telegramUserId),
+    p_display_name: String(displayName || '').slice(0, 120),
+    p_display_tag: displayTag ? String(displayTag).slice(0, 32) : null,
+    p_epoch_index: epoch,
+    p_joined_at: now,
+    p_active: true,
+    p_updated_at: now,
+    p_hub_message_id: existing?.hub_message_id != null ? Number(existing.hub_message_id) : null,
+    p_hub_epoch_index: existing?.hub_epoch_index != null ? Number(existing.hub_epoch_index) : null,
+    p_display_verified: displayVerified,
+  });
   if (error) throw new Error(error.message);
 }
 
 async function deactivateGlobalSubscriber(telegramUserId) {
   const c = client();
   if (!c) return;
-  await c
-    .from('telegram_global_chat_subscribers')
-    .update({
-      active: false,
-      updated_at: new Date().toISOString(),
-      hub_message_id: null,
-      hub_epoch_index: null,
-    })
-    .eq('telegram_user_id', Number(telegramUserId));
+  const { error } = await c.rpc('cocboard_deactivate_global_subscriber', {
+    p_telegram_user_id: Number(telegramUserId),
+  });
+  if (error) throw new Error(error.message);
 }
 
 async function setGlobalSubscriberHub(telegramUserId, hubMessageId, hubEpochIndex) {
   const c = client();
   if (!c) return;
-  const { data, error } = await c
-    .from('telegram_global_chat_subscribers')
-    .update({
-      hub_message_id: Number(hubMessageId),
-      hub_epoch_index: Number(hubEpochIndex),
-      updated_at: new Date().toISOString(),
-    })
-    .eq('telegram_user_id', Number(telegramUserId))
-    .eq('active', true)
-    .select('telegram_user_id');
+  const now = new Date().toISOString();
+  const { data, error } = await c.rpc('cocboard_set_global_subscriber_hub', {
+    p_telegram_user_id: Number(telegramUserId),
+    p_hub_message_id: Number(hubMessageId),
+    p_hub_epoch_index: Number(hubEpochIndex),
+    p_updated_at: now,
+  });
   if (error) throw new Error(error.message);
-  if (!data || !data.length) {
+  const n = typeof data === 'number' ? data : Number(data);
+  if (!n) {
     throw new Error('setGlobalSubscriberHub: nessuna riga attiva aggiornata (utente non in chat globale?)');
   }
 }
@@ -82,14 +76,10 @@ async function setGlobalSubscriberHub(telegramUserId, hubMessageId, hubEpochInde
 async function clearGlobalSubscriberHub(telegramUserId) {
   const c = client();
   if (!c) return;
-  await c
-    .from('telegram_global_chat_subscribers')
-    .update({
-      hub_message_id: null,
-      hub_epoch_index: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('telegram_user_id', Number(telegramUserId));
+  const { error } = await c.rpc('cocboard_clear_global_subscriber_hub', {
+    p_telegram_user_id: Number(telegramUserId),
+  });
+  if (error) throw new Error(error.message);
 }
 
 async function insertGlobalEphemeralDelivery(chatId, messageId, epochIndex) {
@@ -118,13 +108,12 @@ async function consumeGlobalEphemeralDeliveriesBeforeEpoch(cutoffEpochIndex) {
 async function getGlobalSubscriber(telegramUserId) {
   const c = client();
   if (!c) return null;
-  const { data, error } = await c
-    .from('telegram_global_chat_subscribers')
-    .select('*')
-    .eq('telegram_user_id', Number(telegramUserId))
-    .maybeSingle();
+  const { data, error } = await c.rpc('cocboard_get_global_chat_subscriber', {
+    p_telegram_user_id: Number(telegramUserId),
+  });
   if (error) throw new Error(error.message);
-  return data || null;
+  if (data == null || typeof data !== 'object') return null;
+  return data;
 }
 
 async function isActiveInGlobalChat(telegramUserId) {

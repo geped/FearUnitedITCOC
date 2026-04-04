@@ -31,12 +31,13 @@ function formatGuestWelcomePrivate() {
   return (
     `⚔️ <b>CoCBoard</b> <i>· gestione clan, CWL e giocatori</i>\n` +
     `${DIV2}\n\n` +
-    `🔐 <b>Accesso</b>\n` +
-    `Stesso account del sito web CoCBoard.\n\n` +
-    `1️⃣ Tocca <b>Accedi</b> o <b>Registrati</b>\n` +
-    `2️⃣ Segui i messaggi del bot (username, password, ecc.)\n` +
-    `3️⃣ Dopo l’ingresso avrai membro, CWL, bonus, guerre\n\n` +
-    `<i>Annulla in qualsiasi momento con <code>/cancel</code></i>`
+    `📌 <b>Da ospite</b>\n` +
+    `• <b>Cerca</b> e <b>Classifica</b> — subito\n` +
+    `• <b>Community</b> — chat globale e reclutamento (anche senza account)\n` +
+    `• <b>Come funziona</b> — guida rapida\n\n` +
+    `🔐 <b>Dopo Accedi / Registrati</b>\n` +
+    `Stesso account del sito: nel menù compariranno anche membri, CWL, bonus, guerre e scorciatoie <b>(web)</b> / Mini App.\n\n` +
+    `<i>Annulla con <code>/cancel</code> durante login o registrazione.</i>`
   );
 }
 
@@ -105,15 +106,19 @@ function formatGuestSnack() {
 function formatGuestHelp() {
   return (
     `${DIV}\n📖 <b>Guida rapida</b> (privato)\n${DIV}\n\n` +
+    `<b>Senza account</b>\n` +
+    `• <b>Cerca</b> / <b>Classifica</b> — villaggio o clan, classifiche trofei\n` +
+    `• <b>Community</b> — <b>Chat globale</b>: profilo CoCBoard (✓ verificato) oppure riga <code>nome#TAG</code> (tag 10 caratteri con <code>#</code>, solo formalità)\n` +
+    `• <b>Reclutamento</b> — leggi annunci; invia bozza come ospite (nome Telegram) o con account\n\n` +
     `<b>Accedi</b>\n` +
-    `Nome utente CoCBoard, oppure tag <code>#...</code>, oppure email → poi password.\n\n` +
+    `Username, tag <code>#...</code> o email → password.\n\n` +
     `<b>Registrati</b>\n` +
     `Tag villaggio → chiave API in-game → password → email (facoltativa).\n\n` +
     `<b>Dopo il login</b>\n` +
-    `Membri, CWL live, bonus, guerre, cerca, classifica, profilo.\n\n` +
-    `<b>Logout</b> (solo se sei dentro)\n` +
-    `Dal menù principale: cancella sessione sul bot.\n\n` +
-    `<code>/start</code> o <code>/cocboard</code> menù · <code>/cancel</code> annulla procedura`
+    `Menù completo: membri, CWL live, bonus, guerre, pulsanti <b>(web)</b> (CWL live apre Registri → Cronologia leghe → turni; Bonus apre gestione bonus).\n\n` +
+    `<b>Logout</b>\n` +
+    `Dal menù se sei dentro.\n\n` +
+    `<code>/start</code> · <code>/cocboard</code> · <code>/cancel</code>`
   );
 }
 
@@ -247,22 +252,23 @@ function formatTutorialStep(step) {
   if (step === 1) {
     return (
       `📚 <b>CoCBoard — passo 1/3</b>\n\n` +
-      `🔍 <b>Cerca</b> e <b>Classifica</b> funzionano anche senza clan.\n\n` +
-      `<i><code>/skip</code> in chat per saltare il tutorial.</i>`
+      `Da <b>ospite</b>: <b>Cerca</b>, <b>Classifica</b>, <b>Community</b> (chat globale + reclutamento).\n` +
+      `Dopo <b>Accedi</b>: nel menù trovi anche dati clan e pulsanti <b>(web)</b> (CWL live = Registri guerre → leghe → turni; Bonus = schermata bonus).\n\n` +
+      `<i><code>/skip</code> per saltare.</i>`
     );
   }
   if (step === 2) {
     return (
       `📚 <b>Passo 2/3</b>\n\n` +
-      `Nel <b>gruppo o canale</b> i dati clan (membri, CWL, bonus…) servono che un <b>Capo / Co-Capo / Admin</b> abbia collegato la chat con <code>/linkclan</code> (dopo «Aggiungi a canale/gruppo» in privato).\n\n` +
+      `Nel <b>gruppo</b>: membri/CWL servono che un <b>Capo / Co-Capo / Admin</b> abbia collegato la chat (<code>/linkclan</code> dopo «Aggiungi a canale/gruppo» in privato).\n\n` +
       `<i><code>/skip</code> per saltare.</i>`
     );
   }
   return (
     `📚 <b>Passo 3/3</b>\n\n` +
-    `📖 <code>/help</code> per i comandi · <b>Logout</b> nel menù.\n` +
-    `Dopo login in <b>privato</b>, tornando in gruppo sei già riconosciuto.\n\n` +
-    `Tocca <b>Apri menù</b> oppure <code>/skip</code>.`
+    `📖 <code>/help</code> · <b>Logout</b> nel menù.\n` +
+    `Login sempre in <b>privato</b>; in gruppo resti riconosciuto.\n\n` +
+    `Tocca <b>Apri menù</b> o <code>/skip</code>.`
   );
 }
 

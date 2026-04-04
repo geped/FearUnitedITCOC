@@ -22,6 +22,8 @@ const pendingSearch = new Map();
 const pendingLinkWizard = new Map();
 /** Wizard community: tag manuale chat globale, bozza reclutamento */
 const pendingCommunity = new Map();
+/** Dopo login da Community (profilo CoCBoard) → scelta chat globale vs menù */
+const postAuthGlobalResume = new Map();
 
 let cachedTgBotUsername = (process.env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '');
 
@@ -239,38 +241,34 @@ function isPublicCallbackData(d) {
   );
 }
 
-/** Community: chat globale anche senza login (reclutamento resta protetto negli handler). */
+/** Community: chat globale + reclutamento anche senza login (owner queue esclusa). */
 function isCommunityOpenGuestCallback(d) {
   if (!d) return false;
   return (
     d === 'comm_hub' ||
     d === 'comm_global' ||
     d === 'comm_gman' ||
+    d === 'comm_gauth' ||
+    d === 'comm_gprof' ||
+    d === 'comm_postauth_global_join' ||
     d === 'comm_global_leave' ||
-    d === 'comm_global_status'
+    d === 'comm_global_status' ||
+    d === 'comm_recruit' ||
+    d === 'comm_recruit_list' ||
+    d === 'comm_recruit_send' ||
+    d === 'comm_recruit_quick' ||
+    d === 'comm_recruit_guided' ||
+    d === 'recg_skip_link' ||
+    d === 'recg_skip_media' ||
+    d === 'recg_confirm' ||
+    d === 'recg_cancel'
   );
 }
 
-/** Ospite in chat privata: niente Logout (non sei dentro). */
+/** Ospite in chat privata: scorciatoie web solo dopo login (menù autenticato). */
 function buildPrivateGuestKb() {
   return Markup.inlineKeyboard([
     [Markup.button.callback('🔑 Accedi', 'auth_login'), Markup.button.callback('📝 Registrati', 'auth_register')],
-    [
-      Markup.button.callback('🏆 CWL live (web)', 'web_open:cwl'),
-      Markup.button.callback('📜 Guerre (web)', 'web_open:warlog'),
-    ],
-    [
-      Markup.button.callback('🎁 Bonus (web)', 'web_open:bonus'),
-      Markup.button.callback('👤 Profilo (web)', 'web_open:profilo'),
-    ],
-    [
-      Markup.button.callback('🏰 Info clan (web)', 'web_open:clan'),
-      Markup.button.callback('👥 Membri (web)', 'web_open:members'),
-    ],
-    [
-      Markup.button.callback('🔍 Cerca (web)', 'web_open:cerca'),
-      Markup.button.callback('📊 Classifica (web)', 'web_open:rankings'),
-    ],
     [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
     [Markup.button.callback('💬 Community', 'comm_hub')],
     [Markup.button.callback('ℹ️ Come funziona', 'auth_guest_help')],
@@ -436,6 +434,17 @@ async function startAddGroupWizard(ctx) {
   await presentLinkClanChoice(ctx, clanTag);
 }
 
+async function sendPostAuthGlobalChoice(ctx) {
+  const text =
+    `✅ <b>Accesso effettuato.</b>\n\n` +
+    `Vuoi entrare in <b>chat globale</b> con il profilo CoCBoard (✓ verificato in chat) oppure aprire il <b>menù principale</b>?`;
+  const kb = Markup.inlineKeyboard([
+    [Markup.button.callback('🌍 Chat globale (profilo verificato)', 'comm_postauth_global_join')],
+    [Markup.button.callback('🏠 Menù principale', 'menu')],
+  ]);
+  await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+}
+
 async function handlePendingMessage(ctx) {
   const uid = ctx.from?.id;
   if (uid == null) return;
@@ -478,11 +487,17 @@ async function handlePendingMessage(ctx) {
           await ctx.telegram.deleteMessage(uid, loadingMsg.message_id).catch(() => {});
         }
         await ctx.reply('✅ <b>Accesso effettuato.</b>', { parse_mode: 'HTML' });
-        await reopenMainMenu(ctx, data.user);
+        if (postAuthGlobalResume.get(uid) === 'global_profile') {
+          postAuthGlobalResume.delete(uid);
+          await sendPostAuthGlobalChoice(ctx);
+        } else {
+          await reopenMainMenu(ctx, data.user);
+        }
       } catch (e) {
         if (loadingMsg?.message_id) {
           await ctx.telegram.deleteMessage(uid, loadingMsg.message_id).catch(() => {});
         }
+        postAuthGlobalResume.delete(uid);
         await ctx.reply(`❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
         await sendGuestMenu(ctx);
       }
@@ -553,11 +568,17 @@ async function handlePendingMessage(ctx) {
           await ctx.telegram.deleteMessage(uid, loadingMsg.message_id).catch(() => {});
         }
         await ctx.reply(`✅ Registrato come <b>${fmt.escapeHtml(reg.username)}</b>.`, { parse_mode: 'HTML' });
-        await reopenMainMenu(ctx, sign.user);
+        if (postAuthGlobalResume.get(uid) === 'global_profile') {
+          postAuthGlobalResume.delete(uid);
+          await sendPostAuthGlobalChoice(ctx);
+        } else {
+          await reopenMainMenu(ctx, sign.user);
+        }
       } catch (e) {
         if (loadingMsg?.message_id) {
           await ctx.telegram.deleteMessage(uid, loadingMsg.message_id).catch(() => {});
         }
+        postAuthGlobalResume.delete(uid);
         await ctx.reply(`❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
         await sendGuestMenu(ctx);
       }
@@ -713,7 +734,7 @@ async function mainMenuKeyboard(ctx, user, hasClanTag) {
   if (!grp && user) {
     try {
       const webPairs = [
-        ['🏆 CWL live', 'cwl', '📜 Registro guerre', 'warlog'],
+        ['🏆 CWL live', 'cwl_warlog', '📜 Registro guerre', 'warlog'],
         ['🎁 Bonus', 'bonus', '🏰 Info / Membri', 'members'],
         ['👤 Profilo', 'profilo', '🔍 Cerca', 'cerca'],
       ];
@@ -839,6 +860,7 @@ async function performFullLogout(ctx, { viaCommand }) {
   pendingSearch.delete(uid);
   pendingLinkWizard.delete(uid);
   pendingCommunity.delete(uid);
+  postAuthGlobalResume.delete(uid);
   await sbcCommunity.deactivateGlobalSubscriber(uid).catch(() => {});
   await refreshWebhookDropPending(ctx.telegram);
   if (viaCommand) {
@@ -939,7 +961,7 @@ async function loadAndShowCwl(ctx, clanTag, viewSpec) {
     try {
       const idx = fmt.getDefaultCwlRoundIndex(data);
       const rn = (data.roundsData || [])[idx]?.roundNumber;
-      const extra = {};
+      const extra = { open_tab: 'cwl_warlog' };
       if (rn != null) extra.cwl_round = String(rn);
       webAppUrl = await buildWebAppHandoffUrl(ctx, extra);
       if (webAppUrl && !String(webAppUrl).startsWith('https://')) webAppUrl = null;
@@ -1038,7 +1060,7 @@ async function buildBonusKeyboard(ctx, page, pages) {
   rows.push([Markup.button.callback('📅 Storico per stagione', 'bonus:hist'), Markup.button.callback('🏆 Classifica riceventi', 'bonus:hof')]);
   if (!isLinkedChatContext(ctx) && ctx.cocboardUser) {
     try {
-      const wu = await buildWebAppHandoffUrl(ctx, { open_tab: 'cwl' });
+      const wu = await buildWebAppHandoffUrl(ctx, { open_tab: 'bonus' });
       if (wu && String(wu).startsWith('https://')) {
         rows.push([Markup.button.webApp('🌐 Gestisci bonus (web)', wu)]);
       }
@@ -1253,8 +1275,11 @@ function setupBot(bot) {
       `📖 <b>Aiuto CoCBoard</b>`,
       `${fmt.DIV}`,
       '',
-      `🔍 <b>Cerca e classifica</b> (anche senza clan)`,
-      `Pulsanti <b>Cerca</b> e <b>Classifica</b>, oppure <code>/player</code> · <code>/cerca_clan</code>`,
+      `🔍 <b>Cerca e classifica</b> (anche senza account)`,
+      `Pulsanti nel menù o <code>/player</code> · <code>/cerca_clan</code>`,
+      '',
+      `💬 <b>Community</b> (anche ospite)`,
+      `Chat globale e reclutamento dal menù.`,
       '',
       `🏰 <b>Clan</b>`,
       `<code>/setclan #TAG</code> — altro clan\n<code>/logout_clan</code> — rimuovi override`,
@@ -1529,6 +1554,50 @@ function setupBot(bot) {
     );
   });
 
+  bot.action('auth_login_for_global', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (isLinkedChatContext(ctx)) {
+      await ensureTgBotUsername(ctx.telegram);
+      const url = privateChatUrl(cachedTgBotUsername);
+      if (url) {
+        await ctx.reply(`🔐 <b>Accedi in privato</b>\n\n<a href="${url}">Apri la chat con il bot</a>`, { parse_mode: 'HTML' });
+      } else {
+        await ctx.reply(fmt.formatPrivateOnlyWizard(), { parse_mode: 'HTML' });
+      }
+      return;
+    }
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    postAuthGlobalResume.set(uid, 'global_profile');
+    pendingSearch.delete(uid);
+    pendingAuth.set(uid, { kind: 'login', step: 1 });
+    await ctx.reply(
+      '🔑 <b>Accedi</b> (per la chat globale con profilo verificato)\n\n' +
+        'Invia <b>nome utente</b>, <b>tag</b> <code>#...</code> o <b>email</b>.',
+      { parse_mode: 'HTML' }
+    );
+  });
+
+  bot.action('auth_register_for_global', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (isLinkedChatContext(ctx)) {
+      await ensureTgBotUsername(ctx.telegram);
+      const url = privateChatUrl(cachedTgBotUsername);
+      if (url) {
+        await ctx.reply(`🔐 <b>Registrati in privato</b>\n\n<a href="${url}">Apri la chat con il bot</a>`, { parse_mode: 'HTML' });
+      } else {
+        await ctx.reply(fmt.formatPrivateOnlyWizard(), { parse_mode: 'HTML' });
+      }
+      return;
+    }
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    postAuthGlobalResume.set(uid, 'global_profile');
+    pendingSearch.delete(uid);
+    pendingAuth.set(uid, { kind: 'reg', step: 1 });
+    await ctx.reply('📝 <b>Registrati</b>\n\nInvia il <b>tag villaggio</b> (es. <code>#2ABC</code>).', { parse_mode: 'HTML' });
+  });
+
   bot.action('auth_login', async (ctx) => {
     safeAnswerCb(ctx);
     if (isLinkedChatContext(ctx)) {
@@ -1543,6 +1612,7 @@ function setupBot(bot) {
       }
       return;
     }
+    postAuthGlobalResume.delete(ctx.from.id);
     pendingSearch.delete(ctx.from.id);
     pendingAuth.set(ctx.from.id, { kind: 'login', step: 1 });
     await ctx.reply(
@@ -1566,6 +1636,7 @@ function setupBot(bot) {
       }
       return;
     }
+    postAuthGlobalResume.delete(ctx.from.id);
     pendingSearch.delete(ctx.from.id);
     pendingAuth.set(ctx.from.id, { kind: 'reg', step: 1 });
     await ctx.reply(
@@ -1646,10 +1717,10 @@ function setupBot(bot) {
     safeAnswerCb(ctx);
     const body =
       `${fmt.DIV}\n📖 <b>Aiuto rapido</b>\n${fmt.DIV}\n\n` +
-      `• <b>Cerca / Classifica</b> — pulsanti nel menù\n` +
-      `• <code>/setclan</code> · <code>/player</code> · <code>/cerca_clan</code>\n` +
-      `• <code>/esci</code> — logout\n` +
-      `• Comando completo: <code>/help</code>`;
+      `• <b>Cerca / Classifica / Community</b> — anche da ospite\n` +
+      `• Dopo login: scorciatoie <b>(web)</b> (CWL live = turni in Registri guerre; Bonus = bonus)\n` +
+      `• <code>/setclan</code> · <code>/player</code> · <code>/cerca_clan</code> · <code>/esci</code>\n` +
+      `• Dettagli: <code>/help</code>`;
     await ctx
       .editMessageText(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('« Menù', 'menu')]]) })
       .catch(async () => {
@@ -2052,7 +2123,8 @@ function setupBot(bot) {
   });
 
   const WEB_OPEN_TAB = {
-    cwl: 'cwl',
+    cwl_warlog: 'cwl_warlog',
+    cwl: 'cwl_warlog',
     warlog: 'warlog',
     bonus: 'bonus',
     profilo: 'profilo',
@@ -2092,7 +2164,8 @@ function setupBot(bot) {
     }
     await ctx.answerCbQuery().catch(() => {});
     const titles = {
-      cwl: 'CWL live',
+      cwl_warlog: 'CWL live (turni)',
+      cwl: 'CWL live (turni)',
       warlog: 'Registro guerre',
       bonus: 'Bonus CWL',
       profilo: 'Il mio profilo',
