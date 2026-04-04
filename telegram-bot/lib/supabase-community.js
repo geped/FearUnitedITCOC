@@ -63,14 +63,16 @@ async function deactivateGlobalSubscriber(telegramUserId) {
 async function setGlobalSubscriberHub(telegramUserId, hubMessageId, hubEpochIndex) {
   const c = client();
   if (!c) return;
-  await c
+  const { error } = await c
     .from('telegram_global_chat_subscribers')
     .update({
       hub_message_id: Number(hubMessageId),
       hub_epoch_index: Number(hubEpochIndex),
       updated_at: new Date().toISOString(),
     })
-    .eq('telegram_user_id', Number(telegramUserId));
+    .eq('telegram_user_id', Number(telegramUserId))
+    .eq('active', true);
+  if (error) throw new Error(error.message);
 }
 
 async function clearGlobalSubscriberHub(telegramUserId) {

@@ -149,7 +149,11 @@ async function buildGlobalHubBodyHtml(subscriberRow) {
   );
 }
 
-async function ensureGlobalHubMessage(telegram, telegramUserId) {
+/**
+ * @param {{ allowCreate?: boolean }} opts allowCreate=true solo da ingresso manuale / pulsante Aggiorna (mai dal timer).
+ */
+async function ensureGlobalHubMessage(telegram, telegramUserId, opts = {}) {
+  const allowCreate = opts.allowCreate === true;
   const sub = await sbc.getGlobalSubscriber(telegramUserId);
   if (!sub || !sub.active) return;
   const curE = cv.currentEpochIndex();
@@ -158,23 +162,43 @@ async function ensureGlobalHubMessage(telegram, telegramUserId) {
   const kb = globalHubKeyboard();
   const chatId = telegramUserId;
   const extra = { parse_mode: 'HTML', reply_markup: kb.reply_markup };
-  if (sub.hub_message_id) {
+  const mid = sub.hub_message_id != null ? Number(sub.hub_message_id) : null;
+
+  if (mid) {
     try {
-      await telegram.editMessageText(chatId, sub.hub_message_id, undefined, text, extra);
+      await telegram.editMessageText(chatId, mid, undefined, text, extra);
       if (Number(sub.hub_epoch_index) !== curE) {
-        await sbc.setGlobalSubscriberHub(telegramUserId, sub.hub_message_id, curE);
+        try {
+          await sbc.setGlobalSubscriberHub(telegramUserId, mid, curE);
+        } catch (e) {
+          console.warn('[cocboard-bot] global hub setHub dopo edit:', e.message || e);
+        }
       }
       return;
-    } catch (_) {}
+    } catch (e) {
+      await sbc.clearGlobalSubscriberHub(telegramUserId).catch(() => {});
+      if (!allowCreate) return;
+    }
   }
-  const msg = await telegram.sendMessage(chatId, text, extra);
-  if (msg?.message_id) {
-    await sbc.setGlobalSubscriberHub(telegramUserId, msg.message_id, curE);
+
+  if (!allowCreate) return;
+
+  try {
+    const msg = await telegram.sendMessage(chatId, text, extra);
+    if (msg?.message_id) {
+      try {
+        await sbc.setGlobalSubscriberHub(telegramUserId, msg.message_id, curE);
+      } catch (e) {
+        console.warn('[cocboard-bot] global hub setHub dopo send:', e.message || e);
+      }
+    }
+  } catch (e) {
+    console.warn('[cocboard-bot] global hub sendMessage:', e.message || e);
   }
 }
 
 async function refreshGlobalHubForUser(telegram, telegramUserId) {
-  await ensureGlobalHubMessage(telegram, telegramUserId);
+  await ensureGlobalHubMessage(telegram, telegramUserId, { allowCreate: true });
 }
 
 /** Dopo tick epoch: cancella su Telegram le bolle della finestra precedente e hub obsoleti. */
@@ -208,7 +232,7 @@ async function refreshAllGlobalHubMessages(bot) {
     ids = [];
   }
   for (const uid of ids) {
-    await ensureGlobalHubMessage(telegram, uid).catch(() => {});
+    await ensureGlobalHubMessage(telegram, uid, { allowCreate: false }).catch(() => {});
     await sleep(30);
   }
 }
@@ -221,7 +245,7 @@ async function sendGlobalEnteredMessage(ctx) {
   } catch (_) {
     await ctx.reply('✅ <b>Chat globale</b> — sei dentro.', { parse_mode: 'HTML' }).catch(() => {});
   }
-  await ensureGlobalHubMessage(ctx.telegram, uid);
+  await ensureGlobalHubMessage(ctx.telegram, uid, { allowCreate: true });
 }
 
 async function submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFileId, uid, subLabel }) {
@@ -385,7 +409,7 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
       await sbc.tickGlobalEpochIfNeeded().catch(() => {});
       await sbc.upsertGlobalSubscriber(uid, displayName, displayTag);
       await ctx.reply('✅ <b>Chat globale</b> — sei dentro.', { parse_mode: 'HTML' });
-      await ensureGlobalHubMessage(ctx.telegram, uid);
+      await ensureGlobalHubMessage(ctx.telegram, uid, { allowCreate: true });
       return true;
     }
 

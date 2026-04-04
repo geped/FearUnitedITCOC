@@ -2112,7 +2112,7 @@ async function main() {
   comm.refreshAllGlobalHubMessages(bot).catch(() => {});
   setInterval(() => {
     comm.refreshAllGlobalHubMessages(bot).catch(() => {});
-  }, 15_000);
+  }, 45_000);
 
   const webhookDomain = pickWebhookDomain();
   const webhookSecretPath = pickWebhookPath();
