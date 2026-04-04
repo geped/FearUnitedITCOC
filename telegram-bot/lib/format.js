@@ -108,7 +108,8 @@ function formatGuestHelp() {
     `${DIV}\n📖 <b>Guida rapida</b> (privato)\n${DIV}\n\n` +
     `<b>Senza account</b>\n` +
     `• <b>Cerca</b> / <b>Classifica</b> — villaggio o clan, classifiche trofei\n` +
-    `• <b>Community</b> — <b>Chat globale</b>: profilo CoCBoard (✓ verificato) oppure riga <code>nome#TAG</code> (tag 10 caratteri con <code>#</code>, solo formalità)\n` +
+    `• <b>Community</b> — <b>Chat globale</b>: profilo CoCBoard (✅ verificato) oppure riga <code>nome#TAG</code> (tag 10 caratteri con <code>#</code>, solo formalità)\n` +
+    `• <b>Uscita chat globale</b> — automatica se usi un comando <code>/</code> (tranne <code>/esci_chat_global</code> e <code>/annulla_reclutamento</code>), <code>/cocboard</code>, <code>/start</code>, oppure pulsanti come <b>Menù</b> / <b>Community</b>; ricevi un messaggio di conferma.\n` +
     `• <b>Reclutamento</b> — leggi annunci; invia bozza come ospite (nome Telegram) o con account\n\n` +
     `<b>Accedi</b>\n` +
     `Username, tag <code>#...</code> o email → password.\n\n` +
@@ -252,8 +253,9 @@ function formatTutorialStep(step) {
   if (step === 1) {
     return (
       `📚 <b>CoCBoard — passo 1/3</b>\n\n` +
-      `Da <b>ospite</b>: <b>Cerca</b>, <b>Classifica</b>, <b>Community</b> (chat globale + reclutamento).\n` +
-      `Dopo <b>Accedi</b>: nel menù trovi anche dati clan e pulsanti <b>(web)</b> (CWL live = Registri guerre → leghe → turni; Bonus = schermata bonus).\n\n` +
+    `Da <b>ospite</b>: <b>Cerca</b>, <b>Classifica</b>, <b>Community</b> (chat globale + reclutamento).\n` +
+    `Dopo <b>Accedi</b>: nel menù trovi anche dati clan e pulsanti <b>(web)</b> (CWL live = Registri guerre → leghe → turni; Bonus = schermata bonus).\n` +
+    `In <b>chat globale</b>: ✅ accanto al nome = profilo CoCBoard; <code>/cocboard</code>, <code>/start</code>, altri comandi <code>/</code> o il pulsante <b>Menù</b> ti fanno uscire dalla stanza (ricevi un avviso).\n\n` +
       `<i><code>/skip</code> per saltare.</i>`
     );
   }

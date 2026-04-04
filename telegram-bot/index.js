@@ -434,12 +434,36 @@ async function startAddGroupWizard(ctx) {
   await presentLinkClanChoice(ctx, clanTag);
 }
 
+const GLOBAL_CHAT_LEAVE_HINT =
+  '👋 <i>Sei uscito dalla <b>chat globale</b>.</i> Non ricevi più i messaggi della stanza. Per rientrare: <b>Community → Chat globale</b>.';
+
+/** Se iscritto attivo alla chat globale: disiscrive, elimina hub, pending. @returns {boolean} se era in stanza */
+async function leaveGlobalIfActive(ctx, opts = {}) {
+  const notify = opts.notify === true;
+  const uid = ctx.from?.id;
+  if (uid == null || isLinkedChatContext(ctx) || ctx.chat?.type !== 'private') return false;
+  const active = await sbcCommunity.isActiveInGlobalChat(uid).catch(() => false);
+  if (!active) return false;
+  const sub = await sbcCommunity.getGlobalSubscriber(uid).catch(() => null);
+  if (sub?.hub_message_id != null) {
+    try {
+      await ctx.telegram.deleteMessage(uid, Number(sub.hub_message_id));
+    } catch (_) {}
+  }
+  await sbcCommunity.deactivateGlobalSubscriber(uid).catch(() => {});
+  pendingCommunity.delete(uid);
+  if (notify) {
+    await ctx.reply(GLOBAL_CHAT_LEAVE_HINT, { parse_mode: 'HTML' }).catch(() => {});
+  }
+  return true;
+}
+
 async function sendPostAuthGlobalChoice(ctx) {
   const text =
     `✅ <b>Accesso effettuato.</b>\n\n` +
-    `Vuoi entrare in <b>chat globale</b> con il profilo CoCBoard (✓ verificato in chat) oppure aprire il <b>menù principale</b>?`;
+    `Vuoi entrare in <b>chat globale</b> con il profilo CoCBoard (✅ verificato in chat) oppure aprire il <b>menù principale</b>?`;
   const kb = Markup.inlineKeyboard([
-    [Markup.button.callback('🌍 Chat globale (profilo verificato)', 'comm_postauth_global_join')],
+    [Markup.button.callback('🌍 Chat globale (profilo ✅)', 'comm_postauth_global_join')],
     [Markup.button.callback('🏠 Menù principale', 'menu')],
   ]);
   await ctx.reply(text, { parse_mode: 'HTML', ...kb });
@@ -1112,6 +1136,19 @@ async function replyRanking(ctx, rankType, locationId, areaLabel) {
 function setupBot(bot) {
   bot.use(guardMiddleware());
 
+  /** Uscita silenziosa dalla chat globale su quasi tutti i callback (tranne hub stanza). */
+  bot.use(async (ctx, next) => {
+    if (!ctx.callbackQuery) return next();
+    if (isLinkedChatContext(ctx)) return next();
+    const uid = ctx.from?.id;
+    if (uid == null || ctx.chat?.type !== 'private') return next();
+    const d = ctx.callbackQuery.data || '';
+    if (d === 'noop' || d === 'comm_global_leave' || d === 'comm_global_status') return next();
+    const notifyLeave = d === 'menu' || d === 'comm_hub';
+    await leaveGlobalIfActive(ctx, { notify: notifyLeave });
+    return next();
+  });
+
   bot.use(async (ctx, next) => {
     if (!ctx.from) return next();
     const txt = (ctx.message?.text || '').trim();
@@ -1163,6 +1200,15 @@ function setupBot(bot) {
       tauth,
     });
     if (handledComm) return;
+    if (ctx.chat?.type === 'private' && ctx.message?.text) {
+      const raw = ctx.message.text.trim();
+      if (raw.startsWith('/')) {
+        const cmd = raw.split(/\s+/)[0].toLowerCase().split('@')[0];
+        if (cmd !== '/esci_chat_global' && cmd !== '/annulla_reclutamento') {
+          await leaveGlobalIfActive(ctx, { notify: true });
+        }
+      }
+    }
     return next();
   });
 
@@ -1572,7 +1618,7 @@ function setupBot(bot) {
     pendingSearch.delete(uid);
     pendingAuth.set(uid, { kind: 'login', step: 1 });
     await ctx.reply(
-      '🔑 <b>Accedi</b> (per la chat globale con profilo verificato)\n\n' +
+      '🔑 <b>Accedi</b> (per la chat globale con profilo ✅)\n\n' +
         'Invia <b>nome utente</b>, <b>tag</b> <code>#...</code> o <b>email</b>.',
       { parse_mode: 'HTML' }
     );

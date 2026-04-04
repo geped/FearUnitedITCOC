@@ -22,7 +22,7 @@ function guestTelegramLabel(from) {
 /** Solo contenuto messaggio utente (niente footer stanza: sta nel messaggio fisso hub). */
 function formatGlobalLine(displayName, displayTag, body, displayVerified) {
   const tagPart = displayTag ? ` <code>${escapeHtml(displayTag)}</code>` : '';
-  const badge = displayVerified ? ' <b>✓</b>' : '';
+  const badge = displayVerified ? ' ✅' : '';
   return `<b>${escapeHtml(displayName)}</b>${badge}${tagPart}\n${escapeHtml(body)}`;
 }
 
@@ -148,7 +148,7 @@ async function buildGlobalHubBodyHtml(subscriberRow) {
   const tagPart = sub.display_tag ? ` <code>${escapeHtml(sub.display_tag)}</code>` : '';
   const verifiedLine =
     sub.display_verified === true || sub.display_verified === 'true'
-      ? '\n✓ <i>Profilo CoCBoard (verificato)</i>'
+      ? '\n✅ <i>Profilo CoCBoard (verificato)</i>'
       : '\n<i>Ospite: nome + tag testuale (non verificato)</i>';
   return (
     `🌍 <b>Chat globale</b>\n\n` +
@@ -616,7 +616,7 @@ async function sendCommunityMenu(ctx) {
   const uid = ctx.from?.id;
   const text =
     `${escapeHtml('───')}\n💬 <b>Community CoCBoard</b>\n${escapeHtml('───')}\n\n` +
-    `• <b>Chat globale</b> — aperta a tutti; in stanza solo chi è dentro; ✓ se usi il profilo CoCBoard.\n` +
+    `• <b>Chat globale</b> — aperta a tutti; in stanza solo chi è dentro; ✅ se usi il profilo CoCBoard.\n` +
     `• <b>Reclutamento</b> — annunci visibili a tutti; invio bozza anche senza account (come <b>ospite Telegram</b>); 24h nel feed dopo approvazione.\n\n` +
     `<i>Nessuna chat diretta tra giocatori.</i>`;
   const kb = await communityMenuKb(uid);
@@ -660,7 +660,7 @@ function registerCommunityHandlers(bot, deps) {
     const kb = Markup.inlineKeyboard(rows);
     const body =
       `🌍 <b>Chat globale</b>\n\n` +
-      `• <b>Profilo CoCBoard</b> — dopo accesso: nome e tag dall’account (compare ✓ <i>verificato</i> in chat).\n` +
+      `• <b>Profilo CoCBoard</b> — dopo accesso: nome e tag dall’account (compare ✅ <i>verificato</i> in chat).\n` +
       `• <b>Senza account</b> — una riga <code>nomeInGioco#TAG</code> (es. <code>GIOCATORE#2J2VLPP9R</code>): il tag deve essere <b>10</b> caratteri (<code>#</code> + 9), solo formalità (nessun controllo API CoC).\n\n` +
       `<i>Dopo l’ingresso vedi quante persone ci sono in stanza.</i>`;
     try {
@@ -722,7 +722,7 @@ function registerCommunityHandlers(bot, deps) {
     ]);
     const body =
       `👤 <b>Nome da profilo CoCBoard</b>\n\n` +
-      `Per entrare in chat con il nome dell’account (e la spunta ✓ <i>verificato</i>) devi <b>accedere o registrarti</b>.\n\n` +
+      `Per entrare in chat con il nome dell’account (✅ <i>verificato</i>) devi <b>accedere o registrarti</b>.\n\n` +
       `Dopo l’accesso ti chiederemo se entrare in chat globale o aprire il menù principale.`;
     try {
       await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
