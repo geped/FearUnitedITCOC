@@ -169,9 +169,14 @@ vercel --prod --yes
 # Deploy Render (solo se modifichi render-proxy/index.js)
 # → Fare push su git e triggera deploy automatico su Render, oppure deploy manuale dalla dashboard
 
+# Bot Telegram (cartella telegram-bot/) — servizio Render collegato al repo
+# → commit mirato dei file del bot + git push origin master (deploy automatico)
+
 # Test
 npm test
 ```
+
+**Convenzione (agente):** dopo modifiche al bot, eseguire **commit e push** senza attendere conferma, salvo implementazioni **complesse** (es. migrazioni SQL delicate, refactor ampi, breaking changes) dove serve un checkpoint con il maintainer.
 
 ---
 

@@ -992,14 +992,16 @@ function registerCommunityHandlers(bot, deps) {
     const uid = ctx.from?.id;
     if (uid == null) return;
     pendingCommunity.set(uid, { kind: 'global_manual_tag' });
-    await ctx
-      .editMessageText(
-        '✏️ Invia <b>una riga</b> nel formato:\n<code>nomeInGioco#TAG</code>\n\n' +
-          'Esempio: in gioco ti chiami <b>GIOCATORE</b> e il tag è <code>#2J2VLPP9R</code> →\n<code>GIOCATORE#2J2VLPP9R</code>\n\n' +
-          '<code>/esci_chat_global</code> oppure «Esci» sull’hub dopo l’ingresso.',
-        { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('« Indietro — Chat globale', 'comm_global')]]) }
-      )
-      .catch(() => {});
+    const body =
+      '✏️ Invia <b>una riga</b> nel formato:\n<code>nomeInGioco#TAG</code>\n\n' +
+      'Esempio: in gioco ti chiami <b>GIOCATORE</b> e il tag è <code>#2J2VLPP9R</code> →\n<code>GIOCATORE#2J2VLPP9R</code>\n\n' +
+      '<code>/esci_chat_global</code> oppure «Esci» sull’hub dopo l’ingresso.';
+    const kb = Markup.inlineKeyboard([[Markup.button.callback('« Indietro — Chat globale', 'comm_global')]]);
+    try {
+      await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
+    } catch (_) {
+      await ctx.reply(body, { parse_mode: 'HTML', ...kb }).catch(() => {});
+    }
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 

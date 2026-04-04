@@ -60,6 +60,16 @@ function attachPrivateUiTracking(ctx) {
 function callbackSkipsUiWipe(data) {
   const d = data || '';
   if (d === 'noop' || d === 'comm_global_status') return true;
+  // Sotto-menu chat globale: stessa bolla di comm_global — se facciamo wipe, editMessageText fallisce.
+  if (
+    d === 'comm_gman' ||
+    d === 'comm_gauth' ||
+    d === 'comm_gprof' ||
+    d === 'comm_gprof_sf' ||
+    d === 'comm_gprof_sm'
+  ) {
+    return true;
+  }
   return false;
 }
 
