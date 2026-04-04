@@ -105,6 +105,19 @@ async function consumeGlobalEphemeralDeliveriesBeforeEpoch(cutoffEpochIndex) {
   return data || [];
 }
 
+/** Elimina tutte le bolle chat globale per una DM (utente esce o cambia sezione); ritorna le righe per deleteMessage su Telegram. */
+async function consumeGlobalEphemeralDeliveriesForChat(chatId) {
+  const c = client();
+  if (!c) return [];
+  const { data, error } = await c
+    .from('telegram_global_ephemeral_deliveries')
+    .delete()
+    .eq('chat_id', Number(chatId))
+    .select('chat_id, message_id');
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
 async function getGlobalSubscriber(telegramUserId) {
   const c = client();
   if (!c) return null;
@@ -331,6 +344,7 @@ module.exports = {
   clearGlobalSubscriberHub,
   insertGlobalEphemeralDelivery,
   consumeGlobalEphemeralDeliveriesBeforeEpoch,
+  consumeGlobalEphemeralDeliveriesForChat,
   getGlobalSubscriber,
   isActiveInGlobalChat,
   insertGlobalMessage,

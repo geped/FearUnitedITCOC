@@ -11,6 +11,7 @@ const tauth = require('./lib/telegram-auth');
 const sbcCommunity = require('./lib/supabase-community');
 const cv = require('./lib/community-validation');
 const comm = require('./lib/community-handlers');
+const privateUi = require('./lib/private-ui-cleanup');
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -1134,6 +1135,37 @@ async function replyRanking(ctx, rankType, locationId, areaLabel) {
 
 function setupBot(bot) {
   bot.use(guardMiddleware());
+
+  /** Chat privata: traccia ogni ctx.reply per poter ripulire la conversazione al cambio sezione. */
+  bot.use(async (ctx, next) => {
+    if (ctx.chat?.type !== 'private' || ctx.from?.id == null) return next();
+    const uid = ctx.from.id;
+    const origReply = ctx.reply.bind(ctx);
+    ctx.reply = async (...args) => {
+      const m = await origReply(...args);
+      if (m && typeof m.message_id === 'number') privateUi.notePrivateUiMessage(uid, m.message_id);
+      return m;
+    };
+    return next();
+  });
+
+  /** Privato + callback: elimina bolle precedenti (menù, CWL multi-messaggio, annunci, relay chat globale…). */
+  bot.use(async (ctx, next) => {
+    if (ctx.chat?.type !== 'private' || ctx.from?.id == null || !ctx.callbackQuery) return next();
+    const d = ctx.callbackQuery.data || '';
+    if (privateUi.callbackSkipsUiWipe(d)) return next();
+    await privateUi.wipePrivateConversationUi(ctx.telegram, ctx.from.id);
+    return next();
+  });
+
+  /** Privato + comando /…: stessa pulizia (es. /start dopo un elenco annunci). */
+  bot.use(async (ctx, next) => {
+    if (ctx.chat?.type !== 'private' || ctx.from?.id == null || !ctx.message?.text) return next();
+    const t = ctx.message.text.trim();
+    if (!t.startsWith('/')) return next();
+    await privateUi.wipePrivateConversationUi(ctx.telegram, ctx.from.id);
+    return next();
+  });
 
   /** Uscita silenziosa dalla chat globale su quasi tutti i callback (tranne hub stanza). */
   bot.use(async (ctx, next) => {

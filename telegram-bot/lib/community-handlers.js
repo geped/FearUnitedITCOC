@@ -4,6 +4,7 @@ const { Markup } = require('telegraf');
 const sbc = require('./supabase-community');
 const cv = require('./community-validation');
 const tgh = require('./telegram-html');
+const privateUi = require('./private-ui-cleanup');
 
 function displayFromUser(user) {
   const meta = user?.user_metadata || {};
@@ -92,42 +93,52 @@ async function broadcastRecruitmentDelivers(telegram, postText, photoFileId) {
   return delivered;
 }
 
+/** @returns {Promise<number[]>} message_id inviati (per cleanup UI in privato) */
 async function sendOneActivePostToChat(telegram, chatId, row, ownerDeleteKb) {
   const extra = ownerDeleteKb ? { reply_markup: ownerDeleteKb.reply_markup } : {};
   const text = row.post_text || '';
+  const out = [];
   try {
     if (row.photo_file_id) {
       if (text.length <= TG_CAPTION_HTML_MAX) {
-        await telegram.sendPhoto(chatId, row.photo_file_id, {
+        const m = await telegram.sendPhoto(chatId, row.photo_file_id, {
           caption: text,
           parse_mode: 'HTML',
           ...extra,
         });
-        return;
+        if (m?.message_id) out.push(m.message_id);
+        return out;
       }
       const m1 = await telegram.sendMessage(chatId, text, {
         parse_mode: 'HTML',
         disable_web_page_preview: false,
         ...extra,
       });
-      await telegram.sendPhoto(chatId, row.photo_file_id, {
+      if (m1?.message_id) out.push(m1.message_id);
+      const m2 = await telegram.sendPhoto(chatId, row.photo_file_id, {
         caption: '📣 Immagine allegata all’annuncio.',
       });
-      return { m1 };
+      if (m2?.message_id) out.push(m2.message_id);
+      return out;
     }
-    await telegram.sendMessage(chatId, text, {
+    const m = await telegram.sendMessage(chatId, text, {
       parse_mode: 'HTML',
       disable_web_page_preview: false,
       ...extra,
     });
+    if (m?.message_id) out.push(m.message_id);
+    return out;
   } catch (e) {
-    await telegram
-      .sendMessage(chatId, `⚠️ Annuncio #${row.id}: errore invio (${escapeHtml(String(e.message || '')).slice(0, 80)}).`, {
-        parse_mode: 'HTML',
-      })
-      .catch(() => {});
+    try {
+      const errM = await telegram.sendMessage(
+        chatId,
+        `⚠️ Annuncio #${row.id}: errore invio (${escapeHtml(String(e.message || '')).slice(0, 80)}).`,
+        { parse_mode: 'HTML' }
+      );
+      if (errM?.message_id) out.push(errM.message_id);
+    } catch (_) {}
   }
-  return null;
+  return out;
 }
 
 function globalHubKeyboard() {
@@ -818,13 +829,18 @@ function registerCommunityHandlers(bot, deps) {
           uid != null && cv.isBotOwnerTelegramUser(uid)
             ? Markup.inlineKeyboard([[Markup.button.callback('🗑 Rimuovi annuncio', `rad:${row.id}`)]])
             : null;
-        await sendOneActivePostToChat(ctx.telegram, chatId, row, ownerKb);
+        const mids = await sendOneActivePostToChat(ctx.telegram, chatId, row, ownerKb);
+        if (uid != null) for (const mid of mids) privateUi.notePrivateUiMessage(uid, mid);
         await sleep(45);
       }
       const endKb = Markup.inlineKeyboard([[Markup.button.callback('« Indietro — Reclutamento', 'comm_recruit')]]);
-      await ctx.telegram
-        .sendMessage(chatId, '📋 <b>Annunci attivi</b> — fine elenco.', { parse_mode: 'HTML', ...endKb })
-        .catch(() => {});
+      try {
+        const endMsg = await ctx.telegram.sendMessage(chatId, '📋 <b>Annunci attivi</b> — fine elenco.', {
+          parse_mode: 'HTML',
+          ...endKb,
+        });
+        if (uid != null && endMsg?.message_id) privateUi.notePrivateUiMessage(uid, endMsg.message_id);
+      } catch (_) {}
     } catch (e) {
       await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML', ...recruitHubKb() });
     }
@@ -859,6 +875,7 @@ function registerCommunityHandlers(bot, deps) {
           );
         });
       const chatId = ctx.chat.id;
+      const ownerUid = ctx.from?.id;
       for (const sub of list) {
         const part = submissionBodyHtmlPart(sub);
         const kb = Markup.inlineKeyboard([
@@ -868,17 +885,24 @@ function registerCommunityHandlers(bot, deps) {
         const tail = `\n\n🔗 <code>${escapeHtml(sub.clan_profile_url)}</code>`;
         const combined = `${head}${part}${tail}`;
         if (sub.photo_file_id && combined.length <= TG_CAPTION_HTML_MAX) {
-          await ctx.telegram
-            .sendPhoto(chatId, sub.photo_file_id, { caption: combined, parse_mode: 'HTML', ...kb })
-            .catch(() => {});
+          try {
+            const pm = await ctx.telegram.sendPhoto(chatId, sub.photo_file_id, {
+              caption: combined,
+              parse_mode: 'HTML',
+              ...kb,
+            });
+            if (ownerUid != null && pm?.message_id) privateUi.notePrivateUiMessage(ownerUid, pm.message_id);
+          } catch (_) {}
         } else {
-          await ctx.telegram
-            .sendMessage(chatId, combined, { parse_mode: 'HTML', ...kb })
-            .catch(() => {});
+          try {
+            const tm = await ctx.telegram.sendMessage(chatId, combined, { parse_mode: 'HTML', ...kb });
+            if (ownerUid != null && tm?.message_id) privateUi.notePrivateUiMessage(ownerUid, tm.message_id);
+          } catch (_) {}
           if (sub.photo_file_id) {
-            await ctx.telegram
-              .sendPhoto(chatId, sub.photo_file_id, { caption: '📷 Allegato alla bozza.' })
-              .catch(() => {});
+            try {
+              const pm2 = await ctx.telegram.sendPhoto(chatId, sub.photo_file_id, { caption: '📷 Allegato alla bozza.' });
+              if (ownerUid != null && pm2?.message_id) privateUi.notePrivateUiMessage(ownerUid, pm2.message_id);
+            } catch (_) {}
           }
         }
         await sleep(45);
