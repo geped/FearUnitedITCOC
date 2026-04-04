@@ -56,6 +56,36 @@ function isBotOwnerTelegramUser(userId) {
   return ids.includes(Number(userId));
 }
 
+/** Tag clan senza # per URL (es. 2J2VLPP9R). */
+function normClanTagForUrl(tagRaw) {
+  let t = String(tagRaw || '')
+    .trim()
+    .toUpperCase()
+    .replace(/^#/, '');
+  if (!/^[0-9A-Z]{3,15}$/.test(t)) return null;
+  return t;
+}
+
+function buildOfficialClanLinkFromTag(tagRaw) {
+  const t = normClanTagForUrl(tagRaw);
+  if (!t) return null;
+  return `https://link.clashofclans.com/en?action=OpenClanProfile&tag=${t}`;
+}
+
+function msUntilNextEpochBoundary() {
+  const cur = currentEpochIndex();
+  const nextSec = (cur + 1) * EPOCH_SEC;
+  const nowSec = Math.floor(Date.now() / 1000);
+  return Math.max(0, (nextSec - nowSec) * 1000);
+}
+
+function formatCountdownIt(ms) {
+  const totalSec = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}m ${String(s).padStart(2, '0')}s`;
+}
+
 module.exports = {
   EPOCH_SEC,
   RECRUIT_TTL_MS,
@@ -67,4 +97,8 @@ module.exports = {
   recruitmentTextValid,
   isBotOwnerTelegramUser,
   parseOwnerTelegramIds,
+  normClanTagForUrl,
+  buildOfficialClanLinkFromTag,
+  msUntilNextEpochBoundary,
+  formatCountdownIt,
 };

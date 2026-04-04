@@ -206,6 +206,32 @@ async function countSubmissionsSince(submitterId, sinceIso) {
   return count || 0;
 }
 
+async function countActiveGlobalSubscribers(epochIndex) {
+  const c = client();
+  if (!c) return 0;
+  const { count, error } = await c
+    .from('telegram_global_chat_subscribers')
+    .select('*', { count: 'exact', head: true })
+    .eq('active', true)
+    .eq('epoch_index', Number(epochIndex));
+  if (error) return 0;
+  return count || 0;
+}
+
+async function listActiveRecruitmentPosts(limit = 10) {
+  const c = client();
+  if (!c) return [];
+  const now = new Date().toISOString();
+  const { data, error } = await c
+    .from('telegram_recruitment_posts')
+    .select('id, post_text, approved_at, expires_at, submission_id')
+    .gt('expires_at', now)
+    .order('approved_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
 module.exports = {
   tickGlobalEpochIfNeeded,
   upsertGlobalSubscriber,
@@ -223,4 +249,6 @@ module.exports = {
   listExpiredRecruitmentPosts,
   deleteRecruitmentPostRow,
   countSubmissionsSince,
+  countActiveGlobalSubscribers,
+  listActiveRecruitmentPosts,
 };
