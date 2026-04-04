@@ -311,6 +311,17 @@ async function listPendingRecruitmentSubmissions(limit = 25) {
   return data || [];
 }
 
+async function countPendingRecruitmentSubmissions() {
+  const c = client();
+  if (!c) return 0;
+  const { count, error } = await c
+    .from('telegram_recruitment_submissions')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'pending');
+  if (error) return 0;
+  return count || 0;
+}
+
 async function getRecruitmentPostById(postId) {
   const c = client();
   if (!c) return null;
@@ -347,5 +358,6 @@ module.exports = {
   countActiveGlobalSubscribers,
   listActiveRecruitmentPosts,
   listPendingRecruitmentSubmissions,
+  countPendingRecruitmentSubmissions,
   getRecruitmentPostById,
 };

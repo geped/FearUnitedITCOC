@@ -38,7 +38,8 @@ const db = window.sb;
   try {
     const p = new URLSearchParams(window.location.search);
     const ot = p.get('open_tab');
-    if (ot === 'members' || ot === 'cerca' || ot === 'cwl' || ot === 'login') window.__cocboardOpenTab = ot;
+    const allowed = new Set(['members', 'cerca', 'cwl', 'login', 'warlog', 'profilo', 'rankings', 'bonus']);
+    if (allowed.has(ot)) window.__cocboardOpenTab = ot;
   } catch (_) {}
 })();
 (function consumeTelegramWebHandoffFromUrl() {
@@ -850,9 +851,24 @@ async function applyCocboardTelegramWebDeepLinks() {
       activateTab('cerca');
       return;
     }
-    if (ot === 'cwl' && window._userClanTag) {
+    if ((ot === 'cwl' || ot === 'bonus') && window._userClanTag) {
       delete window.__cocboardOpenTab;
       activateTab('cwl');
+      return;
+    }
+    if (ot === 'warlog' && window._userClanTag) {
+      delete window.__cocboardOpenTab;
+      activateTab('warlog');
+      return;
+    }
+    if (ot === 'profilo') {
+      delete window.__cocboardOpenTab;
+      activateTab('profilo');
+      return;
+    }
+    if (ot === 'rankings') {
+      delete window.__cocboardOpenTab;
+      activateTab('rankings');
       return;
     }
     if (ot === 'members' && window._userClanTag) {

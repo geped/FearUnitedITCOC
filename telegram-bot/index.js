@@ -239,19 +239,42 @@ function isPublicCallbackData(d) {
   );
 }
 
+/** Community: chat globale anche senza login (reclutamento resta protetto negli handler). */
+function isCommunityOpenGuestCallback(d) {
+  if (!d) return false;
+  return (
+    d === 'comm_hub' ||
+    d === 'comm_global' ||
+    d === 'comm_gman' ||
+    d === 'comm_global_leave' ||
+    d === 'comm_global_status'
+  );
+}
+
 /** Ospite in chat privata: niente Logout (non sei dentro). */
 function buildPrivateGuestKb() {
-  const rows = [
-    [Markup.button.callback('🔑 Accedi', 'auth_login')],
-    [Markup.button.callback('📝 Registrati', 'auth_register')],
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('🔑 Accedi', 'auth_login'), Markup.button.callback('📝 Registrati', 'auth_register')],
+    [
+      Markup.button.callback('🏆 CWL live (web)', 'web_open:cwl'),
+      Markup.button.callback('📜 Guerre (web)', 'web_open:warlog'),
+    ],
+    [
+      Markup.button.callback('🎁 Bonus (web)', 'web_open:bonus'),
+      Markup.button.callback('👤 Profilo (web)', 'web_open:profilo'),
+    ],
+    [
+      Markup.button.callback('🏰 Info clan (web)', 'web_open:clan'),
+      Markup.button.callback('👥 Membri (web)', 'web_open:members'),
+    ],
+    [
+      Markup.button.callback('🔍 Cerca (web)', 'web_open:cerca'),
+      Markup.button.callback('📊 Classifica (web)', 'web_open:rankings'),
+    ],
     [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
+    [Markup.button.callback('💬 Community', 'comm_hub')],
     [Markup.button.callback('ℹ️ Come funziona', 'auth_guest_help')],
-  ];
-  const site = process.env.COCBOARD_SITE_HOME_URL;
-  if (site && String(site).trim()) {
-    rows.push([Markup.button.url('🌐 Apri il sito CoCBoard', String(site).trim())]);
-  }
-  return Markup.inlineKeyboard(rows);
+  ]);
 }
 
 /** Gruppo: login solo in privato; cerca/classifica pubbliche. */
@@ -265,10 +288,6 @@ function buildGroupGuestKb(botUsername) {
     [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
     [Markup.button.callback('ℹ️ Guida gruppo', 'auth_guest_help')]
   );
-  const site = process.env.COCBOARD_SITE_HOME_URL;
-  if (site && String(site).trim()) {
-    rows.push([Markup.button.url('🌐 Sito CoCBoard', String(site).trim())]);
-  }
   return Markup.inlineKeyboard(rows);
 }
 
@@ -663,7 +682,7 @@ async function mainMenuKeyboard(ctx, user, hasClanTag) {
   ]);
   const leader = user ? isClanLeader(user) : false;
   const grp = isLinkedChatContext(ctx);
-  if (!grp && user) {
+  if (!grp) {
     rows.push([Markup.button.callback('💬 Community', 'comm_hub')]);
   }
   let showClanRows = !!hasClanTag;
@@ -693,14 +712,31 @@ async function mainMenuKeyboard(ctx, user, hasClanTag) {
   );
   if (!grp && user) {
     try {
-      const wu = await buildWebAppHandoffUrl(ctx, { open_tab: 'members' });
-      if (wu && String(wu).startsWith('https://'))
-        rows.push([Markup.button.webApp('🌐 Visualizza versione web', wu)]);
+      const webPairs = [
+        ['🏆 CWL live', 'cwl', '📜 Registro guerre', 'warlog'],
+        ['🎁 Bonus', 'bonus', '🏰 Info / Membri', 'members'],
+        ['👤 Profilo', 'profilo', '🔍 Cerca', 'cerca'],
+      ];
+      for (const [la, ta, lb, tb] of webPairs) {
+        const ua = await buildWebAppHandoffUrl(ctx, { open_tab: ta });
+        const ub = await buildWebAppHandoffUrl(ctx, { open_tab: tb });
+        if (
+          ua &&
+          ub &&
+          String(ua).startsWith('https://') &&
+          String(ub).startsWith('https://')
+        ) {
+          rows.push([
+            Markup.button.webApp(`${la} (web)`, ua),
+            Markup.button.webApp(`${lb} (web)`, ub),
+          ]);
+        }
+      }
+      const wr = await buildWebAppHandoffUrl(ctx, { open_tab: 'rankings' });
+      if (wr && String(wr).startsWith('https://')) {
+        rows.push([Markup.button.webApp('📊 Classifica (web)', wr)]);
+      }
     } catch (_) {}
-  }
-  const site = process.env.COCBOARD_SITE_HOME_URL;
-  if (site && String(site).trim()) {
-    rows.push([Markup.button.url('🌐 Apri CoCBoard nel browser', String(site).trim())]);
   }
   return Markup.inlineKeyboard(rows);
 }
@@ -1100,6 +1136,7 @@ function setupBot(bot) {
     const handledComm = await comm.tryHandleEarlyMessage(ctx, pendingCommunity, {
       isLinkedChatContext,
       sendMainMenu,
+      sendGuestMenu,
       backMenuKb,
       tauth,
     });
@@ -1138,6 +1175,8 @@ function setupBot(bot) {
     if (pendingSearch.has(uid)) return next();
     const d = ctx.callbackQuery?.data || '';
     if (isPublicCallbackData(d)) return next();
+    if (isCommunityOpenGuestCallback(d)) return next();
+    if (/^web_open:/.test(d)) return next();
 
     const session = await tauth.getValidSession(uid);
     if (session) {
@@ -2012,11 +2051,70 @@ function setupBot(bot) {
     } catch (_) {}
   });
 
+  const WEB_OPEN_TAB = {
+    cwl: 'cwl',
+    warlog: 'warlog',
+    bonus: 'bonus',
+    profilo: 'profilo',
+    clan: 'members',
+    members: 'members',
+    cerca: 'cerca',
+    rankings: 'rankings',
+  };
+
+  bot.action(/^web_open:(\w+)$/, async (ctx) => {
+    if (isLinkedChatContext(ctx)) return;
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    const key = ctx.match[1];
+    const openTab = WEB_OPEN_TAB[key];
+    if (!openTab) {
+      await ctx.answerCbQuery('Sconosciuto').catch(() => {});
+      return;
+    }
+    const sess = await tauth.getValidSession(uid);
+    if (!sess) {
+      await ctx.answerCbQuery('Accedi prima (Accedi / Registrati).').catch(() => {});
+      await ensureTgBotUsername(ctx.telegram);
+      await ctx
+        .reply('🔐 Per aprire CoCBoard nel browser devi aver fatto l’accesso.', { parse_mode: 'HTML', ...buildPrivateGuestKb() })
+        .catch(() => {});
+      return;
+    }
+    ctx.cocboardUser = sess.user;
+    let wu;
+    try {
+      wu = await buildWebAppHandoffUrl(ctx, { open_tab: openTab });
+    } catch (_) {}
+    if (!wu || !String(wu).startsWith('https://')) {
+      await ctx.answerCbQuery('Web non disponibile.').catch(() => {});
+      return;
+    }
+    await ctx.answerCbQuery().catch(() => {});
+    const titles = {
+      cwl: 'CWL live',
+      warlog: 'Registro guerre',
+      bonus: 'Bonus CWL',
+      profilo: 'Il mio profilo',
+      clan: 'Info clan',
+      members: 'Membri',
+      cerca: 'Cerca',
+      rankings: 'Classifica',
+    };
+    await ctx
+      .reply(`🌐 <b>${titles[key] || 'CoCBoard'}</b> — apri la Mini App o il sito.`, {
+        parse_mode: 'HTML',
+        ...Markup.inlineKeyboard([[Markup.button.webApp('Apri CoCBoard (web)', wu)]]),
+      })
+      .catch(() => {});
+  });
+
   comm.registerCommunityHandlers(bot, {
     pendingCommunity,
     isLinkedChatContext,
     tauth,
     sendMainMenu,
+    sendGuestMenu,
     backMenuKb,
   });
 

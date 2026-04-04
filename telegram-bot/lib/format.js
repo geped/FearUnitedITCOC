@@ -29,7 +29,7 @@ function parseTagArg(text) {
 /** Chat privata: login sicuro. */
 function formatGuestWelcomePrivate() {
   return (
-    `⚔️ <b>CoCBoard</b> <i>· Fear United IT</i>\n` +
+    `⚔️ <b>CoCBoard</b> <i>· gestione clan, CWL e giocatori</i>\n` +
     `${DIV2}\n\n` +
     `🔐 <b>Accesso</b>\n` +
     `Stesso account del sito web CoCBoard.\n\n` +

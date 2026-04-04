@@ -87,6 +87,10 @@ CREATE INDEX IF NOT EXISTS telegram_global_ephem_epoch_idx
 ALTER TABLE public.telegram_global_chat_subscribers ADD COLUMN IF NOT EXISTS hub_message_id BIGINT;
 ALTER TABLE public.telegram_global_chat_subscribers ADD COLUMN IF NOT EXISTS hub_epoch_index BIGINT;
 
+-- Opzionale: dopo ADD COLUMN, aggiorna la cache PostgREST (errore "column ... not in schema cache").
+-- Se fallisce, da Supabase: Settings → API → Restart project, oppure esegui solo questa riga:
+-- NOTIFY pgrst, 'reload schema';
+
 COMMENT ON COLUMN public.telegram_global_chat_subscribers.hub_message_id IS 'Messaggio fisso stanza (countdown + pulsanti); aggiornato via edit.';
 COMMENT ON COLUMN public.telegram_global_chat_subscribers.hub_epoch_index IS 'Epoch della finestra in cui è stato creato l’hub; se < epoch corrente, hub va eliminato.';
 
