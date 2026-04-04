@@ -63,7 +63,7 @@ async function deactivateGlobalSubscriber(telegramUserId) {
 async function setGlobalSubscriberHub(telegramUserId, hubMessageId, hubEpochIndex) {
   const c = client();
   if (!c) return;
-  const { error } = await c
+  const { data, error } = await c
     .from('telegram_global_chat_subscribers')
     .update({
       hub_message_id: Number(hubMessageId),
@@ -71,8 +71,12 @@ async function setGlobalSubscriberHub(telegramUserId, hubMessageId, hubEpochInde
       updated_at: new Date().toISOString(),
     })
     .eq('telegram_user_id', Number(telegramUserId))
-    .eq('active', true);
+    .eq('active', true)
+    .select('telegram_user_id');
   if (error) throw new Error(error.message);
+  if (!data || !data.length) {
+    throw new Error('setGlobalSubscriberHub: nessuna riga attiva aggiornata (utente non in chat globale?)');
+  }
 }
 
 async function clearGlobalSubscriberHub(telegramUserId) {
@@ -86,18 +90,6 @@ async function clearGlobalSubscriberHub(telegramUserId) {
       updated_at: new Date().toISOString(),
     })
     .eq('telegram_user_id', Number(telegramUserId));
-}
-
-async function listActiveGlobalSubscriberIds(epochIndex) {
-  const c = client();
-  if (!c) return [];
-  const { data, error } = await c
-    .from('telegram_global_chat_subscribers')
-    .select('telegram_user_id')
-    .eq('active', true)
-    .eq('epoch_index', Number(epochIndex));
-  if (error) throw new Error(error.message);
-  return (data || []).map((r) => Number(r.telegram_user_id));
 }
 
 async function insertGlobalEphemeralDelivery(chatId, messageId, epochIndex) {
@@ -337,7 +329,6 @@ module.exports = {
   deactivateGlobalSubscriber,
   setGlobalSubscriberHub,
   clearGlobalSubscriberHub,
-  listActiveGlobalSubscriberIds,
   insertGlobalEphemeralDelivery,
   consumeGlobalEphemeralDeliveriesBeforeEpoch,
   getGlobalSubscriber,

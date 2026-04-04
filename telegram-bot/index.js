@@ -2109,10 +2109,6 @@ async function main() {
   setInterval(() => {
     runCommunityMaintenance(bot).catch(() => {});
   }, 60_000);
-  comm.refreshAllGlobalHubMessages(bot).catch(() => {});
-  setInterval(() => {
-    comm.refreshAllGlobalHubMessages(bot).catch(() => {});
-  }, 45_000);
 
   const webhookDomain = pickWebhookDomain();
   const webhookSecretPath = pickWebhookPath();
