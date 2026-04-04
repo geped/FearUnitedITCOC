@@ -4,8 +4,9 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const { createClient } = supabase;
 window.sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
-        persistSession: false,
-        autoRefreshToken: false,
+        // Necessario per Mini App Telegram: dopo il primo ingresso da bot (tg_h) la sessione resta sul dispositivo.
+        persistSession: true,
+        autoRefreshToken: true,
         detectSessionInUrl: false
     }
 });

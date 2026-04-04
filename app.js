@@ -42,32 +42,7 @@ const db = window.sb;
     if (allowed.has(ot)) window.__cocboardOpenTab = ot;
   } catch (_) {}
 })();
-(function consumeTelegramWebHandoffFromUrl() {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('tg_h') || params.get('h');
-    if (!code) return;
-    (async () => {
-      try {
-        const r = await fetch(`/api/lookup?type=telegram-handoff&code=${encodeURIComponent(code)}`);
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok || !j.access_token || !j.refresh_token) {
-          console.warn('[CoCBoard] Handoff Telegram:', j.error || r.status);
-          return;
-        }
-        await db.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
-        params.delete('tg_h');
-        params.delete('h');
-        params.delete('cwl_round');
-        params.delete('open_tab');
-        const qs = params.toString();
-        window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
-      } catch (e) {
-        console.warn('[CoCBoard] Handoff Telegram', e);
-      }
-    })();
-  } catch (_) {}
-})();
+// Handoff tg_h: vedi cocboardTelegramHandoffBootstrap() dopo registrazione onAuthStateChange (await prima del login).
 
 // Clan dell'utente loggato — impostati in showApp() dopo il login
 window._userClanTag    = null;  // es. '#2J2VLPP9R'
@@ -348,10 +323,45 @@ function cocRole(role) {
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 
+window.__cocboardAuthBootstrapping = true;
+
 db.auth.onAuthStateChange((_event, session) => {
-  if (session) showApp(session.user);
+  if (window.__cocboardAuthBootstrapping) return;
+  if (session) void showApp(session.user);
   else showLogin();
 });
+
+/** Mini App / link bot: scambia tg_h con JWT prima di mostrare login; open_tab già letto in window.__cocboardOpenTab. */
+void (async function cocboardTelegramHandoffBootstrap() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('tg_h') || params.get('h');
+    if (code) {
+      const r = await fetch(`/api/lookup?type=telegram-handoff&code=${encodeURIComponent(code)}`);
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.access_token && j.refresh_token) {
+        await db.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
+        params.delete('tg_h');
+        params.delete('h');
+        params.delete('cwl_round');
+        params.delete('open_tab');
+        const qs = params.toString();
+        window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+      } else {
+        console.warn('[CoCBoard] Handoff Telegram:', j.error || r.status);
+      }
+    }
+  } catch (e) {
+    console.warn('[CoCBoard] Handoff Telegram', e);
+  }
+  const { data: { session } } = await db.auth.getSession();
+  window.__cocboardAuthBootstrapping = false;
+  if (session) {
+    await showApp(session.user);
+  } else {
+    showLogin();
+  }
+})();
 
 // Converte "nomeutente" → "nomeutente@fearunited.internal" per login interni
 function resolveLoginEmail(input) {

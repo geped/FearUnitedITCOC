@@ -269,9 +269,9 @@ function isCommunityOpenGuestCallback(d) {
 function buildPrivateGuestKb() {
   return Markup.inlineKeyboard([
     [Markup.button.callback('🔑 Accedi', 'auth_login'), Markup.button.callback('📝 Registrati', 'auth_register')],
-    [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
     [Markup.button.callback('💬 Community', 'comm_hub')],
-    [Markup.button.callback('ℹ️ Come funziona', 'auth_guest_help')],
+    [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
+    [Markup.button.callback('ℹ️ Guida e tutorial', 'auth_guest_help')],
   ]);
 }
 
@@ -721,15 +721,15 @@ async function buildWebAppHandoffUrl(ctx, extraParams = {}) {
 
 async function mainMenuKeyboard(ctx, user, hasClanTag) {
   const rows = [];
-  rows.push([
-    Markup.button.callback('🔍 Cerca', 'nav_search'),
-    Markup.button.callback('📊 Classifica', 'nav_rank'),
-  ]);
   const leader = user ? isClanLeader(user) : false;
   const grp = isLinkedChatContext(ctx);
   if (!grp) {
     rows.push([Markup.button.callback('💬 Community', 'comm_hub')]);
   }
+  rows.push([
+    Markup.button.callback('🔍 Cerca', 'nav_search'),
+    Markup.button.callback('📊 Classifica', 'nav_rank'),
+  ]);
   let showClanRows = !!hasClanTag;
   if (grp) {
     const g = await getGroupChatGate(ctx);
@@ -750,11 +750,6 @@ async function mainMenuKeyboard(ctx, user, hasClanTag) {
   if (leader && !grp) {
     rows.push([Markup.button.callback('➕ Aggiungi a canale/gruppo', 'add_group_bot')]);
   }
-  rows.push(
-    [Markup.button.callback('⚙️ Account', 'acct')],
-    [Markup.button.callback('❓ Aiuto', 'helpbtn')],
-    [Markup.button.callback('🚪 Logout', 'auth_logout')]
-  );
   if (!grp && user) {
     try {
       const webPairs = [
@@ -783,6 +778,10 @@ async function mainMenuKeyboard(ctx, user, hasClanTag) {
       }
     } catch (_) {}
   }
+  rows.push(
+    [Markup.button.callback('⚙️ Account', 'acct'), Markup.button.callback('❓ Aiuto', 'helpbtn')],
+    [Markup.button.callback('🚪 Logout', 'auth_logout')]
+  );
   return Markup.inlineKeyboard(rows);
 }
 

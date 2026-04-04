@@ -32,11 +32,12 @@ function formatGuestWelcomePrivate() {
     `⚔️ <b>CoCBoard</b> <i>· gestione clan, CWL e giocatori</i>\n` +
     `${DIV2}\n\n` +
     `📌 <b>Da ospite</b>\n` +
-    `• <b>Cerca</b> e <b>Classifica</b> — subito\n` +
-    `• <b>Community</b> — chat globale e reclutamento (anche senza account)\n` +
-    `• <b>Come funziona</b> — guida rapida\n\n` +
+    `• <b>Community</b> — chat globale e reclutamento\n` +
+    `• <b>Cerca</b> · <b>Classifica</b>\n` +
+    `• <b>Guida e tutorial</b> — come funziona il bot\n\n` +
     `🔐 <b>Dopo Accedi / Registrati</b>\n` +
-    `Stesso account del sito: nel menù compariranno anche membri, CWL, bonus, guerre e scorciatoie <b>(web)</b> / Mini App.\n\n` +
+    `Menù con clan, CWL, bonus, guerre e pulsanti <b>(web)</b>.\n` +
+    `🌐 <b>Mini App / sito da Telegram:</b> se sei già entrato dal bot, l’apertura con <b>(web)</b> non chiede di nuovo password (sessione sul telefono).\n\n` +
     `<i>Annulla con <code>/cancel</code> durante login o registrazione.</i>`
   );
 }
@@ -116,7 +117,7 @@ function formatGuestHelp() {
     `<b>Registrati</b>\n` +
     `Tag villaggio → chiave API in-game → password → email (facoltativa).\n\n` +
     `<b>Dopo il login</b>\n` +
-    `Menù completo: membri, CWL live, bonus, guerre, pulsanti <b>(web)</b> (CWL live apre Registri → Cronologia leghe → turni; Bonus apre gestione bonus).\n\n` +
+    `Menù completo + pulsanti <b>(web)</b> (Mini App). Se apri il <b>(web)</b> da qui, l’accesso al sito è <b>automatico</b> (stessa sessione del bot sul dispositivo).\n\n` +
     `<b>Logout</b>\n` +
     `Dal menù se sei dentro.\n\n` +
     `<code>/start</code> · <code>/cocboard</code> · <code>/cancel</code>`
@@ -252,25 +253,27 @@ function formatLinkedGroupGuestIntro({ clanTag, clanName, botUsername }) {
 function formatTutorialStep(step) {
   if (step === 1) {
     return (
-      `📚 <b>CoCBoard — passo 1/3</b>\n\n` +
-    `Da <b>ospite</b>: <b>Cerca</b>, <b>Classifica</b>, <b>Community</b> (chat globale + reclutamento).\n` +
-    `Dopo <b>Accedi</b>: nel menù trovi anche dati clan e pulsanti <b>(web)</b> (CWL live = Registri guerre → leghe → turni; Bonus = schermata bonus).\n` +
-    `In <b>chat globale</b>: ✅ accanto al nome = profilo CoCBoard; <code>/cocboard</code>, <code>/start</code>, altri comandi <code>/</code> o il pulsante <b>Menù</b> ti fanno uscire dalla stanza (ricevi un avviso).\n\n` +
+      `📚 <b>Tutorial 1/3 — Menù e Community</b>\n\n` +
+      `In alto nel menù trovi <b>Community</b> (chat globale + reclutamento), poi <b>Cerca</b> e <b>Classifica</b>.\n` +
+      `Sotto, se hai un clan: <b>Membri</b>, <b>CWL</b>, <b>Bonus</b>, <b>Profilo</b>.\n` +
+      `I pulsanti <b>(web)</b> aprono la Mini App: <b>non devi rifare il login</b> se hai già usato <b>Accedi</b> sul bot — la sessione resta sul telefono.\n\n` +
       `<i><code>/skip</code> per saltare.</i>`
     );
   }
   if (step === 2) {
     return (
-      `📚 <b>Passo 2/3</b>\n\n` +
-      `Nel <b>gruppo</b>: membri/CWL servono che un <b>Capo / Co-Capo / Admin</b> abbia collegato la chat (<code>/linkclan</code> dopo «Aggiungi a canale/gruppo» in privato).\n\n` +
+      `📚 <b>Tutorial 2/3 — Chat globale</b>\n\n` +
+      `In stanza, chi usa il profilo CoCBoard ha il simbolo <b>✅</b> accanto al nome.\n` +
+      `Per uscire dalla stanza: <b>Esci</b>, oppure <code>/start</code>, <code>/cocboard</code>, un altro comando <code>/</code>, o il pulsante <b>Menù</b> — ricevi un avviso e non ricevi più i messaggi della stanza.\n\n` +
       `<i><code>/skip</code> per saltare.</i>`
     );
   }
   return (
-    `📚 <b>Passo 3/3</b>\n\n` +
-    `📖 <code>/help</code> · <b>Logout</b> nel menù.\n` +
-    `Login sempre in <b>privato</b>; in gruppo resti riconosciuto.\n\n` +
-    `Tocca <b>Apri menù</b> o <code>/skip</code>.`
+    `📚 <b>Tutorial 3/3 — Gruppo e account</b>\n\n` +
+      `Nel <b>gruppo Telegram</b> servono Capo/Co-Capo/Admin che colleghino la chat con il bot (<code>/linkclan</code>).\n` +
+      `Password e chiavi API <b>solo in privato</b> con il bot.\n\n` +
+      `📖 <code>/help</code> · <b>Logout</b> nel menù.\n\n` +
+      `Tocca <b>Apri menù</b> o <code>/skip</code>.`
   );
 }
 
