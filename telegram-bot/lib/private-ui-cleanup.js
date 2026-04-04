@@ -12,7 +12,7 @@ const privateUiMessageIds = new Map();
 function notePrivateUiMessage(telegramUserId, messageId) {
   if (telegramUserId == null || messageId == null) return;
   const uid = Number(telegramUserId);
-  const mid = Number(messageId);
+  const mid = typeof messageId === 'bigint' ? Number(messageId) : Number(messageId);
   if (!Number.isFinite(uid) || !Number.isFinite(mid)) return;
   let set = privateUiMessageIds.get(uid);
   if (!set) {
@@ -20,6 +20,40 @@ function notePrivateUiMessage(telegramUserId, messageId) {
     privateUiMessageIds.set(uid, set);
   }
   set.add(mid);
+}
+
+/**
+ * Chat privata: intercetta reply/sendMessage (nuove bolle) e edit* (stessa bolla dei callback),
+ * così il wipe elimina anche i menù aggiornati solo con editMessageText.
+ */
+function attachPrivateUiTracking(ctx) {
+  if (ctx.chat?.type !== 'private' || ctx.from?.id == null) return;
+  const uid = ctx.from.id;
+
+  const trackSent = (orig) => async (...args) => {
+    const m = await orig(...args);
+    if (m != null && m.message_id != null) notePrivateUiMessage(uid, m.message_id);
+    return m;
+  };
+
+  ctx.reply = trackSent(ctx.reply.bind(ctx));
+  ctx.sendMessage = trackSent(ctx.sendMessage.bind(ctx));
+
+  const origEditText = ctx.editMessageText.bind(ctx);
+  ctx.editMessageText = async (...args) => {
+    const r = await origEditText(...args);
+    const mid = ctx.callbackQuery?.message?.message_id;
+    if (mid != null) notePrivateUiMessage(uid, mid);
+    return r;
+  };
+
+  const origEditMarkup = ctx.editMessageReplyMarkup.bind(ctx);
+  ctx.editMessageReplyMarkup = async (...args) => {
+    const r = await origEditMarkup(...args);
+    const mid = ctx.callbackQuery?.message?.message_id;
+    if (mid != null) notePrivateUiMessage(uid, mid);
+    return r;
+  };
 }
 
 /** Callback che aggiornano solo la bolla corrente (nessun cambio sezione): non cancellare il resto. */
@@ -66,6 +100,7 @@ async function wipePrivateConversationUi(telegram, telegramUserId) {
 
 module.exports = {
   notePrivateUiMessage,
+  attachPrivateUiTracking,
   callbackSkipsUiWipe,
   wipePrivateConversationUi,
 };

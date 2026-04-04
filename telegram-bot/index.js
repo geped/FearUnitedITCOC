@@ -1136,16 +1136,9 @@ async function replyRanking(ctx, rankType, locationId, areaLabel) {
 function setupBot(bot) {
   bot.use(guardMiddleware());
 
-  /** Chat privata: traccia ogni ctx.reply per poter ripulire la conversazione al cambio sezione. */
+  /** Chat privata: traccia reply/sendMessage e edit* (menù aggiornati con callback senza nuove reply). */
   bot.use(async (ctx, next) => {
-    if (ctx.chat?.type !== 'private' || ctx.from?.id == null) return next();
-    const uid = ctx.from.id;
-    const origReply = ctx.reply.bind(ctx);
-    ctx.reply = async (...args) => {
-      const m = await origReply(...args);
-      if (m && typeof m.message_id === 'number') privateUi.notePrivateUiMessage(uid, m.message_id);
-      return m;
-    };
+    privateUi.attachPrivateUiTracking(ctx);
     return next();
   });
 
