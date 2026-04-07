@@ -301,6 +301,7 @@ function isPublicCallbackData(d) {
     d === 'support_user_menu' ||
     d === 'support_user_reopen' ||
     d === 'support_user_new' ||
+    d === 'support_user_cancel_active' ||
     d === 'noop'
   );
 }
@@ -919,6 +920,20 @@ function supportManageKb(hasOpen, hasClosed) {
   return Markup.inlineKeyboard(rows);
 }
 
+/** Dopo apertura ticket da pulsante «Apri nuovo ticket»: solo uscita verso il menù (le altre opzioni restano in /assistenza). */
+function supportActiveSessionSimpleKb() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('↩️ Annulla ticket e torna al menù', 'support_user_cancel_active')],
+  ]);
+}
+
+function formatSupportWritePromptHtml(ticketId) {
+  return (
+    `📩 <b>Ticket #${ticketId}</b>\n\n` +
+    `Scrivi qui il messaggio per il supporto (testo e fino a <b>${SUPPORT_MAX_PHOTO_PER_SESSION}</b> immagini in questa sessione).`
+  );
+}
+
 async function notifyAdminsTicketUpdate(ctx, ticketId, senderLabel, text, photoFileId) {
   const ticket = await sb.getTicketById(ticketId).catch(() => null);
   if (!ticket) return;
@@ -1039,9 +1054,11 @@ async function handleSupportInboundMessage(ctx) {
   let ticket = await sb.getOpenTicketForUser(uid).catch(() => null);
   const explicitlyOpened = pendingSupportOpen.get(uid) === true;
   if (!ticket && !explicitlyOpened) return false;
+  let justCreatedTicket = false;
   if (!ticket) {
     try {
       ticket = await sb.createSupportTicket(uid, 'Richiesta supporto Telegram');
+      justCreatedTicket = true;
     } catch (e) {
       console.error('[cocboard-bot] handleSupportInboundMessage createSupportTicket', e?.message || e);
       pendingSupportOpen.delete(uid);
@@ -1053,9 +1070,6 @@ async function handleSupportInboundMessage(ctx) {
         .catch(() => {});
       return true;
     }
-    await ctx
-      .reply(`✅ Ticket aperto: <b>#${ticket.id}</b>. Riceverai risposta qui.`, { parse_mode: 'HTML' })
-      .catch(() => {});
   }
   pendingSupportOpen.delete(uid);
 
@@ -1088,7 +1102,12 @@ async function handleSupportInboundMessage(ctx) {
     .catch(() => {});
   await sb.insertUsageEvent({ telegram_user_id: uid, telegram_chat_id: uid, chat_type: 'private', event_type: 'support_msg' }).catch(() => {});
   await notifyAdminsTicketUpdate(ctx, ticket.id, 'utente', bodyText || (photoFileId ? '[immagine]' : ''), photoFileId);
-  await ctx.reply('📨 Messaggio inviato al supporto.', { parse_mode: 'HTML' }).catch(() => {});
+  const confirmText = justCreatedTicket
+    ? `✅ <b>Ticket #${ticket.id}</b> aperto.\n📨 Messaggio inviato al supporto.`
+    : '📨 Messaggio inviato al supporto.';
+  await ctx
+    .reply(confirmText, { parse_mode: 'HTML', ...(justCreatedTicket ? supportActiveSessionSimpleKb() : {}) })
+    .catch(() => {});
   return true;
 }
 
@@ -2558,11 +2577,36 @@ function setupBot(bot) {
       })
       .catch(() => {});
     pendingSupportOpen.delete(uid);
-    const closedT = await sb.getLatestClosedPendingTicketForUser(uid).catch(() => null);
-    const body =
-      `✅ <b>Nuovo ticket aperto: #${ticket.id}</b>\n\n` +
-      `Scrivi qui il messaggio per il supporto (testo e fino a ${SUPPORT_MAX_PHOTO_PER_SESSION} immagini in questa sessione).`;
-    await ctx.reply(body, { parse_mode: 'HTML', ...supportManageKb(true, Boolean(closedT)) }).catch(() => {});
+    await ctx
+      .reply(formatSupportWritePromptHtml(ticket.id), { parse_mode: 'HTML', ...supportActiveSessionSimpleKb() })
+      .catch(() => {});
+  });
+
+  bot.action('support_user_cancel_active', async (ctx) => {
+    if (isLinkedChatContext(ctx)) return;
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    const t = await sb.getOpenTicketForUser(uid).catch(() => null);
+    pendingSupportOpen.delete(uid);
+    if (t) {
+      const sid = Number(t.session_index || 1);
+      await sb.setTicketStatus(t.id, 'closed_pending_purge', null).catch(() => {});
+      await sb
+        .appendSupportMessage(t.id, {
+          from_role: 'system',
+          text: 'Ticket annullato dall’utente (chiusura anticipata).',
+          session_index: sid,
+        })
+        .catch(() => {});
+    }
+    await ctx.answerCbQuery(t ? 'Ticket annullato' : undefined).catch(() => {});
+    const sess = await tauth.getValidSession(uid).catch(() => null);
+    if (sess) {
+      ctx.cocboardUser = sess.user;
+      await sendMainMenu(ctx);
+    } else {
+      await sendGuestMenu(ctx);
+    }
   });
 
   bot.action('support_admin_home', async (ctx) => {
