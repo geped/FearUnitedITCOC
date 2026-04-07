@@ -1040,8 +1040,19 @@ async function handleSupportInboundMessage(ctx) {
   const explicitlyOpened = pendingSupportOpen.get(uid) === true;
   if (!ticket && !explicitlyOpened) return false;
   if (!ticket) {
-    ticket = await sb.createSupportTicket(uid, 'Richiesta supporto Telegram').catch(() => null);
-    if (!ticket) return false;
+    try {
+      ticket = await sb.createSupportTicket(uid, 'Richiesta supporto Telegram');
+    } catch (e) {
+      console.error('[cocboard-bot] handleSupportInboundMessage createSupportTicket', e?.message || e);
+      pendingSupportOpen.delete(uid);
+      await ctx
+        .reply(
+          '❌ Impossibile aprire il ticket (errore database). Chiedi allo staff di controllare su Supabase le tabelle ticket e su Render la variabile <code>SUPABASE_SERVICE_ROLE_KEY</code> (deve essere la chiave <b>service_role</b>, non la anon).',
+          { parse_mode: 'HTML' }
+        )
+        .catch(() => {});
+      return true;
+    }
     await ctx
       .reply(`✅ Ticket aperto: <b>#${ticket.id}</b>. Riceverai risposta qui.`, { parse_mode: 'HTML' })
       .catch(() => {});
@@ -2524,9 +2535,17 @@ function setupBot(bot) {
       await ctx.reply(`Hai già un ticket aperto (#${t.id}). Scrivi qui per continuare.`);
       return;
     }
-    const ticket = await sb.createSupportTicket(uid, 'Richiesta supporto Telegram').catch(() => null);
-    if (!ticket) {
-      await ctx.reply('❌ Impossibile aprire il ticket adesso. Riprova tra poco o usa /assistenza.').catch(() => {});
+    let ticket;
+    try {
+      ticket = await sb.createSupportTicket(uid, 'Richiesta supporto Telegram');
+    } catch (e) {
+      console.error('[cocboard-bot] support_user_new createSupportTicket', e?.message || e);
+      await ctx
+        .reply(
+          '❌ Impossibile aprire il ticket (errore database). Su Supabase esegui <code>schema-support-tickets-ensure.sql</code> (cartella telegram-bot); su Render verifica <code>SUPABASE_SERVICE_ROLE_KEY</code> = chiave <b>service_role</b>.',
+          { parse_mode: 'HTML' }
+        )
+        .catch(() => {});
       return;
     }
     await sb

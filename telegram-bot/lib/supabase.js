@@ -349,10 +349,9 @@ async function getOpenTicketForUser(telegramUserId) {
     .eq('telegram_user_id', Number(telegramUserId))
     .in('status', ['open', 'in_progress', 'waiting_user'])
     .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
   if (error) throw new Error(error.message);
-  return data || null;
+  return Array.isArray(data) && data.length ? data[0] : null;
 }
 
 async function getLatestClosedPendingTicketForUser(telegramUserId) {
@@ -364,25 +363,26 @@ async function getLatestClosedPendingTicketForUser(telegramUserId) {
     .eq('telegram_user_id', Number(telegramUserId))
     .eq('status', 'closed_pending_purge')
     .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
   if (error) throw new Error(error.message);
-  return data || null;
+  return Array.isArray(data) && data.length ? data[0] : null;
 }
 
 async function createSupportTicket(telegramUserId, subject) {
   const client = sb();
   if (!client) throw new Error('Supabase non configurato.');
+  // Solo colonne base + default DB: compatibile con schema senza reopen_count/session_index espliciti nell'INSERT.
   const row = {
     telegram_user_id: Number(telegramUserId),
     status: 'open',
     subject: subject ? String(subject).slice(0, 180) : null,
-    reopen_count: 0,
-    session_index: 1,
     updated_at: new Date().toISOString(),
   };
   const { data, error } = await client.from('telegram_support_tickets').insert(row).select('*').single();
-  if (error) throw new Error(error.message);
+  if (error) {
+    console.error('[sb] createSupportTicket', error.code || '', error.message, error.details || '');
+    throw new Error(error.message);
+  }
   return data;
 }
 
