@@ -19,6 +19,10 @@ module.exports = async (req, res) => {
             proxyPath = `/rankings?type=${encodeURIComponent(rankType)}&locationId=${encodeURIComponent(locationId)}`;
         } else if (type === 'locations') {
             proxyPath = '/locations';
+        } else if (type === 'current-war') {
+            const clanTag = req.query.clanTag;
+            if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });
+            proxyPath = `/current-war?clanTag=${encodeURIComponent(clanTag)}`;
         } else if (type === 'proxy-ip') {
             // IP pubblico in uscita del proxy Render (quello da whitelist su developer.clashofclans.com)
             proxyPath = '/myip';
@@ -132,7 +136,7 @@ module.exports = async (req, res) => {
             return res.status(200).json({ ok: r.ok, status: r.status, ms });
         } else {
             return res.status(400).json({
-                error: 'type non valido. Usa: player, search-clans, rankings, locations, proxy-ip, ping, telegram-handoff',
+                error: 'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff',
             });
         }
         const r = await fetch(`${proxyUrl}${proxyPath}`, {

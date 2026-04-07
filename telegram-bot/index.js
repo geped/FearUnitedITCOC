@@ -27,6 +27,8 @@ const pendingCommunity = new Map();
 const postAuthGlobalResume = new Map();
 
 let cachedTgBotUsername = (process.env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '');
+/** Anti-spam avvisi guerra: chatId -> key avvisi già inviati per endTime corrente. */
+const warAlertMemory = new Map();
 
 async function ensureTgBotUsername(telegram) {
   if (cachedTgBotUsername) return cachedTgBotUsername;
@@ -50,6 +52,39 @@ function chatKind(ctx) {
 function isLinkedChatContext(ctx) {
   const t = chatKind(ctx);
   return t === 'group' || t === 'supergroup' || t === 'channel';
+}
+
+function isGroupLikeContext(ctx) {
+  const t = chatKind(ctx);
+  return t === 'group' || t === 'supergroup';
+}
+
+function normalizeBotCommandName(text) {
+  const raw = String(text || '').trim();
+  if (!raw.startsWith('/')) return '';
+  const cmd = raw.split(/\s+/)[0].toLowerCase();
+  const bare = cmd.split('@')[0];
+  return bare;
+}
+
+async function isExplicitGroupInvocation(ctx) {
+  const txt = (ctx.message?.text || '').trim();
+  if (!txt) return false;
+  if (txt.startsWith('/')) return true;
+  const botUsername = (await ensureTgBotUsername(ctx.telegram)).toLowerCase();
+  if (!botUsername) return false;
+  const low = txt.toLowerCase();
+  return low.includes(`@${botUsername}`);
+}
+
+async function isTelegramChatAdmin(ctx) {
+  if (!isGroupLikeContext(ctx) || ctx.from?.id == null || ctx.chat?.id == null) return false;
+  try {
+    const member = await ctx.telegram.getChatMember(ctx.chat.id, ctx.from.id);
+    return member?.status === 'administrator' || member?.status === 'creator';
+  } catch (_) {
+    return false;
+  }
 }
 
 /** Capo / Co-Capo / Admin: collegano la chat al clan. */
@@ -1220,6 +1255,9 @@ async function registerBotCommands(telegram) {
       { command: 'cerca', description: 'Cerca villaggio o clan' },
       { command: 'classifica', description: 'Classifiche trofei' },
       { command: 'help', description: 'Aiuto' },
+      { command: 'coc_off', description: 'Spegni bot in questa chat (admin)' },
+      { command: 'coc_on', description: 'Riattiva bot in questa chat (admin)' },
+      { command: 'coc_status', description: 'Stato bot in questa chat' },
     ];
     await telegram.setMyCommands(priv, { scope: { type: 'all_private_chats' } });
     await telegram.setMyCommands(grp, { scope: { type: 'all_group_chats' } });
@@ -1248,6 +1286,32 @@ function setupBot(bot) {
   let handlePrivateReplyKeyboardShortcuts = null;
 
   bot.use(guardMiddleware());
+
+  /** Gruppi/canali: interruttore ON/OFF chat. Se OFF accetta solo /coc_on. */
+  bot.use(async (ctx, next) => {
+    if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return next();
+    const cmd = normalizeBotCommandName(ctx.message?.text || '');
+    if (cmd === '/coc_on') return next();
+    let enabled = true;
+    try {
+      const st = await sb.getTelegramChatControl(ctx.chat.id);
+      enabled = st?.bot_enabled !== false;
+    } catch (_) {
+      enabled = true;
+    }
+    if (enabled) return next();
+    if (ctx.message?.text && cmd) {
+      await ctx
+        .reply(
+          '🤫 Bot in pausa in questa chat. Solo un admin può riattivarlo con <code>/coc_on</code>.',
+          { parse_mode: 'HTML' }
+        )
+        .catch(() => {});
+    } else if (ctx.callbackQuery) {
+      await ctx.answerCbQuery('Bot in pausa: usa /coc_on').catch(() => {});
+    }
+    return;
+  });
 
   /** Chat privata: traccia reply/sendMessage e edit* (menù aggiornati con callback senza nuove reply). */
   bot.use(async (ctx, next) => {
@@ -1378,6 +1442,9 @@ function setupBot(bot) {
       t.startsWith('/classifica') ||
       t.startsWith('/linkclan') ||
       t.startsWith('/unlinkclan') ||
+      t.startsWith('/coc_off') ||
+      t.startsWith('/coc_on') ||
+      t.startsWith('/coc_status') ||
       t.startsWith('/skip')
     ) {
       return next();
@@ -1426,6 +1493,10 @@ function setupBot(bot) {
       return;
     }
     if (ctx.message && ctx.message.text) {
+      if (isLinkedChatContext(ctx)) {
+        const explicit = await isExplicitGroupInvocation(ctx);
+        if (!explicit) return;
+      }
       await sendGuestMenu(ctx);
       return;
     }
@@ -1517,6 +1588,58 @@ function setupBot(bot) {
   bot.command('help', async (ctx) => {
     if (!ctx.from?.id) return;
     await dispatchHelpCommand(ctx);
+  });
+
+  bot.command('coc_status', async (ctx) => {
+    if (!isLinkedChatContext(ctx) || !ctx.chat?.id) {
+      await ctx.reply('Usa <code>/coc_status</code> in gruppo/supergruppo/canale.', { parse_mode: 'HTML' }).catch(() => {});
+      return;
+    }
+    const st = await sb.getTelegramChatControl(ctx.chat.id).catch(() => ({ bot_enabled: true }));
+    const on = st?.bot_enabled !== false;
+    await ctx
+      .reply(on ? '✅ Bot attivo in questa chat.' : '🤫 Bot in pausa in questa chat. Usa <code>/coc_on</code>.', {
+        parse_mode: 'HTML',
+      })
+      .catch(() => {});
+  });
+
+  bot.command('coc_off', async (ctx) => {
+    if (!isLinkedChatContext(ctx) || !ctx.chat?.id) {
+      await ctx.reply('Usa <code>/coc_off</code> in gruppo/supergruppo/canale.', { parse_mode: 'HTML' }).catch(() => {});
+      return;
+    }
+    const isTgAdmin = await isTelegramChatAdmin(ctx);
+    const sess = ctx.from?.id != null ? await tauth.getValidSession(ctx.from.id).catch(() => null) : null;
+    const isAppAdmin = (sess?.user?.user_metadata?.role || '') === 'admin';
+    if (!isTgAdmin && !isAppAdmin) {
+      await ctx.reply('Solo amministratori chat o ruolo <b>admin</b> CoCBoard possono usare questo comando.', { parse_mode: 'HTML' });
+      return;
+    }
+    await sb.setTelegramChatEnabled(ctx.chat.id, false, ctx.from?.id).catch((e) => {
+      throw new Error(e.message || 'Errore salvataggio stato chat');
+    });
+    await ctx
+      .reply('🤫 Bot <b>spento</b> in questa chat. Per riattivarlo: <code>/coc_on</code>.', { parse_mode: 'HTML' })
+      .catch(() => {});
+  });
+
+  bot.command('coc_on', async (ctx) => {
+    if (!isLinkedChatContext(ctx) || !ctx.chat?.id) {
+      await ctx.reply('Usa <code>/coc_on</code> in gruppo/supergruppo/canale.', { parse_mode: 'HTML' }).catch(() => {});
+      return;
+    }
+    const isTgAdmin = await isTelegramChatAdmin(ctx);
+    const sess = ctx.from?.id != null ? await tauth.getValidSession(ctx.from.id).catch(() => null) : null;
+    const isAppAdmin = (sess?.user?.user_metadata?.role || '') === 'admin';
+    if (!isTgAdmin && !isAppAdmin) {
+      await ctx.reply('Solo amministratori chat o ruolo <b>admin</b> CoCBoard possono usare questo comando.', { parse_mode: 'HTML' });
+      return;
+    }
+    await sb.setTelegramChatEnabled(ctx.chat.id, true, ctx.from?.id).catch((e) => {
+      throw new Error(e.message || 'Errore salvataggio stato chat');
+    });
+    await ctx.reply('✅ Bot riattivato in questa chat.', { parse_mode: 'HTML' }).catch(() => {});
   });
 
   bot.command('esci', async (ctx) => {
@@ -2421,6 +2544,154 @@ function setupBot(bot) {
   });
 }
 
+function parseCocTimeToDate(raw) {
+  const s = String(raw || '').trim();
+  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})\.\d{3}Z$/.exec(s);
+  if (!m) return null;
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6])));
+}
+
+function listMissingWarAttacks(warData) {
+  const side = warData?.clan || {};
+  const apm = Number(warData?.attacksPerMember || 2);
+  const members = Array.isArray(side.members) ? side.members : [];
+  return members
+    .map((m) => {
+      const made = Array.isArray(m.attacks) ? m.attacks.length : 0;
+      const missing = Math.max(0, apm - made);
+      return { name: m.name || m.tag || 'Sconosciuto', made, missing };
+    })
+    .filter((m) => m.missing > 0)
+    .sort((a, b) => b.missing - a.missing || a.name.localeCompare(b.name, 'it'));
+}
+
+function warOutcomeLabel(warData) {
+  const c = warData?.clan || {};
+  const o = warData?.opponent || {};
+  const cs = Number(c.stars || 0);
+  const os = Number(o.stars || 0);
+  const cd = Number(c.destructionPercentage || 0);
+  const od = Number(o.destructionPercentage || 0);
+  if (cs > os) return '✅ Vinta';
+  if (cs < os) return '❌ Persa';
+  if (cd > od) return '✅ Vinta (tie-break distruzione)';
+  if (cd < od) return '❌ Persa (tie-break distruzione)';
+  return '⚖️ Pareggio';
+}
+
+function minuteCountdownLabel(ms) {
+  const totalMin = Math.max(0, Math.floor(ms / 60000));
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h <= 0) return `${m}m`;
+  return `${h}h ${m}m`;
+}
+
+function formatWarAlertBody(warData, missing, minsLeft) {
+  const c = warData?.clan || {};
+  const o = warData?.opponent || {};
+  const lineScore = `${c.stars || 0}★ vs ${o.stars || 0}★`;
+  const lineDest = `${Number(c.destructionPercentage || 0).toFixed(2)}% vs ${Number(o.destructionPercentage || 0).toFixed(2)}%`;
+  if (!missing.length) {
+    return (
+      `🚨 <b>Attenzione ${fmt.escapeHtml(c.name || 'Clan')}!</b>\n` +
+      `⚔️ <b>Guerra in corso</b> · ${lineScore} · ${lineDest}\n` +
+      `⏳ Mancano <b>${fmt.escapeHtml(minsLeft)}</b> alla fine\n\n` +
+      `✅ Non ci sono utenti da avvisare!\n` +
+      `<b>Tutti hanno già fatto il numero richiesto di attacchi</b> 🥳`
+    );
+  }
+  const list = missing.slice(0, 15).map((m) => `• ${fmt.escapeHtml(m.name)} (${m.missing} att.)`).join('\n');
+  return (
+    `🚨 <b>Attenzione ${fmt.escapeHtml(c.name || 'Clan')}!</b>\n` +
+    `⚔️ <b>Guerra in corso</b> · ${lineScore} · ${lineDest}\n` +
+    `⏳ Mancano <b>${fmt.escapeHtml(minsLeft)}</b> alla fine\n\n` +
+    `È il momento di controllare gli attacchi mancanti:\n${list}`
+  );
+}
+
+function formatWarFinalRecap(warData, missing) {
+  const c = warData?.clan || {};
+  const o = warData?.opponent || {};
+  const lineScore = `${c.stars || 0}★ vs ${o.stars || 0}★`;
+  const lineDest = `${Number(c.destructionPercentage || 0).toFixed(2)}% vs ${Number(o.destructionPercentage || 0).toFixed(2)}%`;
+  const out = warOutcomeLabel(warData);
+  if (!missing.length) {
+    return (
+      `📣 <b>Recap finale guerra</b>\n` +
+      `${out} · ${lineScore} · ${lineDest}\n\n` +
+      `✅ Tutti hanno completato gli attacchi richiesti.`
+    );
+  }
+  const list = missing.slice(0, 20).map((m) => `• ${fmt.escapeHtml(m.name)} (${m.missing} att.)`).join('\n');
+  return (
+    `📣 <b>Recap finale guerra</b>\n` +
+    `${out} · ${lineScore} · ${lineDest}\n\n` +
+    `<b>Attacchi mancanti registrati:</b>\n${list}`
+  );
+}
+
+async function runWarAlertsMaintenance(bot) {
+  let links = [];
+  try {
+    links = await sb.listEnabledTelegramChatLinks();
+  } catch (e) {
+    console.warn('[cocboard-bot] war alerts list links', e.message || e);
+    return;
+  }
+  for (const link of links) {
+    const chatId = Number(link.telegram_chat_id);
+    const clanTag = link.clan_tag;
+    if (!Number.isFinite(chatId) || !clanTag) continue;
+    try {
+      const war = await api.currentWar(clanTag);
+      const state = String(war?.state || '');
+      if (!state || state === 'notInWar') continue;
+      if (String(war?.warType || '').toLowerCase() === 'cwl') continue;
+      const end = parseCocTimeToDate(war?.endTime);
+      if (!end) continue;
+      const keyRoot = `${chatId}:${war.endTime}`;
+      const now = Date.now();
+      const leftMs = end.getTime() - now;
+      const missing = listMissingWarAttacks(war);
+      let sent = warAlertMemory.get(keyRoot);
+      if (!sent) {
+        sent = new Set();
+        warAlertMemory.set(keyRoot, sent);
+      }
+      if (state === 'inWar') {
+        const minsLeft = Math.ceil(leftMs / 60000);
+        if (minsLeft <= 60 && minsLeft > 15 && !sent.has('t60')) {
+          const body = formatWarAlertBody(war, missing, minuteCountdownLabel(Math.max(0, leftMs)));
+          await bot.telegram.sendMessage(chatId, body, { parse_mode: 'HTML', disable_web_page_preview: true });
+          sent.add('t60');
+        }
+        if (minsLeft <= 15 && minsLeft > 0 && !sent.has('t15')) {
+          const body = formatWarAlertBody(war, missing, minuteCountdownLabel(Math.max(0, leftMs)));
+          await bot.telegram.sendMessage(chatId, body, { parse_mode: 'HTML', disable_web_page_preview: true });
+          sent.add('t15');
+        }
+      }
+      if ((state === 'warEnded' || leftMs <= 0) && !sent.has('final')) {
+        const body = formatWarFinalRecap(war, missing);
+        await bot.telegram.sendMessage(chatId, body, { parse_mode: 'HTML', disable_web_page_preview: true });
+        sent.add('final');
+      }
+    } catch (e) {
+      if (isTelegramChatStaleError(e)) {
+        await sb.deleteTelegramChatLink(chatId).catch(() => {});
+      } else {
+        console.warn('[cocboard-bot] war alerts chat', chatId, e.message || e);
+      }
+    }
+  }
+  if (warAlertMemory.size > 600) {
+    // Cleanup semplice per evitare crescita non limitata dopo molte guerre.
+    const first = warAlertMemory.keys().next();
+    if (!first.done) warAlertMemory.delete(first.value);
+  }
+}
+
 async function runCommunityMaintenance(bot) {
   try {
     await sbcCommunity.tickGlobalEpochIfNeeded();
@@ -2500,8 +2771,10 @@ async function main() {
   setupBot(bot);
 
   runCommunityMaintenance(bot).catch(() => {});
+  runWarAlertsMaintenance(bot).catch(() => {});
   setInterval(() => {
     runCommunityMaintenance(bot).catch(() => {});
+    runWarAlertsMaintenance(bot).catch(() => {});
   }, 60_000);
 
   const webhookDomain = pickWebhookDomain();

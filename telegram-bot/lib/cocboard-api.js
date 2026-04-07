@@ -48,6 +48,10 @@ async function warLog(clanTag) {
   return fetchJson('/api/war-log', { clanTag });
 }
 
+async function currentWar(clanTag) {
+  return fetchJson('/api/lookup', { type: 'current-war', clanTag });
+}
+
 async function lookupPlayer(playerTag) {
   return fetchJson('/api/lookup', { type: 'player', playerTag });
 }
@@ -91,6 +95,7 @@ module.exports = {
   clanInfo,
   cwlStats,
   warLog,
+  currentWar,
   lookupPlayer,
   searchClans,
   rankings,

@@ -596,6 +596,22 @@ app.get('/war-log', authMiddleware, async (req, res) => {
     }
 });
 
+app.get('/current-war', authMiddleware, async (req, res) => {
+    try {
+        const clanTag = parseClanTag(req.query.clanTag);
+        if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });
+        const r = await fetch(
+            `https://api.clashofclans.com/v1/clans/${encodeTag(clanTag)}/currentwar`,
+            { headers: cocHeaders() }
+        );
+        const data = await r.json();
+        if (!r.ok) return res.status(r.status).json({ error: data.reason || 'CoC API error', detail: data });
+        return res.json(data);
+    } catch (err) {
+        return res.status(500).json({ error: err.message });
+    }
+});
+
 app.get('/clan-info', authMiddleware, async (req, res) => {
     try {
         const clanTag = parseClanTag(req.query.clanTag);

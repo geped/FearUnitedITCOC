@@ -177,6 +177,49 @@ async function getTelegramChatLink(chatId) {
   return data || null;
 }
 
+async function getTelegramChatControl(chatId) {
+  const client = sb();
+  if (!client) return { bot_enabled: true };
+  const id = Number(chatId);
+  const { data, error } = await client.from('telegram_chat_controls').select('*').eq('telegram_chat_id', id).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data || { telegram_chat_id: id, bot_enabled: true };
+}
+
+async function setTelegramChatEnabled(chatId, enabled, updatedBy) {
+  const client = sb();
+  if (!client) throw new Error('Supabase non configurato.');
+  const id = Number(chatId);
+  const now = new Date().toISOString();
+  const payload = {
+    telegram_chat_id: id,
+    bot_enabled: enabled === true,
+    updated_by: updatedBy != null ? Number(updatedBy) : null,
+    updated_at: now,
+  };
+  const { error } = await client.from('telegram_chat_controls').upsert(payload, { onConflict: 'telegram_chat_id' });
+  if (error) throw new Error(error.message);
+}
+
+async function listEnabledTelegramChatLinks() {
+  const client = sb();
+  if (!client) return [];
+  const { data, error } = await client
+    .from('telegram_chat_links')
+    .select('telegram_chat_id, clan_tag, chat_type')
+    .order('telegram_chat_id', { ascending: true });
+  if (error) throw new Error(error.message);
+  const controls = await client
+    .from('telegram_chat_controls')
+    .select('telegram_chat_id, bot_enabled')
+    .then(({ data: cdata, error: cerr }) => {
+      if (cerr) throw new Error(cerr.message);
+      return cdata || [];
+    });
+  const controlMap = new Map(controls.map((r) => [Number(r.telegram_chat_id), r.bot_enabled !== false]));
+  return (data || []).filter((r) => controlMap.get(Number(r.telegram_chat_id)) !== false);
+}
+
 async function upsertTelegramChatLink(chatId, clanTag, linkedByTelegramUserId, chatType) {
   const client = sb();
   if (!client) throw new Error('Supabase non configurato.');
@@ -344,6 +387,9 @@ module.exports = {
   createWebAppHandoff,
   markTutorialCompleted,
   getTelegramChatLink,
+  getTelegramChatControl,
+  setTelegramChatEnabled,
+  listEnabledTelegramChatLinks,
   upsertTelegramChatLink,
   deleteTelegramChatLink,
   createPendingChatLink,
