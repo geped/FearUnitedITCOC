@@ -28,7 +28,6 @@ const postAuthGlobalResume = new Map();
 /** Supporto: ticket attivo per admin (chat continua) + aperture utente. */
 const adminActiveSupportTicket = new Map(); // adminUid -> ticketId
 const pendingSupportOpen = new Map(); // uid -> true (apertura esplicita supporto)
-const pendingSupportForceNew = new Map(); // uid -> true (forza nuovo ticket)
 
 const SUPPORT_RK_TAKE = 'Ticket: presa in carico';
 const SUPPORT_RK_WAIT = 'Ticket: in attesa utente';
@@ -1039,13 +1038,7 @@ async function handleSupportInboundMessage(ctx) {
 
   let ticket = await sb.getOpenTicketForUser(uid).catch(() => null);
   const explicitlyOpened = pendingSupportOpen.get(uid) === true;
-  const forceNew = pendingSupportForceNew.get(uid) === true;
-  if (!ticket && !explicitlyOpened && !forceNew) return false;
-  if (forceNew && ticket) {
-    await ctx.reply(`Hai già un ticket aperto (#${ticket.id}). Chiudilo prima di crearne uno nuovo.`);
-    pendingSupportForceNew.delete(uid);
-    return true;
-  }
+  if (!ticket && !explicitlyOpened) return false;
   if (!ticket) {
     ticket = await sb.createSupportTicket(uid, 'Richiesta supporto Telegram').catch(() => null);
     if (!ticket) return false;
@@ -1054,7 +1047,6 @@ async function handleSupportInboundMessage(ctx) {
       .catch(() => {});
   }
   pendingSupportOpen.delete(uid);
-  pendingSupportForceNew.delete(uid);
 
   if (ticket.status === 'closed_pending_purge') {
     await sb.setTicketStatus(ticket.id, 'open', null).catch(() => {});
@@ -2532,9 +2524,26 @@ function setupBot(bot) {
       await ctx.reply(`Hai già un ticket aperto (#${t.id}). Scrivi qui per continuare.`);
       return;
     }
-    pendingSupportForceNew.set(uid, true);
-    pendingSupportOpen.set(uid, true);
-    await showSupportEntryHub(ctx);
+    const ticket = await sb.createSupportTicket(uid, 'Richiesta supporto Telegram').catch(() => null);
+    if (!ticket) {
+      await ctx.reply('❌ Impossibile aprire il ticket adesso. Riprova tra poco o usa /assistenza.').catch(() => {});
+      return;
+    }
+    await sb
+      .insertUsageEvent({
+        telegram_user_id: uid,
+        telegram_chat_id: uid,
+        chat_type: 'private',
+        event_type: 'support_ticket_create',
+        payload: { ticket_id: ticket.id },
+      })
+      .catch(() => {});
+    pendingSupportOpen.delete(uid);
+    const closedT = await sb.getLatestClosedPendingTicketForUser(uid).catch(() => null);
+    const body =
+      `✅ <b>Nuovo ticket aperto: #${ticket.id}</b>\n\n` +
+      `Scrivi qui il messaggio per il supporto (testo e fino a ${SUPPORT_MAX_PHOTO_PER_SESSION} immagini in questa sessione).`;
+    await ctx.reply(body, { parse_mode: 'HTML', ...supportManageKb(true, Boolean(closedT)) }).catch(() => {});
   });
 
   bot.action('support_admin_home', async (ctx) => {
