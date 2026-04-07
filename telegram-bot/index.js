@@ -36,6 +36,8 @@ const SUPPORT_RK_CLOSE = 'Ticket: chiudi';
 const SUPPORT_RK_BAN = 'Ticket: permaban utente';
 const SUPPORT_RK_UNBAN = 'Ticket: rimuovi ban';
 const SUPPORT_RK_EXIT = 'Esci ticket supporto';
+const SUPPORT_MAX_REOPEN = 3;
+const SUPPORT_MAX_PHOTO_PER_SESSION = 2;
 
 let cachedTgBotUsername = (process.env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '');
 /** Anti-spam avvisi guerra: chatId -> key avvisi già inviati per endTime corrente. */
@@ -295,6 +297,8 @@ function isPublicCallbackData(d) {
     d === 'notif_cwl' ||
     d === 'notif_raids' ||
     d === 'notif_games' ||
+    d === 'support_open' ||
+    d === 'support_user_manage' ||
     d === 'support_user_menu' ||
     d === 'support_user_reopen' ||
     d === 'support_user_new' ||
@@ -878,12 +882,42 @@ async function showSupportOpenPrompt(ctx) {
   }
 }
 
+async function showSupportEntryHub(ctx) {
+  const uid = ctx.from?.id;
+  if (uid == null || isLinkedChatContext(ctx)) return;
+  const openT = await sb.getOpenTicketForUser(uid).catch(() => null);
+  const closedT = await sb.getLatestClosedPendingTicketForUser(uid).catch(() => null);
+  if (openT) {
+    const body =
+      `📩 <b>Supporto</b>\n\n` +
+      `Hai un ticket attivo: <b>#${openT.id}</b>.\n` +
+      `Scrivi ora il tuo messaggio (testo + max ${SUPPORT_MAX_PHOTO_PER_SESSION} immagini in questa sessione).`;
+    await ctx.reply(body, { parse_mode: 'HTML', ...supportManageKb(true, Boolean(closedT)) }).catch(() => {});
+    return;
+  }
+  const body =
+    `📩 <b>Supporto</b>\n\n` +
+    `Apri un nuovo ticket oppure riapri l’ultimo chiuso (max ${SUPPORT_MAX_REOPEN} riaperture).\n` +
+    `Per ogni sessione ticket: massimo ${SUPPORT_MAX_PHOTO_PER_SESSION} immagini.`;
+  await ctx.reply(body, { parse_mode: 'HTML', ...supportManageKb(false, Boolean(closedT)) }).catch(() => {});
+}
+
 function closedTicketUserKb() {
   return Markup.inlineKeyboard([
+    [Markup.button.callback('🧰 Gestisci ticket', 'support_user_manage')],
     [Markup.button.callback('🏠 Torna al menù', 'support_user_menu')],
     [Markup.button.callback('♻️ Riapri ticket', 'support_user_reopen')],
     [Markup.button.callback('🆕 Nuovo ticket', 'support_user_new')],
   ]);
+}
+
+function supportManageKb(hasOpen, hasClosed) {
+  const rows = [];
+  if (hasOpen) rows.push([Markup.button.callback('💬 Continua ticket attivo', 'support_user_manage')]);
+  if (hasClosed) rows.push([Markup.button.callback('♻️ Riapri ticket chiuso', 'support_user_reopen')]);
+  rows.push([Markup.button.callback('🆕 Apri nuovo ticket', 'support_user_new')]);
+  rows.push([Markup.button.callback('🏠 Torna al menù', 'support_user_menu')]);
+  return Markup.inlineKeyboard(rows);
 }
 
 async function notifyAdminsTicketUpdate(ctx, ticketId, senderLabel, text, photoFileId) {
@@ -1013,9 +1047,10 @@ async function handleSupportInboundMessage(ctx) {
 
   let photoFileId = null;
   if (hasPhoto) {
-    const photoCount = await sb.countTicketPhotos(ticket.id).catch(() => 0);
-    if (photoCount >= 2) {
-      await ctx.reply('⚠️ Hai già inviato 2 immagini in questo ticket. Invia solo testo oppure apri un nuovo ticket.', {
+    const sessionIdx = Number(ticket.session_index || 1);
+    const photoCount = await sb.countTicketPhotosInSession(ticket.id, sessionIdx).catch(() => 0);
+    if (photoCount >= SUPPORT_MAX_PHOTO_PER_SESSION) {
+      await ctx.reply(`⚠️ Hai già inviato ${SUPPORT_MAX_PHOTO_PER_SESSION} immagini in questa sessione ticket.`, {
         parse_mode: 'HTML',
       });
       return true;
@@ -1029,6 +1064,7 @@ async function handleSupportInboundMessage(ctx) {
       from_telegram_user_id: uid,
       text: bodyText || null,
       photo_file_id: photoFileId,
+          session_index: Number(ticket.session_index || 1),
     })
     .catch(() => {});
   await sb.insertUsageEvent({ telegram_user_id: uid, telegram_chat_id: uid, chat_type: 'private', event_type: 'support_msg' }).catch(() => {});
@@ -1742,6 +1778,7 @@ function setupBot(bot) {
           from_telegram_user_id: ctx.from.id,
           text: messageText || null,
           photo_file_id: photo?.file_id || null,
+          session_index: Number(tk.session_index || 1),
         })
         .catch(() => {});
       await sb.setTicketStatus(adminTicketId, 'in_progress', ctx.from.id).catch(() => {});
@@ -1981,7 +2018,7 @@ function setupBot(bot) {
       return;
     }
     pendingSupportOpen.set(ctx.from.id, true);
-    await showSupportOpenPrompt(ctx);
+    await showSupportEntryHub(ctx);
   });
 
   bot.command('adminbot', async (ctx) => {
@@ -2417,7 +2454,26 @@ function setupBot(bot) {
       return;
     }
     pendingSupportOpen.set(ctx.from.id, true);
-    await showSupportOpenPrompt(ctx);
+    await showSupportEntryHub(ctx);
+  });
+
+  bot.action('support_user_manage', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (isLinkedChatContext(ctx)) return;
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    const t = await sb.getOpenTicketForUser(uid).catch(() => null);
+    const c = await sb.getLatestClosedPendingTicketForUser(uid).catch(() => null);
+    if (!t) {
+      await showSupportEntryHub(ctx);
+      return;
+    }
+    const text =
+      `🎫 Ticket attivo: <b>#${t.id}</b>\n` +
+      `Riaperture usate: <b>${Math.min(Number(t.reopen_count || 0), SUPPORT_MAX_REOPEN)}</b>/${SUPPORT_MAX_REOPEN}\n` +
+      `Sessione corrente: <b>${Number(t.session_index || 1)}</b>\n` +
+      `Scrivi qui per inviare messaggi al supporto.`;
+    await ctx.reply(text, { parse_mode: 'HTML', ...supportManageKb(true, Boolean(c)) }).catch(() => {});
   });
 
   bot.action('support_user_menu', async (ctx) => {
@@ -2437,14 +2493,17 @@ function setupBot(bot) {
     if (isLinkedChatContext(ctx)) return;
     const uid = ctx.from?.id;
     if (uid == null) return;
-    const t = await sb.getLatestClosedPendingTicketForUser(uid).catch(() => null);
-    if (!t) {
-      await ctx.reply('Nessun ticket chiuso recente da riaprire.');
+    const r = await sb.reopenSupportTicket(uid).catch(() => ({ ok: false, reason: 'Errore riapertura ticket.' }));
+    if (!r?.ok || !r.ticket) {
+      await ctx.reply(`❌ ${r?.reason || 'Nessun ticket chiuso recente da riaprire.'}`);
       return;
     }
-    await sb.setTicketStatus(t.id, 'open', null).catch(() => {});
-    await sb.appendSupportMessage(t.id, { from_role: 'system', text: 'Ticket riaperto dall’utente.' }).catch(() => {});
-    await ctx.reply(`♻️ Ticket #${t.id} riaperto. Invia il tuo messaggio.`);
+    await sb.appendSupportMessage(r.ticket.id, {
+      from_role: 'system',
+      text: `Ticket riaperto dall’utente (sessione ${r.ticket.session_index}).`,
+      session_index: Number(r.ticket.session_index || 1),
+    }).catch(() => {});
+    await ctx.reply(`♻️ Ticket #${r.ticket.id} riaperto. Sessione ${r.ticket.session_index}: puoi inviare fino a ${SUPPORT_MAX_PHOTO_PER_SESSION} immagini.`);
   });
 
   bot.action('support_user_new', async (ctx) => {
@@ -2459,7 +2518,7 @@ function setupBot(bot) {
     }
     pendingSupportForceNew.set(uid, true);
     pendingSupportOpen.set(uid, true);
-    await showSupportOpenPrompt(ctx);
+    await showSupportEntryHub(ctx);
   });
 
   bot.action('support_admin_home', async (ctx) => {

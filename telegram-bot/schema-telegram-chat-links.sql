@@ -89,6 +89,8 @@ CREATE TABLE IF NOT EXISTS public.telegram_support_tickets (
     status                    TEXT NOT NULL DEFAULT 'open',
     subject                   TEXT,
     image_count               INT NOT NULL DEFAULT 0,
+    reopen_count              INT NOT NULL DEFAULT 0,
+    session_index             INT NOT NULL DEFAULT 1,
     assigned_admin_id         BIGINT,
     closed_at                 TIMESTAMPTZ,
     purge_after               TIMESTAMPTZ,
@@ -106,6 +108,7 @@ CREATE TABLE IF NOT EXISTS public.telegram_support_messages (
     from_telegram_user_id     BIGINT,
     text                      TEXT,
     photo_file_id             TEXT,
+    session_index             INT NOT NULL DEFAULT 1,
     created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS telegram_support_messages_ticket_idx ON public.telegram_support_messages (ticket_id, created_at ASC);

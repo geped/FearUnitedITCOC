@@ -377,6 +377,8 @@ async function createSupportTicket(telegramUserId, subject) {
     telegram_user_id: Number(telegramUserId),
     status: 'open',
     subject: subject ? String(subject).slice(0, 180) : null,
+    reopen_count: 0,
+    session_index: 1,
     updated_at: new Date().toISOString(),
   };
   const { data, error } = await client.from('telegram_support_tickets').insert(row).select('*').single();
@@ -393,6 +395,8 @@ async function appendSupportMessage(ticketId, msg) {
     from_telegram_user_id: msg.from_telegram_user_id != null ? Number(msg.from_telegram_user_id) : null,
     text: msg.text != null ? String(msg.text).slice(0, 4000) : null,
     photo_file_id: msg.photo_file_id ? String(msg.photo_file_id).slice(0, 300) : null,
+    session_index:
+      msg.session_index != null && Number.isFinite(Number(msg.session_index)) ? Number(msg.session_index) : 1,
   };
   const { error } = await client.from('telegram_support_messages').insert(row);
   if (error) throw new Error(error.message);
@@ -405,6 +409,19 @@ async function countTicketPhotos(ticketId) {
     .from('telegram_support_messages')
     .select('*', { count: 'exact', head: true })
     .eq('ticket_id', Number(ticketId))
+    .not('photo_file_id', 'is', null);
+  if (error) return 0;
+  return count || 0;
+}
+
+async function countTicketPhotosInSession(ticketId, sessionIndex) {
+  const client = sb();
+  if (!client) return 0;
+  const { count, error } = await client
+    .from('telegram_support_messages')
+    .select('*', { count: 'exact', head: true })
+    .eq('ticket_id', Number(ticketId))
+    .eq('session_index', Number(sessionIndex))
     .not('photo_file_id', 'is', null);
   if (error) return 0;
   return count || 0;
@@ -429,6 +446,29 @@ async function setTicketStatus(ticketId, status, adminId) {
   }
   const { error } = await client.from('telegram_support_tickets').update(patch).eq('id', Number(ticketId));
   if (error) throw new Error(error.message);
+}
+
+async function reopenSupportTicket(telegramUserId) {
+  const client = sb();
+  if (!client) return { ok: false, reason: 'Supabase non configurato.' };
+  const ticket = await getLatestClosedPendingTicketForUser(telegramUserId);
+  if (!ticket) return { ok: false, reason: 'Nessun ticket chiuso recente da riaprire.' };
+  const reopenCount = Number(ticket.reopen_count || 0);
+  if (reopenCount >= 3) {
+    return { ok: false, reason: 'Hai raggiunto il limite massimo: 3 riaperture per lo stesso ticket.' };
+  }
+  const patch = {
+    status: 'open',
+    reopen_count: reopenCount + 1,
+    session_index: Number(ticket.session_index || 1) + 1,
+    closed_at: null,
+    purge_after: null,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await client.from('telegram_support_tickets').update(patch).eq('id', Number(ticket.id));
+  if (error) throw new Error(error.message);
+  const updated = await getTicketById(ticket.id);
+  return { ok: true, ticket: updated };
 }
 
 async function listActiveSupportTickets(limit = 30) {
@@ -744,7 +784,9 @@ module.exports = {
   createSupportTicket,
   appendSupportMessage,
   countTicketPhotos,
+  countTicketPhotosInSession,
   setTicketStatus,
+  reopenSupportTicket,
   listActiveSupportTickets,
   listActiveSupportTicketsAssignedTo,
   listSupportMessages,
