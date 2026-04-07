@@ -813,6 +813,67 @@ async function upsertCwlHistoryAssignRow(row) {
   if (error) throw new Error(error.message);
 }
 
+/** Nomi con bonus assegnato in una stagione (per esclusione “stagione precedente”). */
+async function fetchBonusAssignedNamesForSeason(clanTagRaw, season) {
+  const client = sb();
+  if (!client) return new Set();
+  const tag = normClanTagSql(clanTagRaw);
+  const { data, error } = await client
+    .from('cwl_history')
+    .select('player_name')
+    .eq('clan_tag', tag)
+    .eq('season', String(season))
+    .eq('bonus_assigned', true);
+  if (error) throw new Error(error.message);
+  return new Set((data || []).map((r) => r.player_name).filter(Boolean));
+}
+
+/** Mappa nome giocatore (lower) → th_level per clan. */
+async function fetchMembersThByNameForClan(clanTagRaw) {
+  const client = sb();
+  if (!client) return new Map();
+  const tag = normClanTagSql(clanTagRaw);
+  const { data, error } = await client.from('members').select('name, th_level').eq('clan_tag', tag);
+  if (error) throw new Error(error.message);
+  const m = new Map();
+  for (const r of data || []) {
+    const n = String(r.name || '').toLowerCase().trim();
+    if (n) m.set(n, Number(r.th_level) || 0);
+  }
+  return m;
+}
+
+/** Imposta bonus_assigned su tutto il roster attivo (non secondari) della stagione. */
+async function applyBonusSelectionForSeason(clanTagRaw, season, selectedNames) {
+  const client = sb();
+  if (!client) throw new Error('Supabase non configurato.');
+  const tag = normClanTagSql(clanTagRaw);
+  const all = await fetchCwlHistoryFullSeason(clanTagRaw, season);
+  const sel = new Set(selectedNames);
+  const payload = [];
+  for (const r of all) {
+    if (r.still_in_clan === false || r.is_secondary) continue;
+    payload.push({
+      clan_tag: tag,
+      player_name: String(r.player_name),
+      season: String(season),
+      participated: Boolean(r.participated),
+      stars: Math.round(Number(r.stars ?? 0)),
+      destruction: Number(Number(r.destruction ?? 0).toFixed(2)),
+      attacks_made: Math.round(Number(r.attacks_made ?? 0)),
+      attacks_required: Math.round(Number(r.attacks_required ?? 0)),
+      bonus_score: Math.round(Number(r.bonus_score ?? 0)),
+      bonus_assigned: sel.has(String(r.player_name)),
+      still_in_clan: r.still_in_clan !== false,
+      is_secondary: Boolean(r.is_secondary),
+    });
+  }
+  if (!payload.length) return 0;
+  const { error } = await client.from('cwl_history').upsert(payload, { onConflict: 'player_name,season,clan_tag' });
+  if (error) throw new Error(error.message);
+  return payload.length;
+}
+
 module.exports = {
   sb,
   getFullRow,
@@ -844,6 +905,9 @@ module.exports = {
   listCwlSeasonsForClan,
   fetchCwlHistoryFullSeason,
   upsertCwlHistoryAssignRow,
+  fetchBonusAssignedNamesForSeason,
+  fetchMembersThByNameForClan,
+  applyBonusSelectionForSeason,
   getChatNotificationSettings,
   upsertChatNotificationSettings,
   insertUsageEvent,

@@ -12,6 +12,7 @@ const sbcCommunity = require('./lib/supabase-community');
 const cv = require('./lib/community-validation');
 const comm = require('./lib/community-handlers');
 const privateUi = require('./lib/private-ui-cleanup');
+const bonusAssist = require('./lib/bonus-assistant');
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -39,6 +40,10 @@ const SUPPORT_MAX_REOPEN = 3;
 const SUPPORT_MAX_PHOTO_PER_SESSION = 2;
 /** Righe per pagina nel flusso «Assegna bonus» (limite pulsanti Telegram). */
 const BONUS_ASSIGN_PAGE_SIZE = 6;
+/** Paginazione lista candidati nel wizard assistito. */
+const BONUS_WIZARD_PAGE = 6;
+/** Stato wizard bonus: uid → risultato runBonusAssistant + metadati. */
+const bonusWizardByUid = new Map();
 
 let cachedTgBotUsername = (process.env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '');
 /** Anti-spam avvisi guerra: chatId -> key avvisi già inviati per endTime corrente. */
@@ -1617,12 +1622,12 @@ async function renderBonusAssignSeasonPick(ctx, clanTag) {
     }
     return;
   }
-  const rows = seasons.map((s) => [Markup.button.callback(`📅 ${bonusAssignSeasonLabelIt(s)}`, `bonus:asz:${s}`)]);
+  const rows = seasons.map((s) => [Markup.button.callback(`📅 ${bonusAssignSeasonLabelIt(s)}`, `bonus:azp:${s}`)]);
   rows.push([Markup.button.callback('« Ranking bonus', 'bonus:0')]);
   const txt =
     `${fmt.DIV}\n✏️ <b>Assegna bonus CWL</b>\n${fmt.DIV}\n\n` +
     `Scegli la <b>stessa stagione</b> (<code>YYYY-MM</code>) che usi sul sito. ` +
-    `Poi tocca i nomi per assegnare o rimuovere il bonus — come le checkbox nella tabella web.`;
+    `Poi potrai usare <b>manuale</b> o <b>assistito</b> (suggerimento + conferma).`;
   try {
     await ctx.editMessageText(txt, { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) });
   } catch (_) {
@@ -1663,11 +1668,177 @@ async function renderBonusAssignPage(ctx, clanTag, season, page) {
   if (totalPages > 1) nav.push(Markup.button.callback(`· ${p + 1}/${totalPages} ·`, 'noop'));
   if (p < totalPages - 1) nav.push(Markup.button.callback('▶', `bonus:asp:${season}:${p + 1}`));
   if (nav.length) kbRows.push(nav);
-  kbRows.push([Markup.button.callback('« Stagioni', 'bonus:as'), Markup.button.callback('« Ranking', 'bonus:0')]);
+  kbRows.push([
+    Markup.button.callback('« Stagioni', 'bonus:as'),
+    Markup.button.callback('« Modalità', `bonus:azp:${season}`),
+  ]);
+  kbRows.push([Markup.button.callback('« Ranking', 'bonus:0')]);
   try {
     await ctx.editMessageText(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(kbRows) });
   } catch (_) {
     await ctx.reply(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(kbRows) });
+  }
+}
+
+async function renderBonusAssignModePick(ctx, clanTag, season) {
+  bonusWizardByUid.delete(ctx.from?.id);
+  const tagDisp = clanTag.startsWith('#') ? clanTag : `#${clanTag}`;
+  const body =
+    `${fmt.DIV}\n✏️ <b>Assegna bonus</b> · <i>${fmt.escapeHtml(bonusAssignSeasonLabelIt(season))}</i>\n` +
+    `<code>${fmt.escapeHtml(tagDisp)}</code>\n${fmt.DIV}\n\n` +
+    `• <b>Manuale</b> — come la tabella web (pagina per pagina).\n` +
+    `• <b>Assistito</b> — quanti bonus, criteri (es. escludi chi ha avuto bonus la stagione precedente, partecipazione, attacchi completi, peso TH sul roster); ` +
+    `poi modifichi la lista e salvi.`;
+  const kb = Markup.inlineKeyboard([
+    [Markup.button.callback('✏️ Manuale', `bonus:azm:${season}`)],
+    [Markup.button.callback('🧮 Assistito', `bonus:aw:${season}`)],
+    [Markup.button.callback('« Stagioni', 'bonus:as')],
+    [Markup.button.callback('« Ranking', 'bonus:0')],
+  ]);
+  try {
+    await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
+  } catch (_) {
+    await ctx.reply(body, { parse_mode: 'HTML', ...kb });
+  }
+}
+
+async function renderBonusWizardSlots(ctx, clanTag, season) {
+  bonusWizardByUid.delete(ctx.from?.id);
+  const tagDisp = clanTag.startsWith('#') ? clanTag : `#${clanTag}`;
+  const body =
+    `${fmt.DIV}\n🧮 <b>Assistito</b> · ${fmt.escapeHtml(bonusAssignSeasonLabelIt(season))}\n` +
+    `<code>${fmt.escapeHtml(tagDisp)}</code>\n${fmt.DIV}\n\n` +
+    `Quanti <b>bonus</b> vuoi assegnare in questa stagione?`;
+  const kb = Markup.inlineKeyboard([
+    [
+      Markup.button.callback('2', `bonus:awn:${season}:2`),
+      Markup.button.callback('3', `bonus:awn:${season}:3`),
+      Markup.button.callback('4', `bonus:awn:${season}:4`),
+      Markup.button.callback('5', `bonus:awn:${season}:5`),
+    ],
+    [
+      Markup.button.callback('6', `bonus:awn:${season}:6`),
+      Markup.button.callback('7', `bonus:awn:${season}:7`),
+      Markup.button.callback('8', `bonus:awn:${season}:8`),
+      Markup.button.callback('9', `bonus:awn:${season}:9`),
+    ],
+    [Markup.button.callback('« Modalità stagione', `bonus:azp:${season}`)],
+  ]);
+  try {
+    await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
+  } catch (_) {
+    await ctx.reply(body, { parse_mode: 'HTML', ...kb });
+  }
+}
+
+async function renderBonusWizardPresets(ctx, clanTag, season, slots) {
+  const tagDisp = clanTag.startsWith('#') ? clanTag : `#${clanTag}`;
+  const body =
+    `${fmt.DIV}\n🧮 <b>Criteri suggerimento</b>\n${fmt.DIV}\n` +
+    `<code>${fmt.escapeHtml(tagDisp)}</code> · <b>${slots}</b> bonus\n\n` +
+    `• <b>Standard</b> — esclude chi ha avuto bonus nella <b>stagione precedente</b> (mese prima), solo partecipanti CWL, merito con <b>peso TH</b> (vs mediana roster).\n` +
+    `• <b>Strict</b> — come Standard + tutti gli <b>attacchi richiesti</b> completati.\n` +
+    `• <b>Solo peso TH</b> — ordina per merito aggiustato col TH (niente filtri su partecipazione o stagione precedente).\n` +
+    `• <b>Solo score</b> — roster attivo, ordine per score salvato in storico.\n\n` +
+    `<i>Non abbiamo in database TH avversario per singolo attacco; il peso TH è un’euristica sul roster.</i>`;
+  const kb = Markup.inlineKeyboard([
+    [Markup.button.callback('⭐ Standard', `bonus:awm:${season}:${slots}:11`)],
+    [Markup.button.callback('⚙️ Strict', `bonus:awm:${season}:${slots}:15`)],
+    [Markup.button.callback('📊 Solo peso TH', `bonus:awm:${season}:${slots}:8`)],
+    [Markup.button.callback('📋 Solo score', `bonus:awm:${season}:${slots}:0`)],
+    [Markup.button.callback('« Numero bonus', `bonus:aw:${season}`)],
+  ]);
+  try {
+    await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
+  } catch (_) {
+    await ctx.reply(body, { parse_mode: 'HTML', ...kb });
+  }
+}
+
+async function runBonusWizardComputeAndShow(ctx, clanTag, season, slots, mask) {
+  const historyRows = await sb.fetchCwlHistoryFullSeason(clanTag, season).catch(() => []);
+  if (!historyRows.length) {
+    await ctx.answerCbQuery('Nessun dato per questa stagione').catch(() => {});
+    await renderBonusAssignModePick(ctx, clanTag, season);
+    return;
+  }
+  const prev = bonusAssist.prevSeasonYM(season);
+  let prevSet = new Set();
+  if (prev && (mask & bonusAssist.EXCL_PREV)) {
+    prevSet = await sb.fetchBonusAssignedNamesForSeason(clanTag, prev).catch(() => new Set());
+  }
+  let thMap = new Map();
+  if (mask & bonusAssist.TH_WEIGHT) {
+    thMap = await sb.fetchMembersThByNameForClan(clanTag).catch(() => new Map());
+  }
+  const result = bonusAssist.runBonusAssistant({
+    clanTag,
+    season,
+    maxSlots: slots,
+    mask,
+    historyRows,
+    prevSeasonBonusNames: prevSet,
+    thByNameLower: thMap,
+  });
+  bonusWizardByUid.set(ctx.from.id, { ...result, wizardPage: 0 });
+  await renderBonusWizardCandidatePage(ctx, 0);
+}
+
+async function renderBonusWizardCandidatePage(ctx, page) {
+  const uid = ctx.from?.id;
+  const st = uid != null ? bonusWizardByUid.get(uid) : null;
+  if (!st || !Array.isArray(st.candidates)) {
+    await ctx.answerCbQuery('Sessione scaduta: riapri Assistito.').catch(() => {});
+    return;
+  }
+  const { candidates, selected, maxSlots, season, mask, medianTh, clanTag } = st;
+  const totalP = Math.max(1, Math.ceil(candidates.length / BONUS_WIZARD_PAGE));
+  const p = Math.min(Math.max(0, page), totalP - 1);
+  st.wizardPage = p;
+  bonusWizardByUid.set(uid, st);
+  const start = p * BONUS_WIZARD_PAGE;
+  const slice = candidates.slice(start, start + BONUS_WIZARD_PAGE);
+  const tagDisp = clanTag.startsWith('#') ? clanTag : `#${clanTag}`;
+  let body =
+    `${fmt.DIV}\n🧮 <b>Conferma bonus</b> · <i>${fmt.escapeHtml(bonusAssignSeasonLabelIt(season))}</i>\n` +
+    `<code>${fmt.escapeHtml(tagDisp)}</code>\n${fmt.DIV}\n` +
+    `<b>${selected.size}</b>/<b>${maxSlots}</b> selezionati · <i>${fmt.escapeHtml(bonusAssist.maskLabelIt(mask))}</i>`;
+  if ((mask & bonusAssist.TH_WEIGHT) && medianTh > 0) {
+    body += `\nMediana TH roster: <b>${medianTh}</b>.`;
+  }
+  const nEligible = candidates.filter((c) => c.eligible === true).length;
+  body +=
+    `\n\n<i>Lista: prima i <b>${nEligible}</b> idonei al preset, poi gli altri (selezionabili fino a ${maxSlots}). ` +
+    `Pulsanti con <b>*</b> = fuori dal preset. ` +
+    `Salvataggio = solo giocatori attivi/non secondari in questa stagione.</i>\n\n<b>Candidati</b> (pag. ${p + 1}/${totalP}):\n`;
+  for (const c of slice) {
+    const on = selected.has(c.player_name);
+    const tag = c.eligible === false ? ' <i>(fuori preset)</i>' : '';
+    body += `${on ? '✅' : '·'} ${fmt.escapeHtml(c.player_name)}${tag} — <code>${c.meritAdj}</code>${c.th ? ` TH${c.th}` : ''}\n`;
+  }
+  const kb = [];
+  for (let i = 0; i < slice.length; i++) {
+    const c = slice[i];
+    const gi = start + i;
+    const on = selected.has(c.player_name);
+    const short = String(c.player_name || '—').slice(0, 18);
+    const suf = c.eligible === false ? ' *' : '';
+    kb.push([Markup.button.callback(`${on ? '✅' : '⬜'} ${short}${suf}`, `bonus:awt:${season}:${gi}`)]);
+  }
+  const nav = [];
+  if (p > 0) nav.push(Markup.button.callback('◀', `bonus:awp:${season}:${p - 1}`));
+  if (totalP > 1) nav.push(Markup.button.callback(`· ${p + 1}/${totalP} ·`, 'noop'));
+  if (p < totalP - 1) nav.push(Markup.button.callback('▶', `bonus:awp:${season}:${p + 1}`));
+  if (nav.length) kb.push(nav);
+  kb.push([
+    Markup.button.callback('💾 Salva', `bonus:awy:${season}`),
+    Markup.button.callback('« Criteri', `bonus:awr:${season}`),
+  ]);
+  kb.push([Markup.button.callback('« Modalità stagione', `bonus:azp:${season}`), Markup.button.callback('« Ranking', 'bonus:0')]);
+  try {
+    await ctx.editMessageText(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(kb) });
+  } catch (_) {
+    await ctx.reply(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(kb) });
   }
 }
 
@@ -3320,6 +3491,21 @@ function setupBot(bot) {
     await renderBonusAssignSeasonPick(ctx, clanTag);
   });
 
+  bot.action(/^bonus:azp:(\d{4}-\d{2})$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
+      await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
+      return;
+    }
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) {
+      await ctx.answerCbQuery('Nessun clan').catch(() => {});
+      return;
+    }
+    await renderBonusAssignModePick(ctx, clanTag, ctx.match[1]);
+  });
+
+  /** Messaggi vecchi con callback stagione diretto → stessa schermata modalità. */
   bot.action(/^bonus:asz:(\d{4}-\d{2})$/, async (ctx) => {
     await answerCbLoading(ctx);
     if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
@@ -3331,7 +3517,169 @@ function setupBot(bot) {
       await ctx.answerCbQuery('Nessun clan').catch(() => {});
       return;
     }
+    await renderBonusAssignModePick(ctx, clanTag, ctx.match[1]);
+  });
+
+  bot.action(/^bonus:azm:(\d{4}-\d{2})$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
+      await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
+      return;
+    }
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) {
+      await ctx.answerCbQuery('Nessun clan').catch(() => {});
+      return;
+    }
     await renderBonusAssignPage(ctx, clanTag, ctx.match[1], 0);
+  });
+
+  bot.action(/^bonus:aw:(\d{4}-\d{2})$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
+      await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
+      return;
+    }
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) {
+      await ctx.answerCbQuery('Nessun clan').catch(() => {});
+      return;
+    }
+    await renderBonusWizardSlots(ctx, clanTag, ctx.match[1]);
+  });
+
+  bot.action(/^bonus:awn:(\d{4}-\d{2}):(\d+)$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
+      await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
+      return;
+    }
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) return;
+    const season = ctx.match[1];
+    const slots = Math.min(9, Math.max(2, Number(ctx.match[2]) || 6));
+    await renderBonusWizardPresets(ctx, clanTag, season, slots);
+  });
+
+  bot.action(/^bonus:awm:(\d{4}-\d{2}):(\d+):(\d+)$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
+      await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
+      return;
+    }
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) return;
+    const season = ctx.match[1];
+    const slots = Math.min(9, Math.max(2, Number(ctx.match[2]) || 6));
+    const mask = Math.min(31, Math.max(0, Number(ctx.match[3]) || 0));
+    await runBonusWizardComputeAndShow(ctx, clanTag, season, slots, mask);
+  });
+
+  bot.action(/^bonus:awp:(\d{4}-\d{2}):(\d+)$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
+      await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
+      return;
+    }
+    const season = ctx.match[1];
+    const st = bonusWizardByUid.get(ctx.from.id);
+    if (!st || st.season !== season) {
+      await ctx.answerCbQuery('Sessione scaduta').catch(() => {});
+      return;
+    }
+    const page = Number(ctx.match[2]) || 0;
+    await renderBonusWizardCandidatePage(ctx, page);
+  });
+
+  bot.action(/^bonus:awt:(\d{4}-\d{2}):(\d+)$/, async (ctx) => {
+    if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
+      await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
+      return;
+    }
+    const season = ctx.match[1];
+    const idx = Number(ctx.match[2]) || 0;
+    const st = bonusWizardByUid.get(ctx.from.id);
+    if (!st || st.season !== season || !st.candidates[idx]) {
+      await ctx.answerCbQuery('Non disponibile').catch(() => {});
+      return;
+    }
+    const name = st.candidates[idx].player_name;
+    if (st.selected.has(name)) {
+      st.selected.delete(name);
+      await ctx.answerCbQuery('Rimosso').catch(() => {});
+    } else {
+      if (st.selected.size >= st.maxSlots) {
+        await ctx.answerCbQuery(`Massimo ${st.maxSlots} bonus`).catch(() => {});
+        await renderBonusWizardCandidatePage(ctx, st.wizardPage || 0);
+        return;
+      }
+      st.selected.add(name);
+      await ctx.answerCbQuery('Aggiunto').catch(() => {});
+    }
+    bonusWizardByUid.set(ctx.from.id, st);
+    await renderBonusWizardCandidatePage(ctx, st.wizardPage || 0);
+  });
+
+  bot.action(/^bonus:awr:(\d{4}-\d{2})$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
+      await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
+      return;
+    }
+    const season = ctx.match[1];
+    const st = bonusWizardByUid.get(ctx.from.id);
+    if (!st || st.season !== season) {
+      await ctx.answerCbQuery('Riprendi da Assistito').catch(() => {});
+      return;
+    }
+    await renderBonusWizardPresets(ctx, st.clanTag, season, st.maxSlots);
+  });
+
+  bot.action(/^bonus:awy:(\d{4}-\d{2})$/, async (ctx) => {
+    if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
+      await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
+      return;
+    }
+    const season = ctx.match[1];
+    const st = bonusWizardByUid.get(ctx.from.id);
+    if (!st || st.season !== season) {
+      await ctx.answerCbQuery('Sessione scaduta').catch(() => {});
+      return;
+    }
+    if (st.selected.size === 0) {
+      await ctx.answerCbQuery('Seleziona almeno un giocatore').catch(() => {});
+      return;
+    }
+    if (st.selected.size > st.maxSlots) {
+      await ctx.answerCbQuery(`Troppi selezionati (max ${st.maxSlots})`).catch(() => {});
+      return;
+    }
+    try {
+      const n = await sb.applyBonusSelectionForSeason(st.clanTag, season, [...st.selected]);
+      bonusWizardByUid.delete(ctx.from.id);
+      await ctx.answerCbQuery(`Salvati ${n} record`).catch(() => {});
+      const tagDisp = st.clanTag.startsWith('#') ? st.clanTag : `#${st.clanTag}`;
+      const done =
+        `✅ <b>Bonus salvati</b> · ${fmt.escapeHtml(bonusAssignSeasonLabelIt(season))}\n` +
+        `<code>${fmt.escapeHtml(tagDisp)}</code>\n\n` +
+        `Assegnati: <b>${st.selected.size}</b> — ${fmt.escapeHtml([...st.selected].join(', '))}`;
+      try {
+        await ctx.editMessageText(done, {
+          parse_mode: 'HTML',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('« Bonus ranking', 'bonus:0')],
+            [Markup.button.callback('« Menù', 'menu')],
+          ]),
+        });
+      } catch (_) {
+        await ctx.reply(done, {
+          parse_mode: 'HTML',
+          ...Markup.inlineKeyboard([[Markup.button.callback('« Menù', 'menu')]]),
+        });
+      }
+    } catch (e) {
+      await ctx.answerCbQuery(String(e.message || 'Errore').slice(0, 180)).catch(() => {});
+    }
   });
 
   bot.action(/^bonus:asp:(\d{4}-\d{2}):(\d+)$/, async (ctx) => {
