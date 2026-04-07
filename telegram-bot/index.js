@@ -1680,7 +1680,8 @@ async function buildBonusKeyboard(ctx, page, pages) {
   }
   const rows = row.length ? [row] : [];
   rows.push([Markup.button.callback('📅 Storico per stagione', 'bonus:hist'), Markup.button.callback('🏆 Classifica riceventi', 'bonus:hof')]);
-  if (!isLinkedChatContext(ctx) && ctx.cocboardUser && isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
+  // Privato o gruppo/canale collegato: storico/HoF per tutti; assegnazione solo Capo/Co-Capo (controllata nei callback).
+  if (ctx.cocboardUser && isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
     rows.push([Markup.button.callback('✏️ Assegna bonus', 'bonus:as')]);
   }
   if (!isLinkedChatContext(ctx) && ctx.cocboardUser) {
