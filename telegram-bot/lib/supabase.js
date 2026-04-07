@@ -347,7 +347,22 @@ async function getOpenTicketForUser(telegramUserId) {
     .from('telegram_support_tickets')
     .select('*')
     .eq('telegram_user_id', Number(telegramUserId))
-    .in('status', ['open', 'in_progress', 'waiting_user', 'closed_pending_purge'])
+    .in('status', ['open', 'in_progress', 'waiting_user'])
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data || null;
+}
+
+async function getLatestClosedPendingTicketForUser(telegramUserId) {
+  const client = sb();
+  if (!client) return null;
+  const { data, error } = await client
+    .from('telegram_support_tickets')
+    .select('*')
+    .eq('telegram_user_id', Number(telegramUserId))
+    .eq('status', 'closed_pending_purge')
     .order('updated_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -725,6 +740,7 @@ module.exports = {
   insertUsageEvent,
   getAdminDashboardStats,
   getOpenTicketForUser,
+  getLatestClosedPendingTicketForUser,
   createSupportTicket,
   appendSupportMessage,
   countTicketPhotos,

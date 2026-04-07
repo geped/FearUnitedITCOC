@@ -25,9 +25,17 @@ const pendingLinkWizard = new Map();
 const pendingCommunity = new Map();
 /** Dopo login da Community (profilo CoCBoard) → scelta chat globale vs menù */
 const postAuthGlobalResume = new Map();
-/** Supporto: ticket aperto utente + risposta admin a ticket specifico. */
-const pendingSupportReply = new Map(); // adminUid -> ticketId
+/** Supporto: ticket attivo per admin (chat continua) + aperture utente. */
+const adminActiveSupportTicket = new Map(); // adminUid -> ticketId
 const pendingSupportOpen = new Map(); // uid -> true (apertura esplicita supporto)
+const pendingSupportForceNew = new Map(); // uid -> true (forza nuovo ticket)
+
+const SUPPORT_RK_TAKE = 'Ticket: presa in carico';
+const SUPPORT_RK_WAIT = 'Ticket: in attesa utente';
+const SUPPORT_RK_CLOSE = 'Ticket: chiudi';
+const SUPPORT_RK_BAN = 'Ticket: permaban utente';
+const SUPPORT_RK_UNBAN = 'Ticket: rimuovi ban';
+const SUPPORT_RK_EXIT = 'Esci ticket supporto';
 
 let cachedTgBotUsername = (process.env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '');
 /** Anti-spam avvisi guerra: chatId -> key avvisi già inviati per endTime corrente. */
@@ -712,6 +720,11 @@ privateUi.setOnBeforePrivateUiWipe((uid) => {
 
 async function buildPrivateReplyKeyboardMarkup(uid) {
   const rows = [[Markup.button.text(PRIVATE_RK_MENU), Markup.button.text(PRIVATE_RK_HELP)]];
+  if (adminActiveSupportTicket.has(uid)) {
+    rows.push([Markup.button.text(SUPPORT_RK_TAKE), Markup.button.text(SUPPORT_RK_WAIT)]);
+    rows.push([Markup.button.text(SUPPORT_RK_CLOSE), Markup.button.text(SUPPORT_RK_EXIT)]);
+    rows.push([Markup.button.text(SUPPORT_RK_BAN), Markup.button.text(SUPPORT_RK_UNBAN)]);
+  }
   if (await sbcCommunity.isActiveInGlobalChat(uid).catch(() => false)) {
     rows.push([Markup.button.text(PRIVATE_RK_EXIT_GLOBAL)]);
   }
@@ -865,6 +878,92 @@ async function showSupportOpenPrompt(ctx) {
   }
 }
 
+function closedTicketUserKb() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('🏠 Torna al menù', 'support_user_menu')],
+    [Markup.button.callback('♻️ Riapri ticket', 'support_user_reopen')],
+    [Markup.button.callback('🆕 Nuovo ticket', 'support_user_new')],
+  ]);
+}
+
+async function notifyAdminsTicketUpdate(ctx, ticketId, senderLabel, text, photoFileId) {
+  const ticket = await sb.getTicketById(ticketId).catch(() => null);
+  if (!ticket) return;
+  const targets = new Set();
+  if (ticket.assigned_admin_id != null) targets.add(Number(ticket.assigned_admin_id));
+  cv.parseOwnerTelegramIds().forEach((id) => targets.add(Number(id)));
+  const body = `📨 Ticket #${ticketId} · ${senderLabel}\nUtente: <code>${ticket.telegram_user_id}</code>\n${fmt.escapeHtml(text || '')}`.trim();
+  for (const aid of targets) {
+    if (!Number.isFinite(aid)) continue;
+    const kb = Markup.inlineKeyboard([[Markup.button.callback(`Apri ticket #${ticketId}`, `support_admin_ticket:${ticketId}`)]]);
+    if (photoFileId) {
+      await ctx.telegram
+        .sendPhoto(aid, photoFileId, {
+          caption: body.slice(0, 900),
+          parse_mode: 'HTML',
+          reply_markup: kb.reply_markup,
+        })
+        .catch(() => {});
+    } else {
+      await ctx.telegram
+        .sendMessage(aid, body, { parse_mode: 'HTML', reply_markup: kb.reply_markup })
+        .catch(() => {});
+    }
+  }
+}
+
+async function performAdminTicketAction(ctx, ticketId, actionText) {
+  const t = await sb.getTicketById(ticketId).catch(() => null);
+  if (!t) {
+    await ctx.reply('Ticket non trovato.');
+    adminActiveSupportTicket.delete(ctx.from.id);
+    await refreshPrivateReplyKeyboard(ctx);
+    return;
+  }
+  if (actionText === SUPPORT_RK_TAKE) {
+    await sb.setTicketStatus(ticketId, 'in_progress', ctx.from?.id).catch(() => {});
+    await sb.appendSupportMessage(ticketId, { from_role: 'system', text: 'Ticket preso in carico da un amministratore.' }).catch(() => {});
+    if (t.telegram_user_id) {
+      await ctx.telegram.sendMessage(t.telegram_user_id, '✅ Il tuo ticket è stato preso in carico da un amministratore.').catch(() => {});
+    }
+    await ctx.reply(`Ticket #${ticketId} preso in carico.`);
+    return;
+  }
+  if (actionText === SUPPORT_RK_WAIT) {
+    await sb.setTicketStatus(ticketId, 'waiting_user', ctx.from?.id).catch(() => {});
+    if (t.telegram_user_id) {
+      await ctx.telegram.sendMessage(t.telegram_user_id, '⏸ Ticket in attesa di un tuo riscontro.').catch(() => {});
+    }
+    await ctx.reply(`Ticket #${ticketId} impostato in attesa utente.`);
+    return;
+  }
+  if (actionText === SUPPORT_RK_CLOSE) {
+    await sb.setTicketStatus(ticketId, 'closed_pending_purge', ctx.from?.id).catch(() => {});
+    await sb.appendSupportMessage(ticketId, { from_role: 'system', text: 'Ticket chiuso: purge definitivo tra 7 giorni.' }).catch(() => {});
+    if (t.telegram_user_id) {
+      await ctx.telegram
+        .sendMessage(
+          t.telegram_user_id,
+          '🔒 Ticket chiuso. Entro 7 giorni verrà eliminato definitivamente.\nSe vuoi, puoi riaprirlo entro 7 giorni; dopo dovrai aprire un nuovo ticket.',
+          { ...closedTicketUserKb() }
+        )
+        .catch(() => {});
+    }
+    await ctx.reply(`Ticket #${ticketId} chiuso (purge tra 7 giorni).`);
+    return;
+  }
+  if (actionText === SUPPORT_RK_BAN) {
+    await sb.setTelegramUserBanned(t.telegram_user_id, true, `Permaban da ticket #${ticketId}`, ctx.from?.id).catch(() => {});
+    await ctx.reply(`🚫 Utente <code>${t.telegram_user_id}</code> bannato.`, { parse_mode: 'HTML' });
+    return;
+  }
+  if (actionText === SUPPORT_RK_UNBAN) {
+    await sb.setTelegramUserBanned(t.telegram_user_id, false, `Unban da ticket #${ticketId}`, ctx.from?.id).catch(() => {});
+    await ctx.reply(`✅ Ban rimosso per utente <code>${t.telegram_user_id}</code>.`, { parse_mode: 'HTML' });
+    return;
+  }
+}
+
 async function handleSupportInboundMessage(ctx) {
   if (ctx.chat?.type !== 'private' || !ctx.from?.id || !ctx.message) return false;
   const uid = ctx.from.id;
@@ -890,7 +989,13 @@ async function handleSupportInboundMessage(ctx) {
 
   let ticket = await sb.getOpenTicketForUser(uid).catch(() => null);
   const explicitlyOpened = pendingSupportOpen.get(uid) === true;
-  if (!ticket && !explicitlyOpened) return false;
+  const forceNew = pendingSupportForceNew.get(uid) === true;
+  if (!ticket && !explicitlyOpened && !forceNew) return false;
+  if (forceNew && ticket) {
+    await ctx.reply(`Hai già un ticket aperto (#${ticket.id}). Chiudilo prima di crearne uno nuovo.`);
+    pendingSupportForceNew.delete(uid);
+    return true;
+  }
   if (!ticket) {
     ticket = await sb.createSupportTicket(uid, 'Richiesta supporto Telegram').catch(() => null);
     if (!ticket) return false;
@@ -899,6 +1004,7 @@ async function handleSupportInboundMessage(ctx) {
       .catch(() => {});
   }
   pendingSupportOpen.delete(uid);
+  pendingSupportForceNew.delete(uid);
 
   if (ticket.status === 'closed_pending_purge') {
     await sb.setTicketStatus(ticket.id, 'open', null).catch(() => {});
@@ -926,6 +1032,7 @@ async function handleSupportInboundMessage(ctx) {
     })
     .catch(() => {});
   await sb.insertUsageEvent({ telegram_user_id: uid, telegram_chat_id: uid, chat_type: 'private', event_type: 'support_msg' }).catch(() => {});
+  await notifyAdminsTicketUpdate(ctx, ticket.id, 'utente', bodyText || (photoFileId ? '[immagine]' : ''), photoFileId);
   await ctx.reply('📨 Messaggio inviato al supporto.', { parse_mode: 'HTML' }).catch(() => {});
   return true;
 }
@@ -1608,11 +1715,12 @@ function setupBot(bot) {
       await handlePendingSearch(ctx);
       return;
     }
-    const adminReplyTid = pendingSupportReply.get(ctx.from.id);
-    if (adminReplyTid && ctx.message) {
+    const adminTicketId = adminActiveSupportTicket.get(ctx.from.id);
+    if (adminTicketId && ctx.message) {
       if (txt === '/cancel') {
-        pendingSupportReply.delete(ctx.from.id);
-        await ctx.reply('Risposta supporto annullata.');
+        adminActiveSupportTicket.delete(ctx.from.id);
+        await refreshPrivateReplyKeyboard(ctx);
+        await ctx.reply('Uscito dalla modalità ticket.');
         return;
       }
       const messageText = (ctx.message.text || ctx.message.caption || '').trim();
@@ -1621,21 +1729,22 @@ function setupBot(bot) {
         await ctx.reply('Invia testo (opzionalmente con immagine).');
         return;
       }
-      const tk = await sb.getTicketById(adminReplyTid).catch(() => null);
+      const tk = await sb.getTicketById(adminTicketId).catch(() => null);
       if (!tk) {
-        pendingSupportReply.delete(ctx.from.id);
+        adminActiveSupportTicket.delete(ctx.from.id);
+        await refreshPrivateReplyKeyboard(ctx);
         await ctx.reply('Ticket non trovato.');
         return;
       }
       await sb
-        .appendSupportMessage(adminReplyTid, {
+        .appendSupportMessage(adminTicketId, {
           from_role: 'admin',
           from_telegram_user_id: ctx.from.id,
           text: messageText || null,
           photo_file_id: photo?.file_id || null,
         })
         .catch(() => {});
-      await sb.setTicketStatus(adminReplyTid, 'in_progress', ctx.from.id).catch(() => {});
+      await sb.setTicketStatus(adminTicketId, 'in_progress', ctx.from.id).catch(() => {});
       if (tk.telegram_user_id) {
         if (photo?.file_id) {
           await ctx.telegram
@@ -1647,8 +1756,15 @@ function setupBot(bot) {
           await ctx.telegram.sendMessage(tk.telegram_user_id, `👮 Supporto:\n${messageText}`).catch(() => {});
         }
       }
-      await ctx.reply(`✅ Risposta inviata a ticket #${adminReplyTid}.`);
-      pendingSupportReply.delete(ctx.from.id);
+      await sb
+        .insertUsageEvent({
+          telegram_user_id: ctx.from.id,
+          telegram_chat_id: ctx.chat?.id,
+          chat_type: ctx.chat?.type,
+          event_type: 'support_admin_msg',
+          payload: { ticket_id: adminTicketId },
+        })
+        .catch(() => {});
       return;
     }
     if (await handleSupportInboundMessage(ctx)) return;
@@ -1787,7 +1903,20 @@ function setupBot(bot) {
 
   handlePrivateReplyKeyboardShortcuts = async (ctx, raw) => {
     const t = raw.trim();
+    const activeTid = adminActiveSupportTicket.get(ctx.from.id);
+    if (activeTid && [SUPPORT_RK_TAKE, SUPPORT_RK_WAIT, SUPPORT_RK_CLOSE, SUPPORT_RK_BAN, SUPPORT_RK_UNBAN].includes(t)) {
+      await performAdminTicketAction(ctx, activeTid, t);
+      await refreshPrivateReplyKeyboard(ctx);
+      return true;
+    }
+    if (activeTid && t === SUPPORT_RK_EXIT) {
+      adminActiveSupportTicket.delete(ctx.from.id);
+      await refreshPrivateReplyKeyboard(ctx);
+      await ctx.reply('Uscito dalla modalità ticket supporto.');
+      return true;
+    }
     if (t === PRIVATE_RK_MENU) {
+      adminActiveSupportTicket.delete(ctx.from.id);
       await privateUi.wipePrivateConversationUi(ctx.telegram, ctx.from.id);
       pendingAuth.delete(ctx.from.id);
       pendingSearch.delete(ctx.from.id);
@@ -1798,6 +1927,7 @@ function setupBot(bot) {
       return true;
     }
     if (t === PRIVATE_RK_HELP) {
+      adminActiveSupportTicket.delete(ctx.from.id);
       await privateUi.wipePrivateConversationUi(ctx.telegram, ctx.from.id);
       await dispatchHelpCommand(ctx);
       return true;
@@ -2307,8 +2437,8 @@ function setupBot(bot) {
     if (isLinkedChatContext(ctx)) return;
     const uid = ctx.from?.id;
     if (uid == null) return;
-    const t = await sb.getOpenTicketForUser(uid).catch(() => null);
-    if (!t || t.status !== 'closed_pending_purge') {
+    const t = await sb.getLatestClosedPendingTicketForUser(uid).catch(() => null);
+    if (!t) {
       await ctx.reply('Nessun ticket chiuso recente da riaprire.');
       return;
     }
@@ -2323,10 +2453,11 @@ function setupBot(bot) {
     const uid = ctx.from?.id;
     if (uid == null) return;
     const t = await sb.getOpenTicketForUser(uid).catch(() => null);
-    if (t && t.status !== 'closed_pending_purge') {
+    if (t) {
       await ctx.reply(`Hai già un ticket aperto (#${t.id}). Scrivi qui per continuare.`);
       return;
     }
+    pendingSupportForceNew.set(uid, true);
     pendingSupportOpen.set(uid, true);
     await showSupportOpenPrompt(ctx);
   });
@@ -2399,7 +2530,9 @@ function setupBot(bot) {
       `Stato: <b>${fmt.escapeHtml(t.status)}</b>\n` +
       `Immagini: <b>${photoCount}</b>\n\n` +
       `${lines.join('\n') || '<i>Nessun messaggio.</i>'}`;
-    await ctx.reply(body, { parse_mode: 'HTML', ...supportTicketAdminKb(t.id) });
+    adminActiveSupportTicket.set(ctx.from.id, t.id);
+    await refreshPrivateReplyKeyboard(ctx);
+    await ctx.reply(body, { parse_mode: 'HTML' });
     for (const m of msgs.slice(-12)) {
       if (!m.photo_file_id) continue;
       const caption = `${m.from_role === 'admin' ? '👮' : '🙋'} Ticket #${t.id}` + (m.text ? `\n${String(m.text).slice(0, 700)}` : '');
@@ -2411,6 +2544,8 @@ function setupBot(bot) {
     safeAnswerCb(ctx);
     if (!(await isSupportAdmin(ctx))) return;
     const tid = Number(ctx.match[1]);
+    adminActiveSupportTicket.set(ctx.from.id, tid);
+    await refreshPrivateReplyKeyboard(ctx);
     await sb.setTicketStatus(tid, 'in_progress', ctx.from?.id).catch(() => {});
     await sb.appendSupportMessage(tid, { from_role: 'system', text: 'Ticket preso in carico da un amministratore.' }).catch(() => {});
     const t = await sb.getTicketById(tid).catch(() => null);
@@ -2426,14 +2561,17 @@ function setupBot(bot) {
     safeAnswerCb(ctx);
     if (!(await isSupportAdmin(ctx))) return;
     const tid = Number(ctx.match[1]);
-    pendingSupportReply.set(ctx.from.id, tid);
-    await ctx.reply(`💬 Invia ora il messaggio per ticket #${tid}. (/cancel per annullare)`);
+    adminActiveSupportTicket.set(ctx.from.id, tid);
+    await refreshPrivateReplyKeyboard(ctx);
+    await ctx.reply(`💬 Ticket #${tid} attivo. Scrivi normalmente in chat per rispondere all’utente.`);
   });
 
   bot.action(/^support_admin_wait:(\d+)$/, async (ctx) => {
     safeAnswerCb(ctx);
     if (!(await isSupportAdmin(ctx))) return;
     const tid = Number(ctx.match[1]);
+    adminActiveSupportTicket.set(ctx.from.id, tid);
+    await refreshPrivateReplyKeyboard(ctx);
     await sb.setTicketStatus(tid, 'waiting_user', ctx.from?.id).catch(() => {});
     const t = await sb.getTicketById(tid).catch(() => null);
     if (t?.telegram_user_id) {
@@ -2446,6 +2584,8 @@ function setupBot(bot) {
     safeAnswerCb(ctx);
     if (!(await isSupportAdmin(ctx))) return;
     const tid = Number(ctx.match[1]);
+    adminActiveSupportTicket.set(ctx.from.id, tid);
+    await refreshPrivateReplyKeyboard(ctx);
     await sb.setTicketStatus(tid, 'closed_pending_purge', ctx.from?.id).catch(() => {});
     await sb.appendSupportMessage(tid, { from_role: 'system', text: 'Ticket chiuso: purge definitivo tra 7 giorni.' }).catch(() => {});
     const t = await sb.getTicketById(tid).catch(() => null);
@@ -2473,6 +2613,8 @@ function setupBot(bot) {
     safeAnswerCb(ctx);
     if (!(await isSupportAdmin(ctx))) return;
     const tid = Number(ctx.match[1]);
+    adminActiveSupportTicket.set(ctx.from.id, tid);
+    await refreshPrivateReplyKeyboard(ctx);
     const t = await sb.getTicketById(tid).catch(() => null);
     if (!t?.telegram_user_id) {
       await ctx.reply('Utente ticket non trovato.');
@@ -2486,6 +2628,8 @@ function setupBot(bot) {
     safeAnswerCb(ctx);
     if (!(await isSupportAdmin(ctx))) return;
     const tid = Number(ctx.match[1]);
+    adminActiveSupportTicket.set(ctx.from.id, tid);
+    await refreshPrivateReplyKeyboard(ctx);
     const t = await sb.getTicketById(tid).catch(() => null);
     if (!t?.telegram_user_id) {
       await ctx.reply('Utente ticket non trovato.');
