@@ -2,6 +2,8 @@
 
 const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
+/** Fallback runtime se telegram_chat_controls non esiste ancora su DB. */
+const chatControlsFallback = new Map();
 
 function sb() {
   const url = process.env.SUPABASE_URL;
@@ -10,6 +12,15 @@ function sb() {
   return createClient(url, key, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+}
+
+function isChatControlsMissingError(error) {
+  const msg = String(error?.message || '');
+  return (
+    msg.includes("public.telegram_chat_controls") ||
+    msg.includes('telegram_chat_controls') ||
+    msg.includes('schema cache')
+  );
 }
 
 async function getFullRow(telegramUserId) {
@@ -179,26 +190,37 @@ async function getTelegramChatLink(chatId) {
 
 async function getTelegramChatControl(chatId) {
   const client = sb();
-  if (!client) return { bot_enabled: true };
+  if (!client) {
+    const v = chatControlsFallback.get(Number(chatId));
+    return { bot_enabled: v !== false };
+  }
   const id = Number(chatId);
   const { data, error } = await client.from('telegram_chat_controls').select('*').eq('telegram_chat_id', id).maybeSingle();
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isChatControlsMissingError(error)) {
+      const v = chatControlsFallback.get(id);
+      return { telegram_chat_id: id, bot_enabled: v !== false };
+    }
+    throw new Error(error.message);
+  }
   return data || { telegram_chat_id: id, bot_enabled: true };
 }
 
 async function setTelegramChatEnabled(chatId, enabled, updatedBy) {
   const client = sb();
-  if (!client) throw new Error('Supabase non configurato.');
   const id = Number(chatId);
+  const flag = enabled === true;
+  chatControlsFallback.set(id, flag);
+  if (!client) return;
   const now = new Date().toISOString();
   const payload = {
     telegram_chat_id: id,
-    bot_enabled: enabled === true,
+    bot_enabled: flag,
     updated_by: updatedBy != null ? Number(updatedBy) : null,
     updated_at: now,
   };
   const { error } = await client.from('telegram_chat_controls').upsert(payload, { onConflict: 'telegram_chat_id' });
-  if (error) throw new Error(error.message);
+  if (error && !isChatControlsMissingError(error)) throw new Error(error.message);
 }
 
 async function listEnabledTelegramChatLinks() {
@@ -209,15 +231,25 @@ async function listEnabledTelegramChatLinks() {
     .select('telegram_chat_id, clan_tag, chat_type')
     .order('telegram_chat_id', { ascending: true });
   if (error) throw new Error(error.message);
-  const controls = await client
-    .from('telegram_chat_controls')
-    .select('telegram_chat_id, bot_enabled')
-    .then(({ data: cdata, error: cerr }) => {
-      if (cerr) throw new Error(cerr.message);
-      return cdata || [];
-    });
+  let controls = [];
+  try {
+    controls = await client
+      .from('telegram_chat_controls')
+      .select('telegram_chat_id, bot_enabled')
+      .then(({ data: cdata, error: cerr }) => {
+        if (cerr) throw cerr;
+        return cdata || [];
+      });
+  } catch (e) {
+    if (!isChatControlsMissingError(e)) throw new Error(e.message || String(e));
+    controls = [];
+  }
   const controlMap = new Map(controls.map((r) => [Number(r.telegram_chat_id), r.bot_enabled !== false]));
-  return (data || []).filter((r) => controlMap.get(Number(r.telegram_chat_id)) !== false);
+  return (data || []).filter((r) => {
+    const id = Number(r.telegram_chat_id);
+    if (chatControlsFallback.has(id)) return chatControlsFallback.get(id) !== false;
+    return controlMap.get(id) !== false;
+  });
 }
 
 async function upsertTelegramChatLink(chatId, clanTag, linkedByTelegramUserId, chatType) {
