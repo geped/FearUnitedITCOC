@@ -929,6 +929,8 @@ async function notifyAdminsTicketUpdate(ctx, ticketId, senderLabel, text, photoF
   const body = `📨 Ticket #${ticketId} · ${senderLabel}\nUtente: <code>${ticket.telegram_user_id}</code>\n${fmt.escapeHtml(text || '')}`.trim();
   for (const aid of targets) {
     if (!Number.isFinite(aid)) continue;
+    // Se l'admin è già nella chat del ticket attivo, evita spam con notifiche duplicate.
+    if (adminActiveSupportTicket.get(aid) === Number(ticketId)) continue;
     const kb = Markup.inlineKeyboard([[Markup.button.callback(`Apri ticket #${ticketId}`, `support_admin_ticket:${ticketId}`)]]);
     if (photoFileId) {
       await ctx.telegram
@@ -2578,7 +2580,8 @@ function setupBot(bot) {
     }
     const msgs = await sb.listSupportMessages(tid, 50).catch(() => []);
     const photoCount = msgs.filter((m) => !!m.photo_file_id).length;
-    const lines = msgs.slice(-8).map((m) => {
+    const lastMsgs = msgs.slice(-12).reverse(); // prima i più recenti
+    const lines = lastMsgs.slice(0, 8).map((m) => {
       const who = m.from_role === 'admin' ? '👮 Admin' : m.from_role === 'system' ? 'ℹ️ Sistema' : '🙋 Utente';
       const txt = m.text ? fmt.escapeHtml(m.text) : m.photo_file_id ? '[immagine]' : '[vuoto]';
       return `${who}: ${txt}`;
@@ -2592,7 +2595,7 @@ function setupBot(bot) {
     adminActiveSupportTicket.set(ctx.from.id, t.id);
     await refreshPrivateReplyKeyboard(ctx);
     await ctx.reply(body, { parse_mode: 'HTML' });
-    for (const m of msgs.slice(-12)) {
+    for (const m of lastMsgs) {
       if (!m.photo_file_id) continue;
       const caption = `${m.from_role === 'admin' ? '👮' : '🙋'} Ticket #${t.id}` + (m.text ? `\n${String(m.text).slice(0, 700)}` : '');
       await ctx.telegram.sendPhoto(ctx.chat.id, m.photo_file_id, { caption }).catch(() => {});
