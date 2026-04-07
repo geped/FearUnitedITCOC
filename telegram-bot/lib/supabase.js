@@ -429,6 +429,20 @@ async function listActiveSupportTickets(limit = 30) {
   return data || [];
 }
 
+async function listActiveSupportTicketsAssignedTo(adminTelegramUserId, limit = 30) {
+  const client = sb();
+  if (!client) return [];
+  const { data, error } = await client
+    .from('telegram_support_tickets')
+    .select('*')
+    .in('status', ['in_progress', 'waiting_user', 'closed_pending_purge'])
+    .eq('assigned_admin_id', Number(adminTelegramUserId))
+    .order('updated_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
 async function listSupportMessages(ticketId, limit = 80) {
   const client = sb();
   if (!client) return [];
@@ -462,6 +476,70 @@ async function purgeExpiredSupportTickets() {
     .select('id');
   if (error) throw new Error(error.message);
   return (data || []).length;
+}
+
+async function getTelegramUserRestriction(telegramUserId) {
+  const client = sb();
+  if (!client) return null;
+  const { data, error } = await client
+    .from('telegram_user_restrictions')
+    .select('*')
+    .eq('telegram_user_id', Number(telegramUserId))
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data || null;
+}
+
+async function setTelegramUserBanned(telegramUserId, banned, reason, updatedBy) {
+  const client = sb();
+  if (!client) return;
+  const row = {
+    telegram_user_id: Number(telegramUserId),
+    banned: banned === true,
+    muted_until: null,
+    reason: reason ? String(reason).slice(0, 240) : null,
+    updated_by: updatedBy != null ? Number(updatedBy) : null,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await client.from('telegram_user_restrictions').upsert(row, { onConflict: 'telegram_user_id' });
+  if (error) throw new Error(error.message);
+}
+
+async function getUsageDailyStats(days = 14) {
+  const client = sb();
+  if (!client) return [];
+  const start = new Date(Date.now() - Math.max(1, Number(days)) * 24 * 3600 * 1000).toISOString();
+  const { data, error } = await client
+    .from('telegram_usage_events')
+    .select('created_at, event_type, telegram_user_id, telegram_chat_id')
+    .gte('created_at', start)
+    .order('created_at', { ascending: true });
+  if (error) throw new Error(error.message);
+  const map = new Map();
+  for (const r of data || []) {
+    const day = String(r.created_at || '').slice(0, 10);
+    if (!day) continue;
+    let row = map.get(day);
+    if (!row) {
+      row = { day, events: 0, users: new Set(), chats: new Set(), commands: 0, callbacks: 0, messages: 0 };
+      map.set(day, row);
+    }
+    row.events += 1;
+    if (r.telegram_user_id != null) row.users.add(Number(r.telegram_user_id));
+    if (r.telegram_chat_id != null) row.chats.add(Number(r.telegram_chat_id));
+    if (r.event_type === 'command') row.commands += 1;
+    else if (r.event_type === 'callback') row.callbacks += 1;
+    else if (r.event_type === 'message') row.messages += 1;
+  }
+  return [...map.values()].map((r) => ({
+    day: r.day,
+    events: r.events,
+    unique_users: r.users.size,
+    unique_chats: r.chats.size,
+    commands: r.commands,
+    callbacks: r.callbacks,
+    messages: r.messages,
+  }));
 }
 
 async function upsertTelegramChatLink(chatId, clanTag, linkedByTelegramUserId, chatType) {
@@ -652,7 +730,11 @@ module.exports = {
   countTicketPhotos,
   setTicketStatus,
   listActiveSupportTickets,
+  listActiveSupportTicketsAssignedTo,
   listSupportMessages,
   getTicketById,
   purgeExpiredSupportTickets,
+  getTelegramUserRestriction,
+  setTelegramUserBanned,
+  getUsageDailyStats,
 };

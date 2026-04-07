@@ -287,6 +287,9 @@ function isPublicCallbackData(d) {
     d === 'notif_cwl' ||
     d === 'notif_raids' ||
     d === 'notif_games' ||
+    d === 'support_user_menu' ||
+    d === 'support_user_reopen' ||
+    d === 'support_user_new' ||
     d === 'noop'
   );
 }
@@ -774,6 +777,9 @@ async function dispatchHelpCommand(ctx) {
     `💬 <b>Community</b> (anche ospite)`,
     `Chat globale e reclutamento dal menù.`,
     '',
+    `🆘 <b>Supporto</b>`,
+    `<code>/assistenza</code> (consigliato) · <code>/support</code> (alias)`,
+    '',
     `🏰 <b>Clan</b>`,
     `<code>/setclan #TAG</code> — altro clan\n<code>/logout_clan</code> — rimuovi override`,
     '',
@@ -808,7 +814,9 @@ async function isSupportAdmin(ctx) {
 function supportAdminPanelKb() {
   return Markup.inlineKeyboard([
     [Markup.button.callback('📬 Segnalazioni attive', 'support_admin_open')],
+    [Markup.button.callback('👤 Solo miei assegnati', 'support_admin_mine')],
     [Markup.button.callback('📊 Statistiche bot', 'support_admin_stats')],
+    [Markup.button.callback('📄 Export CSV metriche', 'support_admin_csv')],
     [Markup.button.callback('« Menù', 'menu')],
   ]);
 }
@@ -830,6 +838,10 @@ function supportTicketAdminKb(ticketId) {
     [
       Markup.button.callback('⏸ In attesa utente', `support_admin_wait:${ticketId}`),
       Markup.button.callback('🔒 Chiudi ticket', `support_admin_close:${ticketId}`),
+    ],
+    [
+      Markup.button.callback('🚫 Permaban utente', `support_admin_ban:${ticketId}`),
+      Markup.button.callback('✅ Rimuovi ban', `support_admin_unban:${ticketId}`),
     ],
     [Markup.button.callback('« Segnalazioni attive', 'support_admin_open')],
   ]);
@@ -922,6 +934,18 @@ function guardMiddleware() {
   return async (ctx, next) => {
     const uid = guardUserId(ctx);
     if (uid == null) return next();
+    try {
+      const restr = await sb.getTelegramUserRestriction(uid);
+      if (restr?.banned === true) {
+        if (ctx.callbackQuery) await ctx.answerCbQuery('Account bloccato.').catch(() => {});
+        else if (ctx.message) {
+          await ctx
+            .reply('🚫 Questo account è stato bloccato dall’amministratore del bot. Contatta il supporto se pensi sia un errore.')
+            .catch(() => {});
+        }
+        return;
+      }
+    } catch (_) {}
     if (!isUserAllowed(uid)) {
       if (ctx.callbackQuery) await ctx.answerCbQuery('Accesso non autorizzato.').catch(() => {});
       else await ctx.reply('Accesso non autorizzato.').catch(() => {});
@@ -1406,7 +1430,8 @@ async function registerBotCommands(telegram) {
       { command: 'start', description: 'Menù principale' },
       { command: 'cocboard', description: 'Menù CoCBoard' },
       { command: 'help', description: 'Aiuto' },
-      { command: 'support', description: 'Contatta amministratore' },
+      { command: 'assistenza', description: 'Apri ticket supporto' },
+      { command: 'support', description: 'Alias assistenza' },
       { command: 'adminbot', description: 'Pannello admin bot' },
       { command: 'cerca', description: 'Cerca villaggio o clan' },
       { command: 'classifica', description: 'Classifiche trofei' },
@@ -1418,7 +1443,8 @@ async function registerBotCommands(telegram) {
       { command: 'cerca', description: 'Cerca villaggio o clan' },
       { command: 'classifica', description: 'Classifiche trofei' },
       { command: 'help', description: 'Aiuto' },
-      { command: 'support', description: 'Supporto in privato' },
+      { command: 'assistenza', description: 'Supporto in privato' },
+      { command: 'support', description: 'Alias assistenza' },
       { command: 'coc_off', description: 'Spegni bot in questa chat (admin)' },
       { command: 'coc_on', description: 'Riattiva bot in questa chat (admin)' },
       { command: 'coc_status', description: 'Stato bot in questa chat' },
@@ -1656,6 +1682,7 @@ function setupBot(bot) {
       t.startsWith('/start') ||
       t.startsWith('/cocboard') ||
       t.startsWith('/help') ||
+      t.startsWith('/assistenza') ||
       t.startsWith('/player') ||
       t.startsWith('/cerca_clan') ||
       t.startsWith('/cerca') ||
@@ -1675,7 +1702,13 @@ function setupBot(bot) {
       /^rva:\d+$/.test(cbDataEarly) ||
       /^rvr:\d+$/.test(cbDataEarly) ||
       cbDataEarly === 'comm_owner_queue' ||
-      /^rad:\d+$/.test(cbDataEarly)
+      /^rad:\d+$/.test(cbDataEarly) ||
+      cbDataEarly === 'support_admin_home' ||
+      cbDataEarly === 'support_admin_stats' ||
+      cbDataEarly === 'support_admin_open' ||
+      cbDataEarly === 'support_admin_mine' ||
+      cbDataEarly === 'support_admin_csv' ||
+      /^support_admin_(ticket|take|reply|wait|close|ban|unban):\d+$/.test(cbDataEarly)
     ) {
       if (cv.isBotOwnerTelegramUser(ctx.from?.id)) return next();
     }
@@ -1810,6 +1843,19 @@ function setupBot(bot) {
     await dispatchHelpCommand(ctx);
   });
 
+  bot.command('assistenza', async (ctx) => {
+    if (isLinkedChatContext(ctx)) {
+      await ensureTgBotUsername(ctx.telegram);
+      const url = privateChatUrl(cachedTgBotUsername);
+      if (url) {
+        await ctx.reply(`📩 Assistenza disponibile in privato: <a href="${url}">apri chat bot</a>`, { parse_mode: 'HTML' });
+      }
+      return;
+    }
+    pendingSupportOpen.set(ctx.from.id, true);
+    await showSupportOpenPrompt(ctx);
+  });
+
   bot.command('support', async (ctx) => {
     if (isLinkedChatContext(ctx)) {
       await ensureTgBotUsername(ctx.telegram);
@@ -1819,6 +1865,7 @@ function setupBot(bot) {
       }
       return;
     }
+    await ctx.reply('ℹ️ Usa <code>/assistenza</code> per aprire una segnalazione al supporto.', { parse_mode: 'HTML' }).catch(() => {});
     pendingSupportOpen.set(ctx.from.id, true);
     await showSupportOpenPrompt(ctx);
   });
@@ -2259,6 +2306,47 @@ function setupBot(bot) {
     await showSupportOpenPrompt(ctx);
   });
 
+  bot.action('support_user_menu', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (isLinkedChatContext(ctx)) return;
+    const sess = await tauth.getValidSession(ctx.from.id).catch(() => null);
+    if (sess) {
+      ctx.cocboardUser = sess.user;
+      await sendMainMenu(ctx);
+    } else {
+      await sendGuestMenu(ctx);
+    }
+  });
+
+  bot.action('support_user_reopen', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (isLinkedChatContext(ctx)) return;
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    const t = await sb.getOpenTicketForUser(uid).catch(() => null);
+    if (!t || t.status !== 'closed_pending_purge') {
+      await ctx.reply('Nessun ticket chiuso recente da riaprire.');
+      return;
+    }
+    await sb.setTicketStatus(t.id, 'open', null).catch(() => {});
+    await sb.appendSupportMessage(t.id, { from_role: 'system', text: 'Ticket riaperto dall’utente.' }).catch(() => {});
+    await ctx.reply(`♻️ Ticket #${t.id} riaperto. Invia il tuo messaggio.`);
+  });
+
+  bot.action('support_user_new', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (isLinkedChatContext(ctx)) return;
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    const t = await sb.getOpenTicketForUser(uid).catch(() => null);
+    if (t && t.status !== 'closed_pending_purge') {
+      await ctx.reply(`Hai già un ticket aperto (#${t.id}). Scrivi qui per continuare.`);
+      return;
+    }
+    pendingSupportOpen.set(uid, true);
+    await showSupportOpenPrompt(ctx);
+  });
+
   bot.action('support_admin_home', async (ctx) => {
     safeAnswerCb(ctx);
     if (!(await isSupportAdmin(ctx))) return;
@@ -2294,6 +2382,17 @@ function setupBot(bot) {
     await ctx.reply('📬 <b>Segnalazioni attive</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows) });
   });
 
+  bot.action('support_admin_mine', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const rows = await sb.listActiveSupportTicketsAssignedTo(ctx.from.id, 25).catch(() => []);
+    if (!rows.length) {
+      await ctx.reply('📭 Nessuna segnalazione assegnata a te.', { parse_mode: 'HTML', ...supportAdminPanelKb() });
+      return;
+    }
+    await ctx.reply('👤 <b>Ticket assegnati a me</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows) });
+  });
+
   bot.action(/^support_admin_ticket:(\d+)$/, async (ctx) => {
     safeAnswerCb(ctx);
     if (!(await isSupportAdmin(ctx))) return;
@@ -2304,6 +2403,7 @@ function setupBot(bot) {
       return;
     }
     const msgs = await sb.listSupportMessages(tid, 50).catch(() => []);
+    const photoCount = msgs.filter((m) => !!m.photo_file_id).length;
     const lines = msgs.slice(-8).map((m) => {
       const who = m.from_role === 'admin' ? '👮 Admin' : m.from_role === 'system' ? 'ℹ️ Sistema' : '🙋 Utente';
       const txt = m.text ? fmt.escapeHtml(m.text) : m.photo_file_id ? '[immagine]' : '[vuoto]';
@@ -2313,9 +2413,14 @@ function setupBot(bot) {
       `🎫 <b>Ticket #${t.id}</b>\n` +
       `Utente: <code>${t.telegram_user_id}</code>\n` +
       `Stato: <b>${fmt.escapeHtml(t.status)}</b>\n` +
-      `Immagini: <b>${t.image_count || 0}</b>\n\n` +
+      `Immagini: <b>${photoCount}</b>\n\n` +
       `${lines.join('\n') || '<i>Nessun messaggio.</i>'}`;
     await ctx.reply(body, { parse_mode: 'HTML', ...supportTicketAdminKb(t.id) });
+    for (const m of msgs.slice(-12)) {
+      if (!m.photo_file_id) continue;
+      const caption = `${m.from_role === 'admin' ? '👮' : '🙋'} Ticket #${t.id}` + (m.text ? `\n${String(m.text).slice(0, 700)}` : '');
+      await ctx.telegram.sendPhoto(ctx.chat.id, m.photo_file_id, { caption }).catch(() => {});
+    }
   });
 
   bot.action(/^support_admin_take:(\d+)$/, async (ctx) => {
@@ -2365,12 +2470,65 @@ function setupBot(bot) {
         .sendMessage(
           t.telegram_user_id,
           '🔒 Ticket chiuso. Entro 7 giorni verrà eliminato definitivamente.\n' +
-            'Se vuoi, puoi riaprirlo rispondendo qui entro 7 giorni; dopo dovrai aprire un nuovo ticket.',
-          { parse_mode: 'HTML' }
+            'Se vuoi, puoi riaprirlo entro 7 giorni; dopo dovrai aprire un nuovo ticket.',
+          {
+            parse_mode: 'HTML',
+            ...Markup.inlineKeyboard([
+              [Markup.button.callback('🏠 Torna al menù', 'support_user_menu')],
+              [Markup.button.callback('♻️ Riapri ticket', 'support_user_reopen')],
+              [Markup.button.callback('🆕 Nuovo ticket', 'support_user_new')],
+            ]),
+          }
         )
         .catch(() => {});
     }
     await ctx.reply(`Ticket #${tid} chiuso (purge tra 7 giorni).`);
+  });
+
+  bot.action(/^support_admin_ban:(\d+)$/, async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const tid = Number(ctx.match[1]);
+    const t = await sb.getTicketById(tid).catch(() => null);
+    if (!t?.telegram_user_id) {
+      await ctx.reply('Utente ticket non trovato.');
+      return;
+    }
+    await sb.setTelegramUserBanned(t.telegram_user_id, true, `Permaban da ticket #${tid}`, ctx.from?.id).catch(() => {});
+    await ctx.reply(`🚫 Utente <code>${t.telegram_user_id}</code> bannato.`, { parse_mode: 'HTML' });
+  });
+
+  bot.action(/^support_admin_unban:(\d+)$/, async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const tid = Number(ctx.match[1]);
+    const t = await sb.getTicketById(tid).catch(() => null);
+    if (!t?.telegram_user_id) {
+      await ctx.reply('Utente ticket non trovato.');
+      return;
+    }
+    await sb.setTelegramUserBanned(t.telegram_user_id, false, `Unban da ticket #${tid}`, ctx.from?.id).catch(() => {});
+    await ctx.reply(`✅ Ban rimosso per utente <code>${t.telegram_user_id}</code>.`, { parse_mode: 'HTML' });
+  });
+
+  bot.action('support_admin_csv', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const rows = await sb.getUsageDailyStats(21).catch(() => []);
+    const header = 'day,events,unique_users,unique_chats,commands,callbacks,messages';
+    const body = rows
+      .map((r) => [r.day, r.events, r.unique_users, r.unique_chats, r.commands, r.callbacks, r.messages].join(','))
+      .join('\n');
+    const csv = `${header}\n${body}\n`;
+    await ctx.telegram
+      .sendDocument(
+        ctx.chat.id,
+        { source: Buffer.from(csv, 'utf8'), filename: `cocboard-metrics-${new Date().toISOString().slice(0, 10)}.csv` },
+        { caption: '📄 Export metriche giornaliere (ultimi 21 giorni).' }
+      )
+      .catch(async () => {
+        await ctx.reply('❌ Export CSV non riuscito.');
+      });
   });
 
   bot.action('auth_logout', async (ctx) => {
