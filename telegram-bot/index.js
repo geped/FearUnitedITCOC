@@ -778,7 +778,7 @@ async function dispatchHelpCommand(ctx) {
     `Chat globale e reclutamento dal menù.`,
     '',
     `🆘 <b>Supporto</b>`,
-    `<code>/assistenza</code> (consigliato) · <code>/support</code> (alias)`,
+    `<code>/assistenza</code>`,
     '',
     `🏰 <b>Clan</b>`,
     `<code>/setclan #TAG</code> — altro clan\n<code>/logout_clan</code> — rimuovi override`,
@@ -1431,7 +1431,6 @@ async function registerBotCommands(telegram) {
       { command: 'cocboard', description: 'Menù CoCBoard' },
       { command: 'help', description: 'Aiuto' },
       { command: 'assistenza', description: 'Apri ticket supporto' },
-      { command: 'support', description: 'Alias assistenza' },
       { command: 'adminbot', description: 'Pannello admin bot' },
       { command: 'cerca', description: 'Cerca villaggio o clan' },
       { command: 'classifica', description: 'Classifiche trofei' },
@@ -1444,7 +1443,6 @@ async function registerBotCommands(telegram) {
       { command: 'classifica', description: 'Classifiche trofei' },
       { command: 'help', description: 'Aiuto' },
       { command: 'assistenza', description: 'Supporto in privato' },
-      { command: 'support', description: 'Alias assistenza' },
       { command: 'coc_off', description: 'Spegni bot in questa chat (admin)' },
       { command: 'coc_on', description: 'Riattiva bot in questa chat (admin)' },
       { command: 'coc_status', description: 'Stato bot in questa chat' },
@@ -1852,20 +1850,6 @@ function setupBot(bot) {
       }
       return;
     }
-    pendingSupportOpen.set(ctx.from.id, true);
-    await showSupportOpenPrompt(ctx);
-  });
-
-  bot.command('support', async (ctx) => {
-    if (isLinkedChatContext(ctx)) {
-      await ensureTgBotUsername(ctx.telegram);
-      const url = privateChatUrl(cachedTgBotUsername);
-      if (url) {
-        await ctx.reply(`📩 Supporto disponibile in privato: <a href="${url}">apri chat bot</a>`, { parse_mode: 'HTML' });
-      }
-      return;
-    }
-    await ctx.reply('ℹ️ Usa <code>/assistenza</code> per aprire una segnalazione al supporto.', { parse_mode: 'HTML' }).catch(() => {});
     pendingSupportOpen.set(ctx.from.id, true);
     await showSupportOpenPrompt(ctx);
   });
