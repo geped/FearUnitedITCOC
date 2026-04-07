@@ -25,10 +25,14 @@ const pendingLinkWizard = new Map();
 const pendingCommunity = new Map();
 /** Dopo login da Community (profilo CoCBoard) → scelta chat globale vs menù */
 const postAuthGlobalResume = new Map();
+/** Supporto: ticket aperto utente + risposta admin a ticket specifico. */
+const pendingSupportReply = new Map(); // adminUid -> ticketId
+const pendingSupportOpen = new Map(); // uid -> true (apertura esplicita supporto)
 
 let cachedTgBotUsername = (process.env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '');
 /** Anti-spam avvisi guerra: chatId -> key avvisi già inviati per endTime corrente. */
 const warAlertMemory = new Map();
+const TELEGRAPH_TUTORIAL_URL = (process.env.TELEGRAPH_TUTORIAL_URL || 'https://telegra.ph/CoCBoard-Bot-Guida-04-07').trim();
 
 async function ensureTgBotUsername(telegram) {
   if (cachedTgBotUsername) return cachedTgBotUsername;
@@ -57,6 +61,11 @@ function isLinkedChatContext(ctx) {
 function isGroupLikeContext(ctx) {
   const t = chatKind(ctx);
   return t === 'group' || t === 'supergroup';
+}
+
+function isCoCboardAdminUser(user) {
+  const role = user?.user_metadata?.role || '';
+  return String(role).toLowerCase() === 'admin';
 }
 
 function normalizeBotCommandName(text) {
@@ -273,6 +282,11 @@ function isPublicCallbackData(d) {
     d === 'rk_p_g' ||
     d === 'rk_c_i' ||
     d === 'rk_c_g' ||
+    d === 'notif_menu' ||
+    d === 'notif_war' ||
+    d === 'notif_cwl' ||
+    d === 'notif_raids' ||
+    d === 'notif_games' ||
     d === 'noop'
   );
 }
@@ -299,7 +313,8 @@ function isCommunityOpenGuestCallback(d) {
     d === 'recg_skip_link' ||
     d === 'recg_skip_media' ||
     d === 'recg_confirm' ||
-    d === 'recg_cancel'
+    d === 'recg_cancel' ||
+    d === 'support_open'
   );
 }
 
@@ -309,6 +324,7 @@ function buildPrivateGuestKb() {
     [Markup.button.callback('🔑 Accedi', 'auth_login'), Markup.button.callback('📝 Registrati', 'auth_register')],
     [Markup.button.callback('💬 Community', 'comm_hub')],
     [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
+    [Markup.button.callback('📩 Contatta amministratore', 'support_open')],
     [Markup.button.callback('ℹ️ Guida e tutorial', 'auth_guest_help')],
   ]);
 }
@@ -322,6 +338,7 @@ function buildGroupGuestKb(botUsername) {
   }
   rows.push(
     [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
+    [Markup.button.url('📘 Tutorial', TELEGRAPH_TUTORIAL_URL)],
     [Markup.button.callback('ℹ️ Guida gruppo', 'auth_guest_help')]
   );
   return Markup.inlineKeyboard(rows);
@@ -780,6 +797,127 @@ function safeAnswerCb(ctx) {
   } catch (_) {}
 }
 
+async function isSupportAdmin(ctx) {
+  const uid = ctx.from?.id;
+  if (uid == null) return false;
+  if (cv.isBotOwnerTelegramUser(uid)) return true;
+  const sess = await tauth.getValidSession(uid).catch(() => null);
+  return isCoCboardAdminUser(sess?.user);
+}
+
+function supportAdminPanelKb() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('📬 Segnalazioni attive', 'support_admin_open')],
+    [Markup.button.callback('📊 Statistiche bot', 'support_admin_stats')],
+    [Markup.button.callback('« Menù', 'menu')],
+  ]);
+}
+
+function supportTicketListKb(rows) {
+  const buttons = (rows || []).slice(0, 20).map((r) => [
+    Markup.button.callback(`🎫 #${r.id} · utente ${r.telegram_user_id} · ${r.status}`, `support_admin_ticket:${r.id}`),
+  ]);
+  buttons.push([Markup.button.callback('« Pannello admin', 'support_admin_home')]);
+  return Markup.inlineKeyboard(buttons);
+}
+
+function supportTicketAdminKb(ticketId) {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('✅ Presa in carico', `support_admin_take:${ticketId}`),
+      Markup.button.callback('💬 Rispondi', `support_admin_reply:${ticketId}`),
+    ],
+    [
+      Markup.button.callback('⏸ In attesa utente', `support_admin_wait:${ticketId}`),
+      Markup.button.callback('🔒 Chiudi ticket', `support_admin_close:${ticketId}`),
+    ],
+    [Markup.button.callback('« Segnalazioni attive', 'support_admin_open')],
+  ]);
+}
+
+async function showSupportOpenPrompt(ctx) {
+  const txt =
+    `📩 <b>Contatta amministratore</b>\n\n` +
+    `Invia qui il tuo problema (testo + max 2 immagini).\n` +
+    `File non ammessi: zip, documenti, audio, video, sticker.\n\n` +
+    `Se hai già un ticket aperto, il messaggio verrà aggiunto lì.`;
+  const kb = Markup.inlineKeyboard([[Markup.button.callback('« Menù', 'menu')]]);
+  if (ctx.callbackQuery) {
+    try {
+      await ctx.editMessageText(txt, { parse_mode: 'HTML', ...kb });
+    } catch (_) {
+      await ctx.reply(txt, { parse_mode: 'HTML', ...kb });
+    }
+  } else {
+    await ctx.reply(txt, { parse_mode: 'HTML', ...kb });
+  }
+}
+
+async function handleSupportInboundMessage(ctx) {
+  if (ctx.chat?.type !== 'private' || !ctx.from?.id || !ctx.message) return false;
+  const uid = ctx.from.id;
+  const txt = (ctx.message.text || '').trim();
+  if (txt.startsWith('/')) return false;
+  // Non intercettare se l'utente è in altri wizard attivi.
+  if (pendingAuth.has(uid) || pendingSearch.has(uid) || pendingLinkWizard.has(uid) || pendingCommunity.has(uid)) return false;
+
+  const hasPhoto = Array.isArray(ctx.message.photo) && ctx.message.photo.length > 0;
+  const hasText = Boolean(ctx.message.text || ctx.message.caption);
+  const unsupportedAttachment =
+    ctx.message.document || ctx.message.video || ctx.message.audio || ctx.message.voice || ctx.message.sticker || ctx.message.animation;
+
+  if (unsupportedAttachment) {
+    await ctx
+      .reply('❌ In supporto sono ammessi solo <b>testo</b> e <b>immagini</b> (max 2 per ticket). Altri file non sono accettati.', {
+        parse_mode: 'HTML',
+      })
+      .catch(() => {});
+    return true;
+  }
+  if (!hasPhoto && !hasText) return false;
+
+  let ticket = await sb.getOpenTicketForUser(uid).catch(() => null);
+  const explicitlyOpened = pendingSupportOpen.get(uid) === true;
+  if (!ticket && !explicitlyOpened) return false;
+  if (!ticket) {
+    ticket = await sb.createSupportTicket(uid, 'Richiesta supporto Telegram').catch(() => null);
+    if (!ticket) return false;
+    await ctx
+      .reply(`✅ Ticket aperto: <b>#${ticket.id}</b>. Riceverai risposta qui.`, { parse_mode: 'HTML' })
+      .catch(() => {});
+  }
+  pendingSupportOpen.delete(uid);
+
+  if (ticket.status === 'closed_pending_purge') {
+    await sb.setTicketStatus(ticket.id, 'open', null).catch(() => {});
+    await ctx.reply('♻️ Ticket riaperto. Puoi continuare la conversazione.', { parse_mode: 'HTML' }).catch(() => {});
+  }
+
+  let photoFileId = null;
+  if (hasPhoto) {
+    const photoCount = await sb.countTicketPhotos(ticket.id).catch(() => 0);
+    if (photoCount >= 2) {
+      await ctx.reply('⚠️ Hai già inviato 2 immagini in questo ticket. Invia solo testo oppure apri un nuovo ticket.', {
+        parse_mode: 'HTML',
+      });
+      return true;
+    }
+    photoFileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+  }
+  const bodyText = (ctx.message.text || ctx.message.caption || '').trim();
+  await sb
+    .appendSupportMessage(ticket.id, {
+      from_role: 'user',
+      from_telegram_user_id: uid,
+      text: bodyText || null,
+      photo_file_id: photoFileId,
+    })
+    .catch(() => {});
+  await sb.insertUsageEvent({ telegram_user_id: uid, telegram_chat_id: uid, chat_type: 'private', event_type: 'support_msg' }).catch(() => {});
+  await ctx.reply('📨 Messaggio inviato al supporto.', { parse_mode: 'HTML' }).catch(() => {});
+  return true;
+}
+
 function guardMiddleware() {
   return async (ctx, next) => {
     const uid = guardUserId(ctx);
@@ -830,11 +968,13 @@ async function sendLinkedGroupGuestMenu(ctx, clanTag) {
     [Markup.button.callback('👥 Membri', 'mb0'), Markup.button.callback('🏰 Info clan', 'info')],
     [Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')],
     [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
+    [Markup.button.callback('🔔 Notifiche', 'notif_menu')],
   ];
   const url = privateChatUrl(cachedTgBotUsername);
   if (url) {
     rows.push([Markup.button.url('🔐 Accedi per Bonus e Web App (privato)', url)]);
   }
+  rows.push([Markup.button.url('📘 Tutorial', TELEGRAPH_TUTORIAL_URL)]);
   rows.push([Markup.button.callback('❓ Aiuto', 'helpbtn')]);
   const kb = Markup.inlineKeyboard(rows);
   if (ctx.callbackQuery) {
@@ -887,6 +1027,12 @@ async function mainMenuKeyboard(ctx, user, hasClanTag) {
   }
   if (leader && !grp) {
     rows.push([Markup.button.callback('➕ Aggiungi a canale/gruppo', 'add_group_bot')]);
+  }
+  if (!grp && isCoCboardAdminUser(user)) {
+    rows.push([Markup.button.callback('🛠 Admin Bot', 'support_admin_home')]);
+  }
+  if (!grp) {
+    rows.push([Markup.button.callback('📩 Contatta amministratore', 'support_open')]);
   }
   if (!grp && user) {
     try {
@@ -956,6 +1102,21 @@ async function sendMainMenu(ctx) {
 
 function backMenuKb() {
   return Markup.inlineKeyboard([[Markup.button.callback('« Menù', 'menu')]]);
+}
+
+function notifLabel(on) {
+  return on ? '✅ ON' : '⚪ OFF';
+}
+
+async function notificationMenuKb(chatId) {
+  const s = await sb.getChatNotificationSettings(chatId).catch(() => ({}));
+  return Markup.inlineKeyboard([
+    [Markup.button.callback(`⚔️ Guerra ${notifLabel(s.war_alerts_enabled === true)}`, 'notif_war')],
+    [Markup.button.callback(`🏆 CWL ${notifLabel(s.cwl_alerts_enabled === true)}`, 'notif_cwl')],
+    [Markup.button.callback(`🏛 Raid capitale ${notifLabel(s.capital_raids_enabled === true)}`, 'notif_raids')],
+    [Markup.button.callback(`🎯 Giochi del clan ${notifLabel(s.clan_games_enabled === true)}`, 'notif_games')],
+    [Markup.button.callback('« Menù', 'menu')],
+  ]);
 }
 
 function buildMembersKb(page, pages) {
@@ -1245,6 +1406,8 @@ async function registerBotCommands(telegram) {
       { command: 'start', description: 'Menù principale' },
       { command: 'cocboard', description: 'Menù CoCBoard' },
       { command: 'help', description: 'Aiuto' },
+      { command: 'support', description: 'Contatta amministratore' },
+      { command: 'adminbot', description: 'Pannello admin bot' },
       { command: 'cerca', description: 'Cerca villaggio o clan' },
       { command: 'classifica', description: 'Classifiche trofei' },
       { command: 'esci_chat_global', description: 'Esci dalla chat globale' },
@@ -1255,6 +1418,7 @@ async function registerBotCommands(telegram) {
       { command: 'cerca', description: 'Cerca villaggio o clan' },
       { command: 'classifica', description: 'Classifiche trofei' },
       { command: 'help', description: 'Aiuto' },
+      { command: 'support', description: 'Supporto in privato' },
       { command: 'coc_off', description: 'Spegni bot in questa chat (admin)' },
       { command: 'coc_on', description: 'Riattiva bot in questa chat (admin)' },
       { command: 'coc_status', description: 'Stato bot in questa chat' },
@@ -1286,6 +1450,18 @@ function setupBot(bot) {
   let handlePrivateReplyKeyboardShortcuts = null;
 
   bot.use(guardMiddleware());
+
+  bot.use(async (ctx, next) => {
+    const uid = ctx.from?.id ?? null;
+    const chatId = ctx.chat?.id ?? null;
+    const chatType = ctx.chat?.type || null;
+    let eventType = 'update';
+    if (ctx.callbackQuery) eventType = 'callback';
+    else if (ctx.message?.text?.startsWith('/')) eventType = 'command';
+    else if (ctx.message) eventType = 'message';
+    sb.insertUsageEvent({ telegram_user_id: uid, telegram_chat_id: chatId, chat_type: chatType, event_type: eventType }).catch(() => {});
+    return next();
+  });
 
   /** Gruppi/canali: interruttore ON/OFF chat. Se OFF accetta solo /coc_on. */
   bot.use(async (ctx, next) => {
@@ -1408,6 +1584,50 @@ function setupBot(bot) {
       await handlePendingSearch(ctx);
       return;
     }
+    const adminReplyTid = pendingSupportReply.get(ctx.from.id);
+    if (adminReplyTid && ctx.message) {
+      if (txt === '/cancel') {
+        pendingSupportReply.delete(ctx.from.id);
+        await ctx.reply('Risposta supporto annullata.');
+        return;
+      }
+      const messageText = (ctx.message.text || ctx.message.caption || '').trim();
+      const photo = Array.isArray(ctx.message.photo) && ctx.message.photo.length ? ctx.message.photo[ctx.message.photo.length - 1] : null;
+      if (!messageText && !photo) {
+        await ctx.reply('Invia testo (opzionalmente con immagine).');
+        return;
+      }
+      const tk = await sb.getTicketById(adminReplyTid).catch(() => null);
+      if (!tk) {
+        pendingSupportReply.delete(ctx.from.id);
+        await ctx.reply('Ticket non trovato.');
+        return;
+      }
+      await sb
+        .appendSupportMessage(adminReplyTid, {
+          from_role: 'admin',
+          from_telegram_user_id: ctx.from.id,
+          text: messageText || null,
+          photo_file_id: photo?.file_id || null,
+        })
+        .catch(() => {});
+      await sb.setTicketStatus(adminReplyTid, 'in_progress', ctx.from.id).catch(() => {});
+      if (tk.telegram_user_id) {
+        if (photo?.file_id) {
+          await ctx.telegram
+            .sendPhoto(tk.telegram_user_id, photo.file_id, {
+              caption: messageText ? `👮 Supporto:\n${messageText}` : '👮 Supporto ha inviato un’immagine.',
+            })
+            .catch(() => {});
+        } else {
+          await ctx.telegram.sendMessage(tk.telegram_user_id, `👮 Supporto:\n${messageText}`).catch(() => {});
+        }
+      }
+      await ctx.reply(`✅ Risposta inviata a ticket #${adminReplyTid}.`);
+      pendingSupportReply.delete(ctx.from.id);
+      return;
+    }
+    if (await handleSupportInboundMessage(ctx)) return;
     const handledComm = await comm.tryHandleEarlyMessage(ctx, pendingCommunity, {
       isLinkedChatContext,
       sendMainMenu,
@@ -1588,6 +1808,29 @@ function setupBot(bot) {
   bot.command('help', async (ctx) => {
     if (!ctx.from?.id) return;
     await dispatchHelpCommand(ctx);
+  });
+
+  bot.command('support', async (ctx) => {
+    if (isLinkedChatContext(ctx)) {
+      await ensureTgBotUsername(ctx.telegram);
+      const url = privateChatUrl(cachedTgBotUsername);
+      if (url) {
+        await ctx.reply(`📩 Supporto disponibile in privato: <a href="${url}">apri chat bot</a>`, { parse_mode: 'HTML' });
+      }
+      return;
+    }
+    pendingSupportOpen.set(ctx.from.id, true);
+    await showSupportOpenPrompt(ctx);
+  });
+
+  bot.command('adminbot', async (ctx) => {
+    if (!ctx.from?.id || isLinkedChatContext(ctx)) return;
+    const ok = await isSupportAdmin(ctx);
+    if (!ok) {
+      await ctx.reply('🔒 Sezione riservata agli admin.').catch(() => {});
+      return;
+    }
+    await ctx.reply('🛠 <b>Pannello amministratore bot</b>', { parse_mode: 'HTML', ...supportAdminPanelKb() });
   });
 
   bot.command('coc_status', async (ctx) => {
@@ -2002,6 +2245,134 @@ function setupBot(bot) {
     }
   });
 
+  bot.action('support_open', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (isLinkedChatContext(ctx)) {
+      await ensureTgBotUsername(ctx.telegram);
+      const url = privateChatUrl(cachedTgBotUsername);
+      if (url) {
+        await ctx.reply(`📩 Supporto in privato: <a href="${url}">apri chat bot</a>`, { parse_mode: 'HTML' });
+      }
+      return;
+    }
+    pendingSupportOpen.set(ctx.from.id, true);
+    await showSupportOpenPrompt(ctx);
+  });
+
+  bot.action('support_admin_home', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    await ctx.reply('🛠 <b>Pannello amministratore bot</b>', { parse_mode: 'HTML', ...supportAdminPanelKb() });
+  });
+
+  bot.action('support_admin_stats', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const s = (await sb.getAdminDashboardStats().catch(() => null)) || {
+      linkedChats: 0,
+      pausedChats: 0,
+      dau: 0,
+      wau: 0,
+    };
+    const body =
+      `📊 <b>Statistiche bot</b>\n\n` +
+      `• Chat collegate: <b>${s.linkedChats}</b>\n` +
+      `• Chat in pausa (/coc_off): <b>${s.pausedChats}</b>\n` +
+      `• Utenti attivi 24h (DAU): <b>${s.dau}</b>\n` +
+      `• Utenti attivi 7gg (WAU): <b>${s.wau}</b>`;
+    await ctx.reply(body, { parse_mode: 'HTML', ...supportAdminPanelKb() });
+  });
+
+  bot.action('support_admin_open', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const rows = await sb.listActiveSupportTickets(25).catch(() => []);
+    if (!rows.length) {
+      await ctx.reply('📭 Nessuna segnalazione attiva.', { parse_mode: 'HTML', ...supportAdminPanelKb() });
+      return;
+    }
+    await ctx.reply('📬 <b>Segnalazioni attive</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows) });
+  });
+
+  bot.action(/^support_admin_ticket:(\d+)$/, async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const tid = Number(ctx.match[1]);
+    const t = await sb.getTicketById(tid).catch(() => null);
+    if (!t) {
+      await ctx.reply('Ticket non trovato.');
+      return;
+    }
+    const msgs = await sb.listSupportMessages(tid, 50).catch(() => []);
+    const lines = msgs.slice(-8).map((m) => {
+      const who = m.from_role === 'admin' ? '👮 Admin' : m.from_role === 'system' ? 'ℹ️ Sistema' : '🙋 Utente';
+      const txt = m.text ? fmt.escapeHtml(m.text) : m.photo_file_id ? '[immagine]' : '[vuoto]';
+      return `${who}: ${txt}`;
+    });
+    const body =
+      `🎫 <b>Ticket #${t.id}</b>\n` +
+      `Utente: <code>${t.telegram_user_id}</code>\n` +
+      `Stato: <b>${fmt.escapeHtml(t.status)}</b>\n` +
+      `Immagini: <b>${t.image_count || 0}</b>\n\n` +
+      `${lines.join('\n') || '<i>Nessun messaggio.</i>'}`;
+    await ctx.reply(body, { parse_mode: 'HTML', ...supportTicketAdminKb(t.id) });
+  });
+
+  bot.action(/^support_admin_take:(\d+)$/, async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const tid = Number(ctx.match[1]);
+    await sb.setTicketStatus(tid, 'in_progress', ctx.from?.id).catch(() => {});
+    await sb.appendSupportMessage(tid, { from_role: 'system', text: 'Ticket preso in carico da un amministratore.' }).catch(() => {});
+    const t = await sb.getTicketById(tid).catch(() => null);
+    if (t?.telegram_user_id) {
+      await ctx.telegram
+        .sendMessage(t.telegram_user_id, '✅ Il tuo ticket è stato preso in carico da un amministratore.', { parse_mode: 'HTML' })
+        .catch(() => {});
+    }
+    await ctx.reply(`Ticket #${tid} preso in carico.`);
+  });
+
+  bot.action(/^support_admin_reply:(\d+)$/, async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const tid = Number(ctx.match[1]);
+    pendingSupportReply.set(ctx.from.id, tid);
+    await ctx.reply(`💬 Invia ora il messaggio per ticket #${tid}. (/cancel per annullare)`);
+  });
+
+  bot.action(/^support_admin_wait:(\d+)$/, async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const tid = Number(ctx.match[1]);
+    await sb.setTicketStatus(tid, 'waiting_user', ctx.from?.id).catch(() => {});
+    const t = await sb.getTicketById(tid).catch(() => null);
+    if (t?.telegram_user_id) {
+      await ctx.telegram.sendMessage(t.telegram_user_id, '⏸ Ticket in attesa di un tuo riscontro.', { parse_mode: 'HTML' }).catch(() => {});
+    }
+    await ctx.reply(`Ticket #${tid} impostato in attesa utente.`);
+  });
+
+  bot.action(/^support_admin_close:(\d+)$/, async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const tid = Number(ctx.match[1]);
+    await sb.setTicketStatus(tid, 'closed_pending_purge', ctx.from?.id).catch(() => {});
+    await sb.appendSupportMessage(tid, { from_role: 'system', text: 'Ticket chiuso: purge definitivo tra 7 giorni.' }).catch(() => {});
+    const t = await sb.getTicketById(tid).catch(() => null);
+    if (t?.telegram_user_id) {
+      await ctx.telegram
+        .sendMessage(
+          t.telegram_user_id,
+          '🔒 Ticket chiuso. Entro 7 giorni verrà eliminato definitivamente.\n' +
+            'Se vuoi, puoi riaprirlo rispondendo qui entro 7 giorni; dopo dovrai aprire un nuovo ticket.',
+          { parse_mode: 'HTML' }
+        )
+        .catch(() => {});
+    }
+    await ctx.reply(`Ticket #${tid} chiuso (purge tra 7 giorni).`);
+  });
+
   bot.action('auth_logout', async (ctx) => {
     await performFullLogout(ctx, { viaCommand: false });
   });
@@ -2072,6 +2443,44 @@ function setupBot(bot) {
         await ctx.reply(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('« Menù', 'menu')]]) });
       });
   });
+
+  bot.action('notif_menu', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
+    const kb = await notificationMenuKb(ctx.chat.id);
+    const body =
+      `🔔 <b>Notifiche chat</b>\n\n` +
+      `Configura avvisi automatici per questa chat.\n` +
+      `<i>Predefinito: tutto OFF.</i>\n` +
+      `<i>Solo admin chat o admin CoCBoard possono modificare.</i>`;
+    try {
+      await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
+    } catch (_) {
+      await ctx.reply(body, { parse_mode: 'HTML', ...kb });
+    }
+  });
+
+  async function toggleChatNotif(ctx, key) {
+    if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
+    const tgAdmin = await isTelegramChatAdmin(ctx);
+    const sess = ctx.from?.id != null ? await tauth.getValidSession(ctx.from.id).catch(() => null) : null;
+    const appAdmin = isCoCboardAdminUser(sess?.user);
+    if (!tgAdmin && !appAdmin) {
+      await ctx.answerCbQuery('Solo amministratori chat o admin CoCBoard.').catch(() => {});
+      return;
+    }
+    const cur = await sb.getChatNotificationSettings(ctx.chat.id).catch(() => ({}));
+    const next = !(cur?.[key] === true);
+    await sb.upsertChatNotificationSettings(ctx.chat.id, { [key]: next }, ctx.from?.id).catch(() => {});
+    await ctx.answerCbQuery(next ? 'Attivata' : 'Disattivata').catch(() => {});
+    const kb = await notificationMenuKb(ctx.chat.id);
+    await ctx.editMessageReplyMarkup(kb.reply_markup).catch(() => {});
+  }
+
+  bot.action('notif_war', async (ctx) => toggleChatNotif(ctx, 'war_alerts_enabled'));
+  bot.action('notif_cwl', async (ctx) => toggleChatNotif(ctx, 'cwl_alerts_enabled'));
+  bot.action('notif_raids', async (ctx) => toggleChatNotif(ctx, 'capital_raids_enabled'));
+  bot.action('notif_games', async (ctx) => toggleChatNotif(ctx, 'clan_games_enabled'));
 
   bot.action('nav_search', async (ctx) => {
     safeAnswerCb(ctx);
@@ -2212,10 +2621,19 @@ function setupBot(bot) {
       clanTag: w.clanTag,
       linkToken: token,
     });
+    const addUrl = cachedTgBotUsername
+      ? `https://t.me/${cachedTgBotUsername}?startgroup=linkclan_${encodeURIComponent(token)}`
+      : null;
+    const kb = addUrl
+      ? Markup.inlineKeyboard([
+          [Markup.button.url('➕ Seleziona canale/gruppo (picker Telegram)', addUrl)],
+          [Markup.button.callback('« Menù', 'menu')],
+        ])
+      : backMenuKb();
     try {
-      await ctx.editMessageText(text, { parse_mode: 'HTML', ...backMenuKb() });
+      await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
     } catch (_) {
-      await ctx.reply(text, { parse_mode: 'HTML', ...backMenuKb() });
+      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
     }
   });
 
@@ -2644,6 +3062,8 @@ async function runWarAlertsMaintenance(bot) {
     const clanTag = link.clan_tag;
     if (!Number.isFinite(chatId) || !clanTag) continue;
     try {
+      const notif = await sb.getChatNotificationSettings(chatId).catch(() => null);
+      if (!notif?.war_alerts_enabled) continue;
       const war = await api.currentWar(clanTag);
       const state = String(war?.state || '');
       if (!state || state === 'notInWar') continue;
@@ -2709,6 +3129,7 @@ async function runCommunityMaintenance(bot) {
       }
       await sbcCommunity.deleteRecruitmentPostRow(row.id);
     }
+    await sb.purgeExpiredSupportTickets().catch(() => 0);
   } catch (e) {
     console.warn('[cocboard-bot] community maintenance', e.message || e);
   }

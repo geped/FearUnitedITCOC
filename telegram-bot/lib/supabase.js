@@ -252,6 +252,218 @@ async function listEnabledTelegramChatLinks() {
   });
 }
 
+async function getChatNotificationSettings(chatId) {
+  const client = sb();
+  if (!client) {
+    return {
+      telegram_chat_id: Number(chatId),
+      war_alerts_enabled: false,
+      cwl_alerts_enabled: false,
+      capital_raids_enabled: false,
+      clan_games_enabled: false,
+    };
+  }
+  const id = Number(chatId);
+  const { data, error } = await client
+    .from('telegram_chat_notification_settings')
+    .select('*')
+    .eq('telegram_chat_id', id)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (
+    data || {
+      telegram_chat_id: id,
+      war_alerts_enabled: false,
+      cwl_alerts_enabled: false,
+      capital_raids_enabled: false,
+      clan_games_enabled: false,
+    }
+  );
+}
+
+async function upsertChatNotificationSettings(chatId, patch, updatedBy) {
+  const client = sb();
+  if (!client) return;
+  const id = Number(chatId);
+  const prev = await getChatNotificationSettings(id);
+  const row = {
+    telegram_chat_id: id,
+    war_alerts_enabled:
+      patch.war_alerts_enabled !== undefined ? patch.war_alerts_enabled === true : prev.war_alerts_enabled === true,
+    cwl_alerts_enabled:
+      patch.cwl_alerts_enabled !== undefined ? patch.cwl_alerts_enabled === true : prev.cwl_alerts_enabled === true,
+    capital_raids_enabled:
+      patch.capital_raids_enabled !== undefined
+        ? patch.capital_raids_enabled === true
+        : prev.capital_raids_enabled === true,
+    clan_games_enabled:
+      patch.clan_games_enabled !== undefined ? patch.clan_games_enabled === true : prev.clan_games_enabled === true,
+    updated_by: updatedBy != null ? Number(updatedBy) : null,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await client.from('telegram_chat_notification_settings').upsert(row, { onConflict: 'telegram_chat_id' });
+  if (error) throw new Error(error.message);
+}
+
+async function insertUsageEvent(event) {
+  const client = sb();
+  if (!client) return;
+  const row = {
+    telegram_user_id: event.telegram_user_id != null ? Number(event.telegram_user_id) : null,
+    telegram_chat_id: event.telegram_chat_id != null ? Number(event.telegram_chat_id) : null,
+    chat_type: event.chat_type || null,
+    event_type: String(event.event_type || 'unknown').slice(0, 64),
+    payload: event.payload || {},
+  };
+  await client.from('telegram_usage_events').insert(row);
+}
+
+async function getAdminDashboardStats() {
+  const client = sb();
+  if (!client) return null;
+  const now = Date.now();
+  const dayAgo = new Date(now - 24 * 3600 * 1000).toISOString();
+  const sevenAgo = new Date(now - 7 * 24 * 3600 * 1000).toISOString();
+  const [{ count: linkedChats }, { count: pausedChats }, { data: dauRows }, { data: wauRows }] = await Promise.all([
+    client.from('telegram_chat_links').select('*', { count: 'exact', head: true }),
+    client.from('telegram_chat_controls').select('*', { count: 'exact', head: true }).eq('bot_enabled', false),
+    client.from('telegram_usage_events').select('telegram_user_id').gte('created_at', dayAgo).not('telegram_user_id', 'is', null),
+    client.from('telegram_usage_events').select('telegram_user_id').gte('created_at', sevenAgo).not('telegram_user_id', 'is', null),
+  ]).catch(() => []);
+  const dau = new Set((dauRows || []).map((r) => Number(r.telegram_user_id))).size;
+  const wau = new Set((wauRows || []).map((r) => Number(r.telegram_user_id))).size;
+  return {
+    linkedChats: linkedChats || 0,
+    pausedChats: pausedChats || 0,
+    dau,
+    wau,
+  };
+}
+
+async function getOpenTicketForUser(telegramUserId) {
+  const client = sb();
+  if (!client) return null;
+  const { data, error } = await client
+    .from('telegram_support_tickets')
+    .select('*')
+    .eq('telegram_user_id', Number(telegramUserId))
+    .in('status', ['open', 'in_progress', 'waiting_user', 'closed_pending_purge'])
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data || null;
+}
+
+async function createSupportTicket(telegramUserId, subject) {
+  const client = sb();
+  if (!client) throw new Error('Supabase non configurato.');
+  const row = {
+    telegram_user_id: Number(telegramUserId),
+    status: 'open',
+    subject: subject ? String(subject).slice(0, 180) : null,
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await client.from('telegram_support_tickets').insert(row).select('*').single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function appendSupportMessage(ticketId, msg) {
+  const client = sb();
+  if (!client) throw new Error('Supabase non configurato.');
+  const row = {
+    ticket_id: Number(ticketId),
+    from_role: String(msg.from_role || 'user'),
+    from_telegram_user_id: msg.from_telegram_user_id != null ? Number(msg.from_telegram_user_id) : null,
+    text: msg.text != null ? String(msg.text).slice(0, 4000) : null,
+    photo_file_id: msg.photo_file_id ? String(msg.photo_file_id).slice(0, 300) : null,
+  };
+  const { error } = await client.from('telegram_support_messages').insert(row);
+  if (error) throw new Error(error.message);
+}
+
+async function countTicketPhotos(ticketId) {
+  const client = sb();
+  if (!client) return 0;
+  const { count, error } = await client
+    .from('telegram_support_messages')
+    .select('*', { count: 'exact', head: true })
+    .eq('ticket_id', Number(ticketId))
+    .not('photo_file_id', 'is', null);
+  if (error) return 0;
+  return count || 0;
+}
+
+async function setTicketStatus(ticketId, status, adminId) {
+  const client = sb();
+  if (!client) return;
+  const now = new Date();
+  const patch = {
+    status,
+    updated_at: now.toISOString(),
+    assigned_admin_id: adminId != null ? Number(adminId) : null,
+  };
+  if (status === 'closed_pending_purge') {
+    patch.closed_at = now.toISOString();
+    patch.purge_after = new Date(now.getTime() + 7 * 24 * 3600 * 1000).toISOString();
+  }
+  if (status === 'open') {
+    patch.closed_at = null;
+    patch.purge_after = null;
+  }
+  const { error } = await client.from('telegram_support_tickets').update(patch).eq('id', Number(ticketId));
+  if (error) throw new Error(error.message);
+}
+
+async function listActiveSupportTickets(limit = 30) {
+  const client = sb();
+  if (!client) return [];
+  const { data, error } = await client
+    .from('telegram_support_tickets')
+    .select('*')
+    .in('status', ['open', 'in_progress', 'waiting_user', 'closed_pending_purge'])
+    .order('updated_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+async function listSupportMessages(ticketId, limit = 80) {
+  const client = sb();
+  if (!client) return [];
+  const { data, error } = await client
+    .from('telegram_support_messages')
+    .select('*')
+    .eq('ticket_id', Number(ticketId))
+    .order('created_at', { ascending: true })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+async function getTicketById(ticketId) {
+  const client = sb();
+  if (!client) return null;
+  const { data, error } = await client.from('telegram_support_tickets').select('*').eq('id', Number(ticketId)).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data || null;
+}
+
+async function purgeExpiredSupportTickets() {
+  const client = sb();
+  if (!client) return 0;
+  const now = new Date().toISOString();
+  const { data, error } = await client
+    .from('telegram_support_tickets')
+    .delete()
+    .eq('status', 'closed_pending_purge')
+    .lt('purge_after', now)
+    .select('id');
+  if (error) throw new Error(error.message);
+  return (data || []).length;
+}
+
 async function upsertTelegramChatLink(chatId, clanTag, linkedByTelegramUserId, chatType) {
   const client = sb();
   if (!client) throw new Error('Supabase non configurato.');
@@ -430,4 +642,17 @@ module.exports = {
   canLinkChatToClan,
   listTelegramChatIdsForClan,
   fetchCwlHistoryBonusRows,
+  getChatNotificationSettings,
+  upsertChatNotificationSettings,
+  insertUsageEvent,
+  getAdminDashboardStats,
+  getOpenTicketForUser,
+  createSupportTicket,
+  appendSupportMessage,
+  countTicketPhotos,
+  setTicketStatus,
+  listActiveSupportTickets,
+  listSupportMessages,
+  getTicketById,
+  purgeExpiredSupportTickets,
 };
