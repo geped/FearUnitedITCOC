@@ -70,6 +70,10 @@ function callbackSkipsUiWipe(data) {
   ) {
     return true;
   }
+  // Assegnazione bonus (stessa bolla: edit testo + tastiera)
+  if (d === 'bonus:as' || /^bonus:asz:\d{4}-\d{2}$/.test(d) || /^bonus:asp:\d{4}-\d{2}:\d+$/.test(d) || /^bonus:ast:\d{4}-\d{2}:\d+:\d+$/.test(d)) {
+    return true;
+  }
   return false;
 }
 

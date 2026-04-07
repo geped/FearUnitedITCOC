@@ -747,6 +747,72 @@ async function fetchCwlHistoryBonusRows(clanTagRaw) {
   return data || [];
 }
 
+/** Stagioni distinte presenti in cwl_history per il clan (più recenti prima). */
+async function listCwlSeasonsForClan(clanTagRaw, limit = 12) {
+  const client = sb();
+  if (!client) return [];
+  const tag = normClanTagSql(clanTagRaw);
+  const { data, error } = await client
+    .from('cwl_history')
+    .select('season')
+    .eq('clan_tag', tag)
+    .order('season', { ascending: false });
+  if (error) throw new Error(error.message);
+  const seen = new Set();
+  const out = [];
+  for (const r of data || []) {
+    const s = r?.season;
+    if (s && !seen.has(s)) {
+      seen.add(s);
+      out.push(s);
+      if (out.length >= limit) break;
+    }
+  }
+  return out;
+}
+
+/** Righe complete per una stagione (assegnazione bonus come tab «Assegna» sul sito). */
+async function fetchCwlHistoryFullSeason(clanTagRaw, season) {
+  const client = sb();
+  if (!client) return [];
+  const tag = normClanTagSql(clanTagRaw);
+  const { data, error } = await client
+    .from('cwl_history')
+    .select('*')
+    .eq('clan_tag', tag)
+    .eq('season', String(season));
+  if (error) throw new Error(error.message);
+  const rows = data || [];
+  rows.sort(
+    (a, b) =>
+      (Number(b.bonus_score ?? 0) - Number(a.bonus_score ?? 0)) ||
+      String(a.player_name || '').localeCompare(String(b.player_name || ''), 'it')
+  );
+  return rows;
+}
+
+async function upsertCwlHistoryAssignRow(row) {
+  const client = sb();
+  if (!client) throw new Error('Supabase non configurato.');
+  const tag = normClanTagSql(row.clan_tag);
+  const patch = {
+    clan_tag: tag,
+    player_name: String(row.player_name),
+    season: String(row.season),
+    participated: Boolean(row.participated),
+    stars: Math.round(Number(row.stars ?? 0)),
+    destruction: Number(Number(row.destruction ?? 0).toFixed(2)),
+    attacks_made: Math.round(Number(row.attacks_made ?? 0)),
+    attacks_required: Math.round(Number(row.attacks_required ?? 0)),
+    bonus_score: Math.round(Number(row.bonus_score ?? 0)),
+    bonus_assigned: Boolean(row.bonus_assigned),
+    still_in_clan: row.still_in_clan !== false,
+    is_secondary: Boolean(row.is_secondary),
+  };
+  const { error } = await client.from('cwl_history').upsert(patch, { onConflict: 'player_name,season,clan_tag' });
+  if (error) throw new Error(error.message);
+}
+
 module.exports = {
   sb,
   getFullRow,
@@ -775,6 +841,9 @@ module.exports = {
   canLinkChatToClan,
   listTelegramChatIdsForClan,
   fetchCwlHistoryBonusRows,
+  listCwlSeasonsForClan,
+  fetchCwlHistoryFullSeason,
+  upsertCwlHistoryAssignRow,
   getChatNotificationSettings,
   upsertChatNotificationSettings,
   insertUsageEvent,
