@@ -1254,7 +1254,14 @@ async function mainMenuKeyboard(ctx, user, hasClanTag, clanTag, clanName) {
     showClanRows = g.allowClanMenus;
   }
   if (showClanRows) {
-    rows.push([Markup.button.callback(shortClanButtonLabel(clanName, clanTag), 'clan_home')]);
+    if (grp) {
+      rows.push([
+        Markup.button.callback(shortClanButtonLabel(clanName, clanTag), 'clan_home'),
+        Markup.button.callback('🔔 Gestione avvisi', 'notif_menu'),
+      ]);
+    } else {
+      rows.push([Markup.button.callback(shortClanButtonLabel(clanName, clanTag), 'clan_home')]);
+    }
   } else if (!hasClanTag) {
     rows.push([Markup.button.callback('🏰 Come impostare il clan', 'setclan_help')]);
   }
