@@ -398,6 +398,29 @@ function buildGroupGuestKb(botUsername) {
   return Markup.inlineKeyboard(rows);
 }
 
+function normalizeCoCClanTag(raw) {
+  if (raw == null || !String(raw).trim()) return null;
+  const u = String(raw).trim().toUpperCase();
+  return u.startsWith('#') ? u : `#${u}`;
+}
+
+/** Tag villaggio da profilo Supabase o riga telegram_links (stesso ordine di priorità ragionevole). */
+async function resolvePlayerTagForClanLookup(telegramUserId, user) {
+  const meta = user?.user_metadata || {};
+  let t = meta.coc_tag;
+  if (t && String(t).trim()) {
+    const u = String(t).trim().toUpperCase();
+    return u.startsWith('#') ? u : `#${u}`;
+  }
+  const row = await sb.getTelegramRow(telegramUserId).catch(() => null);
+  t = row?.player_tag;
+  if (t && String(t).trim()) {
+    const u = String(t).trim().toUpperCase();
+    return u.startsWith('#') ? u : `#${u}`;
+  }
+  return null;
+}
+
 async function getClanContextAuthed(telegramUserId, user) {
   const saved = await sb.getSavedClanTag(telegramUserId).catch(() => null);
   if (saved) {
@@ -408,16 +431,32 @@ async function getClanContextAuthed(telegramUserId, user) {
       return { clanTag: saved, clanName: saved, hasOverride: true };
     }
   }
-  const raw = user?.user_metadata?.coc_clan_tag;
-  if (!raw) return { clanTag: null, clanName: null, hasOverride: false };
-  const u = String(raw).trim().toUpperCase();
-  const tag = u.startsWith('#') ? u : `#${u}`;
-  try {
-    const info = await api.clanInfo(tag);
-    return { clanTag: tag, clanName: info.name || tag, hasOverride: false };
-  } catch {
-    return { clanTag: tag, clanName: tag, hasOverride: false };
+  const metaClan = normalizeCoCClanTag(user?.user_metadata?.coc_clan_tag);
+  if (metaClan) {
+    try {
+      const info = await api.clanInfo(metaClan);
+      return { clanTag: metaClan, clanName: info.name || metaClan, hasOverride: false };
+    } catch {
+      return { clanTag: metaClan, clanName: metaClan, hasOverride: false };
+    }
   }
+  // Profilo CoC live: coc_clan_tag su Auth può essere vuoto se l'utente è entrato in clan dopo la registrazione
+  // o se i metadati non sono stati aggiornati — stesso player tag usato per login/registrazione.
+  const playerTag = await resolvePlayerTagForClanLookup(telegramUserId, user);
+  if (playerTag) {
+    try {
+      const p = await api.lookupPlayer(playerTag);
+      const ct = p?.clan?.tag;
+      if (ct && String(ct).trim()) {
+        const tag = normalizeCoCClanTag(ct);
+        const name = (p.clan && p.clan.name) || tag;
+        if (tag) {
+          return { clanTag: tag, clanName: name || tag, hasOverride: false };
+        }
+      }
+    } catch (_) {}
+  }
+  return { clanTag: null, clanName: null, hasOverride: false };
 }
 
 async function resolveClanTagForCommands(telegramUserId, user) {
