@@ -456,7 +456,7 @@ async function submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFil
     return true;
   }
   await ctx.reply(
-    '✅ Bozza inviata in moderazione. L’owner la trova in <b>Community → Approva post</b>. Se approvata, il bot pubblicherà nel feed (24h).',
+    '✅ Bozza inviata correttamente. Se approvata, l’annuncio resta pubblicato per <b>24h</b> in <b>Annunci attivi</b>.',
     { parse_mode: 'HTML', ...recruitBackKb() }
   );
   return true;

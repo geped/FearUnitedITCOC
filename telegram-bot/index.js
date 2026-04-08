@@ -1076,9 +1076,9 @@ async function handleSupportInboundMessage(ctx) {
   }
   if (!hasPhoto && !hasText) return false;
 
-  let ticket = await sb.getOpenTicketForUser(uid).catch(() => null);
   const explicitlyOpened = pendingSupportOpen.get(uid) === true;
-  if (!ticket && !explicitlyOpened) return false;
+  if (!explicitlyOpened) return false;
+  let ticket = await sb.getOpenTicketForUser(uid).catch(() => null);
   let justCreatedTicket = false;
   if (!ticket) {
     try {
@@ -2862,6 +2862,7 @@ function setupBot(bot) {
       `Riaperture usate: <b>${Math.min(Number(t.reopen_count || 0), SUPPORT_MAX_REOPEN)}</b>/${SUPPORT_MAX_REOPEN}\n` +
       `Sessione corrente: <b>${Number(t.session_index || 1)}</b>\n` +
       `Scrivi qui per inviare messaggi al supporto.`;
+    pendingSupportOpen.set(uid, true);
     await ctx.reply(text, { parse_mode: 'HTML', ...supportManageKb(true, Boolean(c)) }).catch(() => {});
   });
 
@@ -2893,6 +2894,7 @@ function setupBot(bot) {
       text: `Ticket riaperto dall’utente (sessione ${r.ticket.session_index}).`,
       session_index: Number(r.ticket.session_index || 1),
     }).catch(() => {});
+    pendingSupportOpen.set(uid, true);
     await ctx.reply(`♻️ Ticket #${r.ticket.id} riaperto. Sessione ${r.ticket.session_index}: puoi inviare fino a ${SUPPORT_MAX_PHOTO_PER_SESSION} immagini.`);
   });
 
@@ -2928,7 +2930,7 @@ function setupBot(bot) {
         payload: { ticket_id: ticket.id },
       })
       .catch(() => {});
-    pendingSupportOpen.delete(uid);
+    pendingSupportOpen.set(uid, true);
     await ctx
       .reply(formatSupportWritePromptHtml(ticket.id), { parse_mode: 'HTML', ...supportActiveSessionSimpleKb() })
       .catch(() => {});
