@@ -952,6 +952,8 @@ function supportActiveSessionSimpleKb() {
 function formatSupportWritePromptHtml(ticketId) {
   return (
     `📩 <b>Ticket #${ticketId}</b>\n\n` +
+    `🟣 <b>Supporto attivo:</b> i prossimi messaggi verranno inviati al ticket.\n` +
+    `<i>Per uscire: usa «Torna al menù» o /start.</i>\n\n` +
     `Scrivi qui il messaggio per il supporto (testo e fino a <b>${SUPPORT_MAX_PHOTO_PER_SESSION}</b> immagini in questa sessione).`
   );
 }
@@ -2861,6 +2863,8 @@ function setupBot(bot) {
       `🎫 Ticket attivo: <b>#${t.id}</b>\n` +
       `Riaperture usate: <b>${Math.min(Number(t.reopen_count || 0), SUPPORT_MAX_REOPEN)}</b>/${SUPPORT_MAX_REOPEN}\n` +
       `Sessione corrente: <b>${Number(t.session_index || 1)}</b>\n` +
+      `🟣 <b>Supporto attivo:</b> i prossimi messaggi verranno inviati al ticket.\n` +
+      `<i>Per uscire: «Torna al menù» o /start.</i>\n\n` +
       `Scrivi qui per inviare messaggi al supporto.`;
     pendingSupportOpen.set(uid, true);
     await ctx.reply(text, { parse_mode: 'HTML', ...supportManageKb(true, Boolean(c)) }).catch(() => {});
@@ -2895,7 +2899,13 @@ function setupBot(bot) {
       session_index: Number(r.ticket.session_index || 1),
     }).catch(() => {});
     pendingSupportOpen.set(uid, true);
-    await ctx.reply(`♻️ Ticket #${r.ticket.id} riaperto. Sessione ${r.ticket.session_index}: puoi inviare fino a ${SUPPORT_MAX_PHOTO_PER_SESSION} immagini.`);
+    await ctx.reply(
+      `♻️ Ticket #${r.ticket.id} riaperto.\n` +
+        `🟣 <b>Supporto attivo:</b> i prossimi messaggi verranno inviati al ticket.\n` +
+        `<i>Per uscire: «Torna al menù» o /start.</i>\n\n` +
+        `Sessione ${r.ticket.session_index}: puoi inviare fino a ${SUPPORT_MAX_PHOTO_PER_SESSION} immagini.`,
+      { parse_mode: 'HTML' }
+    );
   });
 
   bot.action('support_user_new', async (ctx) => {
