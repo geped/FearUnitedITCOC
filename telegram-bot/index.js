@@ -1216,8 +1216,10 @@ async function buildWebAppHandoffUrl(ctx, extraParams = {}) {
 }
 
 function shortClanButtonLabel(clanName, clanTag) {
-  const base = String(clanName || clanTag || 'Il tuo clan').trim();
-  const short = base.length > 22 ? `${base.slice(0, 22)}…` : base;
+  const normalizedName = String(clanName || '').replace(/\s+/g, ' ').trim();
+  const normalizedTag = String(clanTag || '').trim();
+  const base = normalizedName || normalizedTag || 'Il tuo clan';
+  const short = base.length > 20 ? `${base.slice(0, 20)}…` : base;
   return `🏠 ${short}`;
 }
 
@@ -1277,8 +1279,9 @@ async function renderClanHubMenu(ctx) {
   }
   const info = await resolveEffectiveClanContext(ctx);
   const label = shortClanButtonLabel(info?.clanName, info?.clanTag || tag).replace(/^🏠\s*/, '');
+  const tagLine = info?.clanTag ? `\n<code>${fmt.escapeHtml(info.clanTag)}</code>` : '';
   const body =
-    `${fmt.DIV}\n🏠 <b>${fmt.escapeHtml(label)}</b>\n${fmt.DIV}\n\n` +
+    `${fmt.DIV}\n🏠 <b>${fmt.escapeHtml(label)}</b>${tagLine}\n${fmt.DIV}\n\n` +
     `Sezione clan e strumenti dedicati.`;
   const rows = [
     [Markup.button.callback('👥 Membri', 'mb0'), Markup.button.callback('🏰 Info clan', 'info')],
@@ -1318,6 +1321,9 @@ async function renderClanWebAppsMenu(ctx) {
       else rows.push([Markup.button.webApp(la, ua)]);
     }
   } catch (_) {}
+  if (rows.length === 0) {
+    rows.push([Markup.button.callback('ℹ️ Mini app non disponibile', 'noop')]);
+  }
   rows.push([Markup.button.callback('« Nome clan', 'clan_home'), Markup.button.callback('« Menù', 'menu')]);
   try {
     await ctx.editMessageText(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) });
