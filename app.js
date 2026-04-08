@@ -759,6 +759,32 @@ function applyBotAdminStaffUi() {
   });
 }
 
+/**
+ * Se `coc_clan_tag` manca ma c'è `coc_tag`, legge il clan live dall'API CoC
+ * (stesso approccio del bot Telegram) così la Mini App non mostra "nessun clan"
+ * per utenti effettivamente in clan.
+ */
+async function tryHydrateClanFromUserMetadata(user) {
+  const meta = user?.user_metadata || {};
+  if (meta.coc_clan_tag) return;
+  const raw = meta.coc_tag;
+  if (!raw || !String(raw).trim()) return;
+  let tag = String(raw).trim().toUpperCase();
+  if (!tag.startsWith('#')) tag = '#' + tag.replace(/^#+/, '');
+  try {
+    const r = await fetch(`/api/lookup?type=player&playerTag=${encodeURIComponent(tag)}`);
+    const data = await r.json();
+    if (!r.ok || !data?.clan?.tag) return;
+    window._userClanTag = normClanTag(data.clan.tag);
+    if (data.clan.name) window._clanName = data.clan.name;
+    const bu = data.clan.badgeUrls;
+    if (bu) {
+      const url = cocBadgeUrl(bu);
+      if (url) window._clanBadgeUrl = url;
+    }
+  } catch (_) {}
+}
+
 async function showApp(sessionUser) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
@@ -780,13 +806,15 @@ async function showApp(sessionUser) {
   window._clanName     = user.user_metadata?.coc_clan_name || '';
   window._clanBadgeUrl = user.user_metadata?.coc_clan_badge_url || null;
 
-  // Se l'utente non è in nessun clan
+  await tryHydrateClanFromUserMetadata(user);
+
+  // Se l'utente non è in nessun clan (metadata + lookup)
   if (!window._userClanTag) {
-    if (!isAdmin) {
+    if (!isAdmin && !isTelegramModerator) {
       showNoClanScreen(user.user_metadata?.username || '');
       return;
     }
-    // Admin senza clan: nasconde le tab clan, va direttamente a Gestione Utenti
+    // Admin o moderatore staff senza clan risolvibile: tab roster/guerre/CWL nascoste
     ['members', 'warlog', 'cwl'].forEach(tab => {
       document.querySelectorAll(`[data-tab="${tab}"]`).forEach(el => el.style.display = 'none');
     });
@@ -846,6 +874,8 @@ async function showApp(sessionUser) {
 
   if (!window._userClanTag && isAdmin) {
     activateTab('admin');
+  } else if (!window._userClanTag && isTelegramModerator) {
+    activateTab('botadmin');
   } else {
     loadMembers();
   }
