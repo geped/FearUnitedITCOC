@@ -1223,6 +1223,14 @@ function shortClanButtonLabel(clanName, clanTag) {
   return `🏠 ${short}`;
 }
 
+async function clanBackButtonLabel(ctx) {
+  try {
+    const info = await resolveEffectiveClanContext(ctx);
+    if (info?.clanName || info?.clanTag) return `« ${shortClanButtonLabel(info.clanName, info.clanTag).replace(/^🏠\s*/, '')}`;
+  } catch (_) {}
+  return '« Indietro';
+}
+
 async function mainMenuKeyboard(ctx, user, hasClanTag, clanTag, clanName) {
   const rows = [];
   const leader = user ? isClanLeader(user) : false;
@@ -1324,7 +1332,7 @@ async function renderClanWebAppsMenu(ctx) {
   if (rows.length === 0) {
     rows.push([Markup.button.callback('ℹ️ Mini app non disponibile', 'noop')]);
   }
-  rows.push([Markup.button.callback('« Nome clan', 'clan_home'), Markup.button.callback('« Menù', 'menu')]);
+  rows.push([Markup.button.callback(await clanBackButtonLabel(ctx), 'clan_home'), Markup.button.callback('« Menù', 'menu')]);
   try {
     await ctx.editMessageText(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) });
   } catch (_) {
@@ -1367,6 +1375,10 @@ function backMenuKb() {
   return Markup.inlineKeyboard([[Markup.button.callback('« Menù', 'menu')]]);
 }
 
+function clanBackKb() {
+  return Markup.inlineKeyboard([[Markup.button.callback('« Indietro', 'clan_home'), Markup.button.callback('« Menù', 'menu')]]);
+}
+
 function notifLabel(on) {
   return on ? '✅ ON' : '⚪ OFF';
 }
@@ -1387,7 +1399,7 @@ function buildMembersKb(page, pages) {
   if (page > 0) row.push(Markup.button.callback('◀', `mb${page - 1}`));
   row.push(Markup.button.callback(`· ${page + 1}/${pages} ·`, 'noop'));
   if (page < pages - 1) row.push(Markup.button.callback('▶', `mb${page + 1}`));
-  return Markup.inlineKeyboard([row, [Markup.button.callback('« Menù', 'menu')]]);
+  return Markup.inlineKeyboard([row, [Markup.button.callback('« Indietro', 'clan_home'), Markup.button.callback('« Menù', 'menu')]]);
 }
 
 function pickWebhookDomain() {
@@ -1485,7 +1497,7 @@ function warSubmenuKb() {
       Markup.button.callback('🏹 War classiche', 'war:classic'),
       Markup.button.callback('🏆 Cronologia leghe', 'war:cwl'),
     ],
-    [Markup.button.callback('« Menù', 'menu')],
+    [Markup.button.callback('« Indietro', 'clan_home'), Markup.button.callback('« Menù', 'menu')],
   ]);
 }
 
@@ -1504,7 +1516,7 @@ function buildCwlNavKb(data, spec, webAppUrl) {
 
   const rows = [
     [
-      tab(view === 'ov', '📊 Pan', 'cwl_v:ov'),
+      tab(view === 'ov', '📊 Panoramica', 'cwl_v:ov'),
       tab(view === 'g', '🏅 Gruppo', 'cwl_v:g'),
     ],
     [
@@ -1537,7 +1549,8 @@ function buildCwlNavKb(data, spec, webAppUrl) {
     rows.push([Markup.button.webApp('🌐 Visualizza versione web', webAppUrl)]);
   }
 
-  rows.push([Markup.button.callback('« Menù', 'menu')]);
+  if (view !== 'ov') rows.push([Markup.button.callback('« CWL live', 'cwl_v:ov')]);
+  rows.push([Markup.button.callback('« Indietro', 'clan_home'), Markup.button.callback('« Menù', 'menu')]);
   return Markup.inlineKeyboard(rows);
 }
 
@@ -1563,7 +1576,7 @@ async function loadAndShowCwl(ctx, clanTag, viewSpec) {
     }
   }
   const formatted = fmt.formatCwlScreen(data, viewSpec.view, viewSpec.pPage, viewSpec.rIdx);
-  const kb = buildCwlNavKb(data, formatted, webAppUrl);
+  const kb = await buildCwlNavKb(data, formatted, webAppUrl);
   return { text: formatted.text, kb, data };
 }
 
@@ -3453,9 +3466,9 @@ function setupBot(bot) {
     const info = await api.clanInfo(clanTag);
     const text = fmt.formatClanInfo(info);
     try {
-      await ctx.editMessageText(text, { parse_mode: 'HTML', ...backMenuKb() });
+      await ctx.editMessageText(text, { parse_mode: 'HTML', ...clanBackKb() });
     } catch (_) {
-      await ctx.reply(text, { parse_mode: 'HTML', ...backMenuKb() });
+      await ctx.reply(text, { parse_mode: 'HTML', ...clanBackKb() });
     }
   });
 
@@ -3819,7 +3832,10 @@ function setupBot(bot) {
     }
     const data = await api.warLog(clanTag);
     const text = fmt.formatWarLogClassic(data);
-    const kb = Markup.inlineKeyboard([[Markup.button.callback('« Registro guerre', 'war_menu')], [Markup.button.callback('« Menù', 'menu')]]);
+    const kb = Markup.inlineKeyboard([
+      [Markup.button.callback('« Registro guerre', 'war_menu')],
+      [Markup.button.callback('« Indietro', 'clan_home'), Markup.button.callback('« Menù', 'menu')],
+    ]);
     try {
       await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
     } catch (_) {
@@ -3836,7 +3852,10 @@ function setupBot(bot) {
     }
     const data = await api.warLog(clanTag);
     const text = fmt.formatWarLogCwlHistory(data);
-    const kb = Markup.inlineKeyboard([[Markup.button.callback('« Registro guerre', 'war_menu')], [Markup.button.callback('« Menù', 'menu')]]);
+    const kb = Markup.inlineKeyboard([
+      [Markup.button.callback('« Registro guerre', 'war_menu')],
+      [Markup.button.callback('« Indietro', 'clan_home'), Markup.button.callback('« Menù', 'menu')],
+    ]);
     try {
       await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
     } catch (_) {
@@ -3867,9 +3886,9 @@ function setupBot(bot) {
     const data = await api.lookupPlayer(tag);
     const text = fmt.formatPlayerSummary(data);
     try {
-      await ctx.editMessageText(text, { parse_mode: 'HTML', ...backMenuKb() });
+      await ctx.editMessageText(text, { parse_mode: 'HTML', ...clanBackKb() });
     } catch (_) {
-      await ctx.reply(text, { parse_mode: 'HTML', ...backMenuKb() });
+      await ctx.reply(text, { parse_mode: 'HTML', ...clanBackKb() });
     }
   });
 

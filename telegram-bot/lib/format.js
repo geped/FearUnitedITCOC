@@ -317,7 +317,6 @@ function formatMembersPage(items, page, clanTagHint) {
 }
 
 const CWL_PLAYERS_PER_PAGE = 8;
-const CWL_ROUND_ATTACK_LINES = 18;
 
 const CWL_STATE_IT = {
   notInWar: 'Nessuna CWL attiva',
@@ -468,25 +467,34 @@ function formatCwlRoundDetail(data, roundIdx) {
     '',
   ];
 
-  const atkLines = [];
+  const ourAtkLines = [];
+  const oppAtkLines = [];
   const defMap = rd.defenderMap || {};
-  const pushAttacks = (members, label) => {
+  const pushAttacks = (members, out) => {
     for (const m of members || []) {
       for (const a of m.attacks || []) {
         const d = defMap[a.defenderTag] || {};
-        atkLines.push(
-          `${label} <b>${escapeHtml(m.name)}</b> → ${escapeHtml(d.name || a.defenderTag || '?')}: ${a.stars ?? 0}★ ${a.destruction ?? 0}%`
+        const atkNo = Number.isFinite(Number(a.order)) ? `#${Number(a.order)} ` : '';
+        out.push(
+          `• ${atkNo}<b>${escapeHtml(m.name || '?')}</b> → <b>${escapeHtml(d.name || a.defenderTag || '?')}</b>` +
+            `\n  ⭐ ${a.stars ?? 0} · 💥 ${a.destruction ?? 0}%`
         );
       }
     }
   };
-  pushAttacks(c.members, '📍');
-  pushAttacks(o.members, '🛡️');
-  if (atkLines.length) {
-    lines.push(`<b>Attacchi</b> <i>(max ${CWL_ROUND_ATTACK_LINES})</i>`, '');
-    atkLines.slice(0, CWL_ROUND_ATTACK_LINES).forEach((l) => lines.push(l));
-    if (atkLines.length > CWL_ROUND_ATTACK_LINES) {
-      lines.push(`\n<i>… altri ${atkLines.length - CWL_ROUND_ATTACK_LINES} attacchi non mostrati</i>`);
+  pushAttacks(c.members, ourAtkLines);
+  pushAttacks(o.members, oppAtkLines);
+  const totalAttacks = ourAtkLines.length + oppAtkLines.length;
+  if (totalAttacks > 0) {
+    lines.push(`<b>Attacchi completi</b> · <i>${totalAttacks} azioni</i>`, '');
+    if (ourAtkLines.length) {
+      lines.push('📍 <b>Nostri attacchi</b>', '');
+      ourAtkLines.forEach((l) => lines.push(l));
+      lines.push('');
+    }
+    if (oppAtkLines.length) {
+      lines.push('🛡️ <b>Attacchi avversari</b>', '');
+      oppAtkLines.forEach((l) => lines.push(l));
     }
   } else {
     lines.push('<i>Nessun attacco registrato in questo turno.</i>');
