@@ -3026,7 +3026,7 @@ async function loadBotTickets(mode = 'open') {
   const box = document.getElementById('botadmin-tickets');
   const detail = document.getElementById('botadmin-ticket-detail');
   const f = document.getElementById('botadmin-ticket-filter');
-  if (f) f.textContent = `Filtro: ${mode === 'mine' ? 'assegnati a me' : 'attivi'}`;
+  if (f) f.textContent = `Filtro: ${mode === 'mine' ? 'assegnati a me' : mode === 'closed' ? 'chiusi' : 'attivi'}`;
   if (detail) detail.style.display = 'none';
   if (!box) return;
   box.innerHTML = '<p class="wl-loading">Caricamento ticket…</p>';
@@ -3197,7 +3197,13 @@ async function openBotReport(reportId) {
     <div style="display:flex;gap:0.45rem;flex-wrap:wrap">
       <button class="btn-secondary btn-sm" onclick="botReportAction(${report.id}, 'take')">📌 Prendi in carico</button>
       <button class="btn-secondary btn-sm" onclick="botReportAction(${report.id}, 'archive')">✅ Archivia</button>
-      <button class="btn-secondary btn-sm" onclick="botReportAction(${report.id}, 'mute24')">🔇 Mute 24h</button>
+      <button class="btn-secondary btn-sm" onclick="botReportAction(${report.id}, 'unmute')">🔈 Unmute</button>
+      <button class="btn-secondary btn-sm" onclick="botReportAction(${report.id}, 'mute2')">🔇 2h</button>
+      <button class="btn-secondary btn-sm" onclick="botReportAction(${report.id}, 'mute4')">🔇 4h</button>
+      <button class="btn-secondary btn-sm" onclick="botReportAction(${report.id}, 'mute8')">🔇 8h</button>
+      <button class="btn-secondary btn-sm" onclick="botReportAction(${report.id}, 'mute16')">🔇 16h</button>
+      <button class="btn-secondary btn-sm" onclick="botReportAction(${report.id}, 'mute24')">🔇 24h</button>
+      <button class="btn-secondary btn-sm" onclick="botReportAction(${report.id}, 'mute48')">🔇 48h</button>
       <button class="btn-danger btn-sm" onclick="botReportAction(${report.id}, 'ban')">🚫 Ban</button>
       ${!targetKnown ? `<button class="btn-secondary btn-sm" onclick="botReportManualTarget(${report.id})">🎯 Target manuale</button>` : ''}
     </div>
@@ -3263,7 +3269,13 @@ async function loadBotBannedUsers() {
               <td>${new Date(u.updated_at).toLocaleString('it-IT')}</td>
               <td>
                 <button class="btn-secondary btn-sm" onclick="botUserRestrictionAction(${u.telegram_user_id}, 'unban')">✅ Unban</button>
-                <button class="btn-secondary btn-sm" onclick="botUserRestrictionAction(${u.telegram_user_id}, 'mute24')">🔇 Mute 24h</button>
+                <button class="btn-secondary btn-sm" onclick="botUserRestrictionAction(${u.telegram_user_id}, 'unmute')">🔈 Unmute</button>
+                <button class="btn-secondary btn-sm" onclick="botUserRestrictionAction(${u.telegram_user_id}, 'mute2')">🔇 2h</button>
+                <button class="btn-secondary btn-sm" onclick="botUserRestrictionAction(${u.telegram_user_id}, 'mute4')">🔇 4h</button>
+                <button class="btn-secondary btn-sm" onclick="botUserRestrictionAction(${u.telegram_user_id}, 'mute8')">🔇 8h</button>
+                <button class="btn-secondary btn-sm" onclick="botUserRestrictionAction(${u.telegram_user_id}, 'mute16')">🔇 16h</button>
+                <button class="btn-secondary btn-sm" onclick="botUserRestrictionAction(${u.telegram_user_id}, 'mute24')">🔇 24h</button>
+                <button class="btn-secondary btn-sm" onclick="botUserRestrictionAction(${u.telegram_user_id}, 'mute48')">🔇 48h</button>
               </td>
             </tr>
           `).join('')}

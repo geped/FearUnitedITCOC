@@ -138,10 +138,20 @@ async function handleBotAdmin(req, res, supabase) {
                 if (error) return res.status(500).json({ error: error.message });
                 return res.status(200).json({ tickets: data || [] });
             }
+            if (mode === 'closed') {
+                const { data, error } = await supabase
+                    .from('telegram_support_tickets')
+                    .select('*')
+                    .eq('status', 'closed_pending_purge')
+                    .order('updated_at', { ascending: false })
+                    .limit(30);
+                if (error) return res.status(500).json({ error: error.message });
+                return res.status(200).json({ tickets: data || [] });
+            }
             const { data, error } = await supabase
                 .from('telegram_support_tickets')
                 .select('*')
-                .in('status', ['open', 'in_progress', 'waiting_user', 'closed_pending_purge'])
+                .in('status', ['open', 'in_progress', 'waiting_user'])
                 .order('updated_at', { ascending: false })
                 .limit(30);
             if (error) return res.status(500).json({ error: error.message });
@@ -298,16 +308,23 @@ async function handleBotAdmin(req, res, supabase) {
             if (error) return res.status(500).json({ error: error.message });
             return res.status(200).json({ ok: true });
         }
-        if (action === 'mute24' || action === 'ban') {
+        if (/^mute(2|4|8|16|24|48)$/.test(action) || action === 'ban' || action === 'unmute') {
             const target = r.reported_target_telegram_user_id != null ? Number(r.reported_target_telegram_user_id) : null;
             if (!target) return res.status(400).json({ error: 'Target non identificato. Imposta target manuale prima.' });
             const isBan = action === 'ban';
+            const isUnmute = action === 'unmute';
+            const muteHours = /^mute(\d+)$/.test(action) ? Number(action.replace('mute', '')) : 0;
             const now = new Date();
+            const prev = await supabase.from('telegram_user_restrictions').select('*').eq('telegram_user_id', target).maybeSingle();
             const row = {
                 telegram_user_id: target,
-                banned: isBan,
-                muted_until: isBan ? null : new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-                reason: isBan ? `Ban da segnalazione chat globale #${id}` : `Limitazione 24h da segnalazione chat globale #${id}`,
+                banned: isBan ? true : (prev.data?.banned === true),
+                muted_until: isBan || isUnmute ? null : new Date(Date.now() + muteHours * 3600 * 1000).toISOString(),
+                reason: isBan
+                    ? `Ban da segnalazione chat globale #${id}`
+                    : isUnmute
+                        ? `Unmute da segnalazione chat globale #${id}`
+                        : `Limitazione ${muteHours}h da segnalazione chat globale #${id}`,
                 updated_by: adminTelegramUserId || null,
                 updated_at: now.toISOString(),
             };
@@ -315,15 +332,16 @@ async function handleBotAdmin(req, res, supabase) {
             if (e2) return res.status(500).json({ error: e2.message });
             const { error: e3 } = await supabase.from('telegram_global_reports').update({
                 status: 'resolved',
-                action_taken: isBan ? 'ban' : 'mute24h',
-                resolution_note: isBan ? 'Ban applicato da admin web' : 'Mute 24h applicato da admin web',
+                action_taken: isBan ? 'ban' : isUnmute ? 'unmute' : `mute${muteHours}h`,
+                resolution_note: isBan ? 'Ban applicato da admin web' : isUnmute ? 'Unmute applicato da admin web' : `Mute ${muteHours}h applicato da admin web`,
                 reviewed_by_telegram_user_id: adminTelegramUserId || null,
                 reviewed_at: now.toISOString(),
                 updated_at: now.toISOString(),
             }).eq('id', id);
             if (e3) return res.status(500).json({ error: e3.message });
             if (isBan) await notifyTelegram(target, `🚫 Sei stato bannato dall'uso del bot per violazione regole in chat globale.\nMotivo: ${String(r.reason || '').slice(0, 350)}\nContatta un amministratore per eventuale unban.`);
-            else await notifyTelegram(target, `🔇 Hai ricevuto una limitazione temporanea di 24h per violazione regole in chat globale.\nMotivo: ${String(r.reason || '').slice(0, 350)}\nSe ritieni ci sia un errore, contatta un amministratore.`);
+            else if (isUnmute) await notifyTelegram(target, '🔈 La tua limitazione mute è stata rimossa da un amministratore.');
+            else await notifyTelegram(target, `🔇 Hai ricevuto una limitazione temporanea di ${muteHours}h per violazione regole in chat globale.\nMotivo: ${String(r.reason || '').slice(0, 350)}\nSe ritieni ci sia un errore, contatta un amministratore.`);
             return res.status(200).json({ ok: true });
         }
         return res.status(400).json({ error: 'Azione segnalazione non valida.' });
@@ -347,18 +365,33 @@ async function handleBotAdmin(req, res, supabase) {
             await notifyTelegram(uid, '✅ Il tuo ban è stato rimosso. Ora puoi tornare a usare il bot.');
             return res.status(200).json({ ok: true });
         }
-        if (action === 'mute24') {
+        if (action === 'unmute') {
             const prev = await supabase.from('telegram_user_restrictions').select('*').eq('telegram_user_id', uid).maybeSingle();
             const { error } = await supabase.from('telegram_user_restrictions').upsert({
                 telegram_user_id: uid,
                 banned: prev.data?.banned === true,
-                muted_until: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-                reason: 'Limitazione 24h da webapp admin',
+                muted_until: null,
+                reason: 'Unmute da webapp admin',
                 updated_by: adminTelegramUserId || null,
                 updated_at: new Date().toISOString(),
             }, { onConflict: 'telegram_user_id' });
             if (error) return res.status(500).json({ error: error.message });
-            await notifyTelegram(uid, '🔇 Hai ricevuto una limitazione temporanea di 24h sull’utilizzo del bot.');
+            await notifyTelegram(uid, '🔈 La tua limitazione mute è stata rimossa.');
+            return res.status(200).json({ ok: true });
+        }
+        if (/^mute(2|4|8|16|24|48)$/.test(action)) {
+            const hours = Number(action.replace('mute', ''));
+            const prev = await supabase.from('telegram_user_restrictions').select('*').eq('telegram_user_id', uid).maybeSingle();
+            const { error } = await supabase.from('telegram_user_restrictions').upsert({
+                telegram_user_id: uid,
+                banned: prev.data?.banned === true,
+                muted_until: new Date(Date.now() + hours * 3600 * 1000).toISOString(),
+                reason: `Limitazione ${hours}h da webapp admin`,
+                updated_by: adminTelegramUserId || null,
+                updated_at: new Date().toISOString(),
+            }, { onConflict: 'telegram_user_id' });
+            if (error) return res.status(500).json({ error: error.message });
+            await notifyTelegram(uid, `🔇 Hai ricevuto una limitazione temporanea di ${hours}h sull’utilizzo del bot.`);
             return res.status(200).json({ ok: true });
         }
         return res.status(400).json({ error: 'Azione utente non valida.' });

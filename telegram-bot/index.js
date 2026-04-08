@@ -297,6 +297,7 @@ function resetSupportContextForUser(uid) {
   if (uid == null) return;
   pendingSupportOpen.delete(uid);
   adminActiveSupportTicket.delete(uid);
+  pendingManualReportTarget.delete(uid);
 }
 
 function isPublicCallbackData(d) {
@@ -859,6 +860,7 @@ function supportAdminPanelKb(openGlobalReportsCount = null) {
       : '🚩 Segnalazioni chat globale';
   return Markup.inlineKeyboard([
     [Markup.button.callback(globalLabel, 'support_admin_global_reports')],
+    [Markup.button.callback('🗂 Ticket chiusi', 'support_admin_closed')],
     [Markup.button.callback('🚫 Utenti bannati', 'support_admin_banned_users')],
     [Markup.button.callback('📬 Segnalazioni attive', 'support_admin_open')],
     [Markup.button.callback('👤 Solo miei assegnati', 'support_admin_mine')],
@@ -877,6 +879,7 @@ function supportTicketListKb(rows) {
   const buttons = (rows || []).slice(0, 20).map((r) => [
     Markup.button.callback(`🎫 #${r.id} · utente ${r.telegram_user_id} · ${r.status}`, `support_admin_ticket:${r.id}`),
   ]);
+  buttons.push([Markup.button.callback('🗂 Ticket chiusi', 'support_admin_closed')]);
   buttons.push([Markup.button.callback('« Pannello admin', 'support_admin_home')]);
   return Markup.inlineKeyboard(buttons);
 }
@@ -896,6 +899,7 @@ function supportTicketAdminKb(ticketId) {
       Markup.button.callback('✅ Rimuovi ban', `support_admin_unban:${ticketId}`),
     ],
     [Markup.button.callback('« Segnalazioni attive', 'support_admin_open')],
+    [Markup.button.callback('🏠 Menu admin', 'support_admin_home')],
   ]);
 }
 
@@ -907,18 +911,33 @@ function globalReportListKb(rows) {
   return Markup.inlineKeyboard(buttons);
 }
 
-function globalReportAdminKb(report) {
+function globalReportAdminKb(report, opts = {}) {
   const id = Number(report?.id);
   const hasTarget = report?.reported_target_telegram_user_id != null;
+  const isMuted = opts.isMuted === true;
   const rows = [
     [Markup.button.callback('📌 Prendi in carico', `support_admin_greport_take:${id}`)],
     [Markup.button.callback('✅ Archivia', `support_admin_greport_archive:${id}`)],
   ];
   if (hasTarget) {
-    rows.push([
-      Markup.button.callback('🔇 Mute 24h', `support_admin_greport_mute24:${id}`),
-      Markup.button.callback('🚫 Ban utente', `support_admin_greport_ban:${id}`),
-    ]);
+    if (!isMuted) {
+      rows.push([
+        Markup.button.callback('🔇 Mute 2h', `support_admin_greport_muteh:${id}:2`),
+        Markup.button.callback('🔇 4h', `support_admin_greport_muteh:${id}:4`),
+        Markup.button.callback('🔇 8h', `support_admin_greport_muteh:${id}:8`),
+      ]);
+      rows.push([
+        Markup.button.callback('🔇 16h', `support_admin_greport_muteh:${id}:16`),
+        Markup.button.callback('🔇 24h', `support_admin_greport_muteh:${id}:24`),
+        Markup.button.callback('🔇 48h', `support_admin_greport_muteh:${id}:48`),
+      ]);
+    } else {
+      rows.push([
+        Markup.button.callback('🔈 Unmute', `support_admin_greport_unmute:${id}`),
+        Markup.button.callback('🔇 Cambia durata', `support_admin_greport_remute:${id}`),
+      ]);
+    }
+    rows.push([Markup.button.callback('🚫 Ban utente', `support_admin_greport_ban:${id}`)]);
   }
   if (!hasTarget) {
     rows.push([Markup.button.callback('🎯 Imposta target manuale', `support_admin_greport_target:${id}`)]);
@@ -942,7 +961,17 @@ function bannedUsersListKb(rows) {
 function bannedUserAdminKb(telegramUserId) {
   return Markup.inlineKeyboard([
     [Markup.button.callback('✅ Rimuovi ban', `support_admin_unban_user:${telegramUserId}`)],
-    [Markup.button.callback('🔇 Mute 24h', `support_admin_mute_user24:${telegramUserId}`)],
+    [Markup.button.callback('🔈 Unmute', `support_admin_unmute_user:${telegramUserId}`)],
+    [
+      Markup.button.callback('🔇 2h', `support_admin_mute_userh:${telegramUserId}:2`),
+      Markup.button.callback('🔇 4h', `support_admin_mute_userh:${telegramUserId}:4`),
+      Markup.button.callback('🔇 8h', `support_admin_mute_userh:${telegramUserId}:8`),
+    ],
+    [
+      Markup.button.callback('🔇 16h', `support_admin_mute_userh:${telegramUserId}:16`),
+      Markup.button.callback('🔇 24h', `support_admin_mute_userh:${telegramUserId}:24`),
+      Markup.button.callback('🔇 48h', `support_admin_mute_userh:${telegramUserId}:48`),
+    ],
     [Markup.button.callback('🚫 Utenti bannati', 'support_admin_banned_users')],
     [Markup.button.callback('« Pannello admin', 'support_admin_home')],
   ]);
@@ -2353,12 +2382,15 @@ function setupBot(bot) {
       cbDataEarly === 'support_admin_global_reports' ||
       cbDataEarly === 'support_admin_banned_users' ||
       cbDataEarly === 'support_admin_csv' ||
-      /^support_admin_(ticket|take|reply|wait|close|ban|unban|greport|greport_take|greport_archive|greport_mute24|greport_ban|greport_target|banned|unban_user|mute_user24):\d+$/.test(
+      /^support_admin_(ticket|take|reply|wait|close|ban|unban|greport|greport_take|greport_archive|greport_ban|greport_target|greport_unmute|greport_remute|banned|unban_user|unmute_user):\d+$/.test(
         cbDataEarly
       ) ||
+      /^support_admin_greport_muteh:\d+:(2|4|8|16|24|48)$/.test(cbDataEarly) ||
+      /^support_admin_mute_userh:\d+:(2|4|8|16|24|48)$/.test(cbDataEarly) ||
       cbDataEarly === 'support_admin_global_reports_open' ||
       cbDataEarly === 'support_admin_global_reports_resolved' ||
-      cbDataEarly === 'support_admin_global_reports_all'
+      cbDataEarly === 'support_admin_global_reports_all' ||
+      cbDataEarly === 'support_admin_closed'
     ) {
       if (cv.isBotOwnerTelegramUser(ctx.from?.id)) return next();
     }
@@ -3158,6 +3190,8 @@ function setupBot(bot) {
   bot.action('support_admin_home', async (ctx) => {
     safeAnswerCb(ctx);
     if (!(await isSupportAdmin(ctx))) return;
+    resetSupportContextForUser(ctx.from?.id);
+    await refreshPrivateReplyKeyboard(ctx);
     await sendSupportAdminPanel(ctx);
   });
 
@@ -3188,6 +3222,20 @@ function setupBot(bot) {
       return;
     }
     await ctx.reply('📬 <b>Segnalazioni attive</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows) });
+  });
+
+  bot.action('support_admin_closed', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const rows = await sb
+      .listActiveSupportTickets(80)
+      .then((all) => (all || []).filter((t) => String(t.status) === 'closed_pending_purge').slice(0, 30))
+      .catch(() => []);
+    if (!rows.length) {
+      await ctx.reply('📭 Nessun ticket chiuso in attesa purge.', { parse_mode: 'HTML', ...supportAdminPanelKb() });
+      return;
+    }
+    await ctx.reply('🗂 <b>Ticket chiusi</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows) });
   });
 
   bot.action('support_admin_mine', async (ctx) => {
@@ -3248,6 +3296,9 @@ function setupBot(bot) {
   bot.action(/^support_admin_greport:(\d+)$/, async (ctx) => {
     safeAnswerCb(ctx);
     if (!(await isSupportAdmin(ctx))) return;
+    pendingManualReportTarget.delete(ctx.from?.id);
+    adminActiveSupportTicket.delete(ctx.from?.id);
+    await refreshPrivateReplyKeyboard(ctx);
     const rid = Number(ctx.match[1]);
     const r = await sb.getGlobalChatReportById(rid).catch(() => null);
     if (!r) {
@@ -3257,14 +3308,20 @@ function setupBot(bot) {
     const targetLine = r.reported_target_telegram_user_id
       ? `<code>${r.reported_target_telegram_user_id}</code>${r.reported_target_display_name ? ` (${fmt.escapeHtml(r.reported_target_display_name)})` : ''}`
       : '<i>non identificato automaticamente</i>';
+    const restr =
+      r.reported_target_telegram_user_id != null
+        ? await sb.getTelegramUserRestriction(Number(r.reported_target_telegram_user_id)).catch(() => null)
+        : null;
+    const isMuted = Boolean(restr?.muted_until && new Date(restr.muted_until).getTime() > Date.now());
     const body =
       `🚩 <b>Segnalazione #${r.id}</b>\n` +
       `Stato: <b>${fmt.escapeHtml(r.status)}</b>\n` +
       `Segnalante: <code>${r.reporter_telegram_user_id}</code> · ${fmt.escapeHtml(r.reporter_display_name || 'Utente')}\n` +
       `Target: ${targetLine}\n` +
       `Motivo: ${fmt.escapeHtml(r.reason || '')}\n\n` +
-      `<b>Messaggio segnalato</b>:\n${fmt.escapeHtml(String(r.reported_message_text || '').slice(0, 1300))}`;
-    await ctx.reply(body, { parse_mode: 'HTML', ...globalReportAdminKb(r) });
+      `<b>Messaggio segnalato</b>:\n${fmt.escapeHtml(String(r.reported_message_text || '').slice(0, 1300))}` +
+      (isMuted ? `\n\n🔇 <i>Target attualmente in mute fino a ${fmt.escapeHtml(new Date(restr.muted_until).toLocaleString('it-IT', { timeZone: 'UTC' }))} UTC.</i>` : '');
+    await ctx.reply(body, { parse_mode: 'HTML', ...globalReportAdminKb(r, { isMuted }) });
   });
 
   bot.action(/^support_admin_greport_take:(\d+)$/, async (ctx) => {
@@ -3287,25 +3344,87 @@ function setupBot(bot) {
     safeAnswerCb(ctx);
     if (!(await isSupportAdmin(ctx))) return;
     const rid = Number(ctx.match[1]);
+    const hours = 24;
     const r = await sb.getGlobalChatReportById(rid).catch(() => null);
     const targetId = r?.reported_target_telegram_user_id != null ? Number(r.reported_target_telegram_user_id) : null;
     if (!targetId) {
       await ctx.reply('Target non identificato: impossibile applicare mute automatico.');
       return;
     }
-    const untilIso = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
-    await sb.setTelegramUserMutedUntil(targetId, untilIso, `Limitazione da segnalazione chat globale #${rid}`, ctx.from?.id).catch(() => {});
-    await sb.setGlobalChatReportStatus(rid, 'resolved', ctx.from?.id, 'Mute 24h applicato', 'mute24h').catch(() => {});
+    const untilIso = new Date(Date.now() + hours * 3600 * 1000).toISOString();
+    await sb.setTelegramUserMutedUntil(targetId, untilIso, `Limitazione ${hours}h da segnalazione chat globale #${rid}`, ctx.from?.id).catch(() => {});
+    await sb.setGlobalChatReportStatus(rid, 'resolved', ctx.from?.id, `Mute ${hours}h applicato`, `mute${hours}h`).catch(() => {});
     await ctx.telegram
       .sendMessage(
         targetId,
-        `🔇 Hai ricevuto una limitazione temporanea di 24h per violazione regole in chat globale.\nMotivo: ${fmt.escapeHtml(
+        `🔇 Hai ricevuto una limitazione temporanea di ${hours}h per violazione regole in chat globale.\nMotivo: ${fmt.escapeHtml(
           r?.reason || ''
         )}\nSe ritieni ci sia un errore, contatta un amministratore.`,
         { parse_mode: 'HTML' }
       )
       .catch(() => {});
-    await ctx.reply(`🔇 Mute 24h applicato a <code>${targetId}</code>.`, { parse_mode: 'HTML' });
+    await ctx.reply(`🔇 Mute ${hours}h applicato a <code>${targetId}</code>.`, { parse_mode: 'HTML' });
+  });
+
+  bot.action(/^support_admin_greport_muteh:(\d+):(2|4|8|16|24|48)$/, async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const rid = Number(ctx.match[1]);
+    const hours = Number(ctx.match[2]);
+    const r = await sb.getGlobalChatReportById(rid).catch(() => null);
+    const targetId = r?.reported_target_telegram_user_id != null ? Number(r.reported_target_telegram_user_id) : null;
+    if (!targetId) {
+      await ctx.reply('Target non identificato: impossibile applicare mute automatico.');
+      return;
+    }
+    const untilIso = new Date(Date.now() + hours * 3600 * 1000).toISOString();
+    await sb.setTelegramUserMutedUntil(targetId, untilIso, `Limitazione ${hours}h da segnalazione chat globale #${rid}`, ctx.from?.id).catch(() => {});
+    await sb.setGlobalChatReportStatus(rid, 'resolved', ctx.from?.id, `Mute ${hours}h applicato`, `mute${hours}h`).catch(() => {});
+    await ctx.telegram
+      .sendMessage(
+        targetId,
+        `🔇 Hai ricevuto una limitazione temporanea di ${hours}h per violazione regole in chat globale.\nMotivo: ${fmt.escapeHtml(
+          r?.reason || ''
+        )}\nSe ritieni ci sia un errore, contatta un amministratore.`,
+        { parse_mode: 'HTML' }
+      )
+      .catch(() => {});
+    await ctx.reply(`🔇 Mute ${hours}h applicato a <code>${targetId}</code>.`, { parse_mode: 'HTML' });
+  });
+
+  bot.action(/^support_admin_greport_unmute:(\d+)$/, async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const rid = Number(ctx.match[1]);
+    const r = await sb.getGlobalChatReportById(rid).catch(() => null);
+    const targetId = r?.reported_target_telegram_user_id != null ? Number(r.reported_target_telegram_user_id) : null;
+    if (!targetId) {
+      await ctx.reply('Target non identificato.');
+      return;
+    }
+    await sb.setTelegramUserMutedUntil(targetId, null, `Unmute da segnalazione chat globale #${rid}`, ctx.from?.id).catch(() => {});
+    await sb.setGlobalChatReportStatus(rid, 'resolved', ctx.from?.id, 'Unmute eseguito', 'unmute').catch(() => {});
+    await ctx.telegram.sendMessage(targetId, '🔈 La tua limitazione mute è stata rimossa.').catch(() => {});
+    await ctx.reply(`🔈 Unmute eseguito per <code>${targetId}</code>.`, { parse_mode: 'HTML' });
+  });
+
+  bot.action(/^support_admin_greport_remute:(\d+)$/, async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const rid = Number(ctx.match[1]);
+    const kb = Markup.inlineKeyboard([
+      [
+        Markup.button.callback('2h', `support_admin_greport_muteh:${rid}:2`),
+        Markup.button.callback('4h', `support_admin_greport_muteh:${rid}:4`),
+        Markup.button.callback('8h', `support_admin_greport_muteh:${rid}:8`),
+      ],
+      [
+        Markup.button.callback('16h', `support_admin_greport_muteh:${rid}:16`),
+        Markup.button.callback('24h', `support_admin_greport_muteh:${rid}:24`),
+        Markup.button.callback('48h', `support_admin_greport_muteh:${rid}:48`),
+      ],
+    ]);
+    await ctx.reply('⏱ Seleziona nuova durata mute:', kb);
   });
 
   bot.action(/^support_admin_greport_ban:(\d+)$/, async (ctx) => {
@@ -3389,21 +3508,49 @@ function setupBot(bot) {
     safeAnswerCb(ctx);
     if (!(await isSupportAdmin(ctx))) return;
     const uid = Number(ctx.match[1]);
-    const untilIso = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
-    await sb.setTelegramUserMutedUntil(uid, untilIso, 'Limitazione 24h da sezione utenti bannati', ctx.from?.id).catch(() => {});
+    const hours = 24;
+    const untilIso = new Date(Date.now() + hours * 3600 * 1000).toISOString();
+    await sb.setTelegramUserMutedUntil(uid, untilIso, `Limitazione ${hours}h da sezione utenti bannati`, ctx.from?.id).catch(() => {});
     await ctx.telegram
       .sendMessage(
         uid,
-        '🔇 Hai ricevuto una limitazione temporanea di 24h sull’utilizzo del bot. Contatta un amministratore per chiarimenti.',
+        `🔇 Hai ricevuto una limitazione temporanea di ${hours}h sull’utilizzo del bot. Contatta un amministratore per chiarimenti.`,
         { parse_mode: 'HTML' }
       )
       .catch(() => {});
-    await ctx.reply(`🔇 Mute 24h applicato a <code>${uid}</code>.`, { parse_mode: 'HTML' });
+    await ctx.reply(`🔇 Mute ${hours}h applicato a <code>${uid}</code>.`, { parse_mode: 'HTML' });
+  });
+
+  bot.action(/^support_admin_mute_userh:(\d+):(2|4|8|16|24|48)$/, async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const uid = Number(ctx.match[1]);
+    const hours = Number(ctx.match[2]);
+    const untilIso = new Date(Date.now() + hours * 3600 * 1000).toISOString();
+    await sb.setTelegramUserMutedUntil(uid, untilIso, `Limitazione ${hours}h da sezione utenti bannati`, ctx.from?.id).catch(() => {});
+    await ctx.telegram
+      .sendMessage(
+        uid,
+        `🔇 Hai ricevuto una limitazione temporanea di ${hours}h sull’utilizzo del bot. Contatta un amministratore per chiarimenti.`,
+        { parse_mode: 'HTML' }
+      )
+      .catch(() => {});
+    await ctx.reply(`🔇 Mute ${hours}h applicato a <code>${uid}</code>.`, { parse_mode: 'HTML' });
+  });
+
+  bot.action(/^support_admin_unmute_user:(\d+)$/, async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!(await isSupportAdmin(ctx))) return;
+    const uid = Number(ctx.match[1]);
+    await sb.setTelegramUserMutedUntil(uid, null, 'Unmute da sezione utenti bannati', ctx.from?.id).catch(() => {});
+    await ctx.telegram.sendMessage(uid, '🔈 La tua limitazione mute è stata rimossa.').catch(() => {});
+    await ctx.reply(`🔈 Unmute eseguito per <code>${uid}</code>.`, { parse_mode: 'HTML' });
   });
 
   bot.action(/^support_admin_ticket:(\d+)$/, async (ctx) => {
     safeAnswerCb(ctx);
     if (!(await isSupportAdmin(ctx))) return;
+    pendingManualReportTarget.delete(ctx.from?.id);
     const tid = Number(ctx.match[1]);
     const t = await sb.getTicketById(tid).catch(() => null);
     if (!t) {
@@ -3431,6 +3578,10 @@ function setupBot(bot) {
         await ctx.telegram.sendMessage(ctx.chat.id, `${who} · ticket #${t.id}\n${txt}`).catch(() => {});
       }
     }
+    await ctx.reply('Azioni ticket:', {
+      ...supportTicketAdminKb(t.id),
+      parse_mode: 'HTML',
+    });
   });
 
   bot.action(/^support_admin_take:(\d+)$/, async (ctx) => {
