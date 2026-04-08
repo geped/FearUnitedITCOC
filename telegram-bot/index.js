@@ -1215,7 +1215,13 @@ async function buildWebAppHandoffUrl(ctx, extraParams = {}) {
   return `${base}/?${q.toString()}`;
 }
 
-async function mainMenuKeyboard(ctx, user, hasClanTag) {
+function shortClanButtonLabel(clanName, clanTag) {
+  const base = String(clanName || clanTag || 'Il tuo clan').trim();
+  const short = base.length > 22 ? `${base.slice(0, 22)}…` : base;
+  return `🏠 ${short}`;
+}
+
+async function mainMenuKeyboard(ctx, user, hasClanTag, clanTag, clanName) {
   const rows = [];
   const leader = user ? isClanLeader(user) : false;
   const grp = isLinkedChatContext(ctx);
@@ -1232,13 +1238,17 @@ async function mainMenuKeyboard(ctx, user, hasClanTag) {
     showClanRows = g.allowClanMenus;
   }
   if (showClanRows) {
-    rows.push(
-      [Markup.button.callback('👥 Membri', 'mb0'), Markup.button.callback('🏰 Info clan', 'info')],
-      [Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')]
-    );
-    rows.push([Markup.button.callback('🎁 Bonus', 'bonus:0')]);
-    if (user?.user_metadata?.coc_tag) {
-      rows.push([Markup.button.callback('👤 Il mio profilo', 'me')]);
+    if (!grp) {
+      rows.push([Markup.button.callback(shortClanButtonLabel(clanName, clanTag), 'clan_home')]);
+    } else {
+      rows.push(
+        [Markup.button.callback('👥 Membri', 'mb0'), Markup.button.callback('🏰 Info clan', 'info')],
+        [Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')]
+      );
+      rows.push([Markup.button.callback('🎁 Bonus', 'bonus:0')]);
+      if (user?.user_metadata?.coc_tag) {
+        rows.push([Markup.button.callback('👤 Il mio profilo', 'me')]);
+      }
     }
   } else if (!hasClanTag) {
     rows.push([Markup.button.callback('🏰 Come impostare il clan', 'setclan_help')]);
@@ -1252,39 +1262,68 @@ async function mainMenuKeyboard(ctx, user, hasClanTag) {
   if (!grp) {
     rows.push([Markup.button.callback('📩 Contatta amministratore', 'support_open')]);
   }
-  if (!grp && user) {
-    try {
-      const webPairs = [
-        ['🏆 CWL live', 'cwl_warlog', '📜 Registro guerre', 'warlog'],
-        ['🎁 Bonus', 'bonus', '🏰 Info / Membri', 'members'],
-        ['👤 Profilo', 'profilo', '🔍 Cerca', 'cerca'],
-      ];
-      for (const [la, ta, lb, tb] of webPairs) {
-        const ua = await buildWebAppHandoffUrl(ctx, { open_tab: ta });
-        const ub = await buildWebAppHandoffUrl(ctx, { open_tab: tb });
-        if (
-          ua &&
-          ub &&
-          String(ua).startsWith('https://') &&
-          String(ub).startsWith('https://')
-        ) {
-          rows.push([
-            Markup.button.webApp(`${la} (web)`, ua),
-            Markup.button.webApp(`${lb} (web)`, ub),
-          ]);
-        }
-      }
-      const wr = await buildWebAppHandoffUrl(ctx, { open_tab: 'rankings' });
-      if (wr && String(wr).startsWith('https://')) {
-        rows.push([Markup.button.webApp('📊 Classifica (web)', wr)]);
-      }
-    } catch (_) {}
-  }
   rows.push(
     [Markup.button.callback('⚙️ Account', 'acct'), Markup.button.callback('❓ Aiuto', 'helpbtn')],
     [Markup.button.callback('🚪 Logout', 'auth_logout')]
   );
   return Markup.inlineKeyboard(rows);
+}
+
+async function renderClanHubMenu(ctx) {
+  const tag = await resolveEffectiveClanTag(ctx);
+  if (!tag) {
+    await ctx.answerCbQuery('Nessun clan disponibile').catch(() => {});
+    return sendMainMenu(ctx);
+  }
+  const info = await resolveEffectiveClanContext(ctx);
+  const label = shortClanButtonLabel(info?.clanName, info?.clanTag || tag).replace(/^🏠\s*/, '');
+  const body =
+    `${fmt.DIV}\n🏠 <b>${fmt.escapeHtml(label)}</b>\n${fmt.DIV}\n\n` +
+    `Sezione clan e strumenti dedicati.`;
+  const rows = [
+    [Markup.button.callback('👥 Membri', 'mb0'), Markup.button.callback('🏰 Info clan', 'info')],
+    [Markup.button.callback('👤 Il mio profilo', 'me'), Markup.button.callback('🎁 Bonus', 'bonus:0')],
+    [Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')],
+    [Markup.button.callback('📱 Visualizza come mini app', 'clan_webapps')],
+    [Markup.button.callback('« Menù', 'menu')],
+  ];
+  try {
+    await ctx.editMessageText(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) });
+  } catch (_) {
+    await ctx.reply(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) });
+  }
+}
+
+async function renderClanWebAppsMenu(ctx) {
+  const body =
+    `${fmt.DIV}\n📱 <b>Mini App CoCBoard</b>\n${fmt.DIV}\n\n` +
+    `Apri le sezioni web del clan direttamente da Telegram.`;
+  const rows = [];
+  const webPairs = [
+    ['🏆 CWL live (web)', 'cwl_warlog', '📜 Registro guerre (web)', 'warlog'],
+    ['🎁 Bonus (web)', 'bonus', '🏰 Info / Membri (web)', 'members'],
+    ['👤 Profilo (web)', 'profilo', '🔍 Cerca (web)', 'cerca'],
+    ['📊 Classifica (web)', 'rankings', null, null],
+  ];
+  try {
+    for (const [la, ta, lb, tb] of webPairs) {
+      const ua = await buildWebAppHandoffUrl(ctx, { open_tab: ta });
+      if (!ua || !String(ua).startsWith('https://')) continue;
+      if (!lb || !tb) {
+        rows.push([Markup.button.webApp(la, ua)]);
+        continue;
+      }
+      const ub = await buildWebAppHandoffUrl(ctx, { open_tab: tb });
+      if (ub && String(ub).startsWith('https://')) rows.push([Markup.button.webApp(la, ua), Markup.button.webApp(lb, ub)]);
+      else rows.push([Markup.button.webApp(la, ua)]);
+    }
+  } catch (_) {}
+  rows.push([Markup.button.callback('« Nome clan', 'clan_home'), Markup.button.callback('« Menù', 'menu')]);
+  try {
+    await ctx.editMessageText(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) });
+  } catch (_) {
+    await ctx.reply(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) });
+  }
 }
 
 async function sendMainMenu(ctx) {
@@ -1305,7 +1344,7 @@ async function sendMainMenu(ctx) {
     chatHint: grp ? 'Sei in gruppo o canale.' : '',
     groupMenuBanner: '',
   });
-  const kb = await mainMenuKeyboard(ctx, user, !!clanTag);
+  const kb = await mainMenuKeyboard(ctx, user, !!clanTag, clanTag, clanName);
   if (ctx.callbackQuery) {
     try {
       await ctx.editMessageText(intro, { parse_mode: 'HTML', ...kb });
@@ -2012,6 +2051,8 @@ function setupBot(bot) {
       pendingSearch.delete(ctx.from.id);
       pendingLinkWizard.delete(ctx.from.id);
       pendingCommunity.delete(ctx.from.id);
+      pendingSupportOpen.delete(ctx.from.id);
+      adminActiveSupportTicket.delete(ctx.from.id);
       // Obbligatorio qui: questo ramo faceva next() prima del blocco leaveGlobalIfActive sotto.
       if (ctx.chat?.type === 'private') {
         await leaveGlobalIfActive(ctx, { notify: true });
@@ -2210,6 +2251,13 @@ function setupBot(bot) {
   async function handleCocboardCommand(ctx) {
     if (!ctx.from?.id) return;
     try {
+      // Hard reset stati transient all'avvio menù, evita blocchi su primo ingresso.
+      pendingAuth.delete(ctx.from.id);
+      pendingSearch.delete(ctx.from.id);
+      pendingLinkWizard.delete(ctx.from.id);
+      pendingCommunity.delete(ctx.from.id);
+      pendingSupportOpen.delete(ctx.from.id);
+      adminActiveSupportTicket.delete(ctx.from.id);
       const sess = await tauth.getValidSession(ctx.from.id);
       if (sess) {
         ctx.cocboardUser = sess.user;
@@ -2301,6 +2349,7 @@ function setupBot(bot) {
   };
 
   bot.start(handleCocboardCommand);
+  bot.command('start', handleCocboardCommand);
   bot.command('cocboard', handleCocboardCommand);
 
   bot.command('help', async (ctx) => {
@@ -3089,6 +3138,16 @@ function setupBot(bot) {
       if (linked?.clan_tag) return sendLinkedGroupGuestMenu(ctx, linked.clan_tag);
     }
     return sendGuestMenu(ctx);
+  });
+
+  bot.action('clan_home', async (ctx) => {
+    safeAnswerCb(ctx);
+    await renderClanHubMenu(ctx);
+  });
+
+  bot.action('clan_webapps', async (ctx) => {
+    safeAnswerCb(ctx);
+    await renderClanWebAppsMenu(ctx);
   });
 
   bot.action('setclan_help', async (ctx) => {
