@@ -1046,6 +1046,9 @@ async function handleSupportInboundMessage(ctx) {
   const uid = ctx.from.id;
   const txt = (ctx.message.text || '').trim();
   if (txt.startsWith('/')) return false;
+  // Se l'utente è dentro la chat globale, la priorità è sempre il relay community.
+  const inGlobalChat = await sbcCommunity.isActiveInGlobalChat(uid).catch(() => false);
+  if (inGlobalChat) return false;
   // Non intercettare se l'utente è in altri wizard attivi.
   if (pendingAuth.has(uid) || pendingSearch.has(uid) || pendingLinkWizard.has(uid) || pendingCommunity.has(uid)) return false;
 
@@ -2153,7 +2156,6 @@ function setupBot(bot) {
         .catch(() => {});
       return;
     }
-    if (await handleSupportInboundMessage(ctx)) return;
     const handledComm = await comm.tryHandleEarlyMessage(ctx, pendingCommunity, {
       isLinkedChatContext,
       sendMainMenu,
@@ -2162,6 +2164,7 @@ function setupBot(bot) {
       tauth,
     });
     if (handledComm) return;
+    if (await handleSupportInboundMessage(ctx)) return;
     if (ctx.chat?.type === 'private' && ctx.message?.text) {
       const raw = ctx.message.text.trim();
       if (raw.startsWith('/')) {
