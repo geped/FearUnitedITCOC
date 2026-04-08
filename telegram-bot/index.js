@@ -1248,18 +1248,7 @@ async function mainMenuKeyboard(ctx, user, hasClanTag, clanTag, clanName) {
     showClanRows = g.allowClanMenus;
   }
   if (showClanRows) {
-    if (!grp) {
-      rows.push([Markup.button.callback(shortClanButtonLabel(clanName, clanTag), 'clan_home')]);
-    } else {
-      rows.push(
-        [Markup.button.callback('👥 Membri', 'mb0'), Markup.button.callback('🏰 Info clan', 'info')],
-        [Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')]
-      );
-      rows.push([Markup.button.callback('🎁 Bonus', 'bonus:0')]);
-      if (user?.user_metadata?.coc_tag) {
-        rows.push([Markup.button.callback('👤 Il mio profilo', 'me')]);
-      }
-    }
+    rows.push([Markup.button.callback(shortClanButtonLabel(clanName, clanTag), 'clan_home')]);
   } else if (!hasClanTag) {
     rows.push([Markup.button.callback('🏰 Come impostare il clan', 'setclan_help')]);
   }
