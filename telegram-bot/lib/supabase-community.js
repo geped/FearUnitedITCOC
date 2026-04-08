@@ -141,6 +141,22 @@ async function getGlobalSubscriber(telegramUserId) {
   return data;
 }
 
+async function getGlobalSubscriberByDisplayTag(displayTagRaw) {
+  const c = client();
+  if (!c) return null;
+  const tag = String(displayTagRaw || '').trim().toUpperCase();
+  if (!/^#[0-9A-Z]{9}$/.test(tag)) return null;
+  const { data, error } = await c
+    .from('telegram_global_chat_subscribers')
+    .select('*')
+    .eq('display_tag', tag)
+    .eq('active', true)
+    .order('updated_at', { ascending: false })
+    .limit(1);
+  if (error) return null;
+  return Array.isArray(data) && data.length ? data[0] : null;
+}
+
 async function isActiveInGlobalChat(telegramUserId) {
   const row = await getGlobalSubscriber(telegramUserId);
   if (!row || !row.active) return false;
@@ -460,6 +476,7 @@ module.exports = {
   consumeGlobalEphemeralDeliveriesBeforeEpoch,
   consumeGlobalEphemeralDeliveriesForChat,
   getGlobalSubscriber,
+  getGlobalSubscriberByDisplayTag,
   isActiveInGlobalChat,
   insertGlobalMessage,
   listGlobalBroadcastTargets,

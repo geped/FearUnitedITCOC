@@ -548,15 +548,122 @@ async function getTelegramUserRestriction(telegramUserId) {
 async function setTelegramUserBanned(telegramUserId, banned, reason, updatedBy) {
   const client = sb();
   if (!client) return;
+  const prev = await getTelegramUserRestriction(telegramUserId).catch(() => null);
   const row = {
     telegram_user_id: Number(telegramUserId),
     banned: banned === true,
-    muted_until: null,
+    muted_until: prev?.muted_until || null,
     reason: reason ? String(reason).slice(0, 240) : null,
     updated_by: updatedBy != null ? Number(updatedBy) : null,
     updated_at: new Date().toISOString(),
   };
   const { error } = await client.from('telegram_user_restrictions').upsert(row, { onConflict: 'telegram_user_id' });
+  if (error) throw new Error(error.message);
+}
+
+async function setTelegramUserMutedUntil(telegramUserId, mutedUntilIso, reason, updatedBy) {
+  const client = sb();
+  if (!client) return;
+  const prev = await getTelegramUserRestriction(telegramUserId).catch(() => null);
+  const row = {
+    telegram_user_id: Number(telegramUserId),
+    banned: prev?.banned === true,
+    muted_until: mutedUntilIso ? new Date(mutedUntilIso).toISOString() : null,
+    reason: reason ? String(reason).slice(0, 240) : prev?.reason || null,
+    updated_by: updatedBy != null ? Number(updatedBy) : null,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await client.from('telegram_user_restrictions').upsert(row, { onConflict: 'telegram_user_id' });
+  if (error) throw new Error(error.message);
+}
+
+async function listBannedTelegramUsers(limit = 50) {
+  const client = sb();
+  if (!client) return [];
+  const { data, error } = await client
+    .from('telegram_user_restrictions')
+    .select('*')
+    .eq('banned', true)
+    .order('updated_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+async function insertGlobalChatReport(input) {
+  const client = sb();
+  if (!client) throw new Error('Supabase non configurato.');
+  const row = {
+    reporter_telegram_user_id: Number(input.reporterTelegramUserId),
+    reporter_display_name: String(input.reporterDisplayName || 'Utente').slice(0, 160),
+    reporter_display_tag: input.reporterDisplayTag ? String(input.reporterDisplayTag).slice(0, 32) : null,
+    reason: String(input.reason || '').slice(0, 400),
+    reported_message_text: String(input.reportedMessageText || '').slice(0, 4000),
+    reported_target_telegram_user_id:
+      input.reportedTargetTelegramUserId != null ? Number(input.reportedTargetTelegramUserId) : null,
+    reported_target_display_name: input.reportedTargetDisplayName
+      ? String(input.reportedTargetDisplayName).slice(0, 160)
+      : null,
+    status: 'open',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  const { data, error } = await client.from('telegram_global_reports').insert(row).select('*').single();
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function listGlobalChatReports(statuses = ['open', 'in_review'], limit = 30) {
+  const client = sb();
+  if (!client) return [];
+  const q = client
+    .from('telegram_global_reports')
+    .select('*')
+    .in('status', statuses)
+    .order('updated_at', { ascending: false })
+    .limit(limit);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return data || [];
+}
+
+async function getGlobalChatReportById(reportId) {
+  const client = sb();
+  if (!client) return null;
+  const { data, error } = await client
+    .from('telegram_global_reports')
+    .select('*')
+    .eq('id', Number(reportId))
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data || null;
+}
+
+async function setGlobalChatReportStatus(reportId, status, adminTelegramUserId, resolutionNote, actionType) {
+  const client = sb();
+  if (!client) return;
+  const patch = {
+    status: String(status || 'archived').slice(0, 32),
+    updated_at: new Date().toISOString(),
+    reviewed_by_telegram_user_id: adminTelegramUserId != null ? Number(adminTelegramUserId) : null,
+    reviewed_at: new Date().toISOString(),
+    resolution_note: resolutionNote ? String(resolutionNote).slice(0, 500) : null,
+    action_taken: actionType ? String(actionType).slice(0, 64) : null,
+  };
+  const { error } = await client.from('telegram_global_reports').update(patch).eq('id', Number(reportId));
+  if (error) throw new Error(error.message);
+}
+
+async function setGlobalReportTargetTelegramUser(reportId, targetTelegramUserId, adminTelegramUserId) {
+  const client = sb();
+  if (!client) return;
+  const patch = {
+    reported_target_telegram_user_id: Number(targetTelegramUserId),
+    reviewed_by_telegram_user_id: adminTelegramUserId != null ? Number(adminTelegramUserId) : null,
+    reviewed_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await client.from('telegram_global_reports').update(patch).eq('id', Number(reportId));
   if (error) throw new Error(error.message);
 }
 
@@ -927,5 +1034,12 @@ module.exports = {
   purgeExpiredSupportTickets,
   getTelegramUserRestriction,
   setTelegramUserBanned,
+  setTelegramUserMutedUntil,
+  listBannedTelegramUsers,
+  insertGlobalChatReport,
+  listGlobalChatReports,
+  getGlobalChatReportById,
+  setGlobalChatReportStatus,
+  setGlobalReportTargetTelegramUser,
   getUsageDailyStats,
 };

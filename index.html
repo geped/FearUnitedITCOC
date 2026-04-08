@@ -151,6 +151,10 @@
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 13.17 10.33 12 8 12zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C23 13.17 18.33 12 16 12z"/></svg>
                 Gestione Utenti
             </button>
+            <button class="tab-btn admin-only" data-tab="botadmin" style="display:none" onclick="closeNav()">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 2a2 2 0 0 1 2 2v1.07a7 7 0 0 1 3.93 3.93H19a2 2 0 1 1 0 4h-1.07a7 7 0 0 1-3.93 3.93V20a2 2 0 1 1-4 0v-1.07a7 7 0 0 1-3.93-3.93H5a2 2 0 1 1 0-4h1.07A7 7 0 0 1 10 5.07V4a2 2 0 0 1 2-2zm0 6a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+                CoCBoardBot
+            </button>
         </nav>
 
         <div class="sidebar-user">
@@ -468,6 +472,64 @@
                 </div>
             </section>
 
+            <!-- ── TAB: ADMIN BOT ──────────────────────────────── -->
+            <section id="tab-botadmin" class="tab-content" style="display:none">
+                <div class="page-header">
+                    <div>
+                        <h2>🤖 CoCBoardBot</h2>
+                        <p class="page-sub">Controllo completo moderazione e supporto bot</p>
+                    </div>
+                    <button id="refresh-botadmin" class="btn-secondary btn-sm">🔄 Aggiorna</button>
+                </div>
+                <div id="botadmin-msg" class="admin-msg-box" style="display:none"></div>
+
+                <div class="subtab-bar">
+                    <button class="subtab-btn active" data-botadmin-tab="dashboard" onclick="switchBotAdminTab('dashboard', this)">📊 Dashboard</button>
+                    <button class="subtab-btn" data-botadmin-tab="tickets" onclick="switchBotAdminTab('tickets', this)">🎫 Ticket supporto</button>
+                    <button class="subtab-btn" data-botadmin-tab="reports" onclick="switchBotAdminTab('reports', this)">🚩 Segnalazioni globali</button>
+                    <button class="subtab-btn" data-botadmin-tab="banned" onclick="switchBotAdminTab('banned', this)">🚫 Utenti bannati</button>
+                </div>
+
+                <div id="botadmin-tab-dashboard">
+                    <div id="botadmin-dashboard" class="card">
+                        <p class="wl-loading">Caricamento dashboard bot…</p>
+                    </div>
+                </div>
+
+                <div id="botadmin-tab-tickets" style="display:none">
+                    <div class="card" style="margin-bottom:1rem">
+                        <div class="toolbar">
+                            <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                                <button class="btn-secondary btn-sm" onclick="loadBotTickets('open')">📬 Attivi</button>
+                                <button class="btn-secondary btn-sm" onclick="loadBotTickets('mine')">👤 Assegnati a me</button>
+                            </div>
+                            <span id="botadmin-ticket-filter" class="toolbar-label">Filtro: attivi</span>
+                        </div>
+                    </div>
+                    <div id="botadmin-tickets" class="card"><p class="wl-loading">Caricamento ticket…</p></div>
+                    <div id="botadmin-ticket-detail" class="card" style="margin-top:1rem;display:none"></div>
+                </div>
+
+                <div id="botadmin-tab-reports" style="display:none">
+                    <div class="card" style="margin-bottom:1rem">
+                        <div class="toolbar">
+                            <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                                <button class="btn-secondary btn-sm" onclick="loadBotGlobalReports('open,in_review')">🟠 Aperte/In review</button>
+                                <button class="btn-secondary btn-sm" onclick="loadBotGlobalReports('resolved,archived')">✅ Risolte/Archiviate</button>
+                                <button class="btn-secondary btn-sm" onclick="loadBotGlobalReports('open,in_review,resolved,archived')">📚 Tutte</button>
+                            </div>
+                            <span id="botadmin-report-filter" class="toolbar-label">Filtro: aperte/in review</span>
+                        </div>
+                    </div>
+                    <div id="botadmin-reports" class="card"><p class="wl-loading">Caricamento segnalazioni…</p></div>
+                    <div id="botadmin-report-detail" class="card" style="margin-top:1rem;display:none"></div>
+                </div>
+
+                <div id="botadmin-tab-banned" style="display:none">
+                    <div id="botadmin-banned" class="card"><p class="wl-loading">Caricamento utenti bannati…</p></div>
+                </div>
+            </section>
+
             <!-- ── TAB: IL MIO PROFILO ──────────────────────────────────── -->
             <section id="tab-profilo" class="tab-content" style="display:none">
                 <div class="page-header">
@@ -676,6 +738,10 @@
         <button class="bnav-btn admin-only" data-tab="admin" style="display:none">
             <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 13.17 10.33 12 8 12zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C23 13.17 18.33 12 16 12z"/></svg>
             <span class="bnav-label">Utenti</span>
+        </button>
+        <button class="bnav-btn admin-only" data-tab="botadmin" style="display:none">
+            <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 2a2 2 0 0 1 2 2v1.07a7 7 0 0 1 3.93 3.93H19a2 2 0 1 1 0 4h-1.07a7 7 0 0 1-3.93 3.93V20a2 2 0 1 1-4 0v-1.07a7 7 0 0 1-3.93-3.93H5a2 2 0 1 1 0-4h1.07A7 7 0 0 1 10 5.07V4a2 2 0 0 1 2-2zm0 6a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
+            <span class="bnav-label">Bot</span>
         </button>
     </nav>
 

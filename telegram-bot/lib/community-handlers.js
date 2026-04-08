@@ -558,7 +558,11 @@ function formatGuidedPreviewHtml(st) {
   );
 }
 
-async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContext, sendMainMenu, sendGuestMenu, backMenuKb, tauth }) {
+async function tryHandleEarlyMessage(
+  ctx,
+  pendingCommunity,
+  { isLinkedChatContext, sendMainMenu, sendGuestMenu, backMenuKb, tauth, createGlobalReport }
+) {
   const rk = refreshPrivateReplyKeyboardRef;
   const uid = ctx.from?.id;
   if (uid == null || ctx.chat?.type !== 'private' || isLinkedChatContext(ctx)) return false;
@@ -648,21 +652,29 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
       const reporter = await sbc.getGlobalSubscriber(uid).catch(() => null);
       const reporterName = reporter?.display_name || guestTelegramLabel(ctx.from);
       const reportedText = String(replied.text || replied.caption || '').slice(0, 1200);
-      const owners = cv.parseOwnerTelegramIds();
-      if (owners.length) {
-        const reporterTagLine = reporter?.display_tag ? ` <code>${escapeHtml(reporter.display_tag)}</code>` : '';
-        const payload =
-          `🚩 <b>Segnalazione chat globale</b>\n` +
-          `Da: <b>${escapeHtml(reporterName)}</b>${reporterTagLine}\n` +
-          `Motivo: ${escapeHtml(reason)}\n\n` +
-          `<b>Messaggio segnalato</b>:\n${escapeHtml(reportedText)}`;
-        for (const oid of owners) {
-          try {
-            await ctx.telegram.sendMessage(Number(oid), payload, { parse_mode: 'HTML', disable_web_page_preview: true });
-          } catch (_) {}
+      try {
+        if (typeof createGlobalReport === 'function') {
+          await createGlobalReport({
+            reporterTelegramUserId: uid,
+            reporterDisplayName: reporterName,
+            reporterDisplayTag: reporter?.display_tag || null,
+            reason,
+            reportedMessageText: reportedText,
+          });
         }
+      } catch (e) {
+        await ctx
+          .reply(`❌ Impossibile registrare la segnalazione: ${escapeHtml(String(e.message || 'errore'))}`, {
+            parse_mode: 'HTML',
+          })
+          .catch(() => {});
+        await refreshPrivateReplyKeyboardRef(ctx);
+        return true;
       }
-      await ctx.reply('✅ Segnalazione inviata ai moderatori.', { parse_mode: 'HTML', ...globalHubKeyboard() });
+      await ctx.reply('✅ Segnalazione registrata in /adminbot > Segnalazioni chat globale.', {
+        parse_mode: 'HTML',
+        ...globalHubKeyboard(),
+      });
       await refreshPrivateReplyKeyboardRef(ctx);
       return true;
     }

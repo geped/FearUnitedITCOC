@@ -810,8 +810,8 @@ async function showApp(sessionUser) {
       : 'none';
   });
 
-  // Solo admin vede tab "Gestione Utenti"
-  document.querySelectorAll('[data-tab="admin"]').forEach(el => {
+  // Solo admin vede tab "Gestione Utenti" e "CoCBoardBot"
+  document.querySelectorAll('[data-tab="admin"], [data-tab="botadmin"]').forEach(el => {
     el.style.display = isAdmin
       ? (el.classList.contains('bnav-btn') ? 'flex' : 'inline-block')
       : 'none';
@@ -945,6 +945,7 @@ const TAB_TITLES = {
   profilo:   'Il mio Profilo',
   cerca:     'Cerca',
   admin:     'Gestione Utenti',
+  botadmin:  'CoCBoardBot',
 };
 
 function activateTab(tabId) {
@@ -959,6 +960,7 @@ function activateTab(tabId) {
   const titleEl = document.getElementById('topbar-title');
   if (titleEl) titleEl.textContent = TAB_TITLES[tabId] || tabId;
   if (tabId === 'admin') loadUsers();
+  if (tabId === 'botadmin') loadBotAdminDashboard();
   if (tabId === 'warlog') setTimeout(loadWarLog, 80);
   if (tabId === 'cwl') setTimeout(loadAssignBonus, 80);
   if (tabId === 'profilo') setTimeout(loadProfile, 80);
@@ -2933,6 +2935,361 @@ async function deleteUser(userId, username) {
 }
 
 document.getElementById('refresh-users').addEventListener('click', loadUsers);
+
+// ── ADMIN: COCBOARDBOT (parità con /adminbot) ───────────────────────────────
+
+let _botTicketMode = 'open';
+let _botReportFilter = 'open,in_review';
+
+function showBotAdminMsg(text, type = 'info') {
+  const el = document.getElementById('botadmin-msg');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'admin-msg-box ' + (type === 'error' ? 'admin-msg-err' : 'admin-msg-ok');
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 4500);
+}
+
+function switchBotAdminTab(tab, btn) {
+  document.querySelectorAll('[data-botadmin-tab]').forEach((b) => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  ['dashboard', 'tickets', 'reports', 'banned'].forEach((k) => {
+    const el = document.getElementById(`botadmin-tab-${k}`);
+    if (el) el.style.display = k === tab ? 'block' : 'none';
+  });
+  if (tab === 'dashboard') loadBotAdminDashboard();
+  if (tab === 'tickets') loadBotTickets(_botTicketMode);
+  if (tab === 'reports') loadBotGlobalReports(_botReportFilter);
+  if (tab === 'banned') loadBotBannedUsers();
+}
+
+async function botAdminFetch(view, extra = {}, method = 'GET', body = null) {
+  const qs = new URLSearchParams({ scope: 'bot', view, ...extra });
+  const opts = { method };
+  if (body != null) {
+    opts.headers = { 'Content-Type': 'application/json' };
+    opts.body = JSON.stringify(body);
+  }
+  return authFetch(`/api/admin/users?${qs.toString()}`, opts);
+}
+
+async function loadBotAdminDashboard() {
+  const box = document.getElementById('botadmin-dashboard');
+  if (!box) return;
+  box.innerHTML = '<p class="wl-loading">Caricamento dashboard bot…</p>';
+  const res = await botAdminFetch('dashboard');
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    box.innerHTML = `<p class="wl-err">❌ ${e.error || 'Errore caricamento dashboard bot.'}</p>`;
+    return;
+  }
+  const data = await res.json();
+  const stats = data.stats || {};
+  const reportOpen = Number(data.openGlobalReports || 0);
+  box.innerHTML = `
+    <h3 class="card-title">Stato bot</h3>
+    <div class="admin-form-grid">
+      <div class="admin-field"><label>Chat collegate</label><div><strong>${stats.linkedChats || 0}</strong></div></div>
+      <div class="admin-field"><label>Chat in pausa</label><div><strong>${stats.pausedChats || 0}</strong></div></div>
+      <div class="admin-field"><label>DAU</label><div><strong>${stats.dau || 0}</strong></div></div>
+      <div class="admin-field"><label>WAU</label><div><strong>${stats.wau || 0}</strong></div></div>
+      <div class="admin-field"><label>Segnalazioni globali aperte</label><div><strong>${reportOpen}</strong></div></div>
+      <div class="admin-field"><label>Utenti bannati</label><div><strong>${Number(data.bannedUsersCount || 0)}</strong></div></div>
+    </div>
+    <div class="admin-form-footer">
+      <button class="btn-secondary btn-sm" onclick="downloadBotMetricsCsv()">📄 Export CSV metriche</button>
+    </div>
+  `;
+}
+
+async function downloadBotMetricsCsv() {
+  const res = await botAdminFetch('csv');
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    showBotAdminMsg(`✗ ${e.error || 'Errore export CSV.'}`, 'error');
+    return;
+  }
+  const data = await res.json();
+  const csv = String(data.csv || '');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cocboard-metrics-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showBotAdminMsg('✅ CSV metriche scaricato.');
+}
+
+async function loadBotTickets(mode = 'open') {
+  _botTicketMode = mode;
+  const box = document.getElementById('botadmin-tickets');
+  const detail = document.getElementById('botadmin-ticket-detail');
+  const f = document.getElementById('botadmin-ticket-filter');
+  if (f) f.textContent = `Filtro: ${mode === 'mine' ? 'assegnati a me' : 'attivi'}`;
+  if (detail) detail.style.display = 'none';
+  if (!box) return;
+  box.innerHTML = '<p class="wl-loading">Caricamento ticket…</p>';
+  const res = await botAdminFetch('tickets', { mode });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    box.innerHTML = `<p class="wl-err">❌ ${e.error || 'Errore caricamento ticket.'}</p>`;
+    return;
+  }
+  const data = await res.json();
+  const rows = data.tickets || [];
+  if (!rows.length) {
+    box.innerHTML = '<p class="wl-loading">Nessun ticket trovato.</p>';
+    return;
+  }
+  box.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Utente</th><th>Stato</th><th>Aggiornato</th><th>Azioni</th></tr></thead>
+        <tbody>
+          ${rows.map((t) => `
+            <tr>
+              <td><code>#${t.id}</code></td>
+              <td><code>${t.telegram_user_id}</code></td>
+              <td>${t.status}</td>
+              <td>${new Date(t.updated_at).toLocaleString('it-IT')}</td>
+              <td>
+                <button class="btn-secondary btn-sm" onclick="openBotTicket(${t.id})">Apri</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function openBotTicket(ticketId) {
+  const detail = document.getElementById('botadmin-ticket-detail');
+  if (!detail) return;
+  detail.style.display = 'block';
+  detail.innerHTML = '<p class="wl-loading">Caricamento ticket…</p>';
+  const res = await botAdminFetch('ticket', { id: String(ticketId) });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    detail.innerHTML = `<p class="wl-err">❌ ${e.error || 'Errore dettaglio ticket.'}</p>`;
+    return;
+  }
+  const data = await res.json();
+  const t = data.ticket;
+  const msgs = data.messages || [];
+  detail.innerHTML = `
+    <h3 class="card-title">🎫 Ticket #${t.id}</h3>
+    <p style="margin-bottom:0.6rem">Utente: <code>${t.telegram_user_id}</code> · Stato: <b>${t.status}</b></p>
+    <div style="display:flex;gap:0.45rem;flex-wrap:wrap;margin-bottom:0.8rem">
+      <button class="btn-secondary btn-sm" onclick="botTicketAction(${t.id}, 'take')">✅ Presa in carico</button>
+      <button class="btn-secondary btn-sm" onclick="botTicketAction(${t.id}, 'wait')">⏸ In attesa</button>
+      <button class="btn-secondary btn-sm" onclick="botTicketAction(${t.id}, 'close')">🔒 Chiudi</button>
+      <button class="btn-danger btn-sm" onclick="botTicketAction(${t.id}, 'ban')">🚫 Ban utente</button>
+      <button class="btn-secondary btn-sm" onclick="botTicketAction(${t.id}, 'unban')">✅ Unban utente</button>
+    </div>
+    <div class="card" style="background:var(--bg-2);max-height:260px;overflow:auto;margin-bottom:0.8rem">
+      ${(msgs || []).map((m) => `
+        <div style="padding:0.4rem 0;border-bottom:1px solid var(--border)">
+          <div style="font-size:0.78rem;color:var(--text-3)">${m.from_role} · ${new Date(m.created_at).toLocaleString('it-IT')}</div>
+          <div>${(m.text || '').replace(/</g,'&lt;').replace(/>/g,'&gt;') || '<i>[immagine]</i>'}</div>
+        </div>
+      `).join('')}
+    </div>
+    <div class="admin-form-grid">
+      <div class="admin-field" style="grid-column:1/-1">
+        <label>Rispondi all'utente (invia DM dal bot)</label>
+        <textarea id="bot-ticket-reply-${t.id}" class="form-input-sm" style="min-height:90px"></textarea>
+      </div>
+    </div>
+    <div class="admin-form-footer">
+      <button class="btn-primary btn-sm" onclick="botTicketReply(${t.id})">💬 Invia risposta</button>
+    </div>
+  `;
+}
+
+async function botTicketAction(ticketId, action) {
+  const res = await botAdminFetch('ticket_action', {}, 'PUT', { ticketId, action });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    showBotAdminMsg(`✗ ${e.error || 'Azione ticket fallita.'}`, 'error');
+    return;
+  }
+  showBotAdminMsg('✅ Azione ticket eseguita.');
+  await openBotTicket(ticketId);
+  await loadBotTickets(_botTicketMode);
+}
+
+async function botTicketReply(ticketId) {
+  const ta = document.getElementById(`bot-ticket-reply-${ticketId}`);
+  if (!ta) return;
+  const text = ta.value.trim();
+  if (!text) return;
+  const res = await botAdminFetch('ticket_reply', {}, 'POST', { ticketId, text });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    showBotAdminMsg(`✗ ${e.error || 'Invio risposta fallito.'}`, 'error');
+    return;
+  }
+  ta.value = '';
+  showBotAdminMsg('✅ Risposta inviata all’utente.');
+  await openBotTicket(ticketId);
+}
+
+async function loadBotGlobalReports(statuses = 'open,in_review') {
+  _botReportFilter = statuses;
+  const box = document.getElementById('botadmin-reports');
+  const detail = document.getElementById('botadmin-report-detail');
+  const f = document.getElementById('botadmin-report-filter');
+  if (f) f.textContent = `Filtro: ${statuses}`;
+  if (detail) detail.style.display = 'none';
+  if (!box) return;
+  box.innerHTML = '<p class="wl-loading">Caricamento segnalazioni…</p>';
+  const res = await botAdminFetch('global_reports', { statuses });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    box.innerHTML = `<p class="wl-err">❌ ${e.error || 'Errore caricamento segnalazioni.'}</p>`;
+    return;
+  }
+  const data = await res.json();
+  const rows = data.reports || [];
+  if (!rows.length) {
+    box.innerHTML = '<p class="wl-loading">Nessuna segnalazione trovata.</p>';
+    return;
+  }
+  box.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>Stato</th><th>Segnalante</th><th>Motivo</th><th>Azioni</th></tr></thead>
+        <tbody>
+          ${rows.map((r) => `
+            <tr>
+              <td><code>#${r.id}</code></td>
+              <td>${r.status}</td>
+              <td><code>${r.reporter_telegram_user_id}</code></td>
+              <td>${String(r.reason || '').slice(0, 80).replace(/</g,'&lt;').replace(/>/g,'&gt;')}</td>
+              <td><button class="btn-secondary btn-sm" onclick="openBotReport(${r.id})">Apri</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function openBotReport(reportId) {
+  const detail = document.getElementById('botadmin-report-detail');
+  if (!detail) return;
+  detail.style.display = 'block';
+  detail.innerHTML = '<p class="wl-loading">Caricamento segnalazione…</p>';
+  const res = await botAdminFetch('global_report', { id: String(reportId) });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    detail.innerHTML = `<p class="wl-err">❌ ${e.error || 'Errore dettaglio segnalazione.'}</p>`;
+    return;
+  }
+  const { report } = await res.json();
+  const targetKnown = report.reported_target_telegram_user_id != null;
+  detail.innerHTML = `
+    <h3 class="card-title">🚩 Segnalazione #${report.id}</h3>
+    <p>Stato: <b>${report.status}</b> · Segnalante: <code>${report.reporter_telegram_user_id}</code></p>
+    <p>Target: ${targetKnown ? `<code>${report.reported_target_telegram_user_id}</code>` : '<i>non identificato</i>'}</p>
+    <p>Motivo: ${(report.reason || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>
+    <div class="card" style="background:var(--bg-2);margin:0.6rem 0">${String(report.reported_message_text || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+    <div style="display:flex;gap:0.45rem;flex-wrap:wrap">
+      <button class="btn-secondary btn-sm" onclick="botReportAction(${report.id}, 'take')">📌 Prendi in carico</button>
+      <button class="btn-secondary btn-sm" onclick="botReportAction(${report.id}, 'archive')">✅ Archivia</button>
+      <button class="btn-secondary btn-sm" onclick="botReportAction(${report.id}, 'mute24')">🔇 Mute 24h</button>
+      <button class="btn-danger btn-sm" onclick="botReportAction(${report.id}, 'ban')">🚫 Ban</button>
+      ${!targetKnown ? `<button class="btn-secondary btn-sm" onclick="botReportManualTarget(${report.id})">🎯 Target manuale</button>` : ''}
+    </div>
+  `;
+}
+
+async function botReportManualTarget(reportId) {
+  const v = prompt('Inserisci Telegram User ID target per questa segnalazione:');
+  if (!v) return;
+  const targetTelegramUserId = Number(v);
+  if (!Number.isFinite(targetTelegramUserId)) {
+    showBotAdminMsg('ID non valido.', 'error');
+    return;
+  }
+  const res = await botAdminFetch('global_report_target', {}, 'PUT', { reportId, targetTelegramUserId });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    showBotAdminMsg(`✗ ${e.error || 'Impostazione target manuale fallita.'}`, 'error');
+    return;
+  }
+  showBotAdminMsg('✅ Target manuale salvato.');
+  await openBotReport(reportId);
+}
+
+async function botReportAction(reportId, action) {
+  const res = await botAdminFetch('global_report_action', {}, 'PUT', { reportId, action });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    showBotAdminMsg(`✗ ${e.error || 'Azione segnalazione fallita.'}`, 'error');
+    return;
+  }
+  showBotAdminMsg('✅ Azione segnalazione eseguita.');
+  await openBotReport(reportId);
+  await loadBotGlobalReports(_botReportFilter);
+  await loadBotAdminDashboard();
+}
+
+async function loadBotBannedUsers() {
+  const box = document.getElementById('botadmin-banned');
+  if (!box) return;
+  box.innerHTML = '<p class="wl-loading">Caricamento utenti bannati…</p>';
+  const res = await botAdminFetch('banned_users');
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    box.innerHTML = `<p class="wl-err">❌ ${e.error || 'Errore caricamento bannati.'}</p>`;
+    return;
+  }
+  const data = await res.json();
+  const rows = data.users || [];
+  if (!rows.length) {
+    box.innerHTML = '<p class="wl-loading">Nessun utente bannato.</p>';
+    return;
+  }
+  box.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Utente</th><th>Motivo</th><th>Aggiornato</th><th>Azioni</th></tr></thead>
+        <tbody>
+          ${rows.map((u) => `
+            <tr>
+              <td><code>${u.telegram_user_id}</code></td>
+              <td>${String(u.reason || 'n/d').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</td>
+              <td>${new Date(u.updated_at).toLocaleString('it-IT')}</td>
+              <td>
+                <button class="btn-secondary btn-sm" onclick="botUserRestrictionAction(${u.telegram_user_id}, 'unban')">✅ Unban</button>
+                <button class="btn-secondary btn-sm" onclick="botUserRestrictionAction(${u.telegram_user_id}, 'mute24')">🔇 Mute 24h</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function botUserRestrictionAction(telegramUserId, action) {
+  const res = await botAdminFetch('user_restriction_action', {}, 'PUT', { telegramUserId, action });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    showBotAdminMsg(`✗ ${e.error || 'Azione utente fallita.'}`, 'error');
+    return;
+  }
+  showBotAdminMsg('✅ Azione utente eseguita.');
+  await loadBotBannedUsers();
+  await loadBotAdminDashboard();
+}
+
+document.getElementById('refresh-botadmin')?.addEventListener('click', async () => {
+  await loadBotAdminDashboard();
+  await loadBotTickets(_botTicketMode);
+  await loadBotGlobalReports(_botReportFilter);
+  await loadBotBannedUsers();
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ── REGISTRI GUERRE ──────────────────────────────────────────────────────────
