@@ -1108,6 +1108,58 @@ tbody tr:last-child td { border-bottom: none; }
     font-family: 'IBM Plex Mono', monospace;
 }
 
+/* Tab CoCBoardBot — schermi stretti / Mini App Telegram */
+@media (max-width: 640px) {
+    #tab-botadmin .page-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    #tab-botadmin .page-header .btn-secondary {
+        align-self: flex-start;
+    }
+    #tab-botadmin .subtab-bar {
+        flex-wrap: wrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        gap: 0.35rem;
+        padding-bottom: 0.35rem;
+        margin-bottom: 1rem;
+    }
+    #tab-botadmin .subtab-bar .subtab-btn {
+        flex: 1 1 calc(50% - 0.35rem);
+        min-width: min(100%, 132px);
+        padding: 0.48rem 0.5rem;
+        font-size: 0.76rem;
+        white-space: normal;
+        line-height: 1.2;
+        text-align: center;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        margin-bottom: 0;
+    }
+    #tab-botadmin .subtab-bar .subtab-btn.active {
+        border-color: rgba(212, 175, 55, 0.55);
+        background: rgba(212, 175, 55, 0.08);
+    }
+    #tab-botadmin .card {
+        padding: 0.85rem 0.75rem;
+    }
+    #tab-botadmin .toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    #tab-botadmin .table-wrap table {
+        font-size: 0.78rem;
+    }
+    #tab-botadmin .table-wrap th,
+    #tab-botadmin .table-wrap td {
+        padding: 0.4rem 0.35rem;
+    }
+    #tab-botadmin .admin-form-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* ─────────────────────────────────────────────────────────────
    STATUS BAR / MESSAGES
    ───────────────────────────────────────────────────────────── */

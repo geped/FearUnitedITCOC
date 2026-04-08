@@ -38,7 +38,7 @@ const db = window.sb;
   try {
     const p = new URLSearchParams(window.location.search);
     const ot = p.get('open_tab');
-    const allowed = new Set(['members', 'cerca', 'cwl', 'cwl_warlog', 'login', 'warlog', 'profilo', 'rankings', 'bonus']);
+    const allowed = new Set(['members', 'cerca', 'cwl', 'cwl_warlog', 'login', 'warlog', 'profilo', 'rankings', 'bonus', 'botadmin']);
     if (allowed.has(ot)) window.__cocboardOpenTab = ot;
   } catch (_) {}
 })();
@@ -852,6 +852,11 @@ async function applyCocboardTelegramWebDeepLinks() {
     }
     const ot = window.__cocboardOpenTab;
     if (!ot) return;
+    if (ot === 'botadmin') {
+      delete window.__cocboardOpenTab;
+      if (window._userRole === 'admin') activateTab('botadmin');
+      return;
+    }
     if (ot === 'login') {
       delete window.__cocboardOpenTab;
       const ls = document.getElementById('login-screen');

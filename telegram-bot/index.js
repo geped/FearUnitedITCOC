@@ -853,12 +853,16 @@ async function isSupportAdmin(ctx) {
   return isCoCboardAdminUser(sess?.user);
 }
 
-function supportAdminPanelKb(openGlobalReportsCount = null) {
+function supportAdminPanelKb(openGlobalReportsCount = null, webAppUrl = null) {
   const globalLabel =
     Number.isFinite(Number(openGlobalReportsCount)) && Number(openGlobalReportsCount) > 0
       ? `🚩 Segnalazioni chat globale (${Number(openGlobalReportsCount)})`
       : '🚩 Segnalazioni chat globale';
-  return Markup.inlineKeyboard([
+  const rows = [];
+  if (webAppUrl && String(webAppUrl).startsWith('https://')) {
+    rows.push([Markup.button.webApp('🌐 CoCBoardBot (Mini App)', webAppUrl)]);
+  }
+  rows.push(
     [Markup.button.callback(globalLabel, 'support_admin_global_reports')],
     [Markup.button.callback('🗂 Ticket chiusi', 'support_admin_closed')],
     [Markup.button.callback('🚫 Utenti bannati', 'support_admin_banned_users')],
@@ -867,12 +871,23 @@ function supportAdminPanelKb(openGlobalReportsCount = null) {
     [Markup.button.callback('📊 Statistiche bot', 'support_admin_stats')],
     [Markup.button.callback('📄 Export CSV metriche', 'support_admin_csv')],
     [Markup.button.callback('« Menù', 'menu')],
-  ]);
+  );
+  return Markup.inlineKeyboard(rows);
+}
+
+/** Tastierino admin bot + link Mini App verso tab CoCBoardBot (open_tab=botadmin). */
+async function supportAdminPanelKbAsync(ctx, openGlobalReportsCount = null) {
+  let wu = null;
+  try {
+    wu = await buildWebAppHandoffUrl(ctx, { open_tab: 'botadmin' });
+  } catch (_) {}
+  return supportAdminPanelKb(openGlobalReportsCount, wu);
 }
 
 async function sendSupportAdminPanel(ctx, text = '🛠 <b>Pannello amministratore bot</b>') {
   const n = await sb.listGlobalChatReports(['open', 'in_review'], 200).then((r) => (r || []).length).catch(() => 0);
-  await ctx.reply(text, { parse_mode: 'HTML', ...supportAdminPanelKb(n) });
+  const kb = await supportAdminPanelKbAsync(ctx, n);
+  await ctx.reply(text, { parse_mode: 'HTML', ...kb });
 }
 
 function supportTicketListKb(rows) {
@@ -3210,7 +3225,7 @@ function setupBot(bot) {
       `• Chat in pausa (/coc_off): <b>${s.pausedChats}</b>\n` +
       `• Utenti attivi 24h (DAU): <b>${s.dau}</b>\n` +
       `• Utenti attivi 7gg (WAU): <b>${s.wau}</b>`;
-    await ctx.reply(body, { parse_mode: 'HTML', ...supportAdminPanelKb() });
+    await ctx.reply(body, { parse_mode: 'HTML', ...(await supportAdminPanelKbAsync(ctx)) });
   });
 
   bot.action('support_admin_open', async (ctx) => {
@@ -3218,7 +3233,7 @@ function setupBot(bot) {
     if (!(await isSupportAdmin(ctx))) return;
     const rows = await sb.listActiveSupportTickets(25).catch(() => []);
     if (!rows.length) {
-      await ctx.reply('📭 Nessuna segnalazione attiva.', { parse_mode: 'HTML', ...supportAdminPanelKb() });
+      await ctx.reply('📭 Nessuna segnalazione attiva.', { parse_mode: 'HTML', ...(await supportAdminPanelKbAsync(ctx)) });
       return;
     }
     await ctx.reply('📬 <b>Segnalazioni attive</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows) });
@@ -3232,7 +3247,7 @@ function setupBot(bot) {
       .then((all) => (all || []).filter((t) => String(t.status) === 'closed_pending_purge').slice(0, 30))
       .catch(() => []);
     if (!rows.length) {
-      await ctx.reply('📭 Nessun ticket chiuso in attesa purge.', { parse_mode: 'HTML', ...supportAdminPanelKb() });
+      await ctx.reply('📭 Nessun ticket chiuso in attesa purge.', { parse_mode: 'HTML', ...(await supportAdminPanelKbAsync(ctx)) });
       return;
     }
     await ctx.reply('🗂 <b>Ticket chiusi</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows) });
@@ -3243,7 +3258,7 @@ function setupBot(bot) {
     if (!(await isSupportAdmin(ctx))) return;
     const rows = await sb.listActiveSupportTicketsAssignedTo(ctx.from.id, 25).catch(() => []);
     if (!rows.length) {
-      await ctx.reply('📭 Nessuna segnalazione assegnata a te.', { parse_mode: 'HTML', ...supportAdminPanelKb() });
+      await ctx.reply('📭 Nessuna segnalazione assegnata a te.', { parse_mode: 'HTML', ...(await supportAdminPanelKbAsync(ctx)) });
       return;
     }
     await ctx.reply('👤 <b>Ticket assegnati a me</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows) });
@@ -3252,7 +3267,7 @@ function setupBot(bot) {
   async function renderGlobalReportsAdminList(ctx, statuses, title) {
     const rows = await sb.listGlobalChatReports(statuses, 30).catch(() => []);
     if (!rows.length) {
-      await ctx.reply('📭 Nessuna segnalazione chat globale da gestire.', { parse_mode: 'HTML', ...supportAdminPanelKb() });
+      await ctx.reply('📭 Nessuna segnalazione chat globale da gestire.', { parse_mode: 'HTML', ...(await supportAdminPanelKbAsync(ctx)) });
       return;
     }
     const baseRows = globalReportListKb(rows).reply_markup.inline_keyboard;
@@ -3469,7 +3484,7 @@ function setupBot(bot) {
     if (!(await isSupportAdmin(ctx))) return;
     const rows = await sb.listBannedTelegramUsers(40).catch(() => []);
     if (!rows.length) {
-      await ctx.reply('📭 Nessun utente bannato.', { parse_mode: 'HTML', ...supportAdminPanelKb() });
+      await ctx.reply('📭 Nessun utente bannato.', { parse_mode: 'HTML', ...(await supportAdminPanelKbAsync(ctx)) });
       return;
     }
     await ctx.reply('🚫 <b>Utenti bannati</b>', { parse_mode: 'HTML', ...bannedUsersListKb(rows) });
