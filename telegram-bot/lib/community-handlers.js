@@ -189,6 +189,7 @@ async function buildGlobalHubBodyHtml(subscriberRow) {
     : '\n<i>Ospite: in chat nome e tag su una riga (non verificato; non usare ✅ nel nome).</i>';
   return (
     `🌍 <b>Chat globale</b>\n\n` +
+    `🟢 <b>Modalità attiva:</b> <i>Chat globale</i>\n\n` +
     `Nome mostrato: <b>${escapeHtml(sub.display_name)}</b>${tagPart}${verifiedLine}\n\n` +
     `👥 <b>${n}</b> in stanza\n\n` +
     `<i>Solo chi è in stanza riceve i messaggi. La sessione si aggiorna in automatico. Invia solo testo. Usa <b>Aggiorna</b> per aggiornare il contatore.</i>`
@@ -822,6 +823,7 @@ async function sendCommunityMenu(ctx) {
   const uid = ctx.from?.id;
   const text =
     `${escapeHtml('───')}\n💬 <b>Community CoCBoard</b>\n${escapeHtml('───')}\n\n` +
+    `⚪ <b>Modalità attiva:</b> <i>Menu Community</i>\n\n` +
     `• <b>Chat globale</b> — aperta a tutti; in stanza solo chi è dentro; ✅ se usi il profilo CoCBoard.\n` +
     `• <b>Reclutamento</b> — annunci visibili a tutti; invio bozza anche senza account (come <b>ospite Telegram</b>); 24h nel feed dopo approvazione.\n\n` +
     `<i>Nessuna chat diretta tra giocatori.</i>`;

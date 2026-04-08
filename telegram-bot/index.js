@@ -880,6 +880,7 @@ function supportTicketAdminKb(ticketId) {
 async function showSupportOpenPrompt(ctx) {
   const txt =
     `📩 <b>Contatta amministratore</b>\n\n` +
+    `🟣 <b>Modalità attiva:</b> <i>Supporto</i>\n\n` +
     `Invia qui il tuo problema (testo + max 2 immagini).\n` +
     `File non ammessi: zip, documenti, audio, video, sticker.\n\n` +
     `Se hai già un ticket aperto, il messaggio verrà aggiunto lì.`;
@@ -903,6 +904,7 @@ async function showSupportEntryHub(ctx) {
   if (openT) {
     const body =
       `📩 <b>Supporto</b>\n\n` +
+      `🟣 <b>Modalità attiva:</b> <i>Supporto</i>\n\n` +
       `Hai un ticket attivo: <b>#${openT.id}</b>.\n` +
       `Scrivi ora il tuo messaggio (testo + max ${SUPPORT_MAX_PHOTO_PER_SESSION} immagini in questa sessione).`;
     await ctx.reply(body, { parse_mode: 'HTML', ...supportManageKb(true, Boolean(closedT)) }).catch(() => {});
@@ -910,6 +912,7 @@ async function showSupportEntryHub(ctx) {
   }
   const body =
     `📩 <b>Supporto</b>\n\n` +
+    `🟣 <b>Modalità attiva:</b> <i>Supporto</i>\n\n` +
     `Apri un nuovo ticket oppure riapri l’ultimo chiuso (max ${SUPPORT_MAX_REOPEN} riaperture).\n` +
     `Per ogni sessione ticket: massimo ${SUPPORT_MAX_PHOTO_PER_SESSION} immagini.`;
   await ctx.reply(body, { parse_mode: 'HTML', ...supportManageKb(false, Boolean(closedT)) }).catch(() => {});
