@@ -202,7 +202,7 @@ async function renderGlobalAccessModeMenu(ctx, tauth, opts = {}) {
     `🌍 <b>Chat globale</b>\n\n` +
     `Scegli come entrare in stanza:` +
     `\n• <b>Profilo CoCBoard</b> — accesso verificato ✅ (con o senza dettagli tag/TH/XP).` +
-    `\n• <b>Nome+tag manuale</b> — formato <code>nomeInGioco#TAG</code>.` +
+    `\n• <b>Nome+tag manuale</b> — formato <code>nomeInGioco#TAG</code> (solo testo, <b>nessuna</b> emoticon).` +
     `\n\n<i>La scelta viene ricordata per i prossimi accessi e puoi cambiarla da "Modifica modalità accesso".</i>` +
     lastLine;
   try {
@@ -235,9 +235,17 @@ async function buildGlobalHubBodyHtml(subscriberRow) {
   );
 }
 
-/** Formato: <code>nomeInGioco#XXXXXXXXX</code> — parte tag = <code>#</code> + 9 caratteri (10 in tutto). Solo formalità, nessuna verifica API CoC. */
+/** Formato: <code>nomeInGioco#XXXXXXXXX</code> — parte tag = <code>#</code> + 9 caratteri (10 in tutto). Solo formalità, nessuna verifica API CoC. Nessuna emoticon nel nome. */
 function parseGlobalManualDisplayLine(raw) {
   const t = String(raw || '').trim();
+  if (cv.containsEmojiOrPictograph(t)) {
+    return {
+      ok: false,
+      reason:
+        'Non sono ammesse <b>emoticon</b> o simboli tipo scudo/emoji (es. 🛡). ' +
+        'Usa solo <b>testo</b> come in gioco, formato <code>nome#TAG</code> (es. <code>GIOCATORE#2J2VLPP9R</code>).',
+    };
+  }
   if (cv.containsFakeVerificationMarker(t)) {
     return {
       ok: false,
@@ -603,9 +611,10 @@ async function tryHandleEarlyMessage(
     const st = pendingCommunity.get(uid);
     if (st.kind === 'global_manual_tag') {
       if (ctx.message?.photo) {
-        await ctx.reply('Per entrare invia <b>solo testo</b> su una riga: <code>nomeInGioco#TAG</code>.', {
-          parse_mode: 'HTML',
-        });
+        await ctx.reply(
+          'Per entrare invia <b>solo testo</b> su una riga: <code>nomeInGioco#TAG</code> (nessuna emoticon).',
+          { parse_mode: 'HTML' }
+        );
         return true;
       }
       if (!ctx.message?.text || txt.startsWith('/')) return true;
@@ -1133,6 +1142,7 @@ function registerCommunityHandlers(bot, deps) {
     pendingCommunity.set(uid, { kind: 'global_manual_tag' });
     const body =
       '✏️ Invia <b>una riga</b> nel formato:\n<code>nomeInGioco#TAG</code>\n\n' +
+      '<b>Solo caratteri di testo</b> nel nome (lettere, numeri, spazi, <code>_</code> <code>.</code> ecc.) — <b>nessuna</b> emoticon o simbolo tipo scudo (🛡).\n\n' +
       'Esempio: in gioco ti chiami <b>GIOCATORE</b> e il tag è <code>#2J2VLPP9R</code> →\n<code>GIOCATORE#2J2VLPP9R</code>\n\n' +
       '<code>/esci_chat_global</code> oppure «Esci» sull’hub dopo l’ingresso.';
     const kb = Markup.inlineKeyboard([[Markup.button.callback('« Indietro — Chat globale', 'comm_global')]]);

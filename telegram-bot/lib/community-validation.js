@@ -98,6 +98,17 @@ function containsFakeVerificationMarker(text) {
   return FAKE_VERIFICATION_CHARS_RE.test(String(text || ''));
 }
 
+/**
+ * Emoji / pittogrammi (es. 🛡 😀) e sequenze bandiera — non ammessi nel formato manuale nome#TAG.
+ * Usa Unicode Extended_Pictographic (Node con flag u).
+ */
+function containsEmojiOrPictograph(text) {
+  const s = String(text || '');
+  if (/\p{Extended_Pictographic}/u.test(s)) return true;
+  if (/[\u{1F1E6}-\u{1F1FF}]{2}/u.test(s)) return true;
+  return false;
+}
+
 /** Link ufficiale profilo giocatore CoC (tag senza # nell’URL). */
 function buildOpenPlayerProfileUrl(displayTag, lang = 'it') {
   const raw = String(displayTag || '')
@@ -179,6 +190,7 @@ module.exports = {
   msUntilNextEpochBoundary,
   formatCountdownIt,
   containsFakeVerificationMarker,
+  containsEmojiOrPictograph,
   buildOpenPlayerProfileUrl,
   escapeTelegramHtmlHref,
   validateGlobalChatMessageBody,

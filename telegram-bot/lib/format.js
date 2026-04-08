@@ -109,7 +109,7 @@ function formatGuestHelp() {
     `${DIV}\n📖 <b>Guida rapida</b> (privato)\n${DIV}\n\n` +
     `<b>Senza account</b>\n` +
     `• <b>Cerca</b> / <b>Classifica</b> — villaggio o clan, classifiche trofei\n` +
-    `• <b>Community</b> — <b>Chat globale</b>: con account CoCBoard scegli se mostrare tag/TH/XP o solo nome e ✅; senza account riga <code>nome#TAG</code> (nel nome <b>non</b> usare ✅ — riservato ai profili verificati)\n` +
+    `• <b>Community</b> — <b>Chat globale</b>: con account CoCBoard scegli se mostrare tag/TH/XP o solo nome e ✅; senza account riga <code>nome#TAG</code> solo testo, senza emoticon (nel nome <b>non</b> usare ✅ — riservato ai profili verificati)\n` +
     `• <b>Regole chat globale</b> — niente link (web, Telegram, store), niente link CoC, niente tag <code>#</code> nel testo del messaggio; niente spam. Il bot applica <b>strike</b>: avvisi, poi <b>mute</b> temporaneo, poi <b>ban</b> dalla stanza. Per contestazioni contatta chi gestisce il bot.\n` +
     `• <b>Uscita chat globale</b> — automatica con comandi <code>/</code> (tranne <code>/esci_chat_global</code> e <code>/annulla_reclutamento</code>), <code>/cocboard</code>, <code>/start</code> o pulsanti <b>Menù</b> / <b>Community</b>; alla finestra i messaggi della stanza in questa chat vengono rimossi.\n` +
     `• <b>Reclutamento</b> — leggi annunci; invia bozza come ospite (nome Telegram) o con account\n\n` +
