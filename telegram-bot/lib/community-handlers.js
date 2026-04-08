@@ -170,8 +170,46 @@ function globalHubKeyboard() {
       Markup.button.callback('🚪 Esci', 'comm_global_leave'),
       Markup.button.callback('🔄 Aggiorna', 'comm_global_status'),
     ],
+    [Markup.button.callback('⚙️ Modifica modalità accesso', 'comm_global_mode')],
+    [Markup.button.callback('🚩 Segnala messaggio', 'comm_global_report')],
     [Markup.button.callback('« Menù', 'menu'), Markup.button.callback('« Community', 'comm_hub')],
   ]);
+}
+
+async function renderGlobalAccessModeMenu(ctx, tauth, opts = {}) {
+  const uid = ctx.from?.id;
+  if (uid == null) return;
+  const sess = await tauth.getValidSession(uid);
+  if (sess) ctx.cocboardUser = sess.user;
+  const sub = await sbc.getGlobalSubscriber(uid).catch(() => null);
+  const hasLast = Boolean(sub && sub.display_name);
+  const lastVerified = sub?.display_verified === true || sub?.display_verified === 'true';
+  const rows = [];
+  if (hasLast) rows.push([Markup.button.callback('⚡ Entra con ultima modalità', 'comm_global_quick')]);
+  rows.push([
+    sess
+      ? Markup.button.callback('👤 Nome da profilo CoCBoard', 'comm_gprof')
+      : Markup.button.callback('👤 Nome da profilo (Accedi / Registrati)', 'comm_gauth'),
+  ]);
+  rows.push([Markup.button.callback('✏️ Nome in gioco + tag (testo)', 'comm_gman')]);
+  rows.push([Markup.button.callback('« Indietro — Community', opts.backToHub ? 'comm_hub' : 'comm_global')]);
+  const kb = Markup.inlineKeyboard(rows);
+  const lastLine = hasLast
+    ? `\n\nUltima modalità salvata: <b>${lastVerified ? 'Profilo CoCBoard' : 'Nome+tag manuale'}</b>.`
+    : '';
+  const body =
+    `🌍 <b>Chat globale</b>\n\n` +
+    `Scegli come entrare in stanza:` +
+    `\n• <b>Profilo CoCBoard</b> — accesso verificato ✅ (con o senza dettagli tag/TH/XP).` +
+    `\n• <b>Nome+tag manuale</b> — formato <code>nomeInGioco#TAG</code>.` +
+    `\n\n<i>La scelta viene ricordata per i prossimi accessi e puoi cambiarla da "Modifica modalità accesso".</i>` +
+    lastLine;
+  try {
+    await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
+  } catch (_) {
+    await ctx.reply(body, { parse_mode: 'HTML', ...kb });
+  }
+  await refreshPrivateReplyKeyboardRef(ctx);
 }
 
 async function buildGlobalHubBodyHtml(subscriberRow) {
@@ -592,6 +630,43 @@ async function tryHandleEarlyMessage(ctx, pendingCommunity, { isLinkedChatContex
       return true;
     }
 
+    if (st.kind === 'global_report') {
+      if (!ctx.message?.text || txt.startsWith('/')) return true;
+      const reason = txt.slice(0, 400).trim();
+      if (!reason) {
+        await ctx.reply('Inserisci una motivazione breve per la segnalazione.');
+        return true;
+      }
+      const replied = ctx.message.reply_to_message;
+      if (!replied || !String(replied.text || replied.caption || '').trim()) {
+        await ctx.reply(
+          'Per segnalare, rispondi a un messaggio della chat globale e scrivi il motivo (es. "spam ripetuto").'
+        );
+        return true;
+      }
+      pendingCommunity.delete(uid);
+      const reporter = await sbc.getGlobalSubscriber(uid).catch(() => null);
+      const reporterName = reporter?.display_name || guestTelegramLabel(ctx.from);
+      const reportedText = String(replied.text || replied.caption || '').slice(0, 1200);
+      const owners = cv.parseOwnerTelegramIds();
+      if (owners.length) {
+        const reporterTagLine = reporter?.display_tag ? ` <code>${escapeHtml(reporter.display_tag)}</code>` : '';
+        const payload =
+          `🚩 <b>Segnalazione chat globale</b>\n` +
+          `Da: <b>${escapeHtml(reporterName)}</b>${reporterTagLine}\n` +
+          `Motivo: ${escapeHtml(reason)}\n\n` +
+          `<b>Messaggio segnalato</b>:\n${escapeHtml(reportedText)}`;
+        for (const oid of owners) {
+          try {
+            await ctx.telegram.sendMessage(Number(oid), payload, { parse_mode: 'HTML', disable_web_page_preview: true });
+          } catch (_) {}
+        }
+      }
+      await ctx.reply('✅ Segnalazione inviata ai moderatori.', { parse_mode: 'HTML', ...globalHubKeyboard() });
+      await refreshPrivateReplyKeyboardRef(ctx);
+      return true;
+    }
+
     if (st.kind === 'recruit_guided') {
       if (st.step === 'tag') {
         if (!ctx.message?.text || txt.startsWith('/')) return true;
@@ -869,29 +944,7 @@ function registerCommunityHandlers(bot, deps) {
       await refreshPrivateReplyKeyboardRef(ctx);
       return;
     }
-    const sess = await tauth.getValidSession(uid);
-    if (sess) ctx.cocboardUser = sess.user;
-    const rows = [
-      [
-        sess
-          ? Markup.button.callback('👤 Nome da profilo CoCBoard', 'comm_gprof')
-          : Markup.button.callback('👤 Nome da profilo (Accedi / Registrati)', 'comm_gauth'),
-      ],
-      [Markup.button.callback('✏️ Nome in gioco + tag (testo)', 'comm_gman')],
-      [Markup.button.callback('« Indietro — Community', 'comm_hub')],
-    ];
-    const kb = Markup.inlineKeyboard(rows);
-    const body =
-      `🌍 <b>Chat globale</b>\n\n` +
-      `• <b>Profilo CoCBoard</b> — dopo accesso scegli se mostrare in chat anche <i>tag, TH ed XP</i> (dal database membri) oppure solo <b>nome + ✅</b>.\n` +
-      `• <b>Senza account</b> — riga <code>nomeInGioco#TAG</code> (es. <code>GIOCATORE#2J2VLPP9R</code>): <code>#</code> + 9 caratteri; nel nome <b>non</b> usare simboli tipo ✅ (imitano la verifica).\n\n` +
-      `<i>In stanza valgono regole anti-spam e anti-link (vedi Guida). Uscendo, i messaggi della stanza vengono cancellati in questa chat.</i>`;
-    try {
-      await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
-    } catch (_) {
-      await ctx.reply(body, { parse_mode: 'HTML', ...kb });
-    }
-    await refreshPrivateReplyKeyboardRef(ctx);
+    await renderGlobalAccessModeMenu(ctx, tauth, { backToHub: true });
   });
 
   bot.action('comm_global_leave', async (ctx) => {
@@ -929,6 +982,75 @@ function registerCommunityHandlers(bot, deps) {
     }
     await refreshGlobalHubForUser(ctx.telegram, uid).catch(() => {});
     await ctx.answerCbQuery('Stanza aggiornata.').catch(() => {});
+  });
+
+  bot.action('comm_global_mode', async (ctx) => {
+    if (isLinkedChatContext(ctx)) return;
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    const active = await sbc.isActiveInGlobalChat(uid).catch(() => false);
+    if (!active) {
+      await ctx.answerCbQuery('Apri prima Chat globale').catch(() => {});
+      return;
+    }
+    await renderGlobalAccessModeMenu(ctx, tauth, { backToHub: false });
+  });
+
+  bot.action('comm_global_quick', async (ctx) => {
+    if (isLinkedChatContext(ctx)) return;
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    const sub = await sbc.getGlobalSubscriber(uid).catch(() => null);
+    if (!sub || !sub.display_name) {
+      await ctx.answerCbQuery('Nessuna modalità salvata').catch(() => {});
+      return;
+    }
+    if (sub.display_verified === true || sub.display_verified === 'true') {
+      const sess = await tauth.getValidSession(uid);
+      if (!sess) {
+        await ctx.answerCbQuery('Serve accesso CoCBoard').catch(() => {});
+        await renderGlobalAccessModeMenu(ctx, tauth, { backToHub: true });
+        return;
+      }
+      const share = sub.share_verified_details !== false && sub.share_verified_details !== 'false';
+      await finalizeJoinGlobalVerified(ctx, tauth, share);
+      return;
+    }
+    await sbc.tickGlobalEpochIfNeeded().catch(() => {});
+    await sbc.upsertGlobalSubscriber(uid, sub.display_name, sub.display_tag || null, { displayVerified: false });
+    let subFresh = await sbc.getGlobalSubscriber(uid).catch(() => null);
+    if (!subFresh?.active) {
+      await sleep(80);
+      subFresh = await sbc.getGlobalSubscriber(uid).catch(() => null);
+    }
+    await sendGlobalEnteredMessage(ctx, { subscriberOverride: subFresh || undefined });
+  });
+
+  bot.action('comm_global_report', async (ctx) => {
+    if (isLinkedChatContext(ctx)) return;
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    const active = await sbc.isActiveInGlobalChat(uid).catch(() => false);
+    if (!active) {
+      await ctx.answerCbQuery('Entra prima in chat globale').catch(() => {});
+      return;
+    }
+    pendingCommunity.set(uid, { kind: 'global_report' });
+    const body =
+      `🚩 <b>Segnala messaggio</b>\n\n` +
+      `Rispondi a un messaggio della chat globale e scrivi una breve motivazione.\n` +
+      `Esempio: <i>spam ripetuto</i>\n\n` +
+      `<i>Per annullare: /start o «Community».</i>`;
+    const kb = Markup.inlineKeyboard([[Markup.button.callback('« Indietro — Chat globale', 'comm_global')]]);
+    try {
+      await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
+    } catch (_) {
+      await ctx.reply(body, { parse_mode: 'HTML', ...kb });
+    }
+    await refreshPrivateReplyKeyboardRef(ctx);
   });
 
   bot.action('comm_gauth', async (ctx) => {
@@ -1035,7 +1157,7 @@ function registerCommunityHandlers(bot, deps) {
     const uid = ctx.from?.id;
     try {
       const rows = await sbc.listActiveRecruitmentPosts(12);
-      const introKb = Markup.inlineKeyboard([[Markup.button.callback('« Indietro', 'comm_recruit')]]);
+      const introKb = Markup.inlineKeyboard([[Markup.button.callback('« Indietro', 'comm_recruit_back_clean')]]);
       if (!rows.length) {
         const text = '📋 <b>Annunci attivi</b>\n\n<i>Nessun annuncio attivo al momento.</i>';
         await ctx.editMessageText(text, { parse_mode: 'HTML', ...introKb }).catch(async () => {
@@ -1065,7 +1187,7 @@ function registerCommunityHandlers(bot, deps) {
         if (uid != null) for (const mid of mids) privateUi.notePrivateUiMessage(uid, mid);
         await sleep(45);
       }
-      const endKb = Markup.inlineKeyboard([[Markup.button.callback('« Indietro — Reclutamento', 'comm_recruit')]]);
+      const endKb = Markup.inlineKeyboard([[Markup.button.callback('« Indietro — Reclutamento', 'comm_recruit_back_clean')]]);
       try {
         const endMsg = await ctx.telegram.sendMessage(chatId, '📋 <b>Annunci attivi</b> — fine elenco.', {
           parse_mode: 'HTML',
@@ -1078,6 +1200,26 @@ function registerCommunityHandlers(bot, deps) {
       await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML', ...recruitHubKb() });
       await refreshPrivateReplyKeyboardRef(ctx);
     }
+  });
+
+  bot.action('comm_recruit_back_clean', async (ctx) => {
+    if (isLinkedChatContext(ctx)) return;
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    // Pulizia esplicita dei messaggi mostrati nella lista annunci attivi.
+    await privateUi.wipePrivateConversationUi(ctx.telegram, uid).catch(() => {});
+    const sess = await tauth.getValidSession(uid);
+    if (sess) ctx.cocboardUser = sess.user;
+    await sbc.ensureRecruitmentSubscriber(uid);
+    pendingCommunity.delete(uid);
+    const text =
+      `📣 <b>Reclutamento</b>\n\n` +
+      `Scegli una sezione:\n` +
+      `• <b>Annunci attivi</b> — cosa è in circolazione ora (dal database).\n` +
+      `• <b>Invia annuncio</b> — bozza da far approvare al proprietario del bot.`;
+    await ctx.reply(text, { parse_mode: 'HTML', ...recruitHubKb() }).catch(() => {});
+    await refreshPrivateReplyKeyboardRef(ctx);
   });
 
   bot.action('comm_owner_queue', async (ctx) => {

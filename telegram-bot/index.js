@@ -339,6 +339,9 @@ function isCommunityOpenGuestCallback(d) {
     d === 'comm_postauth_global_join' ||
     d === 'comm_global_leave' ||
     d === 'comm_global_status' ||
+    d === 'comm_global_report' ||
+    d === 'comm_global_mode' ||
+    d === 'comm_global_quick' ||
     d === 'comm_recruit' ||
     d === 'comm_recruit_list' ||
     d === 'comm_recruit_send' ||
@@ -732,6 +735,7 @@ async function reopenMainMenu(ctx, user) {
 const PRIVATE_RK_MENU = 'Menu principale';
 const PRIVATE_RK_HELP = 'Help';
 const PRIVATE_RK_EXIT_GLOBAL = 'Esci dalla chat globale';
+const PRIVATE_RK_REPORT_GLOBAL = '🚩 Segnala (chat globale)';
 const PRIVATE_RK_CANCEL_RECRUIT = 'Annulla reclutamento';
 
 /** Ultimo messaggio usato solo per tenere visibile la reply keyboard (stesso uid → sostituito a ogni refresh). */
@@ -749,7 +753,7 @@ async function buildPrivateReplyKeyboardMarkup(uid) {
     rows.push([Markup.button.text(SUPPORT_RK_BAN), Markup.button.text(SUPPORT_RK_UNBAN)]);
   }
   if (await sbcCommunity.isActiveInGlobalChat(uid).catch(() => false)) {
-    rows.push([Markup.button.text(PRIVATE_RK_EXIT_GLOBAL)]);
+    rows.push([Markup.button.text(PRIVATE_RK_REPORT_GLOBAL), Markup.button.text(PRIVATE_RK_EXIT_GLOBAL)]);
   }
   const p = pendingCommunity.get(uid);
   if (p?.kind === 'recruit_guided' || p?.kind === 'recruit_body') {
@@ -2059,7 +2063,16 @@ function setupBot(bot) {
       // Entrando nei flussi Community azzera eventuale stato supporto pendente.
       resetSupportContextForUser(uid);
     }
-    if (d === 'noop' || d === 'comm_global_leave' || d === 'comm_global_status') return next();
+    if (
+      d === 'noop' ||
+      d === 'comm_global_leave' ||
+      d === 'comm_global_status' ||
+      d === 'comm_global_report' ||
+      d === 'comm_global_mode' ||
+      d === 'comm_global_quick'
+    ) {
+      return next();
+    }
     const notifyLeave = d === 'menu' || d === 'comm_hub';
     await leaveGlobalIfActive(ctx, { notify: notifyLeave });
     return next();
@@ -2368,6 +2381,24 @@ function setupBot(bot) {
       const handled = await comm.tryHandleEarlyMessage(ctx, pendingCommunity, earlyCommDeps);
       ctx.message.text = prev;
       return handled;
+    }
+    if (t === PRIVATE_RK_REPORT_GLOBAL) {
+      const active = await sbcCommunity.isActiveInGlobalChat(ctx.from.id).catch(() => false);
+      if (!active) {
+        await ctx.reply('ℹ️ Non sei in <b>chat globale</b>.', { parse_mode: 'HTML' }).catch(() => {});
+        await refreshPrivateReplyKeyboard(ctx);
+        return true;
+      }
+      pendingCommunity.set(ctx.from.id, { kind: 'global_report' });
+      await ctx
+        .reply(
+          `🚩 <b>Segnala messaggio</b>\n\n` +
+            `Rispondi a un messaggio della chat globale e scrivi il motivo (es. <i>spam ripetuto</i>).`,
+          { parse_mode: 'HTML' }
+        )
+        .catch(() => {});
+      await refreshPrivateReplyKeyboard(ctx);
+      return true;
     }
     if (t === PRIVATE_RK_CANCEL_RECRUIT) {
       const p = pendingCommunity.get(ctx.from.id);

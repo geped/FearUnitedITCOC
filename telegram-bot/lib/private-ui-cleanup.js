@@ -66,7 +66,10 @@ function callbackSkipsUiWipe(data) {
     d === 'comm_gauth' ||
     d === 'comm_gprof' ||
     d === 'comm_gprof_sf' ||
-    d === 'comm_gprof_sm'
+    d === 'comm_gprof_sm' ||
+    d === 'comm_global_report' ||
+    d === 'comm_global_mode' ||
+    d === 'comm_global_quick'
   ) {
     return true;
   }
