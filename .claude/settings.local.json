@@ -35,7 +35,10 @@
       "WebFetch(domain:iocmkt.com)",
       "WebFetch(domain:cocbasedrop.com)",
       "Bash(npx miniverse:*)",
-      "Bash(node_modules/.bin/miniverse --help)"
+      "Bash(node_modules/.bin/miniverse --help)",
+      "WebFetch(domain:assets.clashk.ing)",
+      "WebFetch(domain:fankit.supercell.com)",
+      "Bash(vercel --prod --yes)"
     ]
   }
 }

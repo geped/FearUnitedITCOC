@@ -1,13 +1,110 @@
 {
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/pedro/.claude/**)",
+      "Read(//c/Users/pedro/**)",
+      "Bash(node \"C:/Users/pedro/.claude/get-shit-done/bin/gsd-tools.cjs\" frontmatter validate \".planning/phases/01-equipment-fix-e-asset-mapper/01-02-PLAN.md\" --schema plan)",
+      "Bash(node \"C:/Users/pedro/.claude/get-shit-done/bin/gsd-tools.cjs\" verify plan-structure \".planning/phases/01-equipment-fix-e-asset-mapper/01-01-PLAN.md\")",
+      "Bash(node \"C:/Users/pedro/.claude/get-shit-done/bin/gsd-tools.cjs\" verify plan-structure \".planning/phases/01-equipment-fix-e-asset-mapper/01-02-PLAN.md\")",
+      "Bash(node \"C:/Users/pedro/.claude/get-shit-done/bin/gsd-tools.cjs\" verify plan-structure \"c:/Users/pedro/Desktop/Claude/FearUnitedCoC/.planning/phases/02-rankings-polish/02-01-PLAN.md\")",
+      "Bash(node \"C:/Users/pedro/.claude/get-shit-done/bin/gsd-tools.cjs\" commit \"docs\\(02\\): create phase plan\" --files \".planning/phases/02-rankings-polish/02-01-PLAN.md\" \".planning/ROADMAP.md\")",
+      "Bash(node \"C:/Users/pedro/.claude/get-shit-done/bin/gsd-tools.cjs\" commit \"docs\\(02\\): research rankings polish phase — global locationId root cause\" --files \".planning/phases/02-rankings-polish/02-RESEARCH.md .planning/phases/02-rankings-polish/02-01-PLAN.md .planning/ROADMAP.md\")",
+      "Bash(npm test:*)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\pedro\\.claude"
+    ]
+  },
   "hooks": {
-    "SessionStart": [{ "hooks": [{ "type": "http", "url": "http://localhost:4321/api/hooks/claude-code" }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "http", "url": "http://localhost:4321/api/hooks/claude-code" }] }],
-    "PreToolUse": [{ "hooks": [{ "type": "http", "url": "http://localhost:4321/api/hooks/claude-code" }] }],
-    "PostToolUse": [{ "hooks": [{ "type": "http", "url": "http://localhost:4321/api/hooks/claude-code" }] }],
-    "PostToolUseFailure": [{ "hooks": [{ "type": "http", "url": "http://localhost:4321/api/hooks/claude-code" }] }],
-    "Stop": [{ "hooks": [{ "type": "http", "url": "http://localhost:4321/api/hooks/claude-code" }] }],
-    "SubagentStart": [{ "hooks": [{ "type": "http", "url": "http://localhost:4321/api/hooks/claude-code" }] }],
-    "SubagentStop": [{ "hooks": [{ "type": "http", "url": "http://localhost:4321/api/hooks/claude-code" }] }],
-    "SessionEnd": [{ "hooks": [{ "type": "http", "url": "http://localhost:4321/api/hooks/claude-code" }] }]
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:4321/api/hooks/claude-code"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:4321/api/hooks/claude-code"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:4321/api/hooks/claude-code"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:4321/api/hooks/claude-code"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:4321/api/hooks/claude-code"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:4321/api/hooks/claude-code"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:4321/api/hooks/claude-code"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:4321/api/hooks/claude-code"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://localhost:4321/api/hooks/claude-code"
+          }
+        ]
+      }
+    ]
   }
 }
