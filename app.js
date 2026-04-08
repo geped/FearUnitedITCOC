@@ -759,29 +759,65 @@ function applyBotAdminStaffUi() {
   });
 }
 
+/** Applica sui globali UI il blocco `clan` restituito dall'API CoC (player o clan-info). */
+function applyClanFromApiClanObject(clan) {
+  if (!clan?.tag) return false;
+  window._userClanTag = normClanTag(clan.tag);
+  if (clan.name) window._clanName = clan.name;
+  const bu = clan.badgeUrls;
+  if (bu) {
+    const url = cocBadgeUrl(bu);
+    if (url) window._clanBadgeUrl = url;
+  }
+  return true;
+}
+
 /**
- * Se `coc_clan_tag` manca ma c'è `coc_tag`, legge il clan live dall'API CoC
- * (stesso approccio del bot Telegram) così la Mini App non mostra "nessun clan"
- * per utenti effettivamente in clan.
+ * Se non c'è `coc_clan_tag` nei metadata, risolve il clan come il bot Telegram:
+ * 1) lookup player da `coc_tag` (pubblico)
+ * 2) roster `members` su Supabase se l'API CoC non risponde
+ * 3) `/api/lookup?type=session-clan` (JWT): `telegram_links.player_tag`, override `clan_tag`
+ *
+ * Così chi è in clan (anche solo collegato da bot) non vede "nessun clan" se i metadata Auth sono indietro.
+ * `telegram_moderator` non sostituisce l'appartenenza al clan: limita solo il pannello CoCBoardBot.
  */
 async function tryHydrateClanFromUserMetadata(user) {
+  if (window._userClanTag) return;
+
   const meta = user?.user_metadata || {};
-  if (meta.coc_clan_tag) return;
-  const raw = meta.coc_tag;
-  if (!raw || !String(raw).trim()) return;
-  let tag = String(raw).trim().toUpperCase();
-  if (!tag.startsWith('#')) tag = '#' + tag.replace(/^#+/, '');
+  const normPlayer = (raw) => {
+    if (!raw || !String(raw).trim()) return null;
+    let t = String(raw).trim().toUpperCase();
+    if (!t.startsWith('#')) t = '#' + t.replace(/^#+/, '');
+    return t;
+  };
+
+  const playerTag = normPlayer(meta.coc_tag);
+
+  if (playerTag) {
+    try {
+      const r = await fetch(`/api/lookup?type=player&playerTag=${encodeURIComponent(playerTag)}`);
+      const data = await r.json();
+      if (r.ok && applyClanFromApiClanObject(data.clan)) return;
+    } catch (_) {}
+    try {
+      const row = await _fetchMemberRowForProfile(playerTag);
+      if (row?.clan_tag && String(row.clan_tag).trim()) {
+        window._userClanTag = normClanTag(row.clan_tag);
+        if (row.clan_name) window._clanName = row.clan_name;
+        return;
+      }
+    } catch (_) {}
+  }
+
   try {
-    const r = await fetch(`/api/lookup?type=player&playerTag=${encodeURIComponent(tag)}`);
-    const data = await r.json();
-    if (!r.ok || !data?.clan?.tag) return;
-    window._userClanTag = normClanTag(data.clan.tag);
-    if (data.clan.name) window._clanName = data.clan.name;
-    const bu = data.clan.badgeUrls;
-    if (bu) {
-      const url = cocBadgeUrl(bu);
-      if (url) window._clanBadgeUrl = url;
-    }
+    const session = (await db.auth.getSession())?.data?.session;
+    if (!session?.access_token) return;
+    const r = await fetch('/api/lookup?type=session-clan', {
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.clan) applyClanFromApiClanObject(j.clan);
   } catch (_) {}
 }
 
@@ -801,20 +837,22 @@ async function showApp(sessionUser) {
   const isTelegramModerator = user.user_metadata?.telegram_moderator === true;
   const canEdit   = ['admin', 'capo', 'co-capo'].includes(role);
 
-  // Imposta info clan dell'utente
-  window._userClanTag  = user.user_metadata?.coc_clan_tag  || null;
+  // Info clan da metadata (normalizza; stringhe vuote = assente)
+  const rawMetaClan = user.user_metadata?.coc_clan_tag;
+  window._userClanTag =
+    rawMetaClan && String(rawMetaClan).trim() ? normClanTag(rawMetaClan) : null;
   window._clanName     = user.user_metadata?.coc_clan_name || '';
   window._clanBadgeUrl = user.user_metadata?.coc_clan_badge_url || null;
 
   await tryHydrateClanFromUserMetadata(user);
 
-  // Se l'utente non è in nessun clan (metadata + lookup)
+  // Nessun clan risolvibile: messaggio solo per utenti normali (non admin app / staff bot)
   if (!window._userClanTag) {
     if (!isAdmin && !isTelegramModerator) {
       showNoClanScreen(user.user_metadata?.username || '');
       return;
     }
-    // Admin o moderatore staff senza clan risolvibile: tab roster/guerre/CWL nascoste
+    // Admin dashboard o moderatore Telegram senza clan: resto dell'app + tab CoCBoardBot; niente roster CWL
     ['members', 'warlog', 'cwl'].forEach(tab => {
       document.querySelectorAll(`[data-tab="${tab}"]`).forEach(el => el.style.display = 'none');
     });
