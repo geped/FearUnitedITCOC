@@ -405,6 +405,21 @@ async function getGlobalModerationRow(telegramUserId) {
   return data || null;
 }
 
+/** Moderatore staff (tabella sincronizzata da API; badge in chat globale). */
+async function isTelegramStaffModerator(telegramUserId) {
+  const c = client();
+  if (!c) return false;
+  const uid = Number(telegramUserId);
+  if (!Number.isFinite(uid)) return false;
+  const { data, error } = await c
+    .from('telegram_staff_moderator_ids')
+    .select('telegram_user_id')
+    .eq('telegram_user_id', uid)
+    .maybeSingle();
+  if (error || !data) return false;
+  return true;
+}
+
 function globalModerationBlocked(row) {
   if (!row) return { blocked: false };
   if (row.banned === true || row.banned === 'true') return { blocked: true, kind: 'banned' };
@@ -496,6 +511,7 @@ module.exports = {
   getRecruitmentPostById,
   getMemberThExpByPlayerTag,
   getGlobalModerationRow,
+  isTelegramStaffModerator,
   globalModerationBlocked,
   recordGlobalChatViolation,
 };

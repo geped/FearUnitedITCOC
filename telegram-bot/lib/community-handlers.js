@@ -31,7 +31,8 @@ function formatGlobalLine(displayName, displayTag, body, displayVerified, meta =
   const th = meta.thLevel;
   const exp = meta.expLevel;
   const badge = displayVerified ? ' ✅' : '';
-  const namePart = `<b>${escapeHtml(displayName)}</b>${badge}`;
+  const modBadge = meta.staffModerator === true ? ' 🛡' : '';
+  const namePart = `<b>${escapeHtml(displayName)}</b>${badge}${modBadge}`;
   let tail = '';
   if (displayVerified && shareDetails) {
     const tagRaw = displayTag ? String(displayTag).trim() : '';
@@ -862,10 +863,12 @@ async function tryHandleEarlyMessage(
           exp = m.exp_level ?? exp;
         }
       }
+      const staffMod = await sbc.isTelegramStaffModerator(uid).catch(() => false);
       const line = formatGlobalLine(sub.display_name, sub.display_tag || '', body, verified, {
         shareVerifiedDetails: share,
         thLevel: th,
         expLevel: exp,
+        staffModerator: staffMod,
       });
       const targets = await sbc.listGlobalBroadcastTargets(inserted.epoch_index, uid, inserted.created_at);
       for (const t of targets) {

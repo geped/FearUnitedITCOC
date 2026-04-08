@@ -85,6 +85,21 @@ function isCoCboardAdminUser(user) {
   return String(role).toLowerCase() === 'admin';
 }
 
+function isCoCboardModeratorUser(user) {
+  return user?.user_metadata?.telegram_moderator === true;
+}
+
+/** Admin web oppure moderatore Telegram (staff ticket + segnalazioni globali). */
+async function isSupportStaff(ctx) {
+  const uid = ctx.from?.id;
+  if (uid == null) return false;
+  if (cv.isBotOwnerTelegramUser(uid)) return true;
+  const sess = await tauth.getValidSession(uid).catch(() => null);
+  if (!sess?.user) return false;
+  if (isCoCboardAdminUser(sess.user)) return true;
+  return isCoCboardModeratorUser(sess.user);
+}
+
 function normalizeBotCommandName(text) {
   const raw = String(text || '').trim();
   if (!raw.startsWith('/')) return '';
@@ -884,23 +899,58 @@ async function supportAdminPanelKbAsync(ctx, openGlobalReportsCount = null) {
   return supportAdminPanelKb(openGlobalReportsCount, wu);
 }
 
-async function sendSupportAdminPanel(ctx, text = '🛠 <b>Pannello amministratore bot</b>') {
-  const n = await sb.listGlobalChatReports(['open', 'in_review'], 200).then((r) => (r || []).length).catch(() => 0);
-  const kb = await supportAdminPanelKbAsync(ctx, n);
-  await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+function supportModeratorPanelKb(openGlobalReportsCount = null, webAppUrl = null) {
+  const globalLabel =
+    Number.isFinite(Number(openGlobalReportsCount)) && Number(openGlobalReportsCount) > 0
+      ? `🚩 Segnalazioni chat globale (${Number(openGlobalReportsCount)})`
+      : '🚩 Segnalazioni chat globale';
+  const rows = [];
+  if (webAppUrl && String(webAppUrl).startsWith('https://')) {
+    rows.push([Markup.button.webApp('🌐 CoCBoardBot (Mini App)', webAppUrl)]);
+  }
+  rows.push(
+    [Markup.button.callback(globalLabel, 'support_admin_global_reports')],
+    [Markup.button.callback('📬 Ticket attivi', 'support_admin_open')],
+    [Markup.button.callback('👤 Solo miei assegnati', 'support_admin_mine')],
+    [Markup.button.callback('« Menù', 'menu')],
+  );
+  return Markup.inlineKeyboard(rows);
 }
 
-function supportTicketListKb(rows) {
+async function supportModeratorPanelKbAsync(ctx, openGlobalReportsCount = null) {
+  let wu = null;
+  try {
+    wu = await buildWebAppHandoffUrl(ctx, { open_tab: 'botadmin' });
+  } catch (_) {}
+  return supportModeratorPanelKb(openGlobalReportsCount, wu);
+}
+
+async function supportHomeKbAsync(ctx, openGlobalReportsCount = null) {
+  if (await isSupportAdmin(ctx)) return supportAdminPanelKbAsync(ctx, openGlobalReportsCount);
+  return supportModeratorPanelKbAsync(ctx, openGlobalReportsCount);
+}
+
+async function sendSupportAdminPanel(ctx, text) {
+  const n = await sb.listGlobalChatReports(['open', 'in_review'], 200).then((r) => (r || []).length).catch(() => 0);
+  const full = await isSupportAdmin(ctx);
+  const title =
+    text ||
+    (full ? '🛠 <b>Pannello amministratore bot</b>' : '🛡 <b>Pannello moderatori CoCBoardBot</b>');
+  const kb = await supportHomeKbAsync(ctx, n);
+  await ctx.reply(title, { parse_mode: 'HTML', ...kb });
+}
+
+function supportTicketListKb(rows, includeClosed = true) {
   const buttons = (rows || []).slice(0, 20).map((r) => [
     Markup.button.callback(`🎫 #${r.id} · utente ${r.telegram_user_id} · ${r.status}`, `support_admin_ticket:${r.id}`),
   ]);
-  buttons.push([Markup.button.callback('🗂 Ticket chiusi', 'support_admin_closed')]);
-  buttons.push([Markup.button.callback('« Pannello admin', 'support_admin_home')]);
+  if (includeClosed) buttons.push([Markup.button.callback('🗂 Ticket chiusi', 'support_admin_closed')]);
+  buttons.push([Markup.button.callback('« CoCBoardBot', 'support_admin_home')]);
   return Markup.inlineKeyboard(buttons);
 }
 
-function supportTicketAdminKb(ticketId) {
-  return Markup.inlineKeyboard([
+function supportTicketAdminKb(ticketId, fullAdmin = true) {
+  const rows = [
     [
       Markup.button.callback('✅ Presa in carico', `support_admin_take:${ticketId}`),
       Markup.button.callback('💬 Rispondi', `support_admin_reply:${ticketId}`),
@@ -909,24 +959,28 @@ function supportTicketAdminKb(ticketId) {
       Markup.button.callback('⏸ In attesa utente', `support_admin_wait:${ticketId}`),
       Markup.button.callback('🔒 Chiudi ticket', `support_admin_close:${ticketId}`),
     ],
-    [
+  ];
+  if (fullAdmin) {
+    rows.push([
       Markup.button.callback('🚫 Permaban utente', `support_admin_ban:${ticketId}`),
       Markup.button.callback('✅ Rimuovi ban', `support_admin_unban:${ticketId}`),
-    ],
-    [Markup.button.callback('« Segnalazioni attive', 'support_admin_open')],
-    [Markup.button.callback('🏠 Menu admin', 'support_admin_home')],
-  ]);
+    ]);
+  }
+  rows.push([Markup.button.callback('« Segnalazioni attive', 'support_admin_open')]);
+  rows.push([Markup.button.callback('🏠 CoCBoardBot', 'support_admin_home')]);
+  return Markup.inlineKeyboard(rows);
 }
 
 function globalReportListKb(rows) {
   const buttons = (rows || []).slice(0, 20).map((r) => [
     Markup.button.callback(`🚩 #${r.id} · ${r.status} · utente ${r.reporter_telegram_user_id}`, `support_admin_greport:${r.id}`),
   ]);
-  buttons.push([Markup.button.callback('« Pannello admin', 'support_admin_home')]);
+  buttons.push([Markup.button.callback('« CoCBoardBot', 'support_admin_home')]);
   return Markup.inlineKeyboard(buttons);
 }
 
 function globalReportAdminKb(report, opts = {}) {
+  const fullAdmin = opts.fullAdmin !== false;
   const id = Number(report?.id);
   const hasTarget = report?.reported_target_telegram_user_id != null;
   const isMuted = opts.isMuted === true;
@@ -952,12 +1006,12 @@ function globalReportAdminKb(report, opts = {}) {
         Markup.button.callback('🔇 Cambia durata', `support_admin_greport_remute:${id}`),
       ]);
     }
-    rows.push([Markup.button.callback('🚫 Ban utente', `support_admin_greport_ban:${id}`)]);
+    if (fullAdmin) rows.push([Markup.button.callback('🚫 Ban utente', `support_admin_greport_ban:${id}`)]);
   }
-  if (!hasTarget) {
+  if (!hasTarget && fullAdmin) {
     rows.push([Markup.button.callback('🎯 Imposta target manuale', `support_admin_greport_target:${id}`)]);
   }
-  rows.push([Markup.button.callback('🚫 Utenti bannati', 'support_admin_banned_users')]);
+  if (fullAdmin) rows.push([Markup.button.callback('🚫 Utenti bannati', 'support_admin_banned_users')]);
   rows.push([Markup.button.callback('« Segnalazioni globali', 'support_admin_global_reports')]);
   return Markup.inlineKeyboard(rows);
 }
@@ -969,7 +1023,7 @@ function bannedUsersListKb(rows) {
       `support_admin_banned:${r.telegram_user_id}`
     ),
   ]);
-  buttons.push([Markup.button.callback('« Pannello admin', 'support_admin_home')]);
+  buttons.push([Markup.button.callback('« CoCBoardBot', 'support_admin_home')]);
   return Markup.inlineKeyboard(buttons);
 }
 
@@ -1396,8 +1450,8 @@ async function mainMenuKeyboard(ctx, user, hasClanTag, clanTag, clanName) {
   if (leader && !grp) {
     rows.push([Markup.button.callback('➕ Aggiungi a canale/gruppo', 'add_group_bot')]);
   }
-  if (!grp && isCoCboardAdminUser(user)) {
-    rows.push([Markup.button.callback('🛠 Admin Bot', 'support_admin_home')]);
+  if (!grp && (isCoCboardAdminUser(user) || isCoCboardModeratorUser(user))) {
+    rows.push([Markup.button.callback('🛠 CoCBoardBot', 'support_admin_home')]);
   }
   if (!grp) {
     rows.push([Markup.button.callback('📩 Contatta amministratore', 'support_open')]);
@@ -2062,7 +2116,7 @@ async function registerBotCommands(telegram) {
       { command: 'cocboard', description: 'Menù CoCBoard' },
       { command: 'help', description: 'Aiuto' },
       { command: 'assistenza', description: 'Apri ticket supporto' },
-      { command: 'adminbot', description: 'Pannello admin bot' },
+      { command: 'adminbot', description: 'Pannello staff bot (admin / moderatori)' },
       { command: 'cerca', description: 'Cerca villaggio o clan' },
       { command: 'classifica', description: 'Classifiche trofei' },
       { command: 'esci_chat_global', description: 'Esci dalla chat globale' },
@@ -2262,6 +2316,11 @@ function setupBot(bot) {
     const adminTicketId = adminActiveSupportTicket.get(ctx.from.id);
     const pendingRid = pendingManualReportTarget.get(ctx.from.id);
     if (pendingRid && ctx.message?.text && !txt.startsWith('/')) {
+      if (!(await isSupportAdmin(ctx))) {
+        pendingManualReportTarget.delete(ctx.from.id);
+        await ctx.reply('🔒 Solo gli amministratori possono impostare un target manuale.');
+        return;
+      }
       const targetId = Number(String(ctx.message.text || '').trim());
       if (!Number.isFinite(targetId)) {
         await ctx.reply('Formato non valido. Invia solo Telegram User ID numerico.');
@@ -2307,9 +2366,10 @@ function setupBot(bot) {
         await ctx.reply('Ticket non trovato.');
         return;
       }
+      const replyRole = isCoCboardAdminUser(ctx.cocboardUser) ? 'admin' : 'moderator';
       await sb
         .appendSupportMessage(adminTicketId, {
-          from_role: 'admin',
+          from_role: replyRole,
           from_telegram_user_id: ctx.from.id,
           text: messageText || null,
           photo_file_id: photo?.file_id || null,
@@ -2641,9 +2701,9 @@ function setupBot(bot) {
 
   bot.command('adminbot', async (ctx) => {
     if (!ctx.from?.id || isLinkedChatContext(ctx)) return;
-    const ok = await isSupportAdmin(ctx);
+    const ok = await isSupportStaff(ctx);
     if (!ok) {
-      await ctx.reply('🔒 Sezione riservata agli admin.').catch(() => {});
+      await ctx.reply('🔒 Sezione riservata allo staff CoCBoardBot (admin o moderatori).').catch(() => {});
       return;
     }
     await sendSupportAdminPanel(ctx);
@@ -3204,7 +3264,7 @@ function setupBot(bot) {
 
   bot.action('support_admin_home', async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
     resetSupportContextForUser(ctx.from?.id);
     await refreshPrivateReplyKeyboard(ctx);
     await sendSupportAdminPanel(ctx);
@@ -3230,13 +3290,15 @@ function setupBot(bot) {
 
   bot.action('support_admin_open', async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
+    const n = await sb.listGlobalChatReports(['open', 'in_review'], 200).then((r) => (r || []).length).catch(() => 0);
+    const full = await isSupportAdmin(ctx);
     const rows = await sb.listActiveSupportTickets(25).catch(() => []);
     if (!rows.length) {
-      await ctx.reply('📭 Nessuna segnalazione attiva.', { parse_mode: 'HTML', ...(await supportAdminPanelKbAsync(ctx)) });
+      await ctx.reply('📭 Nessun ticket attivo.', { parse_mode: 'HTML', ...(await supportHomeKbAsync(ctx, n)) });
       return;
     }
-    await ctx.reply('📬 <b>Segnalazioni attive</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows) });
+    await ctx.reply('📬 <b>Ticket assistenza</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows, full) });
   });
 
   bot.action('support_admin_closed', async (ctx) => {
@@ -3255,19 +3317,22 @@ function setupBot(bot) {
 
   bot.action('support_admin_mine', async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
+    const n = await sb.listGlobalChatReports(['open', 'in_review'], 200).then((r) => (r || []).length).catch(() => 0);
+    const full = await isSupportAdmin(ctx);
     const rows = await sb.listActiveSupportTicketsAssignedTo(ctx.from.id, 25).catch(() => []);
     if (!rows.length) {
-      await ctx.reply('📭 Nessuna segnalazione assegnata a te.', { parse_mode: 'HTML', ...(await supportAdminPanelKbAsync(ctx)) });
+      await ctx.reply('📭 Nessun ticket assegnato a te.', { parse_mode: 'HTML', ...(await supportHomeKbAsync(ctx, n)) });
       return;
     }
-    await ctx.reply('👤 <b>Ticket assegnati a me</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows) });
+    await ctx.reply('👤 <b>Ticket assegnati a me</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows, full) });
   });
 
   async function renderGlobalReportsAdminList(ctx, statuses, title) {
+    const n = await sb.listGlobalChatReports(['open', 'in_review'], 200).then((r) => (r || []).length).catch(() => 0);
     const rows = await sb.listGlobalChatReports(statuses, 30).catch(() => []);
     if (!rows.length) {
-      await ctx.reply('📭 Nessuna segnalazione chat globale da gestire.', { parse_mode: 'HTML', ...(await supportAdminPanelKbAsync(ctx)) });
+      await ctx.reply('📭 Nessuna segnalazione chat globale da gestire.', { parse_mode: 'HTML', ...(await supportHomeKbAsync(ctx, n)) });
       return;
     }
     const baseRows = globalReportListKb(rows).reply_markup.inline_keyboard;
@@ -3282,25 +3347,25 @@ function setupBot(bot) {
 
   bot.action('support_admin_global_reports', async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
     await renderGlobalReportsAdminList(ctx, ['open', 'in_review'], '🚩 <b>Segnalazioni chat globale</b> (aperte/in review)');
   });
 
   bot.action('support_admin_global_reports_open', async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
     await renderGlobalReportsAdminList(ctx, ['open', 'in_review'], '🚩 <b>Segnalazioni chat globale</b> (aperte/in review)');
   });
 
   bot.action('support_admin_global_reports_resolved', async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
     await renderGlobalReportsAdminList(ctx, ['resolved', 'archived'], '🚩 <b>Segnalazioni chat globale</b> (risolte/archiviate)');
   });
 
   bot.action('support_admin_global_reports_all', async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
     await renderGlobalReportsAdminList(
       ctx,
       ['open', 'in_review', 'resolved', 'archived'],
@@ -3310,7 +3375,8 @@ function setupBot(bot) {
 
   bot.action(/^support_admin_greport:(\d+)$/, async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
+    const full = await isSupportAdmin(ctx);
     pendingManualReportTarget.delete(ctx.from?.id);
     adminActiveSupportTicket.delete(ctx.from?.id);
     await refreshPrivateReplyKeyboard(ctx);
@@ -3336,12 +3402,12 @@ function setupBot(bot) {
       `Motivo: ${fmt.escapeHtml(r.reason || '')}\n\n` +
       `<b>Messaggio segnalato</b>:\n${fmt.escapeHtml(String(r.reported_message_text || '').slice(0, 1300))}` +
       (isMuted ? `\n\n🔇 <i>Target attualmente in mute fino a ${fmt.escapeHtml(new Date(restr.muted_until).toLocaleString('it-IT', { timeZone: 'UTC' }))} UTC.</i>` : '');
-    await ctx.reply(body, { parse_mode: 'HTML', ...globalReportAdminKb(r, { isMuted }) });
+    await ctx.reply(body, { parse_mode: 'HTML', ...globalReportAdminKb(r, { isMuted, fullAdmin: full }) });
   });
 
   bot.action(/^support_admin_greport_take:(\d+)$/, async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
     const rid = Number(ctx.match[1]);
     await sb.setGlobalChatReportStatus(rid, 'in_review', ctx.from?.id, 'Presa in carico', 'none').catch(() => {});
     await ctx.reply(`📌 Segnalazione #${rid} presa in carico.`);
@@ -3349,7 +3415,7 @@ function setupBot(bot) {
 
   bot.action(/^support_admin_greport_archive:(\d+)$/, async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
     const rid = Number(ctx.match[1]);
     await sb.setGlobalChatReportStatus(rid, 'archived', ctx.from?.id, 'Archiviata da admin', 'archive').catch(() => {});
     await ctx.reply(`✅ Segnalazione #${rid} archiviata.`);
@@ -3357,7 +3423,7 @@ function setupBot(bot) {
 
   bot.action(/^support_admin_greport_mute24:(\d+)$/, async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
     const rid = Number(ctx.match[1]);
     const hours = 24;
     const r = await sb.getGlobalChatReportById(rid).catch(() => null);
@@ -3383,7 +3449,7 @@ function setupBot(bot) {
 
   bot.action(/^support_admin_greport_muteh:(\d+):(2|4|8|16|24|48)$/, async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
     const rid = Number(ctx.match[1]);
     const hours = Number(ctx.match[2]);
     const r = await sb.getGlobalChatReportById(rid).catch(() => null);
@@ -3409,7 +3475,7 @@ function setupBot(bot) {
 
   bot.action(/^support_admin_greport_unmute:(\d+)$/, async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
     const rid = Number(ctx.match[1]);
     const r = await sb.getGlobalChatReportById(rid).catch(() => null);
     const targetId = r?.reported_target_telegram_user_id != null ? Number(r.reported_target_telegram_user_id) : null;
@@ -3425,7 +3491,7 @@ function setupBot(bot) {
 
   bot.action(/^support_admin_greport_remute:(\d+)$/, async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
     const rid = Number(ctx.match[1]);
     const kb = Markup.inlineKeyboard([
       [
@@ -3564,7 +3630,8 @@ function setupBot(bot) {
 
   bot.action(/^support_admin_ticket:(\d+)$/, async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
+    const full = await isSupportAdmin(ctx);
     pendingManualReportTarget.delete(ctx.from?.id);
     const tid = Number(ctx.match[1]);
     const t = await sb.getTicketById(tid).catch(() => null);
@@ -3584,7 +3651,14 @@ function setupBot(bot) {
     await refreshPrivateReplyKeyboard(ctx);
     await ctx.reply(body, { parse_mode: 'HTML' });
     for (const m of msgs) {
-      const who = m.from_role === 'admin' ? '👮 Admin' : m.from_role === 'system' ? 'ℹ️ Sistema' : '🙋 Utente';
+      const who =
+        m.from_role === 'admin'
+          ? '👮 Admin'
+          : m.from_role === 'moderator'
+            ? '🛡 Moderatore'
+            : m.from_role === 'system'
+              ? 'ℹ️ Sistema'
+              : '🙋 Utente';
       const txt = String(m.text || '').trim();
       if (m.photo_file_id) {
         const caption = `${who} · ticket #${t.id}` + (txt ? `\n${txt.slice(0, 700)}` : '');
@@ -3594,23 +3668,24 @@ function setupBot(bot) {
       }
     }
     await ctx.reply('Azioni ticket:', {
-      ...supportTicketAdminKb(t.id),
+      ...supportTicketAdminKb(t.id, full),
       parse_mode: 'HTML',
     });
   });
 
   bot.action(/^support_admin_take:(\d+)$/, async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
     const tid = Number(ctx.match[1]);
     adminActiveSupportTicket.set(ctx.from.id, tid);
     await refreshPrivateReplyKeyboard(ctx);
     await sb.setTicketStatus(tid, 'in_progress', ctx.from?.id).catch(() => {});
-    await sb.appendSupportMessage(tid, { from_role: 'system', text: 'Ticket preso in carico da un amministratore.' }).catch(() => {});
+    await sb.appendSupportMessage(tid, { from_role: 'system', text: 'Ticket preso in carico dallo staff.' }).catch(() => {});
     const t = await sb.getTicketById(tid).catch(() => null);
     if (t?.telegram_user_id) {
+      const staffLabel = (await isSupportAdmin(ctx)) ? 'un amministratore' : 'uno staff moderatore';
       await ctx.telegram
-        .sendMessage(t.telegram_user_id, '✅ Il tuo ticket è stato preso in carico da un amministratore.', { parse_mode: 'HTML' })
+        .sendMessage(t.telegram_user_id, `✅ Il tuo ticket è stato preso in carico da ${staffLabel}.`, { parse_mode: 'HTML' })
         .catch(() => {});
     }
     await ctx.reply(`Ticket #${tid} preso in carico.`);
@@ -3618,7 +3693,7 @@ function setupBot(bot) {
 
   bot.action(/^support_admin_reply:(\d+)$/, async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
     const tid = Number(ctx.match[1]);
     adminActiveSupportTicket.set(ctx.from.id, tid);
     await refreshPrivateReplyKeyboard(ctx);
@@ -3627,7 +3702,7 @@ function setupBot(bot) {
 
   bot.action(/^support_admin_wait:(\d+)$/, async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
     const tid = Number(ctx.match[1]);
     adminActiveSupportTicket.set(ctx.from.id, tid);
     await refreshPrivateReplyKeyboard(ctx);
@@ -3641,7 +3716,7 @@ function setupBot(bot) {
 
   bot.action(/^support_admin_close:(\d+)$/, async (ctx) => {
     safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
+    if (!(await isSupportStaff(ctx))) return;
     const tid = Number(ctx.match[1]);
     adminActiveSupportTicket.set(ctx.from.id, tid);
     await refreshPrivateReplyKeyboard(ctx);

@@ -2,10 +2,6 @@ const { createClient } = require('@supabase/supabase-js');
 const { requireRole } = require('../_utils/require-role');
 
 module.exports = async (req, res) => {
-    // Verifica che il chiamante sia admin
-    const authError = await requireRole(req, ['admin']);
-    if (authError) return res.status(authError.status).json({ error: authError.error });
-
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!serviceKey) return res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY non configurata.' });
 
@@ -15,8 +11,13 @@ module.exports = async (req, res) => {
 
     const isBotScope = String(req.query?.scope || '').toLowerCase() === 'bot';
     if (isBotScope) {
-        return handleBotAdmin(req, res, supabase);
+        const panel = await authenticateBotPanel(req);
+        if (panel.error) return res.status(panel.status).json({ error: panel.error });
+        return handleBotAdmin(req, res, supabase, panel);
     }
+
+    const authError = await requireRole(req, ['admin']);
+    if (authError) return res.status(authError.status).json({ error: authError.error });
 
     // GET — lista utenti
     if (req.method === 'GET') {
@@ -30,41 +31,59 @@ module.exports = async (req, res) => {
         const { email, password, username, role } = req.body;
         if (!password) return res.status(400).json({ error: 'Password obbligatoria.' });
 
-        // Genera email fittizia prevedibile se non fornita
         const resolvedEmail = email || `${username.toLowerCase().replace(/[^a-z0-9]/g, '_')}@cocboard.internal`;
-
 
         const { data, error } = await supabase.auth.admin.createUser({
             email: resolvedEmail,
             password,
-            email_confirm: true,          // nessuna email di verifica
+            email_confirm: true,
             user_metadata: { role: role || 'utente', username: username || '' }
         });
         if (error) return res.status(500).json({ error: error.message });
         return res.status(201).json({ ok: true, user: data.user });
     }
 
-    // PUT — aggiorna ruolo, username e/o password
+    // PUT — aggiorna ruolo, username, flag moderatore Telegram, password
     if (req.method === 'PUT') {
-        const { userId, role, username, newPassword } = req.body;
-        const updates = {};
-        const meta = {};
-        if (role !== undefined) meta.role = role;
-        if (username !== undefined) meta.username = username;
-        if (Object.keys(meta).length) updates.user_metadata = meta;
+        const { userId, role, username, newPassword, telegram_moderator } = req.body;
+        if (!userId) return res.status(400).json({ error: 'userId obbligatorio.' });
+
+        const { data: cur, error: ge } = await supabase.auth.admin.getUserById(userId);
+        if (ge || !cur?.user) return res.status(404).json({ error: 'Utente non trovato.' });
+
+        if (
+            role === undefined &&
+            username === undefined &&
+            newPassword === undefined &&
+            telegram_moderator === undefined
+        ) {
+            return res.status(400).json({ error: 'Nessun campo da aggiornare.' });
+        }
+
+        const merged = { ...(cur.user.user_metadata || {}) };
+        if (role !== undefined) merged.role = role;
+        if (username !== undefined) merged.username = username;
+        if (telegram_moderator !== undefined) merged.telegram_moderator = !!telegram_moderator;
+
+        const updates = { user_metadata: merged };
         if (newPassword) {
             if (newPassword.length < 6) return res.status(400).json({ error: 'Password min 6 caratteri.' });
             updates.password = newPassword;
         }
-        if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nessun campo da aggiornare.' });
+
         const { error } = await supabase.auth.admin.updateUserById(userId, updates);
         if (error) return res.status(500).json({ error: error.message });
+
+        if (telegram_moderator !== undefined) {
+            await syncTelegramStaffModeratorRow(supabase, userId, !!telegram_moderator);
+        }
         return res.status(200).json({ ok: true });
     }
 
     // DELETE — elimina utente
     if (req.method === 'DELETE') {
         const { userId } = req.body;
+        await syncTelegramStaffModeratorRow(supabase, userId, false);
         const { error } = await supabase.auth.admin.deleteUser(userId);
         if (error) return res.status(500).json({ error: error.message });
         return res.status(200).json({ ok: true });
@@ -73,10 +92,65 @@ module.exports = async (req, res) => {
     res.status(405).json({ error: 'Method not allowed' });
 };
 
-async function handleBotAdmin(req, res, supabase) {
+async function authenticateBotPanel(req) {
+    const authHeader = req.headers['authorization'] || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+    if (!token) return { error: 'Autenticazione richiesta. Passa il token JWT nell\'header Authorization.', status: 401 };
+
+    const anon = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY, {
+        auth: { autoRefreshToken: false, persistSession: false }
+    });
+    const { data: { user }, error } = await anon.auth.getUser(token);
+    if (error || !user) return { error: 'Token non valido o scaduto.', status: 401 };
+
+    const role = user.user_metadata?.role || 'utente';
+    const isModerator = user.user_metadata?.telegram_moderator === true;
+    const isAdmin = role === 'admin';
+    if (!isAdmin && !isModerator) {
+        return { error: 'Accesso negato al pannello CoCBoardBot.', status: 403 };
+    }
+    return { user, isAdmin, isModerator };
+}
+
+function botNeedsFullAdmin(panel, res) {
+    if (!panel.isAdmin) {
+        res.status(403).json({ error: 'Operazione riservata agli amministratori.' });
+        return true;
+    }
+    return false;
+}
+
+async function syncTelegramStaffModeratorRow(sb, userId, enabled) {
+    try {
+        const uid = String(userId || '').trim();
+        if (!uid) return;
+        const { data: link } = await sb
+            .from('telegram_links')
+            .select('telegram_user_id')
+            .eq('supabase_user_id', uid)
+            .maybeSingle();
+        const tg = link?.telegram_user_id;
+        if (enabled && tg != null) {
+            await sb.from('telegram_staff_moderator_ids').upsert(
+                {
+                    telegram_user_id: Number(tg),
+                    supabase_user_id: uid,
+                    updated_at: new Date().toISOString(),
+                },
+                { onConflict: 'telegram_user_id' }
+            );
+        } else {
+            if (tg != null) await sb.from('telegram_staff_moderator_ids').delete().eq('telegram_user_id', Number(tg));
+            await sb.from('telegram_staff_moderator_ids').delete().eq('supabase_user_id', uid);
+        }
+    } catch (_) {}
+}
+
+async function handleBotAdmin(req, res, supabase, panel) {
     const view = String(req.query?.view || '').toLowerCase();
     if (req.method === 'GET') {
         if (view === 'dashboard') {
+            if (botNeedsFullAdmin(panel, res)) return;
             const [linked, paused, dauRows, wauRows, reportOpenRows, bannedRows] = await Promise.all([
                 supabase.from('telegram_chat_links').select('telegram_chat_id'),
                 supabase.from('telegram_chat_controls').select('telegram_chat_id').eq('bot_enabled', false),
@@ -97,6 +171,7 @@ async function handleBotAdmin(req, res, supabase) {
             });
         }
         if (view === 'csv') {
+            if (botNeedsFullAdmin(panel, res)) return;
             const start = new Date(Date.now() - 21 * 24 * 3600 * 1000).toISOString();
             const { data, error } = await supabase
                 .from('telegram_usage_events')
@@ -123,6 +198,28 @@ async function handleBotAdmin(req, res, supabase) {
             const csv = `day,events,unique_users,unique_chats,commands,callbacks,messages\n${rows.join('\n')}\n`;
             return res.status(200).json({ csv });
         }
+        if (view === 'moderators') {
+            if (botNeedsFullAdmin(panel, res)) return;
+            const { data: idRows, error: e1 } = await supabase
+                .from('telegram_staff_moderator_ids')
+                .select('telegram_user_id, supabase_user_id');
+            if (e1) return res.status(500).json({ error: e1.message });
+            const moderators = [];
+            for (const row of idRows || []) {
+                const { data: uwrap } = await supabase.auth.admin.getUserById(row.supabase_user_id);
+                const u = uwrap?.user;
+                if (!u) continue;
+                const m = u.user_metadata || {};
+                moderators.push({
+                    userId: u.id,
+                    username: m.username || '',
+                    role: m.role || 'utente',
+                    telegram_user_id: row.telegram_user_id != null ? Number(row.telegram_user_id) : null,
+                });
+            }
+            moderators.sort((a, b) => String(a.username || '').localeCompare(String(b.username || ''), 'it'));
+            return res.status(200).json({ moderators });
+        }
         if (view === 'tickets') {
             const mode = String(req.query?.mode || 'open');
             if (mode === 'mine') {
@@ -139,6 +236,7 @@ async function handleBotAdmin(req, res, supabase) {
                 return res.status(200).json({ tickets: data || [] });
             }
             if (mode === 'closed') {
+                if (botNeedsFullAdmin(panel, res)) return;
                 const { data, error } = await supabase
                     .from('telegram_support_tickets')
                     .select('*')
@@ -169,7 +267,11 @@ async function handleBotAdmin(req, res, supabase) {
                 .eq('ticket_id', id)
                 .order('created_at', { ascending: true })
                 .limit(250);
-            return res.status(200).json({ ticket, messages: messages || [] });
+            return res.status(200).json({
+                ticket,
+                messages: messages || [],
+                panel: { canBan: panel.isAdmin },
+            });
         }
         if (view === 'global_reports') {
             const statuses = String(req.query?.statuses || 'open,in_review')
@@ -191,9 +293,10 @@ async function handleBotAdmin(req, res, supabase) {
             const { data, error } = await supabase.from('telegram_global_reports').select('*').eq('id', id).maybeSingle();
             if (error) return res.status(500).json({ error: error.message });
             if (!data) return res.status(404).json({ error: 'Segnalazione non trovata' });
-            return res.status(200).json({ report: data });
+            return res.status(200).json({ report: data, panel: { canBan: panel.isAdmin } });
         }
         if (view === 'banned_users') {
+            if (botNeedsFullAdmin(panel, res)) return;
             const { data, error } = await supabase
                 .from('telegram_user_restrictions')
                 .select('*')
@@ -212,9 +315,10 @@ async function handleBotAdmin(req, res, supabase) {
         const { data: ticket, error: e1 } = await supabase.from('telegram_support_tickets').select('*').eq('id', Number(ticketId)).maybeSingle();
         if (e1) return res.status(500).json({ error: e1.message });
         if (!ticket) return res.status(404).json({ error: 'Ticket non trovato.' });
+        const fromRole = panel.isAdmin ? 'admin' : 'moderator';
         const { error: e2 } = await supabase.from('telegram_support_messages').insert({
             ticket_id: Number(ticketId),
-            from_role: 'admin',
+            from_role: fromRole,
             text: String(text).slice(0, 4000),
             session_index: Number(ticket.session_index || 1),
         });
@@ -227,15 +331,17 @@ async function handleBotAdmin(req, res, supabase) {
         const { ticketId, action } = req.body || {};
         const id = Number(ticketId);
         if (!Number.isFinite(id)) return res.status(400).json({ error: 'ticketId non valido.' });
+        if ((action === 'ban' || action === 'unban') && botNeedsFullAdmin(panel, res)) return;
         const adminTelegramUserId = await resolveAdminTelegramUserId(req, supabase);
         const { data: t, error: e1 } = await supabase.from('telegram_support_tickets').select('*').eq('id', id).maybeSingle();
         if (e1) return res.status(500).json({ error: e1.message });
         if (!t) return res.status(404).json({ error: 'Ticket non trovato.' });
         const now = new Date();
+        const staffWord = panel.isAdmin ? 'un amministratore' : 'uno staff moderatore';
         if (action === 'take') {
             await supabase.from('telegram_support_tickets').update({ status: 'in_progress', assigned_admin_id: adminTelegramUserId || null, updated_at: now.toISOString() }).eq('id', id);
-            await supabase.from('telegram_support_messages').insert({ ticket_id: id, from_role: 'system', text: 'Ticket preso in carico da un amministratore.', session_index: Number(t.session_index || 1) });
-            await notifyTelegram(t.telegram_user_id, '✅ Il tuo ticket è stato preso in carico da un amministratore.');
+            await supabase.from('telegram_support_messages').insert({ ticket_id: id, from_role: 'system', text: 'Ticket preso in carico dallo staff.', session_index: Number(t.session_index || 1) });
+            await notifyTelegram(t.telegram_user_id, `✅ Il tuo ticket è stato preso in carico da ${staffWord}.`);
             return res.status(200).json({ ok: true });
         }
         if (action === 'wait') {
@@ -291,6 +397,7 @@ async function handleBotAdmin(req, res, supabase) {
         const { reportId, action } = req.body || {};
         const id = Number(reportId);
         if (!Number.isFinite(id)) return res.status(400).json({ error: 'reportId non valido.' });
+        if (action === 'ban' && botNeedsFullAdmin(panel, res)) return;
         const adminTelegramUserId = await resolveAdminTelegramUserId(req, supabase);
         const { data: r, error: e1 } = await supabase.from('telegram_global_reports').select('*').eq('id', id).maybeSingle();
         if (e1) return res.status(500).json({ error: e1.message });
@@ -299,7 +406,7 @@ async function handleBotAdmin(req, res, supabase) {
             const patch = {
                 status: action === 'take' ? 'in_review' : 'archived',
                 action_taken: action === 'take' ? 'none' : 'archive',
-                resolution_note: action === 'take' ? 'Presa in carico' : 'Archiviata da admin web',
+                resolution_note: action === 'take' ? 'Presa in carico' : 'Archiviata dallo staff',
                 reviewed_by_telegram_user_id: adminTelegramUserId || null,
                 reviewed_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
@@ -333,7 +440,11 @@ async function handleBotAdmin(req, res, supabase) {
             const { error: e3 } = await supabase.from('telegram_global_reports').update({
                 status: 'resolved',
                 action_taken: isBan ? 'ban' : isUnmute ? 'unmute' : `mute${muteHours}h`,
-                resolution_note: isBan ? 'Ban applicato da admin web' : isUnmute ? 'Unmute applicato da admin web' : `Mute ${muteHours}h applicato da admin web`,
+                resolution_note: isBan
+                    ? 'Ban applicato dallo staff'
+                    : isUnmute
+                        ? 'Unmute applicato dallo staff'
+                        : `Mute ${muteHours}h applicato dallo staff`,
                 reviewed_by_telegram_user_id: adminTelegramUserId || null,
                 reviewed_at: now.toISOString(),
                 updated_at: now.toISOString(),
@@ -348,6 +459,7 @@ async function handleBotAdmin(req, res, supabase) {
     }
 
     if (req.method === 'PUT' && view === 'user_restriction_action') {
+        if (botNeedsFullAdmin(panel, res)) return;
         const { telegramUserId, action } = req.body || {};
         const uid = Number(telegramUserId);
         if (!Number.isFinite(uid)) return res.status(400).json({ error: 'telegramUserId non valido.' });

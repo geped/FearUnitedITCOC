@@ -1108,6 +1108,11 @@ tbody tr:last-child td { border-bottom: none; }
     font-family: 'IBM Plex Mono', monospace;
 }
 
+/* Moderatore: nasconde voci riservate agli admin (JS toggola .botadmin-mod-hidden) */
+#tab-botadmin .botadmin-mod-hidden {
+    display: none !important;
+}
+
 /* Tab CoCBoardBot — schermi stretti / Mini App Telegram */
 @media (max-width: 640px) {
     #tab-botadmin .page-header {

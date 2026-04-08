@@ -48,6 +48,8 @@ const db = window.sb;
 window._userClanTag    = null;  // es. '#2J2VLPP9R'
 window._clanName       = '';
 window._clanBadgeUrl   = null;
+window._userIsTelegramModerator = false;
+window._userBotAdminFull = false;
 
 // Fetch con JWT dell'utente corrente — usare per endpoint protetti (admin, import)
 async function authFetch(url, options = {}) {
@@ -750,6 +752,13 @@ const ROLES = [
 ];
 const ROLE_LABELS = Object.fromEntries(ROLES.map(r => [r.value, r]));
 
+function applyBotAdminStaffUi() {
+  const full = window._userRole === 'admin';
+  document.querySelectorAll('[data-botadmin-admin-only], .botadmin-admin-only-block').forEach((el) => {
+    el.classList.toggle('botadmin-mod-hidden', !full);
+  });
+}
+
 async function showApp(sessionUser) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
@@ -763,6 +772,7 @@ async function showApp(sessionUser) {
 
   const role = user.user_metadata?.role || 'utente';
   const isAdmin   = role === 'admin';
+  const isTelegramModerator = user.user_metadata?.telegram_moderator === true;
   const canEdit   = ['admin', 'capo', 'co-capo'].includes(role);
 
   // Imposta info clan dell'utente
@@ -810,9 +820,15 @@ async function showApp(sessionUser) {
       : 'none';
   });
 
-  // Solo admin vede tab "Gestione Utenti" e "CoCBoardBot"
-  document.querySelectorAll('[data-tab="admin"], [data-tab="botadmin"]').forEach(el => {
+  // Solo admin vede "Gestione Utenti"; CoCBoardBot per admin o moderatori Telegram
+  document.querySelectorAll('[data-tab="admin"]').forEach(el => {
     el.style.display = isAdmin
+      ? (el.classList.contains('bnav-btn') ? 'flex' : 'inline-block')
+      : 'none';
+  });
+  document.querySelectorAll('[data-tab="botadmin"]').forEach(el => {
+    const show = isAdmin || isTelegramModerator;
+    el.style.display = show
       ? (el.classList.contains('bnav-btn') ? 'flex' : 'inline-block')
       : 'none';
   });
@@ -824,6 +840,9 @@ async function showApp(sessionUser) {
   // Salva il ruolo corrente globalmente
   window._userRole = role;
   window._canEdit  = canEdit;  // usato da renderCwlSeasons per pulsante ✏️
+  window._userIsTelegramModerator = !!isTelegramModerator;
+  window._userBotAdminFull = isAdmin;
+  applyBotAdminStaffUi();
 
   if (!window._userClanTag && isAdmin) {
     activateTab('admin');
@@ -854,7 +873,7 @@ async function applyCocboardTelegramWebDeepLinks() {
     if (!ot) return;
     if (ot === 'botadmin') {
       delete window.__cocboardOpenTab;
-      if (window._userRole === 'admin') activateTab('botadmin');
+      if (window._userRole === 'admin' || window._userIsTelegramModerator) activateTab('botadmin');
       return;
     }
     if (ot === 'login') {
@@ -965,7 +984,16 @@ function activateTab(tabId) {
   const titleEl = document.getElementById('topbar-title');
   if (titleEl) titleEl.textContent = TAB_TITLES[tabId] || tabId;
   if (tabId === 'admin') loadUsers();
-  if (tabId === 'botadmin') loadBotAdminDashboard();
+  if (tabId === 'botadmin') {
+    applyBotAdminStaffUi();
+    if (window._userBotAdminFull) {
+      const d = document.querySelector('#tab-botadmin [data-botadmin-tab="dashboard"]');
+      switchBotAdminTab('dashboard', d);
+    } else {
+      const t = document.querySelector('#tab-botadmin [data-botadmin-tab="tickets"]');
+      switchBotAdminTab('tickets', t);
+    }
+  }
   if (tabId === 'warlog') setTimeout(loadWarLog, 80);
   if (tabId === 'cwl') setTimeout(loadAssignBonus, 80);
   if (tabId === 'profilo') setTimeout(loadProfile, 80);
@@ -2956,9 +2984,10 @@ function showBotAdminMsg(text, type = 'info') {
 }
 
 function switchBotAdminTab(tab, btn) {
+  applyBotAdminStaffUi();
   document.querySelectorAll('[data-botadmin-tab]').forEach((b) => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  ['dashboard', 'tickets', 'reports', 'banned'].forEach((k) => {
+  ['dashboard', 'tickets', 'reports', 'banned', 'moderators'].forEach((k) => {
     const el = document.getElementById(`botadmin-tab-${k}`);
     if (el) el.style.display = k === tab ? 'block' : 'none';
   });
@@ -2966,6 +2995,7 @@ function switchBotAdminTab(tab, btn) {
   if (tab === 'tickets') loadBotTickets(_botTicketMode);
   if (tab === 'reports') loadBotGlobalReports(_botReportFilter);
   if (tab === 'banned') loadBotBannedUsers();
+  if (tab === 'moderators') loadBotModeratorsAdmin();
 }
 
 async function botAdminFetch(view, extra = {}, method = 'GET', body = null) {
@@ -2981,6 +3011,10 @@ async function botAdminFetch(view, extra = {}, method = 'GET', body = null) {
 async function loadBotAdminDashboard() {
   const box = document.getElementById('botadmin-dashboard');
   if (!box) return;
+  if (!window._userBotAdminFull) {
+    box.innerHTML = '<p class="wl-loading">Sezione riservata agli amministratori.</p>';
+    return;
+  }
   box.innerHTML = '<p class="wl-loading">Caricamento dashboard bot…</p>';
   const res = await botAdminFetch('dashboard');
   if (!res.ok) {
@@ -3008,6 +3042,7 @@ async function loadBotAdminDashboard() {
 }
 
 async function downloadBotMetricsCsv() {
+  if (!window._userBotAdminFull) return;
   const res = await botAdminFetch('csv');
   if (!res.ok) {
     const e = await res.json().catch(() => ({}));
@@ -3082,6 +3117,11 @@ async function openBotTicket(ticketId) {
   const data = await res.json();
   const t = data.ticket;
   const msgs = data.messages || [];
+  const canBan = data.panel?.canBan === true;
+  const banRow = canBan
+    ? `<button class="btn-danger btn-sm" onclick="botTicketAction(${t.id}, 'ban')">🚫 Ban utente</button>
+      <button class="btn-secondary btn-sm" onclick="botTicketAction(${t.id}, 'unban')">✅ Unban utente</button>`
+    : '';
   detail.innerHTML = `
     <h3 class="card-title">🎫 Ticket #${t.id}</h3>
     <p style="margin-bottom:0.6rem">Utente: <code>${t.telegram_user_id}</code> · Stato: <b>${t.status}</b></p>
@@ -3089,8 +3129,7 @@ async function openBotTicket(ticketId) {
       <button class="btn-secondary btn-sm" onclick="botTicketAction(${t.id}, 'take')">✅ Presa in carico</button>
       <button class="btn-secondary btn-sm" onclick="botTicketAction(${t.id}, 'wait')">⏸ In attesa</button>
       <button class="btn-secondary btn-sm" onclick="botTicketAction(${t.id}, 'close')">🔒 Chiudi</button>
-      <button class="btn-danger btn-sm" onclick="botTicketAction(${t.id}, 'ban')">🚫 Ban utente</button>
-      <button class="btn-secondary btn-sm" onclick="botTicketAction(${t.id}, 'unban')">✅ Unban utente</button>
+      ${banRow}
     </div>
     <div class="card" style="background:var(--bg-2);max-height:260px;overflow:auto;margin-bottom:0.8rem">
       ${(msgs || []).map((m) => `
@@ -3191,8 +3230,13 @@ async function openBotReport(reportId) {
     detail.innerHTML = `<p class="wl-err">❌ ${e.error || 'Errore dettaglio segnalazione.'}</p>`;
     return;
   }
-  const { report } = await res.json();
+  const data = await res.json();
+  const report = data.report;
+  const canBan = data.panel?.canBan === true;
   const targetKnown = report.reported_target_telegram_user_id != null;
+  const banBtn = canBan ? `<button class="btn-danger btn-sm" onclick="botReportAction(${report.id}, 'ban')">🚫 Ban</button>` : '';
+  const manualTargetBtn =
+    !targetKnown && canBan ? `<button class="btn-secondary btn-sm" onclick="botReportManualTarget(${report.id})">🎯 Target manuale</button>` : '';
   detail.innerHTML = `
     <h3 class="card-title">🚩 Segnalazione #${report.id}</h3>
     <p>Stato: <b>${report.status}</b> · Segnalante: <code>${report.reporter_telegram_user_id}</code></p>
@@ -3209,13 +3253,17 @@ async function openBotReport(reportId) {
       <button class="btn-secondary btn-sm" onclick="botReportAction(${report.id}, 'mute16')">🔇 16h</button>
       <button class="btn-secondary btn-sm" onclick="botReportAction(${report.id}, 'mute24')">🔇 24h</button>
       <button class="btn-secondary btn-sm" onclick="botReportAction(${report.id}, 'mute48')">🔇 48h</button>
-      <button class="btn-danger btn-sm" onclick="botReportAction(${report.id}, 'ban')">🚫 Ban</button>
-      ${!targetKnown ? `<button class="btn-secondary btn-sm" onclick="botReportManualTarget(${report.id})">🎯 Target manuale</button>` : ''}
+      ${banBtn}
+      ${manualTargetBtn}
     </div>
   `;
 }
 
 async function botReportManualTarget(reportId) {
+  if (!window._userBotAdminFull) {
+    showBotAdminMsg('Solo gli amministratori possono impostare il target manuale.', 'error');
+    return;
+  }
   const v = prompt('Inserisci Telegram User ID target per questa segnalazione:');
   if (!v) return;
   const targetTelegramUserId = Number(v);
@@ -3243,12 +3291,12 @@ async function botReportAction(reportId, action) {
   showBotAdminMsg('✅ Azione segnalazione eseguita.');
   await openBotReport(reportId);
   await loadBotGlobalReports(_botReportFilter);
-  await loadBotAdminDashboard();
+  if (window._userBotAdminFull) await loadBotAdminDashboard();
 }
 
 async function loadBotBannedUsers() {
   const box = document.getElementById('botadmin-banned');
-  if (!box) return;
+  if (!box || !window._userBotAdminFull) return;
   box.innerHTML = '<p class="wl-loading">Caricamento utenti bannati…</p>';
   const res = await botAdminFetch('banned_users');
   if (!res.ok) {
@@ -3298,14 +3346,114 @@ async function botUserRestrictionAction(telegramUserId, action) {
   }
   showBotAdminMsg('✅ Azione utente eseguita.');
   await loadBotBannedUsers();
-  await loadBotAdminDashboard();
+  if (window._userBotAdminFull) await loadBotAdminDashboard();
+}
+
+async function loadBotModeratorsAdmin() {
+  if (!window._userBotAdminFull) return;
+  const box = document.getElementById('botadmin-moderators');
+  if (!box) return;
+  box.innerHTML = '<p class="wl-loading">Caricamento moderatori…</p>';
+  const res = await botAdminFetch('moderators');
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    box.innerHTML = `<p class="wl-err">❌ ${e.error || 'Errore caricamento moderatori.'}</p>`;
+    return;
+  }
+  const { moderators } = await res.json();
+  if (!moderators?.length) {
+    box.innerHTML = '<p class="wl-loading">Nessun moderatore assegnato.</p>';
+  } else {
+    box.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Nome</th><th>Ruolo</th><th>Telegram</th><th></th></tr></thead>
+        <tbody>
+          ${moderators
+            .map(
+              (m) => `
+            <tr>
+              <td>${String(m.username || '—').replace(/</g, '&lt;')}</td>
+              <td>${String(m.role || 'utente').replace(/</g, '&lt;')}</td>
+              <td><code>${m.telegram_user_id != null ? m.telegram_user_id : '—'}</code></td>
+              <td><button type="button" class="btn-danger btn-sm" onclick="removeBotModerator('${String(m.userId).replace(/'/g, "\\'")}')">Rimuovi</button></td>
+            </tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>
+    </div>`;
+  }
+  await populateBotModeratorUserSelect((moderators || []).map((m) => m.userId));
+}
+
+async function populateBotModeratorUserSelect(moderatorUserIds = []) {
+  const sel = document.getElementById('botadmin-moderator-user-select');
+  if (!sel) return;
+  const modIds = new Set(moderatorUserIds);
+  const res = await authFetch('/api/admin/users');
+  if (!res.ok) {
+    sel.innerHTML = '<option value="">— Errore lista utenti —</option>';
+    return;
+  }
+  const { users } = await res.json();
+  const opts = (users || []).filter((u) => !modIds.has(u.id) && (u.user_metadata?.role || '') !== 'admin');
+  sel.innerHTML =
+    '<option value="">— Seleziona utente —</option>' +
+    opts
+      .map((u) => {
+        const un = u.user_metadata?.username || u.email?.split('@')[0] || 'utente';
+        const role = u.user_metadata?.role || 'utente';
+        return `<option value="${u.id}">${String(un).replace(/</g, '&lt;')} (${role})</option>`;
+      })
+      .join('');
+}
+
+async function addSelectedBotModerator() {
+  const sel = document.getElementById('botadmin-moderator-user-select');
+  const userId = sel?.value;
+  if (!userId) {
+    showBotAdminMsg('Seleziona un utente.', 'error');
+    return;
+  }
+  const res = await authFetch('/api/admin/users', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, telegram_moderator: true }),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    showBotAdminMsg(`✗ ${e.error || 'Assegnazione fallita.'}`, 'error');
+    return;
+  }
+  showBotAdminMsg('✅ Moderatore assegnato (serve account Telegram collegato al bot per il badge e le azioni).');
+  await loadBotModeratorsAdmin();
+}
+
+async function removeBotModerator(userId) {
+  if (!userId || !confirm('Rimuovere questo moderatore?')) return;
+  const res = await authFetch('/api/admin/users', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, telegram_moderator: false }),
+  });
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    showBotAdminMsg(`✗ ${e.error || 'Rimozione fallita.'}`, 'error');
+    return;
+  }
+  showBotAdminMsg('✅ Moderatore rimosso.');
+  await loadBotModeratorsAdmin();
 }
 
 document.getElementById('refresh-botadmin')?.addEventListener('click', async () => {
-  await loadBotAdminDashboard();
+  if (window._userBotAdminFull) {
+    await loadBotAdminDashboard();
+    await loadBotBannedUsers();
+    await loadBotModeratorsAdmin();
+  }
   await loadBotTickets(_botTicketMode);
   await loadBotGlobalReports(_botReportFilter);
-  await loadBotBannedUsers();
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

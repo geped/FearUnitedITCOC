@@ -484,10 +484,11 @@
                 <div id="botadmin-msg" class="admin-msg-box" style="display:none"></div>
 
                 <div class="subtab-bar">
-                    <button class="subtab-btn active" data-botadmin-tab="dashboard" onclick="switchBotAdminTab('dashboard', this)">📊 Dashboard</button>
-                    <button class="subtab-btn" data-botadmin-tab="tickets" onclick="switchBotAdminTab('tickets', this)">🎫 Ticket supporto</button>
-                    <button class="subtab-btn" data-botadmin-tab="reports" onclick="switchBotAdminTab('reports', this)">🚩 Segnalazioni globali</button>
-                    <button class="subtab-btn" data-botadmin-tab="banned" onclick="switchBotAdminTab('banned', this)">🚫 Utenti bannati</button>
+                    <button type="button" class="subtab-btn active" data-botadmin-tab="dashboard" data-botadmin-admin-only onclick="switchBotAdminTab('dashboard', this)">📊 Dashboard</button>
+                    <button type="button" class="subtab-btn" data-botadmin-tab="tickets" onclick="switchBotAdminTab('tickets', this)">🎫 Ticket supporto</button>
+                    <button type="button" class="subtab-btn" data-botadmin-tab="reports" onclick="switchBotAdminTab('reports', this)">🚩 Segnalazioni globali</button>
+                    <button type="button" class="subtab-btn" data-botadmin-tab="banned" data-botadmin-admin-only onclick="switchBotAdminTab('banned', this)">🚫 Utenti bannati</button>
+                    <button type="button" class="subtab-btn" data-botadmin-tab="moderators" data-botadmin-admin-only onclick="switchBotAdminTab('moderators', this)">🛡 Moderatori</button>
                 </div>
 
                 <div id="botadmin-tab-dashboard">
@@ -502,7 +503,7 @@
                             <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
                                 <button class="btn-secondary btn-sm" onclick="loadBotTickets('open')">📬 Attivi</button>
                                 <button class="btn-secondary btn-sm" onclick="loadBotTickets('mine')">👤 Assegnati a me</button>
-                                <button class="btn-secondary btn-sm" onclick="loadBotTickets('closed')">🗂 Chiusi</button>
+                                <button type="button" class="btn-secondary btn-sm" id="botadmin-tickets-closed-btn" data-botadmin-admin-only onclick="loadBotTickets('closed')">🗂 Chiusi</button>
                             </div>
                             <span id="botadmin-ticket-filter" class="toolbar-label">Filtro: attivi</span>
                         </div>
@@ -528,6 +529,23 @@
 
                 <div id="botadmin-tab-banned" style="display:none">
                     <div id="botadmin-banned" class="card"><p class="wl-loading">Caricamento utenti bannati…</p></div>
+                </div>
+
+                <div id="botadmin-tab-moderators" class="botadmin-admin-only-block" style="display:none">
+                    <div class="card" style="margin-bottom:1rem">
+                        <h3 class="card-title">🛡 Moderatori Telegram</h3>
+                        <p class="page-sub" style="margin-bottom:0.75rem">Gli utenti devono aver collegato Telegram al bot. Ruolo CoC invariato (membro, anziano, ecc.).</p>
+                        <div class="admin-form-grid" style="align-items:flex-end">
+                            <div class="admin-field" style="grid-column:1/-1">
+                                <label for="botadmin-moderator-user-select">Aggiungi da gestione utenti</label>
+                                <select id="botadmin-moderator-user-select" class="form-input-sm"></select>
+                            </div>
+                            <div class="admin-form-footer" style="grid-column:1/-1;padding-top:0">
+                                <button type="button" class="btn-primary btn-sm" onclick="addSelectedBotModerator()">➕ Assegna moderatore</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="botadmin-moderators" class="card"><p class="wl-loading">Caricamento moderatori…</p></div>
                 </div>
             </section>
 
