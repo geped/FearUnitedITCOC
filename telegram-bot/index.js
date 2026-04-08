@@ -292,6 +292,12 @@ function guardUserId(ctx) {
   return ctx.from?.id ?? ctx.callbackQuery?.from?.id;
 }
 
+function resetSupportContextForUser(uid) {
+  if (uid == null) return;
+  pendingSupportOpen.delete(uid);
+  adminActiveSupportTicket.delete(uid);
+}
+
 function isPublicCallbackData(d) {
   if (!d) return false;
   return (
@@ -2047,6 +2053,10 @@ function setupBot(bot) {
     const uid = ctx.from?.id;
     if (uid == null || ctx.chat?.type !== 'private') return next();
     const d = ctx.callbackQuery.data || '';
+    if (d.startsWith('comm_')) {
+      // Entrando nei flussi Community azzera eventuale stato supporto pendente.
+      resetSupportContextForUser(uid);
+    }
     if (d === 'noop' || d === 'comm_global_leave' || d === 'comm_global_status') return next();
     const notifyLeave = d === 'menu' || d === 'comm_hub';
     await leaveGlobalIfActive(ctx, { notify: notifyLeave });
@@ -2072,13 +2082,18 @@ function setupBot(bot) {
       pendingSearch.delete(ctx.from.id);
       pendingLinkWizard.delete(ctx.from.id);
       pendingCommunity.delete(ctx.from.id);
-      pendingSupportOpen.delete(ctx.from.id);
-      adminActiveSupportTicket.delete(ctx.from.id);
+      resetSupportContextForUser(ctx.from.id);
       // Obbligatorio qui: questo ramo faceva next() prima del blocco leaveGlobalIfActive sotto.
       if (ctx.chat?.type === 'private') {
         await leaveGlobalIfActive(ctx, { notify: true });
       }
       return next();
+    }
+    if (ctx.chat?.type === 'private' && txt.startsWith('/')) {
+      const cmd = txt.split(/\s+/)[0].toLowerCase().split('@')[0];
+      if (cmd !== '/assistenza') {
+        resetSupportContextForUser(ctx.from.id);
+      }
     }
     if (pendingLinkWizard.has(ctx.from.id) && ctx.message?.text) {
       if (txt === '/cancel') {
@@ -2387,6 +2402,8 @@ function setupBot(bot) {
       }
       return;
     }
+    await leaveGlobalIfActive(ctx, { notify: true });
+    resetSupportContextForUser(ctx.from.id);
     pendingSupportOpen.set(ctx.from.id, true);
     await showSupportEntryHub(ctx);
   });
@@ -2823,6 +2840,8 @@ function setupBot(bot) {
       }
       return;
     }
+    await leaveGlobalIfActive(ctx, { notify: true });
+    resetSupportContextForUser(ctx.from.id);
     pendingSupportOpen.set(ctx.from.id, true);
     await showSupportEntryHub(ctx);
   });
@@ -2849,6 +2868,7 @@ function setupBot(bot) {
   bot.action('support_user_menu', async (ctx) => {
     safeAnswerCb(ctx);
     if (isLinkedChatContext(ctx)) return;
+    resetSupportContextForUser(ctx.from?.id);
     const sess = await tauth.getValidSession(ctx.from.id).catch(() => null);
     if (sess) {
       ctx.cocboardUser = sess.user;
@@ -2919,7 +2939,7 @@ function setupBot(bot) {
     const uid = ctx.from?.id;
     if (uid == null) return;
     const t = await sb.getOpenTicketForUser(uid).catch(() => null);
-    pendingSupportOpen.delete(uid);
+    resetSupportContextForUser(uid);
     if (t) {
       const sid = Number(t.session_index || 1);
       await sb.setTicketStatus(t.id, 'closed_pending_purge', null).catch(() => {});
@@ -3148,7 +3168,10 @@ function setupBot(bot) {
 
   bot.action('menu', async (ctx) => {
     safeAnswerCb(ctx);
-    if (ctx.from?.id != null) pendingCommunity.delete(ctx.from.id);
+    if (ctx.from?.id != null) {
+      pendingCommunity.delete(ctx.from.id);
+      resetSupportContextForUser(ctx.from.id);
+    }
     const sess = await tauth.getValidSession(ctx.from.id);
     if (sess) {
       ctx.cocboardUser = sess.user;
