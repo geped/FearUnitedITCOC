@@ -4038,12 +4038,14 @@ function minuteCountdownLabel(ms) {
 function formatWarAlertBody(warData, missing, minsLeft) {
   const c = warData?.clan || {};
   const o = warData?.opponent || {};
+  const isCwl = String(warData?.warType || '').toLowerCase() === 'cwl';
+  const modeLabel = isCwl ? 'CWL in corso' : 'Guerra in corso';
   const lineScore = `${c.stars || 0}★ vs ${o.stars || 0}★`;
   const lineDest = `${Number(c.destructionPercentage || 0).toFixed(2)}% vs ${Number(o.destructionPercentage || 0).toFixed(2)}%`;
   if (!missing.length) {
     return (
       `🚨 <b>Attenzione ${fmt.escapeHtml(c.name || 'Clan')}!</b>\n` +
-      `⚔️ <b>Guerra in corso</b> · ${lineScore} · ${lineDest}\n` +
+      `⚔️ <b>${modeLabel}</b> · ${lineScore} · ${lineDest}\n` +
       `⏳ Mancano <b>${fmt.escapeHtml(minsLeft)}</b> alla fine\n\n` +
       `✅ Non ci sono utenti da avvisare!\n` +
       `<b>Tutti hanno già fatto il numero richiesto di attacchi</b> 🥳`
@@ -4052,7 +4054,7 @@ function formatWarAlertBody(warData, missing, minsLeft) {
   const list = missing.slice(0, 15).map((m) => `• ${fmt.escapeHtml(m.name)} (${m.missing} att.)`).join('\n');
   return (
     `🚨 <b>Attenzione ${fmt.escapeHtml(c.name || 'Clan')}!</b>\n` +
-    `⚔️ <b>Guerra in corso</b> · ${lineScore} · ${lineDest}\n` +
+    `⚔️ <b>${modeLabel}</b> · ${lineScore} · ${lineDest}\n` +
     `⏳ Mancano <b>${fmt.escapeHtml(minsLeft)}</b> alla fine\n\n` +
     `È il momento di controllare gli attacchi mancanti:\n${list}`
   );
@@ -4061,19 +4063,21 @@ function formatWarAlertBody(warData, missing, minsLeft) {
 function formatWarFinalRecap(warData, missing) {
   const c = warData?.clan || {};
   const o = warData?.opponent || {};
+  const isCwl = String(warData?.warType || '').toLowerCase() === 'cwl';
+  const modeLabel = isCwl ? 'Recap finale CWL' : 'Recap finale guerra';
   const lineScore = `${c.stars || 0}★ vs ${o.stars || 0}★`;
   const lineDest = `${Number(c.destructionPercentage || 0).toFixed(2)}% vs ${Number(o.destructionPercentage || 0).toFixed(2)}%`;
   const out = warOutcomeLabel(warData);
   if (!missing.length) {
     return (
-      `📣 <b>Recap finale guerra</b>\n` +
+      `📣 <b>${modeLabel}</b>\n` +
       `${out} · ${lineScore} · ${lineDest}\n\n` +
       `✅ Tutti hanno completato gli attacchi richiesti.`
     );
   }
   const list = missing.slice(0, 20).map((m) => `• ${fmt.escapeHtml(m.name)} (${m.missing} att.)`).join('\n');
   return (
-    `📣 <b>Recap finale guerra</b>\n` +
+    `📣 <b>${modeLabel}</b>\n` +
     `${out} · ${lineScore} · ${lineDest}\n\n` +
     `<b>Attacchi mancanti registrati:</b>\n${list}`
   );
@@ -4093,11 +4097,14 @@ async function runWarAlertsMaintenance(bot) {
     if (!Number.isFinite(chatId) || !clanTag) continue;
     try {
       const notif = await sb.getChatNotificationSettings(chatId).catch(() => null);
-      if (!notif?.war_alerts_enabled) continue;
+      const warAlertsOn = notif?.war_alerts_enabled === true;
+      const cwlAlertsOn = notif?.cwl_alerts_enabled === true;
       const war = await api.currentWar(clanTag);
       const state = String(war?.state || '');
       if (!state || state === 'notInWar') continue;
-      if (String(war?.warType || '').toLowerCase() === 'cwl') continue;
+      const isCwl = String(war?.warType || '').toLowerCase() === 'cwl';
+      if (isCwl && !cwlAlertsOn) continue;
+      if (!isCwl && !warAlertsOn) continue;
       const end = parseCocTimeToDate(war?.endTime);
       if (!end) continue;
       const keyRoot = `${chatId}:${war.endTime}`;
