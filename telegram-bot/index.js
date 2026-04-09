@@ -1603,7 +1603,7 @@ async function renderClanHubMenu(ctx) {
     [Markup.button.callback('👥 Membri', 'mb0'), Markup.button.callback('🏰 Info clan', 'info')],
     [profileBtn, Markup.button.callback('🎁 Bonus', 'bonus:0')],
   ];
-  if (!grp) {
+  if (!grp || isAuthed) {
     rows.push([Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')]);
   }
   rows.push(
@@ -1637,17 +1637,18 @@ async function renderClanWebAppsMenu(ctx) {
   const guestClanTag = (!isAuthed && isLinkedChatContext(ctx))
     ? await resolveEffectiveClanTag(ctx).catch(() => null)
     : null;
-  try {
-    for (const [la, ta, lb, tb] of webPairs) {
+  const grp = isLinkedChatContext(ctx);
+  for (const [la, ta, lb, tb] of webPairs) {
+    try {
       const lockedA = !isAuthed && !MINI_APP_GUEST_ALLOWED_TABS.has(ta);
       let ua = null;
       if (!lockedA) {
-        if (isAuthed) ua = await buildWebAppHandoffUrl(ctx, { open_tab: ta });
+        if (grp) ua = buildGuestWebUrl(ta);
+        else if (isAuthed) ua = await buildWebAppHandoffUrl(ctx, { open_tab: ta });
         else ua = buildGuestWebUrl(ta);
       }
       if (lockedA) {
-        if (isLinkedChatContext(ctx)) {
-          // Gruppo: Direct App Link con clan tag → Mini App mostra login poi naviga al tab
+        if (grp) {
           const botUser = (cachedTgBotUsername || 'cocboardbot').replace(/^@/, '');
           const rawTag = (guestClanTag || '').replace(/^#/, '').trim();
           const sp = rawTag ? `${ta}__${rawTag}` : ta;
@@ -1667,11 +1668,12 @@ async function renderClanWebAppsMenu(ctx) {
       const lockedB = !isAuthed && !MINI_APP_GUEST_ALLOWED_TABS.has(tb);
       let ub = null;
       if (!lockedB) {
-        if (isAuthed) ub = await buildWebAppHandoffUrl(ctx, { open_tab: tb });
+        if (grp) ub = buildGuestWebUrl(tb);
+        else if (isAuthed) ub = await buildWebAppHandoffUrl(ctx, { open_tab: tb });
         else ub = buildGuestWebUrl(tb);
       }
       if (lockedB) {
-        if (isLinkedChatContext(ctx)) {
+        if (grp) {
           const botUser = (cachedTgBotUsername || 'cocboardbot').replace(/^@/, '');
           const rawTag = (guestClanTag || '').replace(/^#/, '').trim();
           const sp = rawTag ? `${tb}__${rawTag}` : tb;
@@ -1686,8 +1688,8 @@ async function renderClanWebAppsMenu(ctx) {
       } else {
         rows.push([webLaunchButton(ctx, la, ua, ta, guestClanTag)]);
       }
-    }
-  } catch (_) {}
+    } catch (_) { /* singolo tab fallito — prosegui con i successivi */ }
+  }
   if (rows.length === 0) {
     rows.push([Markup.button.callback('ℹ️ Mini app non disponibile', 'noop')]);
   }
