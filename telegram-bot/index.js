@@ -1435,6 +1435,7 @@ async function sendLinkedGroupGuestMenu(ctx, clanTag) {
   await ensureTgBotUsername(ctx.telegram);
   const intro = fmt.formatLinkedGroupGuestIntro({ clanTag, clanName, botUsername: cachedTgBotUsername });
   const rows = [
+    [Markup.button.callback(shortClanButtonLabel(clanName, clanTag), 'clan_home')],
     [Markup.button.callback('👥 Membri', 'mb0'), Markup.button.callback('🏰 Info clan', 'info')],
     [Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')],
     [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
@@ -1575,6 +1576,9 @@ async function renderClanHubMenu(ctx) {
     await ctx.answerCbQuery('Nessun clan disponibile').catch(() => {});
     return sendMainMenu(ctx);
   }
+  const sess = await tauth.getValidSession(ctx.from?.id).catch(() => null);
+  const isAuthed = !!sess?.user;
+  if (isAuthed) ctx.cocboardUser = sess.user;
   const info = await resolveEffectiveClanContext(ctx);
   const label = shortClanButtonLabel(info?.clanName, info?.clanTag || tag).replace(/^🏠\s*/, '');
   const tagLine = info?.clanTag ? `\n<code>${fmt.escapeHtml(info.clanTag)}</code>` : '';
@@ -1583,7 +1587,10 @@ async function renderClanHubMenu(ctx) {
     `Sezione clan e strumenti dedicati.`;
   const rows = [
     [Markup.button.callback('👥 Membri', 'mb0'), Markup.button.callback('🏰 Info clan', 'info')],
-    [Markup.button.callback('👤 Il mio profilo', 'me'), Markup.button.callback('🎁 Bonus', 'bonus:0')],
+    [
+      isAuthed ? Markup.button.callback('👤 Il mio profilo', 'me') : Markup.button.callback('👤 Profilo 🔒', 'noop'),
+      Markup.button.callback('🎁 Bonus', 'bonus:0'),
+    ],
     [Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')],
     [Markup.button.callback('📱 Visualizza come mini app', 'clan_webapps')],
     [Markup.button.callback('« Menù', 'menu')],
