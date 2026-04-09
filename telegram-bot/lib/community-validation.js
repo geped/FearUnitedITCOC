@@ -100,11 +100,16 @@ function containsFakeVerificationMarker(text) {
 
 /**
  * Emoji / pittogrammi (es. 🛡 😀) e sequenze bandiera — non ammessi nel formato manuale nome#TAG.
- * Usa Unicode Extended_Pictographic (Node con flag u).
+ * Tenta Unicode Extended_Pictographic, con fallback compatibile su runtime Node/ICU più vecchi.
  */
 function containsEmojiOrPictograph(text) {
   const s = String(text || '');
-  if (/\p{Extended_Pictographic}/u.test(s)) return true;
+  try {
+    if (new RegExp('\\p{Extended_Pictographic}', 'u').test(s)) return true;
+  } catch (_) {
+    // Fallback pragmatico: blocca i principali blocchi Unicode usati da emoji/pittogrammi.
+    if (/[\u2190-\u21FF\u2300-\u27BF\u2B00-\u2BFF\uD83C-\uDBFF\uDC00-\uDFFF]/.test(s)) return true;
+  }
   if (/[\u{1F1E6}-\u{1F1FF}]{2}/u.test(s)) return true;
   return false;
 }
