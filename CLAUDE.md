@@ -2,8 +2,8 @@
 
 ## Panoramica Progetto
 
-Dashboard web per la gestione del clan Clash of Clans **Fear United IT** (`#2J2VLPP9R`).
-Funzionalità principali: sincronizzazione membri, calcolo bonus CWL, storico performance, gestione utenti.
+Dashboard web + bot Telegram per la gestione del clan Clash of Clans.
+Funzionalità principali: sincronizzazione membri, calcolo bonus CWL, storico performance, gestione utenti, community (chat globale + reclutamento), supporto ticket, notifiche guerre in tempo reale, Mini App Telegram.
 UI in italiano, single-page application vanilla JS.
 
 ---
@@ -16,7 +16,8 @@ UI in italiano, single-page application vanilla JS.
 | Database | Supabase (PostgreSQL) |
 | Serverless API | Vercel (Node.js), Hobby plan — limite 12 functions |
 | Proxy backend | Render.com (Express) — piano gratuito, cold start ~30s |
-| Auth | Supabase Auth con metadati custom (role, username) |
+| Bot Telegram | Render.com (Express + Telegraf) — servizio separato, deploy automatico da push |
+| Auth | Supabase Auth con metadati custom (role, username, coc_tag, coc_clan_tag) |
 | API esterna | Clash of Clans API v1 |
 | Test | Node.js built-in `node:test` (zero dipendenze) |
 
@@ -25,64 +26,122 @@ UI in italiano, single-page application vanilla JS.
 ## Struttura Directory
 
 ```
-├── index.html              # UI markup (742 righe)
-├── app.js                  # Logica applicazione (4650 righe)
-├── style.css               # Stili (3224 righe)
-├── supabase-config.js      # Init client Supabase (lato client)
-├── vercel.json             # Config Vercel + cron job
+├── index.html                # UI markup
+├── app.js                    # Logica applicazione (monolitico — non spezzare)
+├── style.css                 # Stili
+├── supabase-config.js        # Init client Supabase (lato client)
+├── vercel.json               # Config Vercel + cron jobs
 │
-├── api/                    # Serverless functions Vercel (max 12)
+├── api/                      # Serverless functions Vercel (max 12)
 │   ├── _utils/
-│   │   ├── proxy-client.js # Helper proxyFetch() condiviso tra endpoints
-│   │   └── require-role.js # Middleware auth JWT + verifica ruolo
-│   ├── admin/users.js      # CRUD utenti (solo admin — verifica ruolo JWT)
-│   ├── auto-save-wars.js   # Cron salvataggio automatico guerre (20:00 UTC)
-│   ├── clan-info.js        # Info clan (via proxy)
-│   ├── clan-members.js     # Lista membri live (via proxy)
-│   ├── cwl-stats.js        # Stats CWL live (via proxy)
-│   ├── generate-bonuses.js # Calcolo e salvataggio bonus (legge cwl_history)
-│   ├── import-bonus.js     # Import bonus da Excel (richiede SYNC_SECRET)
-│   ├── lookup.js           # Player lookup, clan search, rankings (via proxy)
-│   ├── purge-ex-players.js # Cron pulizia ex-membri (1° del mese 7:00 UTC)
-│   ├── register-with-coc.js# Registrazione tramite chiave API in-game CoC
-│   ├── sync-members.js     # Sync membri (cron giornaliero 6:00 UTC)
-│   └── war-log.js          # Log guerre (via proxy)
+│   │   ├── proxy-client.js   # Helper proxyFetch() condiviso tra endpoints
+│   │   └── require-role.js   # Middleware auth JWT + verifica ruolo
+│   ├── admin/users.js        # CRUD utenti (solo admin — verifica ruolo JWT)
+│   ├── auto-save-wars.js     # Cron salvataggio automatico guerre (20:00 UTC)
+│   ├── clan-info.js          # Info clan (via proxy)
+│   ├── clan-members.js       # Lista membri live (via proxy)
+│   ├── cwl-stats.js          # Stats CWL live (via proxy)
+│   ├── generate-bonuses.js   # Calcolo e salvataggio bonus (legge cwl_history)
+│   ├── import-bonus.js       # Import bonus da Excel (richiede SYNC_SECRET)
+│   ├── lookup.js             # Player lookup, clan search, rankings, telegram-handoff (via proxy)
+│   ├── purge-ex-players.js   # Cron pulizia ex-membri (1° del mese 7:00 UTC)
+│   ├── register-with-coc.js  # Registrazione tramite chiave API in-game CoC
+│   ├── sync-members.js       # Sync membri (cron giornaliero 6:00 UTC)
+│   └── war-log.js            # Log guerre (via proxy)
 │
-├── render-proxy/           # Backend Express su Render.com
-│   └── index.js            # Proxy CoC API con caching (631 righe)
+├── render-proxy/             # Backend Express su Render.com
+│   └── index.js              # Proxy CoC API con caching
 │
-├── tests/                  # Test Node.js built-in
-│   ├── bonus-calculator.test.js  # 6 test formula calculateMerit
-│   └── purge-logic.test.js       # 5 test logica shouldPurge
+├── telegram-bot/             # Bot Telegram (servizio Render separato)
+│   ├── index.js              # Entry point: Express + Telegraf (~5100 righe)
+│   ├── package.json
+│   ├── lib/
+│   │   ├── access.js             # Rate limit + TELEGRAM_ALLOWED_IDS
+│   │   ├── auth-resolve.js       # Risoluzione email login (allineata ad app.js)
+│   │   ├── bonus-assistant.js    # Wizard assistito assegnazione bonus
+│   │   ├── cocboard-api.js       # Client HTTP verso api/ Vercel
+│   │   ├── community-handlers.js # Chat globale + reclutamento (callback comm_*)
+│   │   ├── community-validation.js # Validazione messaggi globali, rate limit, epoch
+│   │   ├── format.js             # Formattazione HTML Telegram per tutti i menu
+│   │   ├── private-ui-cleanup.js # Pulizia bolle UI in chat privata
+│   │   ├── supabase.js           # Tutte le query DB (service_role + anon)
+│   │   ├── supabase-community.js # Query DB per community (chat globale, reclutamento)
+│   │   ├── telegram-auth.js      # Login/registrazione Supabase Auth via bot
+│   │   └── telegram-html.js      # Conversione entities Telegram → HTML
+│   ├── schema-telegram-links.sql
+│   ├── schema-community-chat.sql
+│   ├── schema-community-subscriber-rpc.sql
+│   ├── schema-global-share-moderation.sql
+│   ├── schema-telegram-chat-links.sql
+│   ├── schema-support-tickets-ensure.sql
+│   ├── schema-telegram-moderators.sql
+│   ├── README.md
+│   └── DEPLOY-COCBOARD-BOT.md
 │
-├── leagues/                # Badge immagini leghe CWL
-├── th/                     # Icone Town Hall (level_01–18 .webp, webp/ per le copie)
+├── tests/                    # Test Node.js built-in
+│   ├── bonus-calculator.test.js
+│   ├── purge-logic.test.js
+│   └── ... (altri file test)
 │
-├── schema-MASTER.sql       # Schema unificato — applica tutto nell'ordine corretto
-└── schema*.sql             # File di migrazione individuali (per riferimento)
+├── leagues/                  # Badge immagini leghe CWL
+├── th/                       # Icone Town Hall (level_01–18 .webp, webp/ per le copie)
+│
+├── schema-MASTER.sql         # Schema unificato sito — applica tutto nell'ordine corretto
+└── schema*.sql               # File di migrazione individuali (per riferimento)
 ```
 
 ---
 
 ## Database Supabase
 
-**Tabelle principali:**
+### Tabelle sito (schema-MASTER.sql)
 
 | Tabella | Scopo |
 |---------|-------|
 | `members` | Roster attuale clan (PK: `tag`) |
 | `cwl_bonuses` | Snapshot assegnazione bonus corrente (PK: `tag`) |
 | `cwl_history` | Storico performance CWL per stagione (unique: `player_name, season`) |
+| `cwl_seasons` | Metadati stagioni CWL |
+| `classic_wars` | Storico guerre classiche salvate |
 | `player_aliases` | Alias nomi giocatori (per gestire cambi nome) |
-| `auth.users` | Gestito da Supabase Auth (metadati: `role`, `username`) |
+| `auth.users` | Gestito da Supabase Auth (metadati: `role`, `username`, `coc_tag`, `coc_clan_tag`) |
 
-**Ruoli utente:** `utente` < `membro` < `anziano` < `co-capo` < `admin`
+### Tabelle bot Telegram (schema-telegram-*.sql)
 
-**Login:** username → email interna `username@fearunited.internal`
+| Tabella | Scopo |
+|---------|-------|
+| `telegram_links` | Sessioni Auth bot (PK: `telegram_user_id`) — token refresh, override clan |
+| `telegram_pending_chat_links` | Token temporanei per collegamento gruppo ↔ clan |
+| `telegram_chat_links` | Associazione gruppo/canale ↔ clan (PK: `telegram_chat_id`) |
+| `telegram_chat_controls` | Interruttore `/coc_off` `/coc_on` per chat |
+| `telegram_chat_notification_settings` | Flag avvisi guerra/CWL/raid/giochi per chat |
+| `telegram_usage_events` | Analytics utilizzo bot |
+| `telegram_user_restrictions` | Ban e mute utenti bot |
+| `telegram_support_tickets` | Ticket supporto utente ↔ admin |
+| `telegram_support_messages` | Messaggi conversazione ticket |
+| `telegram_global_chat_subscribers` | Iscritti chat globale (nome, tag, verificato, epoch) |
+| `telegram_global_chat_messages` | Messaggi chat globale |
+| `telegram_global_ephemeral_deliveries` | Tracking bolle relay per pulizia UI |
+| `telegram_global_moderation` | Violazioni e sanzioni chat globale |
+| `telegram_global_reports` | Segnalazioni messaggi chat globale |
+| `telegram_recruitment_subscribers` | Iscritti feed reclutamento |
+| `telegram_recruitment_submissions` | Bozze annunci reclutamento in attesa approvazione |
+| `telegram_recruitment_posts` | Annunci approvati (TTL 24h) |
+| `telegram_staff_moderator_ids` | Lookup O(1) moderatori staff (sincronizzato da API) |
 
-**Policy RLS:**
-- `members`: SELECT per `authenticated`; write solo via `SERVICE_ROLE_KEY` (render-proxy) + policy anon ristretta
+### Ruoli utente
+
+`utente` < `membro` < `anziano` < `co-capo` < `admin`
+
+- **admin**: accesso completo (sito + bot), assegnazione bonus, gestione utenti, pannello staff bot
+- **capo / co-capo**: assegnazione bonus CWL, collegamento gruppo ↔ clan
+- **Login**: username → email interna `username@fearunited.internal`
+
+### Policy RLS
+
+- `members`: SELECT per `authenticated`; write solo via `SERVICE_ROLE_KEY`
 - `cwl_bonuses`: SELECT-only per `anon` e `authenticated`; write solo via `SERVICE_ROLE_KEY`
+- Tabelle `telegram_*`: accesso via `SERVICE_ROLE_KEY` (bot)
 
 ---
 
@@ -96,12 +155,17 @@ UI in italiano, single-page application vanilla JS.
 | `/api/clan-info` | GET | — | Info clan |
 | `/api/cwl-stats` | GET | — | Stats CWL live |
 | `/api/war-log` | GET | — | Log guerre |
-| `/api/lookup` | GET | — | Player/clan lookup e rankings |
+| `/api/lookup` | GET | — | Player/clan lookup, rankings, telegram-handoff |
 | `/api/generate-bonuses` | POST | JWT authenticated | Calcola e salva ranking bonus |
 | `/api/import-bonus` | POST | SYNC_SECRET header | Import dati da Excel |
 | `/api/register-with-coc` | POST | — | Registrazione con chiave CoC |
 | `/api/purge-ex-players` | POST | CRON_SECRET o SYNC_SECRET | Cron pulizia mensile (1° del mese) |
 | `/api/admin/users` | GET/POST/PUT/DELETE | JWT admin | Gestione utenti |
+
+### Render Proxy (render-proxy/index.js)
+
+Proxy Express verso CoC API. Richiede `COC_API_TOKEN`. Route principali:
+`/player`, `/clan-info`, `/clan-members`, `/cwl-live`, `/war-log`, `/current-war`, `/search-clans`, `/rankings`, `/locations`, `/verify-player-token`, `/sync` (POST), `/save-war` (POST), `/save-all-wars` (POST).
 
 ---
 
@@ -110,24 +174,124 @@ UI in italiano, single-page application vanilla JS.
 Configurate su Vercel e Render — non committare mai valori reali:
 
 ```
-# Vercel + Render
+# Vercel + Render proxy
 SUPABASE_URL
 SUPABASE_ANON_KEY
-SUPABASE_SERVICE_ROLE_KEY    # Render usa questa per scrivere su Supabase (bypassa RLS)
+SUPABASE_SERVICE_ROLE_KEY
 
-# Solo Render
+# Solo Render proxy
 COC_API_TOKEN
 PORT
 
 # Solo Vercel
 RENDER_PROXY_URL
-SYNC_SECRET                  # Segreto condiviso Vercel ↔ Render + script Python
-CRON_SECRET                  # Segreto per cron Vercel (purge-ex-players)
+SYNC_SECRET
+CRON_SECRET
 RESEND_API_KEY               # Opzionale: email di benvenuto
 
-# Script locali (import_bonus.py)
-SYNC_SECRET                  # Stesso segreto configurato su Vercel
+# Bot Telegram (Render — servizio separato)
+TELEGRAM_BOT_TOKEN           # Token BotFather
+COCBOARD_API_BASE            # URL sito Vercel (es. https://cocboard.vercel.app)
+SUPABASE_URL                 # Stessa del sito
+SUPABASE_ANON_KEY            # Chiave anon (obbligatoria per login)
+SUPABASE_SERVICE_ROLE_KEY    # Chiave service_role (scritture DB)
+TELEGRAM_WEBHOOK_SECRET_TOKEN # Segreto webhook (consigliato)
+COCBOARD_SITE_HOME_URL       # URL sito per Mini App e pulsante "Apri sito"
+BOT_OWNER_TELEGRAM_IDS       # ID Telegram proprietari bot (virgola-separati)
+TELEGRAPH_TUTORIAL_URL       # URL tutorial Telegraph (default hardcoded)
+TELEGRAM_ALLOWED_IDS         # Opzionale: limita accesso per ID
+PORT                         # Default 3001
 ```
+
+---
+
+## Bot Telegram — Architettura
+
+### Catena middleware (ordine esatto in `setupBot`)
+
+1. **guardMiddleware** — ban/mute DB (`telegram_user_restrictions`), `TELEGRAM_ALLOWED_IDS`, rate limit
+2. **Usage logging** — `telegram_usage_events`
+3. **Interruttore chat** — `/coc_off` blocca tutto tranne `/coc_on`
+4. **Private UI tracking** — traccia bolle inviate per pulizia successiva
+5. **Private callback wipe** — elimina bolle UI precedenti (eccezioni: hub chat globale, bonus assign, sotto-menu)
+6. **Private command wipe** — stessa pulizia su comandi `/…`
+7. **Leave global chat** — uscita silenziosa da chat globale su quasi tutti i callback
+8. **Router messaggi** — pending auth, search, link wizard, support tickets, community handlers
+9. **Session gate** — `tauth.getValidSession`, imposta `ctx.cocboardUser`; ammette guest read in gruppi collegati
+
+### Menu bot in chat privata
+
+**Ospite (non loggato):**
+- Accedi, Registrati
+- Community
+- Cerca, Classifica
+- Contatta amministratore
+- Guida e tutorial
+
+**Autenticato:**
+- Community (no in gruppo)
+- Il mio clan (se clan disponibile)
+- Cerca, Classifica
+- Aggiungi a canale/gruppo (solo Capo/Co-Capo/Admin)
+- CoCBoardBot (solo Admin/Moderatore)
+- Contatta amministratore
+- Account, Aiuto, Logout
+
+### Menu bot in gruppo/canale collegato
+
+**Ospite (non loggato):**
+- Il mio clan → Membri, Info, Profilo 🔒, Bonus, Mini app, « Menù
+- Cerca, Classifica
+- Accedi / Registrati (privato)
+- Tutorial, Aiuto
+
+**Autenticato:**
+- Il mio clan + Gestione avvisi → Membri, Info, Profilo, Bonus, Mini app, « Menù
+- Cerca, Classifica
+- Account, Aiuto, Logout
+
+### Clan Hub (dentro "Il mio clan")
+
+| Pulsante | Privato | Gruppo ospite | Gruppo loggato |
+|----------|---------|---------------|----------------|
+| Membri | ✅ | ✅ | ✅ |
+| Info clan | ✅ | ✅ | ✅ |
+| Il mio profilo | ✅ | 🔒 | ✅ |
+| Bonus | ✅ | ✅ (sola lettura) | ✅ |
+| CWL live | ✅ | — (solo in mini app) | — (solo in mini app) |
+| Registro guerre | ✅ | — (solo in mini app) | — (solo in mini app) |
+| Mini app | ✅ | ✅ | ✅ |
+
+### Mini App (Visualizza come mini app)
+
+Pulsanti web per aprire sezioni del sito. In privata usa `webApp` button (Telegram Mini App nativa).
+In gruppo usa `url` button (limitazione API Telegram: `webApp` non supportato in inline keyboard di gruppo).
+
+Tab disponibili per ospiti: `cwl_warlog`, `warlog`, `bonus`, `members`, `cerca`, `rankings`.
+Tab bloccata per ospiti: `profilo` → rimanda alla chat privata per login.
+
+### Assegnazione bonus CWL
+
+Visibile solo a ruoli **admin**, **capo**, **co-capo** (funzione `isCapoOrCoCapoForBonus`).
+Percorso: Il mio clan → Bonus → ✏️ Assegna bonus → scelta stagione → modalità:
+- **Manuale**: toggle singolo giocatore per pagina
+- **Assistito**: scelta numero bonus + criteri (Standard/Strict/Solo peso TH/Solo score) → ranking automatico → conferma
+
+I bonus vengono scritti su `cwl_history` con flag `bonus_assigned`.
+
+### Community
+
+- **Chat globale** — stanza a finestre temporali (epoch 5 min), ingresso con profilo CoCBoard (✅ verificato) o nome+tag manuale. Regole: no link, no tag in-game nel corpo, no emoji nel formato manuale, rate limit 12 msg/min. Segnalazioni → pannello admin.
+- **Reclutamento** — invio bozza (rapido o guidato), approvazione da owner, broadcast a iscritti, TTL 24h.
+
+### Supporto
+
+Ticket utente → admin/moderatore. Conversazione bidirezionale in chat privata. Tastiera reply dedicata per admin (presa in carico, in attesa, chiudi, ban/unban). Pannello `/adminbot` con statistiche, ticket aperti/chiusi, segnalazioni chat globale, utenti bannati, export CSV.
+
+### Notifiche guerre (gruppi collegati)
+
+Avvisi automatici ogni 60s per chat con flag attivi (`war_alerts_enabled`, `cwl_alerts_enabled`, etc.):
+countdown guerra, attacchi mancanti, recap finale, mismatch TH.
 
 ---
 
@@ -153,21 +317,22 @@ merit = (stelle / attacchi_richiesti) × 40
 # Esegui tutti i test
 npm test
 
-# Output atteso: 11 test passati (6 bonus + 5 purge)
+# Output atteso: 38 test passati
 ```
 
 I test usano il test runner built-in di Node.js (`node:test`) — zero dipendenze aggiuntive.
+Coprono: formula bonus, logica purge, emoji detection, war planner, war alerts, equipment mapping, asset URL, classifiche.
 
 ---
 
 ## Comandi Utili
 
 ```bash
-# Deploy su Vercel (produzione)
+# Deploy sito su Vercel (produzione)
 vercel --prod --yes
 
-# Deploy Render (solo se modifichi render-proxy/index.js)
-# → Fare push su git e triggera deploy automatico su Render, oppure deploy manuale dalla dashboard
+# Deploy Render proxy (solo se modifichi render-proxy/index.js)
+# → push su git triggera deploy automatico, oppure deploy manuale da dashboard
 
 # Bot Telegram (cartella telegram-bot/) — servizio Render collegato al repo
 # → commit mirato dei file del bot + git push origin master (deploy automatico)
@@ -180,12 +345,18 @@ npm test
 
 ---
 
-## Note Importanti
+## Vincoli Architetturali — NON MODIFICARE
 
-- **Firebase rimosso** — `firebase-config.js`, `functions/`, `.firebaserc` eliminati. Non aggiungere nulla Firebase.
-- **Limite 12 functions Vercel Hobby** — ogni nuovo file in `api/` conta come function. Prima di aggiungerne uno nuovo, valuta se può essere fuso in `lookup.js` o in un endpoint esistente.
-- `app.js` è monolitico (4650 righe) — tutta la logica UI/stato è qui. Non spezzarlo senza motivo.
-- `render-proxy/index.js` gira su Render.com separatamente — modifiche richiedono deploy separato.
-- Le immagini TH livello 1–18 sono `.webp` in `th/webp/`; i file root sono stati rimossi.
-- Il progetto usa `render-proxy` perché la CoC API non supporta chiamate dirette dal browser (CORS + token segreto).
-- `api/_utils/` non conta nel limite delle 12 functions (sono moduli CommonJS importati, non handler).
+1. **Firebase rimosso** — `firebase-config.js`, `functions/`, `.firebaserc` eliminati. Non aggiungere nulla Firebase.
+2. **Limite 12 functions Vercel Hobby** — ogni nuovo file in `api/` conta come function. Prima di aggiungerne uno nuovo, valuta se può essere fuso in `lookup.js` o in un endpoint esistente. `api/_utils/` non conta (sono moduli importati).
+3. **`app.js` è monolitico** — tutta la logica UI/stato è qui. Non spezzarlo senza motivo.
+4. **`telegram-bot/index.js` è monolitico** — ~5100 righe, tutto il bot è qui + `lib/`. Non spezzare `index.js`.
+5. **`render-proxy/index.js`** gira su Render.com separatamente — modifiche richiedono deploy separato.
+6. **CoC API solo via render-proxy** — CORS + token segreto impediscono chiamate dirette dal browser.
+7. **Auth bot ↔ sito** condivide lo stesso account Supabase Auth. Il flusso `telegram_links` + handoff (`tg_h` + `telegram-handoff`) è critico: modificare URL contract o tabella rompe Mini App e login.
+8. **`webApp` button Telegram** funziona solo in chat privata (limitazione API Telegram). In gruppi si usa `url` button.
+9. **Formula bonus** deve restare allineata tra `api/generate-bonuses.js`, `bonus-assistant.js` e test.
+10. **Ruoli per assegnazione bonus**: `admin`, `capo`, `co-capo` — controllati da `isCapoOrCoCapoForBonus` nel bot e `require-role.js` sul sito.
+11. **Middleware ordine** nel bot è critico: guardMiddleware → usage → coc_off → UI tracking → wipe → global leave → router → session gate. Non riordinare.
+12. **`isGroupClanReadCallback`** è la whitelist dei callback accessibili da ospiti in gruppi collegati. Aggiungere callback qui richiede verifica che non espongano dati sensibili.
+13. **Le immagini TH** livello 1–18 sono `.webp` in `th/webp/`; i file root sono stati rimossi. 
