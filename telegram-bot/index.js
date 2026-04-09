@@ -80,9 +80,16 @@ function isGroupLikeContext(ctx) {
   return t === 'group' || t === 'supergroup';
 }
 
-/** Telegram limita i bottoni web_app in alcuni contesti (gruppi/canali): usa URL fallback. */
-function webLaunchButton(ctx, label, url) {
-  if (isLinkedChatContext(ctx)) return Markup.button.url(label, url);
+/** Telegram limita i bottoni web_app in gruppi/canali: in quei contesti usa deep link privato
+ *  (t.me/bot?start=webtab_TAB) che apre la chat privata e lancia la Mini App nativa. */
+function webLaunchButton(ctx, label, url, tab) {
+  if (isLinkedChatContext(ctx)) {
+    if (tab && MINI_APP_WEB_TABS.has(tab)) {
+      const botUser = (cachedTgBotUsername || 'cocboardbot').replace(/^@/, '');
+      return Markup.button.url(label, `https://t.me/${botUser}?start=webtab_${tab}`);
+    }
+    return Markup.button.url(label, url);
+  }
   return Markup.button.webApp(label, url);
 }
 
@@ -1634,7 +1641,7 @@ async function renderClanWebAppsMenu(ctx) {
       }
       if (!ua || !String(ua).startsWith('https://')) continue;
       if (!lb || !tb) {
-        rows.push([webLaunchButton(ctx, la, ua)]);
+        rows.push([webLaunchButton(ctx, la, ua, ta)]);
         continue;
       }
       const lockedB = !isAuthed && !MINI_APP_GUEST_ALLOWED_TABS.has(tb);
@@ -1645,14 +1652,14 @@ async function renderClanWebAppsMenu(ctx) {
       }
       if (lockedB) {
         if (loginUrl) {
-          rows.push([webLaunchButton(ctx, la, ua), Markup.button.url(`${lb} 🔒`, loginUrl)]);
+          rows.push([webLaunchButton(ctx, la, ua, ta), Markup.button.url(`${lb} 🔒`, loginUrl)]);
         } else {
-          rows.push([webLaunchButton(ctx, la, ua), Markup.button.callback(`${lb} 🔒`, 'noop')]);
+          rows.push([webLaunchButton(ctx, la, ua, ta), Markup.button.callback(`${lb} 🔒`, 'noop')]);
         }
       } else if (ub && String(ub).startsWith('https://')) {
-        rows.push([webLaunchButton(ctx, la, ua), webLaunchButton(ctx, lb, ub)]);
+        rows.push([webLaunchButton(ctx, la, ua, ta), webLaunchButton(ctx, lb, ub, tb)]);
       } else {
-        rows.push([webLaunchButton(ctx, la, ua)]);
+        rows.push([webLaunchButton(ctx, la, ua, ta)]);
       }
     }
   } catch (_) {}
