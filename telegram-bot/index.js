@@ -1580,18 +1580,25 @@ async function renderClanHubMenu(ctx) {
   const isAuthed = !!sess?.user;
   if (isAuthed) ctx.cocboardUser = sess.user;
   const grp = isLinkedChatContext(ctx);
+  await ensureTgBotUsername(ctx.telegram);
   const info = await resolveEffectiveClanContext(ctx);
   const label = shortClanButtonLabel(info?.clanName, info?.clanTag || tag).replace(/^🏠\s*/, '');
   const tagLine = info?.clanTag ? `\n<code>${fmt.escapeHtml(info.clanTag)}</code>` : '';
   const body =
     `${fmt.DIV}\n🏠 <b>${fmt.escapeHtml(label)}</b>${tagLine}\n${fmt.DIV}\n\n` +
     `Sezione clan e strumenti dedicati.`;
+  let profileBtn;
+  if (isAuthed) {
+    profileBtn = Markup.button.callback('👤 Il mio profilo', 'me');
+  } else if (grp) {
+    const botUser = (cachedTgBotUsername || 'cocboardbot').replace(/^@/, '');
+    profileBtn = Markup.button.url('👤 Profilo 🔒', `https://t.me/${botUser}/home?startapp=profilo`);
+  } else {
+    profileBtn = Markup.button.callback('👤 Profilo 🔒', 'auth_login');
+  }
   const rows = [
     [Markup.button.callback('👥 Membri', 'mb0'), Markup.button.callback('🏰 Info clan', 'info')],
-    [
-      isAuthed ? Markup.button.callback('👤 Il mio profilo', 'me') : Markup.button.callback('👤 Profilo 🔒', 'noop'),
-      Markup.button.callback('🎁 Bonus', 'bonus:0'),
-    ],
+    [profileBtn, Markup.button.callback('🎁 Bonus', 'bonus:0')],
   ];
   if (!grp) {
     rows.push([Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')]);
@@ -1632,7 +1639,11 @@ async function renderClanWebAppsMenu(ctx) {
         else ua = buildGuestWebUrl(ta);
       }
       if (lockedA) {
-        if (loginUrl) {
+        if (isLinkedChatContext(ctx)) {
+          // Gruppo: Direct App Link → Mini App mostra login, poi naviga al tab dopo login
+          const botUser = (cachedTgBotUsername || 'cocboardbot').replace(/^@/, '');
+          rows.push([Markup.button.url(`${la} 🔒`, `https://t.me/${botUser}/home?startapp=${ta}`)]);
+        } else if (loginUrl) {
           rows.push([Markup.button.url(`${la} 🔒`, loginUrl)]);
         } else {
           rows.push([Markup.button.callback(`${la} 🔒`, 'noop')]);
