@@ -307,6 +307,7 @@ async function resolveEffectiveClanTag(ctx) {
 function isGroupClanReadCallback(d) {
   if (!d) return false;
   if (d === 'info' || d === 'cwl' || d === 'war_menu' || d === 'menu') return true;
+  if (d === 'clan_home' || d === 'clan_webapps' || d === 'noop') return true;
   if (d === 'bonus:hist' || d === 'bonus:hof') return true;
   if (/^bonus:\d+$/.test(d)) return true;
   if (/^mb\d+$/.test(d)) return true;
