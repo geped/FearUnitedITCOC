@@ -80,6 +80,12 @@ function isGroupLikeContext(ctx) {
   return t === 'group' || t === 'supergroup';
 }
 
+/** Telegram limita i bottoni web_app in alcuni contesti (gruppi/canali): usa URL fallback. */
+function webLaunchButton(ctx, label, url) {
+  if (isLinkedChatContext(ctx)) return Markup.button.url(label, url);
+  return Markup.button.webApp(label, url);
+}
+
 function isCoCboardAdminUser(user) {
   const role = user?.user_metadata?.role || '';
   return String(role).toLowerCase() === 'admin';
@@ -1544,12 +1550,12 @@ async function renderClanWebAppsMenu(ctx) {
       const ua = await buildWebAppHandoffUrl(ctx, { open_tab: ta });
       if (!ua || !String(ua).startsWith('https://')) continue;
       if (!lb || !tb) {
-        rows.push([Markup.button.webApp(la, ua)]);
+        rows.push([webLaunchButton(ctx, la, ua)]);
         continue;
       }
       const ub = await buildWebAppHandoffUrl(ctx, { open_tab: tb });
-      if (ub && String(ub).startsWith('https://')) rows.push([Markup.button.webApp(la, ua), Markup.button.webApp(lb, ub)]);
-      else rows.push([Markup.button.webApp(la, ua)]);
+      if (ub && String(ub).startsWith('https://')) rows.push([webLaunchButton(ctx, la, ua), webLaunchButton(ctx, lb, ub)]);
+      else rows.push([webLaunchButton(ctx, la, ua)]);
     }
   } catch (_) {}
   if (rows.length === 0) {
