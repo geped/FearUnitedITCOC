@@ -39,7 +39,13 @@ const db = window.sb;
     const p = new URLSearchParams(window.location.search);
     const ot = p.get('open_tab');
     const allowed = new Set(['members', 'cerca', 'cwl', 'cwl_warlog', 'login', 'warlog', 'profilo', 'rankings', 'bonus', 'botadmin']);
-    if (allowed.has(ot)) window.__cocboardOpenTab = ot;
+    if (allowed.has(ot)) {
+      window.__cocboardOpenTab = ot;
+    } else {
+      // Direct App Link da gruppi Telegram: il tab arriva in start_param, non in URL
+      const sp = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
+      if (sp && allowed.has(sp)) window.__cocboardOpenTab = sp;
+    }
   } catch (_) {}
 })();
 // Handoff tg_h: vedi cocboardTelegramHandoffBootstrap() dopo registrazione onAuthStateChange (await prima del login).

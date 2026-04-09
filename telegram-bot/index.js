@@ -80,13 +80,13 @@ function isGroupLikeContext(ctx) {
   return t === 'group' || t === 'supergroup';
 }
 
-/** Telegram limita i bottoni web_app in gruppi/canali: in quei contesti usa deep link privato
- *  (t.me/bot?start=webtab_TAB) che apre la chat privata e lancia la Mini App nativa. */
+/** Telegram limita i bottoni web_app in gruppi/canali: in quei contesti usa Direct App Link
+ *  (t.me/bot/home?startapp=TAB) che apre la Mini App nativa direttamente nella chat. */
 function webLaunchButton(ctx, label, url, tab) {
   if (isLinkedChatContext(ctx)) {
     if (tab && MINI_APP_WEB_TABS.has(tab)) {
       const botUser = (cachedTgBotUsername || 'cocboardbot').replace(/^@/, '');
-      return Markup.button.url(label, `https://t.me/${botUser}?start=webtab_${tab}`);
+      return Markup.button.url(label, `https://t.me/${botUser}/home?startapp=${tab}`);
     }
     return Markup.button.url(label, url);
   }
