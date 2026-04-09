@@ -373,17 +373,14 @@ void (async function cocboardTelegramHandoffBootstrap() {
   if (session) {
     await showApp(session.user);
   } else {
-    // Telegram Mini App con tab pubblico: accesso ospite anonimo senza login
+    // Telegram Mini App con tab pubblico + clan tag noto: modalità ospite senza login
+    // Nessuna config Supabase richiesta — usa utente guest fittizio (sola lettura)
     const isTgMiniApp = !!(window.Telegram?.WebApp?.initData);
-    const guestTabs = new Set(['cwl_warlog', 'cwl', 'warlog', 'members', 'cerca', 'rankings']);
-    if (isTgMiniApp && guestTabs.has(window.__cocboardOpenTab)) {
-      try {
-        const { data: anonData } = await db.auth.signInAnonymously();
-        if (anonData?.session) {
-          await showApp(anonData.session.user);
-          return;
-        }
-      } catch (_) {}
+    const guestTabs = new Set(['cwl_warlog', 'cwl', 'warlog', 'bonus', 'members', 'cerca', 'rankings']);
+    if (isTgMiniApp && guestTabs.has(window.__cocboardOpenTab) && window.__cocboardGuestClanTag) {
+      const guestUser = { id: null, is_anonymous: true, user_metadata: {}, app_metadata: {} };
+      await showApp(guestUser);
+      return;
     }
     showLogin();
   }

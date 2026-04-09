@@ -97,7 +97,7 @@ function webLaunchButton(ctx, label, url, tab, clanTag) {
 }
 
 const MINI_APP_WEB_TABS = new Set(['cwl_warlog', 'warlog', 'bonus', 'members', 'profilo', 'cerca', 'rankings']);
-const MINI_APP_GUEST_ALLOWED_TABS = new Set(['cwl_warlog', 'warlog', 'members', 'cerca', 'rankings']);
+const MINI_APP_GUEST_ALLOWED_TABS = new Set(['cwl_warlog', 'warlog', 'bonus', 'members', 'cerca', 'rankings']);
 
 function parseRequestedMiniAppTabFromCommand(ctx) {
   const txt = String(ctx.message?.text || '').trim();
