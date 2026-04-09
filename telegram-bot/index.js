@@ -306,8 +306,9 @@ async function resolveEffectiveClanTag(ctx) {
 /** Callback che sono lettura dati clan (ammessi per ospiti in gruppi collegati). */
 function isGroupClanReadCallback(d) {
   if (!d) return false;
-  if (d === 'info' || d === 'cwl' || d === 'war_menu' || d === 'menu') return true;
-  if (d === 'clan_home' || d === 'clan_webapps' || d === 'noop') return true;
+  if (d === 'menu' || d === 'noop') return true;
+  if (d === 'clan_home' || d === 'clan_webapps') return true;
+  if (d === 'info' || d === 'cwl' || d === 'war_menu') return true;
   if (d === 'bonus:hist' || d === 'bonus:hof') return true;
   if (/^bonus:\d+$/.test(d)) return true;
   if (/^mb\d+$/.test(d)) return true;
@@ -1431,14 +1432,11 @@ async function sendLinkedGroupGuestMenu(ctx, clanTag) {
   const intro = fmt.formatLinkedGroupGuestIntro({ clanTag, clanName, botUsername: cachedTgBotUsername });
   const rows = [
     [Markup.button.callback(shortClanButtonLabel(clanName, clanTag), 'clan_home')],
-    [Markup.button.callback('👥 Membri', 'mb0'), Markup.button.callback('🏰 Info clan', 'info')],
-    [Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')],
     [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
-    [Markup.button.callback('🔔 Notifiche', 'notif_menu')],
   ];
   const url = privateChatUrl(cachedTgBotUsername);
   if (url) {
-    rows.push([Markup.button.url('🔐 Accedi per Bonus e Web App (privato)', url)]);
+    rows.push([Markup.button.url('🔐 Accedi / Registrati (privato)', url)]);
   }
   rows.push([Markup.button.url('📘 Tutorial', TELEGRAPH_TUTORIAL_URL)]);
   rows.push([Markup.button.callback('❓ Aiuto', 'helpbtn')]);
@@ -1525,13 +1523,6 @@ async function mainMenuKeyboard(ctx, user, hasClanTag, clanTag, clanName) {
   const rows = [];
   const leader = user ? isClanLeader(user) : false;
   const grp = isLinkedChatContext(ctx);
-  if (!grp) {
-    rows.push([Markup.button.callback('💬 Community', 'comm_hub')]);
-  }
-  rows.push([
-    Markup.button.callback('🔍 Cerca', 'nav_search'),
-    Markup.button.callback('📊 Classifica', 'nav_rank'),
-  ]);
   let showClanRows = !!hasClanTag;
   if (grp) {
     const g = await getGroupChatGate(ctx);
@@ -1549,6 +1540,13 @@ async function mainMenuKeyboard(ctx, user, hasClanTag, clanTag, clanName) {
   } else if (!hasClanTag) {
     rows.push([Markup.button.callback('🏰 Come impostare il clan', 'setclan_help')]);
   }
+  if (!grp) {
+    rows.push([Markup.button.callback('💬 Community', 'comm_hub')]);
+  }
+  rows.push([
+    Markup.button.callback('🔍 Cerca', 'nav_search'),
+    Markup.button.callback('📊 Classifica', 'nav_rank'),
+  ]);
   if (leader && !grp) {
     rows.push([Markup.button.callback('➕ Aggiungi a canale/gruppo', 'add_group_bot')]);
   }
@@ -1574,6 +1572,7 @@ async function renderClanHubMenu(ctx) {
   const sess = await tauth.getValidSession(ctx.from?.id).catch(() => null);
   const isAuthed = !!sess?.user;
   if (isAuthed) ctx.cocboardUser = sess.user;
+  const grp = isLinkedChatContext(ctx);
   const info = await resolveEffectiveClanContext(ctx);
   const label = shortClanButtonLabel(info?.clanName, info?.clanTag || tag).replace(/^🏠\s*/, '');
   const tagLine = info?.clanTag ? `\n<code>${fmt.escapeHtml(info.clanTag)}</code>` : '';
@@ -1586,10 +1585,14 @@ async function renderClanHubMenu(ctx) {
       isAuthed ? Markup.button.callback('👤 Il mio profilo', 'me') : Markup.button.callback('👤 Profilo 🔒', 'noop'),
       Markup.button.callback('🎁 Bonus', 'bonus:0'),
     ],
-    [Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')],
-    [Markup.button.callback('📱 Visualizza come mini app', 'clan_webapps')],
-    [Markup.button.callback('« Menù', 'menu')],
   ];
+  if (!grp) {
+    rows.push([Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')]);
+  }
+  rows.push(
+    [Markup.button.callback('📱 Visualizza come mini app', 'clan_webapps')],
+    [Markup.button.callback('« Menù', 'menu')]
+  );
   try {
     await ctx.editMessageText(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) });
   } catch (_) {
@@ -1605,13 +1608,14 @@ async function renderClanWebAppsMenu(ctx) {
   const webPairs = [
     ['🏆 CWL live (web)', 'cwl_warlog', '📜 Registro guerre (web)', 'warlog'],
     ['🎁 Bonus (web)', 'bonus', '🏰 Info / Membri (web)', 'members'],
-    ['👤 Profilo (web)', 'profilo', '🔍 Cerca (web)', 'cerca'],
-    ['📊 Classifica (web)', 'rankings', null, null],
+    ['🔍 Cerca (web)', 'cerca', '📊 Classifica (web)', 'rankings'],
+    ['👤 Profilo (web)', 'profilo', null, null],
   ];
   const sess = await tauth.getValidSession(ctx.from?.id).catch(() => null);
   const isAuthed = !!sess?.user;
   if (isAuthed) ctx.cocboardUser = sess.user;
   await ensureTgBotUsername(ctx.telegram);
+  const loginUrl = privateChatUrl(cachedTgBotUsername);
   try {
     for (const [la, ta, lb, tb] of webPairs) {
       const lockedA = !isAuthed && !MINI_APP_GUEST_ALLOWED_TABS.has(ta);
@@ -1621,7 +1625,11 @@ async function renderClanWebAppsMenu(ctx) {
         else ua = buildGuestWebUrl(ta);
       }
       if (lockedA) {
-        rows.push([Markup.button.callback(`${la} 🔒`, 'noop')]);
+        if (loginUrl) {
+          rows.push([Markup.button.url(`${la} 🔒`, loginUrl)]);
+        } else {
+          rows.push([Markup.button.callback(`${la} 🔒`, 'noop')]);
+        }
         continue;
       }
       if (!ua || !String(ua).startsWith('https://')) continue;
@@ -1636,7 +1644,11 @@ async function renderClanWebAppsMenu(ctx) {
         else ub = buildGuestWebUrl(tb);
       }
       if (lockedB) {
-        rows.push([webLaunchButton(ctx, la, ua), Markup.button.callback(`${lb} 🔒`, 'noop')]);
+        if (loginUrl) {
+          rows.push([webLaunchButton(ctx, la, ua), Markup.button.url(`${lb} 🔒`, loginUrl)]);
+        } else {
+          rows.push([webLaunchButton(ctx, la, ua), Markup.button.callback(`${lb} 🔒`, 'noop')]);
+        }
       } else if (ub && String(ub).startsWith('https://')) {
         rows.push([webLaunchButton(ctx, la, ua), webLaunchButton(ctx, lb, ub)]);
       } else {
