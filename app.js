@@ -3980,12 +3980,13 @@ async function loadCwlSeasons() {
     if (el) el.textContent = `${elapsed}s`;
   }, 1000);
 
-  // Lancia in parallelo: Supabase + war-log (storico CWL) + cwl-stats (stagione corrente) + clan-info (banner)
-  const [dbResult, warLogResult, cwlResult, clanResult] = await Promise.allSettled([
+  // Lancia in parallelo: Supabase + war-log (storico CWL) + cwl-stats (stagione corrente) + clan-info + cwl_wars storico
+  const [dbResult, warLogResult, cwlResult, clanResult, cwlWarsResult] = await Promise.allSettled([
     db.from('cwl_seasons').select('*').eq('clan_tag', window._userClanTag || '').order('season', { ascending: false }),
     fetch(`/api/war-log${clanQ()}`).then(r => r.ok ? r.json() : null),
     fetch(`/api/cwl-stats${clanQ()}`).then(r => r.ok ? r.json() : null),
-    fetch(`/api/clan-info${clanQ()}`).then(r => r.ok ? r.json() : null)
+    fetch(`/api/clan-info${clanQ()}`).then(r => r.ok ? r.json() : null),
+    db.from('cwl_wars').select('*').eq('clan_tag', window._userClanTag || '').order('season', { ascending: false }).order('round', { ascending: true })
   ]);
 
   clearInterval(timerInterval);
@@ -4073,6 +4074,46 @@ async function loadCwlSeasons() {
     });
   }
 
+  // ── cwl_wars DB: turni storici con dettaglio completo (attacchi, members) ──
+  const cwlWarsRaw = cwlWarsResult?.status === 'fulfilled' ? cwlWarsResult.value : { data: null };
+  if (cwlWarsRaw.data?.length) {
+    const bySeason = {};
+    cwlWarsRaw.data.forEach(w => {
+      if (!bySeason[w.season]) bySeason[w.season] = [];
+      bySeason[w.season].push({
+        roundNumber:      w.round,
+        state:            w.state || 'warEnded',
+        startTime:        w.start_time || null,
+        preparationStartTime: null,
+        endTime:          w.end_time || null,
+        teamSize:         w.team_size || 15,
+        attacksPerMember: 1,
+        result:           w.result || 'draw',
+        clan: {
+          tag: w.our_tag, name: w.our_name, badgeUrls: w.our_badge ? { small: w.our_badge } : null,
+          stars: w.our_stars || 0,
+          destruction: +(w.our_destr || 0),
+          attacksUsed: (w.our_members || []).reduce((s, m) => s + (m.attacks?.length || 0), 0),
+          members: w.our_members || []
+        },
+        opponent: {
+          tag: w.opp_tag, name: w.opp_name || 'Sconosciuto',
+          badgeUrls: w.opp_badge ? { small: w.opp_badge } : null,
+          stars: w.opp_stars || 0,
+          destruction: +(w.opp_destr || 0),
+          attacksUsed: (w.opp_members || []).reduce((s, m) => s + (m.attacks?.length || 0), 0),
+          members: w.opp_members || []
+        },
+        defenderMap: w.defender_map || {}
+      });
+    });
+    Object.entries(bySeason).forEach(([season, rounds]) => {
+      if (!warSeasonRoundsMap[season] || !warSeasonRoundsMap[season][0]?.clan?.members?.length) {
+        warSeasonRoundsMap[season] = rounds;
+      }
+    });
+  }
+
   // ── Stagione corrente/live da cwl-stats ───────────────────────────────────
   if (cwlData && cwlData.state !== 'notInWar' && cwlData.season) {
     const key      = cwlData.season;
@@ -4117,8 +4158,8 @@ async function loadCwlSeasons() {
       wins:           d.wins        ?? wl.wins    ?? null,
       losses:         d.losses      ?? wl.losses  ?? null,
       isLive:         d.isLive      || false,
-      groupStandings: d.groupStandings || null,
-      players:        d.players        || null,
+      groupStandings: d.groupStandings || d.group_standings || null,
+      players:        d.players        || d.roster          || null,
       hasRounds:      !!(warSeasonRoundsMap[s]?.length)
     });
   });

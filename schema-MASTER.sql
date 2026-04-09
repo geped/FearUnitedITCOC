@@ -7,7 +7,7 @@
 -- di esecuzione. Applicare integralmente su un database Supabase vuoto per
 -- ottenere lo schema completo e aggiornato.
 --
--- Ordine di applicazione: 1→base, 2→update, 3→cwl, 4→bonus, 5→multiclan, 6→retention, 7→league, 8→classic-wars, 9→security
+-- Ordine di applicazione: 1→base, 2→update, 3→cwl, 4→bonus, 5→multiclan, 6→retention, 7→league, 8→classic-wars, 9→security, 10→soft-delete, 11→cwl-wars
 --
 -- Sorgenti originali (in ordine):
 --   1. schema.sql               — Tabelle base + RLS iniziale
@@ -300,3 +300,50 @@ ALTER TABLE public.members ADD COLUMN IF NOT EXISTS left_at TIMESTAMPTZ DEFAULT 
 
 -- Indice per query frequente (filtra attivi / ex)
 CREATE INDEX IF NOT EXISTS members_left_at_idx ON public.members(left_at);
+
+
+-- ═══ SEZIONE 11: CWL-WARS — Storico guerre CWL con dettaglio attacchi ═══
+-- Fonte: schema-cwl-wars.sql
+
+CREATE TABLE IF NOT EXISTS public.cwl_wars (
+    id            BIGSERIAL PRIMARY KEY,
+    clan_tag      TEXT NOT NULL,
+    season        TEXT NOT NULL,              -- formato 'YYYY-MM'
+    round         INTEGER NOT NULL,           -- 1-7
+    war_tag       TEXT,
+    state         TEXT,                       -- 'warEnded' | 'inWar' | 'preparation'
+    team_size     INT,
+    start_time    TEXT,
+    end_time      TEXT,
+    result        TEXT,                       -- 'win' | 'lose' | 'draw' | 'ongoing' | 'preparation'
+    our_tag       TEXT,
+    our_name      TEXT,
+    our_badge     TEXT,
+    our_stars     INT,
+    our_destr     DECIMAL(5,2),
+    opp_tag       TEXT,
+    opp_name      TEXT,
+    opp_badge     TEXT,
+    opp_stars     INT,
+    opp_destr     DECIMAL(5,2),
+    our_members   JSONB,
+    opp_members   JSONB,
+    defender_map  JSONB,
+    saved_at      TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(clan_tag, season, round)
+);
+
+ALTER TABLE public.cwl_wars ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "cwl_wars_read" ON public.cwl_wars
+    FOR SELECT USING (true);
+
+CREATE POLICY "cwl_wars_insert" ON public.cwl_wars
+    FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "cwl_wars_upsert" ON public.cwl_wars
+    FOR UPDATE USING (true);
+
+-- ── cwl_seasons: colonne aggiuntive per classifica gruppo e roster ──
+ALTER TABLE public.cwl_seasons ADD COLUMN IF NOT EXISTS group_standings JSONB;
+ALTER TABLE public.cwl_seasons ADD COLUMN IF NOT EXISTS roster JSONB;

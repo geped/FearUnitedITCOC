@@ -420,26 +420,7 @@ async function getCwlStats(clanTagRaw) {
         b.stars !== a.stars ? b.stars - a.stars : b.destruction - a.destruction
     );
 
-    // 5. Auto-salva su Supabase quando CWL terminata con tutti i round
-    if (lg.state === 'ended' && ourPosition && ourGroup?.warCount >= 7 && lg.season) {
-        // destruction = totalDestr × teamSize  (formato CoC, numero intero)
-        const teamSize   = ourGroup.teamSize || 15;
-        const gameDestr  = Math.round(ourGroup.totalDestr * teamSize);
-        try {
-            await supabase().from('cwl_seasons').upsert(
-                {
-                    season:      lg.season,
-                    league:      leagueNameIt,
-                    position:    ourPosition,
-                    stars:       ourGroup.stars,
-                    destruction: gameDestr
-                },
-                { onConflict: 'season' }
-            );
-        } catch (_) {}
-    }
-
-    return {
+    const result = {
         state:         lg.state,
         season:        lg.season,
         leagueNameEn,
@@ -450,6 +431,102 @@ async function getCwlStats(clanTagRaw) {
         players,
         roundsData
     };
+
+    // Side-effect: salva automaticamente turni conclusi, roster e cwl_history
+    saveCwlData(COC_CLAN_TAG_RAW, result).catch(() => {});
+
+    return result;
+}
+
+// ── AUTO-SAVE CWL DATA ──────────────────────────────────────────────────────
+
+async function saveCwlData(clanTag, cwl) {
+    if (!cwl?.season || !cwl.roundsData?.length) return;
+    const sb = supabase();
+    const tag = parseClanTag(clanTag);
+    if (!tag) return;
+
+    // 1. Salva ogni turno concluso in cwl_wars
+    const endedRounds = cwl.roundsData.filter(r =>
+        r.state === 'warEnded' || r.state === 'ended'
+    );
+    for (const rd of endedRounds) {
+        try {
+            await sb.from('cwl_wars').upsert({
+                clan_tag:     tag,
+                season:       cwl.season,
+                round:        rd.roundNumber,
+                war_tag:      null,
+                state:        rd.state,
+                team_size:    rd.teamSize,
+                start_time:   rd.startTime || null,
+                end_time:     rd.endTime || null,
+                result:       rd.result,
+                our_tag:      rd.clan?.tag || null,
+                our_name:     rd.clan?.name || null,
+                our_badge:    rd.clan?.badgeUrls?.small || null,
+                our_stars:    rd.clan?.stars ?? 0,
+                our_destr:    rd.clan?.destruction ?? 0,
+                opp_tag:      rd.opponent?.tag || null,
+                opp_name:     rd.opponent?.name || null,
+                opp_badge:    rd.opponent?.badgeUrls?.small || null,
+                opp_stars:    rd.opponent?.stars ?? 0,
+                opp_destr:    rd.opponent?.destruction ?? 0,
+                our_members:  rd.clan?.members || [],
+                opp_members:  rd.opponent?.members || [],
+                defender_map: rd.defenderMap || {},
+                saved_at:     new Date().toISOString()
+            }, { onConflict: 'clan_tag,season,round' });
+        } catch (_) {}
+    }
+
+    // 2. Salva/aggiorna cwl_seasons con group_standings e roster
+    try {
+        const seasonRow = {
+            season:          cwl.season,
+            clan_tag:        tag,
+            group_standings: cwl.groupStandings || null,
+            roster:          cwl.players || null
+        };
+        if (cwl.leagueNameIt) seasonRow.league = cwl.leagueNameIt;
+        if (cwl.ourPosition)  seasonRow.position = cwl.ourPosition;
+        const ourGroup = (cwl.groupStandings || []).find(c => normClanTag(c.tag) === normClanTag(tag));
+        if (ourGroup) {
+            seasonRow.stars       = ourGroup.stars;
+            seasonRow.destruction = Math.round(ourGroup.totalDestr * (cwl.teamSize || 15));
+        }
+        await sb.from('cwl_seasons').upsert(seasonRow, { onConflict: 'season,clan_tag' });
+    } catch (_) {}
+
+    // 3. Auto-popola cwl_history per ogni giocatore del roster
+    if (cwl.players?.length && (cwl.state === 'ended' || endedRounds.length >= 7)) {
+        try {
+            const historyRows = cwl.players.map(p => {
+                const req  = Math.max(p.attacks_required || 1, 1);
+                const made = p.attacks_made || 0;
+                const stars = p.stars || 0;
+                const destr = p.destruction || 0;
+                const avgD  = made > 0 ? destr / made : 0;
+                const score = Math.round(((stars / req) * 40 + avgD * 0.2 + (made / req) * 20) * 10) / 10;
+                return {
+                    clan_tag:         tag,
+                    player_name:      p.name,
+                    season:           cwl.season,
+                    participated:     made > 0,
+                    stars,
+                    destruction:      parseFloat(destr.toFixed(2)),
+                    attacks_made:     made,
+                    attacks_required: p.attacks_required || 0,
+                    bonus_score:      Math.round(score),
+                    still_in_clan:    true,
+                    is_secondary:     false
+                };
+            });
+            await sb.from('cwl_history').upsert(historyRows, {
+                onConflict: 'player_name,season,clan_tag'
+            });
+        } catch (_) {}
+    }
 }
 
 // ── AUTH MIDDLEWARE ──────────────────────────────────────────────────────────
@@ -515,6 +592,34 @@ app.post('/save-all-wars', authMiddleware, async (req, res) => {
         if (!tags.length) return res.json({ ok: true, clans: 0, results: [] });
 
         const settled = await Promise.allSettled(tags.map(tag => saveEndedWar(tag)));
+        const results = tags.map((tag, i) => ({
+            clan_tag: tag,
+            ...(settled[i].status === 'fulfilled'
+                ? settled[i].value
+                : { error: settled[i].reason?.message }),
+        }));
+
+        res.json({ ok: true, clans: tags.length, results });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/save-all-cwl', authMiddleware, async (req, res) => {
+    try {
+        const { data, error } = await supabase()
+            .from('members')
+            .select('clan_tag')
+            .not('clan_tag', 'is', null);
+        if (error) return res.status(500).json({ error: error.message });
+
+        const tags = [...new Set((data || []).map(r => r.clan_tag).filter(Boolean))];
+        if (!tags.length) return res.json({ ok: true, clans: 0, results: [] });
+
+        const settled = await Promise.allSettled(tags.map(async tag => {
+            const cwl = await getCwlStats(tag);
+            return { state: cwl?.state, season: cwl?.season, rounds: cwl?.roundsData?.length || 0 };
+        }));
         const results = tags.map((tag, i) => ({
             clan_tag: tag,
             ...(settled[i].status === 'fulfilled'
