@@ -81,12 +81,15 @@ function isGroupLikeContext(ctx) {
 }
 
 /** Telegram limita i bottoni web_app in gruppi/canali: in quei contesti usa Direct App Link
- *  (t.me/bot/home?startapp=TAB) che apre la Mini App nativa direttamente nella chat. */
-function webLaunchButton(ctx, label, url, tab) {
+ *  (t.me/bot/home?startapp=TAB o TAB__CLANTAG) che apre la Mini App nativa nella chat.
+ *  clanTag viene codificato nel payload affinché la Mini App ospite sappia quale clan mostrare. */
+function webLaunchButton(ctx, label, url, tab, clanTag) {
   if (isLinkedChatContext(ctx)) {
     if (tab && MINI_APP_WEB_TABS.has(tab)) {
       const botUser = (cachedTgBotUsername || 'cocboardbot').replace(/^@/, '');
-      return Markup.button.url(label, `https://t.me/${botUser}/home?startapp=${tab}`);
+      const rawTag = (clanTag || '').replace(/^#/, '').trim();
+      const startParam = rawTag ? `${tab}__${rawTag}` : tab;
+      return Markup.button.url(label, `https://t.me/${botUser}/home?startapp=${startParam}`);
     }
     return Markup.button.url(label, url);
   }
@@ -94,7 +97,7 @@ function webLaunchButton(ctx, label, url, tab) {
 }
 
 const MINI_APP_WEB_TABS = new Set(['cwl_warlog', 'warlog', 'bonus', 'members', 'profilo', 'cerca', 'rankings']);
-const MINI_APP_GUEST_ALLOWED_TABS = new Set(['cwl_warlog', 'warlog', 'bonus', 'members', 'cerca', 'rankings']);
+const MINI_APP_GUEST_ALLOWED_TABS = new Set(['cwl_warlog', 'warlog', 'members', 'cerca', 'rankings']);
 
 function parseRequestedMiniAppTabFromCommand(ctx) {
   const txt = String(ctx.message?.text || '').trim();
@@ -1630,6 +1633,10 @@ async function renderClanWebAppsMenu(ctx) {
   if (isAuthed) ctx.cocboardUser = sess.user;
   await ensureTgBotUsername(ctx.telegram);
   const loginUrl = privateChatUrl(cachedTgBotUsername);
+  // Clan tag per ospiti in gruppo: codificato nel startapp così la Mini App sa quale clan mostrare
+  const guestClanTag = (!isAuthed && isLinkedChatContext(ctx))
+    ? await resolveEffectiveClanTag(ctx).catch(() => null)
+    : null;
   try {
     for (const [la, ta, lb, tb] of webPairs) {
       const lockedA = !isAuthed && !MINI_APP_GUEST_ALLOWED_TABS.has(ta);
@@ -1640,9 +1647,11 @@ async function renderClanWebAppsMenu(ctx) {
       }
       if (lockedA) {
         if (isLinkedChatContext(ctx)) {
-          // Gruppo: Direct App Link → Mini App mostra login, poi naviga al tab dopo login
+          // Gruppo: Direct App Link con clan tag → Mini App mostra login poi naviga al tab
           const botUser = (cachedTgBotUsername || 'cocboardbot').replace(/^@/, '');
-          rows.push([Markup.button.url(`${la} 🔒`, `https://t.me/${botUser}/home?startapp=${ta}`)]);
+          const rawTag = (guestClanTag || '').replace(/^#/, '').trim();
+          const sp = rawTag ? `${ta}__${rawTag}` : ta;
+          rows.push([Markup.button.url(`${la} 🔒`, `https://t.me/${botUser}/home?startapp=${sp}`)]);
         } else if (loginUrl) {
           rows.push([Markup.button.url(`${la} 🔒`, loginUrl)]);
         } else {
@@ -1652,7 +1661,7 @@ async function renderClanWebAppsMenu(ctx) {
       }
       if (!ua || !String(ua).startsWith('https://')) continue;
       if (!lb || !tb) {
-        rows.push([webLaunchButton(ctx, la, ua, ta)]);
+        rows.push([webLaunchButton(ctx, la, ua, ta, guestClanTag)]);
         continue;
       }
       const lockedB = !isAuthed && !MINI_APP_GUEST_ALLOWED_TABS.has(tb);
@@ -1662,15 +1671,20 @@ async function renderClanWebAppsMenu(ctx) {
         else ub = buildGuestWebUrl(tb);
       }
       if (lockedB) {
-        if (loginUrl) {
-          rows.push([webLaunchButton(ctx, la, ua, ta), Markup.button.url(`${lb} 🔒`, loginUrl)]);
+        if (isLinkedChatContext(ctx)) {
+          const botUser = (cachedTgBotUsername || 'cocboardbot').replace(/^@/, '');
+          const rawTag = (guestClanTag || '').replace(/^#/, '').trim();
+          const sp = rawTag ? `${tb}__${rawTag}` : tb;
+          rows.push([webLaunchButton(ctx, la, ua, ta, guestClanTag), Markup.button.url(`${lb} 🔒`, `https://t.me/${botUser}/home?startapp=${sp}`)]);
+        } else if (loginUrl) {
+          rows.push([webLaunchButton(ctx, la, ua, ta, guestClanTag), Markup.button.url(`${lb} 🔒`, loginUrl)]);
         } else {
-          rows.push([webLaunchButton(ctx, la, ua, ta), Markup.button.callback(`${lb} 🔒`, 'noop')]);
+          rows.push([webLaunchButton(ctx, la, ua, ta, guestClanTag), Markup.button.callback(`${lb} 🔒`, 'noop')]);
         }
       } else if (ub && String(ub).startsWith('https://')) {
-        rows.push([webLaunchButton(ctx, la, ua, ta), webLaunchButton(ctx, lb, ub, tb)]);
+        rows.push([webLaunchButton(ctx, la, ua, ta, guestClanTag), webLaunchButton(ctx, lb, ub, tb, guestClanTag)]);
       } else {
-        rows.push([webLaunchButton(ctx, la, ua, ta)]);
+        rows.push([webLaunchButton(ctx, la, ua, ta, guestClanTag)]);
       }
     }
   } catch (_) {}

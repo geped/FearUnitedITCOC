@@ -42,9 +42,15 @@ const db = window.sb;
     if (allowed.has(ot)) {
       window.__cocboardOpenTab = ot;
     } else {
-      // Direct App Link da gruppi Telegram: il tab arriva in start_param, non in URL
+      // Direct App Link da gruppi Telegram: start_param può essere "TAB" o "TAB__CLANTAG"
       const sp = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
-      if (sp && allowed.has(sp)) window.__cocboardOpenTab = sp;
+      if (sp) {
+        const parts = sp.split('__');
+        const tab = parts[0];
+        const rawTag = parts[1] || '';
+        if (allowed.has(tab)) window.__cocboardOpenTab = tab;
+        if (rawTag) window.__cocboardGuestClanTag = `#${rawTag}`;
+      }
     }
   } catch (_) {}
 })();
@@ -367,6 +373,18 @@ void (async function cocboardTelegramHandoffBootstrap() {
   if (session) {
     await showApp(session.user);
   } else {
+    // Telegram Mini App con tab pubblico: accesso ospite anonimo senza login
+    const isTgMiniApp = !!(window.Telegram?.WebApp?.initData);
+    const guestTabs = new Set(['cwl_warlog', 'cwl', 'warlog', 'members', 'cerca', 'rankings']);
+    if (isTgMiniApp && guestTabs.has(window.__cocboardOpenTab)) {
+      try {
+        const { data: anonData } = await db.auth.signInAnonymously();
+        if (anonData?.session) {
+          await showApp(anonData.session.user);
+          return;
+        }
+      } catch (_) {}
+    }
     showLogin();
   }
 })();
@@ -844,7 +862,8 @@ async function showApp(sessionUser) {
   const canEdit   = ['admin', 'capo', 'co-capo'].includes(role);
 
   // Info clan da metadata (normalizza; stringhe vuote = assente)
-  const rawMetaClan = user.user_metadata?.coc_clan_tag;
+  // Fallback: clan tag ospite passato via startapp per utenti anonimi Telegram
+  const rawMetaClan = user.user_metadata?.coc_clan_tag || window.__cocboardGuestClanTag || null;
   window._userClanTag =
     rawMetaClan && String(rawMetaClan).trim() ? normClanTag(rawMetaClan) : null;
   window._clanName     = user.user_metadata?.coc_clan_name || '';
@@ -864,8 +883,8 @@ async function showApp(sessionUser) {
     });
   }
 
-  // Mostra nome in-game nella sidebar
-  const displayName = user.user_metadata?.username || user.email?.replace(/@(fearunited|cocboard)\.internal$/, '') || user.email;
+  // Mostra nome in-game nella sidebar (utenti anonimi non hanno username/email)
+  const displayName = user.user_metadata?.username || user.email?.replace(/@(fearunited|cocboard)\.internal$/, '') || user.email || (user.is_anonymous ? 'Ospite' : null);
   document.getElementById('user-email').textContent = displayName;
   const topbarEmailEl = document.getElementById('topbar-email');
   if (topbarEmailEl) topbarEmailEl.textContent = displayName;
