@@ -99,12 +99,6 @@ function parseRequestedMiniAppTabFromCommand(ctx) {
   return MINI_APP_WEB_TABS.has(tab) ? tab : null;
 }
 
-function privateStartWebTabUrl(botUsername, tab) {
-  const u = (botUsername || '').replace(/^@/, '');
-  if (!u || !MINI_APP_WEB_TABS.has(tab)) return null;
-  return `https://t.me/${u}?start=${encodeURIComponent(`webtab_${tab}`)}`;
-}
-
 function isCoCboardAdminUser(user) {
   const role = user?.user_metadata?.role || '';
   return String(role).toLowerCase() === 'admin';
