@@ -86,6 +86,25 @@ function webLaunchButton(ctx, label, url) {
   return Markup.button.webApp(label, url);
 }
 
+const MINI_APP_WEB_TABS = new Set(['cwl_warlog', 'warlog', 'bonus', 'members', 'profilo', 'cerca', 'rankings']);
+const MINI_APP_GUEST_ALLOWED_TABS = new Set(['cwl_warlog', 'warlog', 'bonus', 'members', 'cerca', 'rankings']);
+
+function parseRequestedMiniAppTabFromCommand(ctx) {
+  const txt = String(ctx.message?.text || '').trim();
+  if (!txt.startsWith('/')) return null;
+  const parts = txt.split(/\s+/);
+  const arg = String(parts[1] || '').trim();
+  if (!arg.startsWith('webtab_')) return null;
+  const tab = arg.slice('webtab_'.length);
+  return MINI_APP_WEB_TABS.has(tab) ? tab : null;
+}
+
+function privateStartWebTabUrl(botUsername, tab) {
+  const u = (botUsername || '').replace(/^@/, '');
+  if (!u || !MINI_APP_WEB_TABS.has(tab)) return null;
+  return `https://t.me/${u}?start=${encodeURIComponent(`webtab_${tab}`)}`;
+}
+
 function isCoCboardAdminUser(user) {
   const role = user?.user_metadata?.role || '';
   return String(role).toLowerCase() === 'admin';
@@ -1448,6 +1467,48 @@ async function buildWebAppHandoffUrl(ctx, extraParams = {}) {
   return `${base}/?${q.toString()}`;
 }
 
+function buildGuestWebUrl(openTab) {
+  const base = (process.env.COCBOARD_SITE_HOME_URL || '').trim().replace(/\/$/, '');
+  if (!base) return null;
+  const q = new URLSearchParams({ open_tab: String(openTab || '') });
+  return `${base}/?${q.toString()}`;
+}
+
+async function renderMiniAppLaunchForTab(ctx, tab) {
+  const isPrivate = !isLinkedChatContext(ctx);
+  if (!isPrivate) return false;
+  const sess = await tauth.getValidSession(ctx.from?.id).catch(() => null);
+  const authed = !!sess?.user;
+  if (authed) ctx.cocboardUser = sess.user;
+  if (!authed && !MINI_APP_GUEST_ALLOWED_TABS.has(tab)) {
+    await ctx.reply('🔒 Sezione disponibile solo dopo login. Da ospite puoi usare le altre funzioni web.', {
+      parse_mode: 'HTML',
+    });
+    return true;
+  }
+  let url = null;
+  if (authed) {
+    try {
+      url = await buildWebAppHandoffUrl(ctx, { open_tab: tab });
+    } catch (_) {
+      url = null;
+    }
+  } else {
+    url = buildGuestWebUrl(tab);
+  }
+  if (!url || !String(url).startsWith('https://')) {
+    await ctx.reply('⚠️ Mini App non disponibile al momento.');
+    return true;
+  }
+  const kb = Markup.inlineKeyboard([[Markup.button.webApp('📱 Apri Mini App', url)], [Markup.button.callback('« Menù', 'menu')]]);
+  const body =
+    `📱 <b>Mini App CoCBoard</b>\n\n` +
+    `Sezione: <code>${fmt.escapeHtml(tab)}</code>\n` +
+    `${authed ? 'Accesso verificato attivo.' : 'Accesso ospite attivo.'}`;
+  await ctx.reply(body, { parse_mode: 'HTML', ...kb });
+  return true;
+}
+
 function shortClanButtonLabel(clanName, clanTag) {
   const normalizedName = String(clanName || '').replace(/\s+/g, ' ').trim();
   const normalizedTag = String(clanTag || '').trim();
@@ -1545,17 +1606,43 @@ async function renderClanWebAppsMenu(ctx) {
     ['👤 Profilo (web)', 'profilo', '🔍 Cerca (web)', 'cerca'],
     ['📊 Classifica (web)', 'rankings', null, null],
   ];
+  const linkedCtx = isLinkedChatContext(ctx);
+  const sess = await tauth.getValidSession(ctx.from?.id).catch(() => null);
+  const isAuthed = !!sess?.user;
+  if (isAuthed) ctx.cocboardUser = sess.user;
+  await ensureTgBotUsername(ctx.telegram);
   try {
     for (const [la, ta, lb, tb] of webPairs) {
-      const ua = await buildWebAppHandoffUrl(ctx, { open_tab: ta });
+      const lockedA = !isAuthed && !MINI_APP_GUEST_ALLOWED_TABS.has(ta);
+      let ua = null;
+      if (!lockedA) {
+        if (linkedCtx) ua = privateStartWebTabUrl(cachedTgBotUsername, ta);
+        else if (isAuthed) ua = await buildWebAppHandoffUrl(ctx, { open_tab: ta });
+        else ua = buildGuestWebUrl(ta);
+      }
+      if (lockedA) {
+        rows.push([Markup.button.callback(`${la} 🔒`, 'noop')]);
+        continue;
+      }
       if (!ua || !String(ua).startsWith('https://')) continue;
       if (!lb || !tb) {
         rows.push([webLaunchButton(ctx, la, ua)]);
         continue;
       }
-      const ub = await buildWebAppHandoffUrl(ctx, { open_tab: tb });
-      if (ub && String(ub).startsWith('https://')) rows.push([webLaunchButton(ctx, la, ua), webLaunchButton(ctx, lb, ub)]);
-      else rows.push([webLaunchButton(ctx, la, ua)]);
+      const lockedB = !isAuthed && !MINI_APP_GUEST_ALLOWED_TABS.has(tb);
+      let ub = null;
+      if (!lockedB) {
+        if (linkedCtx) ub = privateStartWebTabUrl(cachedTgBotUsername, tb);
+        else if (isAuthed) ub = await buildWebAppHandoffUrl(ctx, { open_tab: tb });
+        else ub = buildGuestWebUrl(tb);
+      }
+      if (lockedB) {
+        rows.push([webLaunchButton(ctx, la, ua), Markup.button.callback(`${lb} 🔒`, 'noop')]);
+      } else if (ub && String(ub).startsWith('https://')) {
+        rows.push([webLaunchButton(ctx, la, ua), webLaunchButton(ctx, lb, ub)]);
+      } else {
+        rows.push([webLaunchButton(ctx, la, ua)]);
+      }
     }
   } catch (_) {}
   if (rows.length === 0) {
@@ -2561,6 +2648,8 @@ function setupBot(bot) {
   async function handleCocboardCommand(ctx) {
     if (!ctx.from?.id) return;
     try {
+      await ensureTgBotUsername(ctx.telegram);
+      const requestedTab = parseRequestedMiniAppTabFromCommand(ctx);
       // Hard reset stati transient all'avvio menù, evita blocchi su primo ingresso.
       pendingAuth.delete(ctx.from.id);
       pendingSearch.delete(ctx.from.id);
@@ -2568,6 +2657,10 @@ function setupBot(bot) {
       pendingCommunity.delete(ctx.from.id);
       pendingSupportOpen.delete(ctx.from.id);
       adminActiveSupportTicket.delete(ctx.from.id);
+      if (requestedTab && ctx.chat?.type === 'private') {
+        const launched = await renderMiniAppLaunchForTab(ctx, requestedTab);
+        if (launched) return;
+      }
       const sess = await tauth.getValidSession(ctx.from.id);
       if (sess) {
         ctx.cocboardUser = sess.user;
