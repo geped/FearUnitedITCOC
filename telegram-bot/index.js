@@ -1590,22 +1590,15 @@ async function renderClanHubMenu(ctx) {
   const body =
     `${fmt.DIV}\n🏠 <b>${fmt.escapeHtml(label)}</b>${tagLine}\n${fmt.DIV}\n\n` +
     `Sezione clan e strumenti dedicati.`;
-  let profileBtn;
-  if (isAuthed) {
-    profileBtn = Markup.button.callback('👤 Il mio profilo', 'me');
-  } else if (grp) {
-    const botUser = (cachedTgBotUsername || 'cocboardbot').replace(/^@/, '');
-    profileBtn = Markup.button.url('👤 Profilo 🔒', `https://t.me/${botUser}/home?startapp=profilo`);
-  } else {
-    profileBtn = Markup.button.callback('👤 Profilo 🔒', 'auth_login');
-  }
   const rows = [
     [Markup.button.callback('👥 Membri', 'mb0'), Markup.button.callback('🏰 Info clan', 'info')],
-    [profileBtn, Markup.button.callback('🎁 Bonus', 'bonus:0')],
   ];
-  if (!grp || isAuthed) {
-    rows.push([Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')]);
+  if (isAuthed) {
+    rows.push([Markup.button.callback('👤 Il mio profilo', 'me'), Markup.button.callback('🎁 Bonus', 'bonus:0')]);
+  } else {
+    rows.push([Markup.button.callback('🎁 Bonus', 'bonus:0')]);
   }
+  rows.push([Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')]);
   rows.push(
     [Markup.button.callback('📱 Visualizza come mini app', 'clan_webapps')],
     [Markup.button.callback('« Menù', 'menu')]
@@ -1622,11 +1615,10 @@ async function renderClanWebAppsMenu(ctx) {
     `${fmt.DIV}\n📱 <b>Mini App CoCBoard</b>\n${fmt.DIV}\n\n` +
     `Apri le sezioni web del clan direttamente da Telegram.`;
   const rows = [];
-  const webPairs = [
+  const webPairsBase = [
     ['🏆 CWL live (web)', 'cwl_warlog', '📜 Registro guerre (web)', 'warlog'],
     ['🎁 Bonus (web)', 'bonus', '🏰 Info / Membri (web)', 'members'],
     ['🔍 Cerca (web)', 'cerca', '📊 Classifica (web)', 'rankings'],
-    ['👤 Profilo (web)', 'profilo', null, null],
   ];
   const sess = await tauth.getValidSession(ctx.from?.id).catch(() => null);
   const isAuthed = !!sess?.user;
@@ -1638,6 +1630,9 @@ async function renderClanWebAppsMenu(ctx) {
     ? await resolveEffectiveClanTag(ctx).catch(() => null)
     : null;
   const grp = isLinkedChatContext(ctx);
+  const webPairs = isAuthed
+    ? [...webPairsBase, ['👤 Profilo (web)', 'profilo', null, null]]
+    : webPairsBase;
   for (const [la, ta, lb, tb] of webPairs) {
     try {
       const lockedA = !isAuthed && !MINI_APP_GUEST_ALLOWED_TABS.has(ta);
