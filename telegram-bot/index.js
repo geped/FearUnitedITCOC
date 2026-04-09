@@ -153,10 +153,10 @@ function isClanLeader(user) {
   return ['admin', 'capo', 'co-capo'].includes(r);
 }
 
-/** Solo Capo / Co-Capo: assegnazione bonus CWL dal bot (stessa azione della tab web «Assegna», senza ruolo Admin). */
+/** Capo / Co-Capo / Admin: assegnazione bonus CWL dal bot. */
 function isCapoOrCoCapoForBonus(user) {
   const r = user?.user_metadata?.role || 'utente';
-  return r === 'capo' || r === 'co-capo';
+  return r === 'admin' || r === 'capo' || r === 'co-capo';
 }
 
 function normClanTagEq(a, b) {
