@@ -1613,7 +1613,6 @@ async function renderClanWebAppsMenu(ctx) {
     ['👤 Profilo (web)', 'profilo', '🔍 Cerca (web)', 'cerca'],
     ['📊 Classifica (web)', 'rankings', null, null],
   ];
-  const linkedCtx = isLinkedChatContext(ctx);
   const sess = await tauth.getValidSession(ctx.from?.id).catch(() => null);
   const isAuthed = !!sess?.user;
   if (isAuthed) ctx.cocboardUser = sess.user;
@@ -1623,8 +1622,7 @@ async function renderClanWebAppsMenu(ctx) {
       const lockedA = !isAuthed && !MINI_APP_GUEST_ALLOWED_TABS.has(ta);
       let ua = null;
       if (!lockedA) {
-        if (linkedCtx) ua = privateStartWebTabUrl(cachedTgBotUsername, ta);
-        else if (isAuthed) ua = await buildWebAppHandoffUrl(ctx, { open_tab: ta });
+        if (isAuthed) ua = await buildWebAppHandoffUrl(ctx, { open_tab: ta });
         else ua = buildGuestWebUrl(ta);
       }
       if (lockedA) {
@@ -1639,8 +1637,7 @@ async function renderClanWebAppsMenu(ctx) {
       const lockedB = !isAuthed && !MINI_APP_GUEST_ALLOWED_TABS.has(tb);
       let ub = null;
       if (!lockedB) {
-        if (linkedCtx) ub = privateStartWebTabUrl(cachedTgBotUsername, tb);
-        else if (isAuthed) ub = await buildWebAppHandoffUrl(ctx, { open_tab: tb });
+        if (isAuthed) ub = await buildWebAppHandoffUrl(ctx, { open_tab: tb });
         else ub = buildGuestWebUrl(tb);
       }
       if (lockedB) {
