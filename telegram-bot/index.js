@@ -5099,28 +5099,24 @@ async function main() {
     const listenPort = Number(process.env.PORT) || PORT;
     app.listen(listenPort, '0.0.0.0', async () => {
       console.log(`Listening 0.0.0.0:${listenPort} webhook POST ${path}`);
-      // Retry setWebhook con backoff — il DNS di Render può non essere pronto subito al cold start
-      let delay = 5000;
-      for (let attempt = 1; attempt <= 10; attempt++) {
+      // Piccola pausa per dare al DNS di Render il tempo di inizializzarsi al cold start
+      await new Promise(r => setTimeout(r, 8000));
+      try {
+        await bot.telegram.setWebhook(hookUrl, {
+          secret_token: secretToken || undefined,
+          allowed_updates: ['message', 'callback_query', 'my_chat_member'],
+          drop_pending_updates: true,
+        });
         try {
-          await bot.telegram.setWebhook(hookUrl, {
-            secret_token: secretToken || undefined,
-            allowed_updates: ['message', 'callback_query', 'my_chat_member'],
-            drop_pending_updates: true,
-          });
-          try {
-            const me = await bot.telegram.getMe();
-            if (me.username) cachedTgBotUsername = me.username.replace(/^@/, '');
-          } catch (_) {}
-          await registerBotCommands(bot.telegram);
-          console.log('Webhook set:', hookUrl);
-          break;
-        } catch (err) {
-          console.warn(`[cocboard-bot] setWebhook attempt ${attempt} failed: ${err.message} — retry in ${delay / 1000}s`);
-          if (attempt === 10) { console.error('[cocboard-bot] setWebhook definitively failed, bot running without webhook'); break; }
-          await new Promise(r => setTimeout(r, delay));
-          delay = Math.min(delay * 2, 60000);
-        }
+          const me = await bot.telegram.getMe();
+          if (me.username) cachedTgBotUsername = me.username.replace(/^@/, '');
+        } catch (_) {}
+        await registerBotCommands(bot.telegram);
+        console.log('Webhook set:', hookUrl);
+      } catch (err) {
+        // DNS non ancora pronto su questo container Render — uscita pulita per forzare un restart
+        console.error('[cocboard-bot] setWebhook failed, restarting:', err.message);
+        process.exit(1);
       }
     });
   } else {
