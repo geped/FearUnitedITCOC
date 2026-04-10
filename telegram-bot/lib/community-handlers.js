@@ -1902,12 +1902,12 @@ function registerCommunityHandlers(bot, deps) {
       return;
     }
 
-    const delivered = await broadcastRecruitmentDelivers(ctx.telegram, postHtml, null);
-    await sbc.insertRecruitmentPost(sid, postHtml, null, approvedAt, expStr, delivered, uid);
+    // Nessun broadcast: "pubblica adesso" è visibile solo in "Annunci attivi".
+    await sbc.insertRecruitmentPost(sid, postHtml, null, approvedAt, expStr, [], uid);
 
     await ctx.reply(
       `✅ <b>Annuncio pubblicato!</b>\n\n` +
-        `Inviato a <b>${delivered.length}</b> iscritti al feed reclutamento.\n` +
+        `Visibile in <b>Reclutamento → Annunci attivi</b> per 24h.\n` +
         `⏳ Scade il <b>${escapeHtml(exp.toLocaleString('it-IT', { timeZone: 'UTC' }))}</b> UTC.\n\n` +
         `<i>Potrai ritirarlo in anticipo da "Annunci attivi".</i>`,
       { parse_mode: 'HTML', ...recruitHubKb() }
