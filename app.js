@@ -1565,7 +1565,7 @@ async function loadAssignBonus() {
     const res = await fetch(`/api/cwl-stats${clanQ()}`);
     const data = await res.json();
 
-    if (data.state !== 'notInWar' && data.players?.length) {
+    if (data.state !== 'notInWar' && data.state !== 'ended' && data.players?.length) {
       cwlLiveData = data.players;
       const season = data.season || new Date().toISOString().slice(0, 7);
 
