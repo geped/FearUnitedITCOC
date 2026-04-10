@@ -720,7 +720,7 @@ function formatSeasonLabelIt(season) {
 }
 
 function rowReceivedBonus(h) {
-  return h.bonus_assigned === true || Number(h.bonus_score) > 0;
+  return h.bonus_assigned === true;
 }
 
 /** Testi aggiuntivi per bonus Telegram: storico per stagione + classifica riceventi. */

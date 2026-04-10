@@ -849,9 +849,28 @@ async function fetchCwlHistoryBonusRows(clanTagRaw) {
     .from('cwl_history')
     .select('player_name, season, bonus_score, bonus_assigned')
     .eq('clan_tag', tag)
+    .eq('bonus_assigned', true)
     .order('season', { ascending: false });
   if (error) throw new Error(error.message);
   return data || [];
+}
+
+/** Mappa alias → nome canonico CoC per il clan (tabella player_aliases). */
+async function fetchPlayerAliasesForClan(clanTagRaw) {
+  const client = sb();
+  if (!client) return {};
+  const tag = normClanTagSql(clanTagRaw);
+  try {
+    const { data } = await client
+      .from('player_aliases')
+      .select('alias, coc_name')
+      .eq('clan_tag', tag);
+    const map = {};
+    (data || []).forEach((a) => { map[String(a.alias).toLowerCase()] = a.coc_name; });
+    return map;
+  } catch (_) {
+    return {}; // tabella potrebbe non esistere
+  }
 }
 
 /** Stagioni distinte presenti in cwl_history per il clan (più recenti prima). */
@@ -1009,6 +1028,7 @@ module.exports = {
   canLinkChatToClan,
   listTelegramChatIdsForClan,
   fetchCwlHistoryBonusRows,
+  fetchPlayerAliasesForClan,
   listCwlSeasonsForClan,
   fetchCwlHistoryFullSeason,
   upsertCwlHistoryAssignRow,

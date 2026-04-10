@@ -3176,12 +3176,18 @@ function setupBot(bot) {
   bot.command('bonus', async (ctx) => {
     await cmdNeedClan(ctx, async (clanTag) => {
       let hist = [];
+      let aliasMap = {};
       try {
-        hist = await sb.fetchCwlHistoryBonusRows(clanTag);
-      } catch (_) {
-        hist = [];
-      }
-      const body = fmt.formatBonusReceiversLeaderboard(hist);
+        [hist, aliasMap] = await Promise.all([
+          sb.fetchCwlHistoryBonusRows(clanTag),
+          sb.fetchPlayerAliasesForClan(clanTag),
+        ]);
+      } catch (_) {}
+      const normalized = hist.map((h) => ({
+        ...h,
+        player_name: aliasMap[String(h.player_name || '').toLowerCase()] || h.player_name,
+      }));
+      const body = fmt.formatBonusReceiversLeaderboard(normalized);
       const kb = await buildBonusKeyboard(ctx);
       await ctx.reply(body, { parse_mode: 'HTML', ...kb });
     });
@@ -4382,12 +4388,18 @@ function setupBot(bot) {
       return;
     }
     let hist = [];
+    let aliasMap = {};
     try {
-      hist = await sb.fetchCwlHistoryBonusRows(clanTag);
-    } catch (_) {
-      hist = [];
-    }
-    const body = fmt.formatBonusReceiversLeaderboard(hist);
+      [hist, aliasMap] = await Promise.all([
+        sb.fetchCwlHistoryBonusRows(clanTag),
+        sb.fetchPlayerAliasesForClan(clanTag),
+      ]);
+    } catch (_) {}
+    const normalized = hist.map((h) => ({
+      ...h,
+      player_name: aliasMap[String(h.player_name || '').toLowerCase()] || h.player_name,
+    }));
+    const body = fmt.formatBonusReceiversLeaderboard(normalized);
     const kb = await buildBonusKeyboard(ctx);
     try {
       await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
@@ -4447,13 +4459,21 @@ function setupBot(bot) {
       return;
     }
     let hist = [];
+    let aliasMap = {};
     try {
-      hist = await sb.fetchCwlHistoryBonusRows(clanTag);
+      [hist, aliasMap] = await Promise.all([
+        sb.fetchCwlHistoryBonusRows(clanTag),
+        sb.fetchPlayerAliasesForClan(clanTag),
+      ]);
     } catch (e) {
       await ctx.answerCbQuery(String(e.message || 'Errore dati').slice(0, 200)).catch(() => {});
       return;
     }
-    const body = fmt.formatBonusReceiversLeaderboard(hist);
+    const normalized = hist.map((h) => ({
+      ...h,
+      player_name: aliasMap[String(h.player_name || '').toLowerCase()] || h.player_name,
+    }));
+    const body = fmt.formatBonusReceiversLeaderboard(normalized);
     await editOrReplyChunkedHtml(ctx, body, bonusHistHofBackKb());
   });
 
