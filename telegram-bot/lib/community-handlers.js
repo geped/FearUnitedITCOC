@@ -1671,17 +1671,16 @@ function registerCommunityHandlers(bot, deps) {
     const uid = ctx.from?.id;
     if (uid == null) return;
     pendingCommunity.set(uid, { kind: 'recruit_instant', step: 'tag' });
-    await ctx
-      .editMessageText(
-        `🚀 <b>Pubblica adesso</b> — passo 1/3\n\n` +
-          `Invia il <b>tag del clan</b> da promuovere (es. <code>#2J2VLPP9R</code>).\n\n` +
-          `<i>Questo metodo pubblica immediatamente senza moderazione. L'annuncio resta attivo 24h.</i>`,
-        {
-          parse_mode: 'HTML',
-          ...Markup.inlineKeyboard([[Markup.button.callback('❌ Annulla', 'rci_cancel')]]),
-        }
-      )
-      .catch(() => {});
+    const instantTagText =
+      `🚀 <b>Pubblica adesso</b> — passo 1/3\n\n` +
+      `Invia il <b>tag del clan</b> da promuovere (es. <code>#2J2VLPP9R</code>).\n\n` +
+      `<i>Questo metodo pubblica immediatamente senza moderazione. L'annuncio resta attivo 24h.</i>`;
+    const instantTagKb = Markup.inlineKeyboard([[Markup.button.callback('❌ Annulla', 'rci_cancel')]]);
+    try {
+      await ctx.editMessageText(instantTagText, { parse_mode: 'HTML', ...instantTagKb });
+    } catch (_) {
+      await ctx.reply(instantTagText, { parse_mode: 'HTML', ...instantTagKb });
+    }
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
@@ -1919,14 +1918,13 @@ function registerCommunityHandlers(bot, deps) {
     const uid = ctx.from?.id;
     if (uid != null) pendingCommunity.set(uid, { kind: 'recruit_instant', step: 'tag' });
     await ctx.answerCbQuery('Ricominciato').catch(() => {});
-    await ctx.reply(
+    const restartText =
       `🚀 <b>Pubblica adesso</b> — passo 1/3\n\n` +
-        `Invia il <b>tag del clan</b> da promuovere (es. <code>#2J2VLPP9R</code>).`,
-      {
-        parse_mode: 'HTML',
-        ...Markup.inlineKeyboard([[Markup.button.callback('❌ Annulla', 'rci_cancel')]]),
-      }
-    );
+      `Invia il <b>tag del clan</b> da promuovere (es. <code>#2J2VLPP9R</code>).`;
+    await ctx.reply(restartText, {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([[Markup.button.callback('❌ Annulla', 'rci_cancel')]]),
+    });
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
