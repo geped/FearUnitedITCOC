@@ -907,10 +907,14 @@ function chunkForTelegram(html) {
   if (html.length <= MAX_MESSAGE) return [html];
   const parts = [];
   let rest = html;
-  while (rest.length) {
-    parts.push(rest.slice(0, MAX_MESSAGE));
-    rest = rest.slice(MAX_MESSAGE);
+  while (rest.length > MAX_MESSAGE) {
+    // Split at the last newline before MAX_MESSAGE to avoid cutting mid-tag
+    let cut = rest.lastIndexOf('\n', MAX_MESSAGE);
+    if (cut <= 0) cut = MAX_MESSAGE; // no newline found, hard cut
+    parts.push(rest.slice(0, cut));
+    rest = rest.slice(cut);
   }
+  if (rest.length) parts.push(rest);
   return parts;
 }
 
