@@ -1529,9 +1529,13 @@ function registerCommunityHandlers(bot, deps) {
       try {
         await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
       } catch (_) {}
-      await ctx.reply(`🗑 Annuncio <code>#${postId}</code> rimosso dal feed.`, { parse_mode: 'HTML' });
+      await ctx.telegram
+        .sendMessage(ctx.from.id, `🗑 Annuncio <code>#${postId}</code> rimosso dal feed.`, { parse_mode: 'HTML' })
+        .catch(() => {});
     } catch (e) {
-      await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
+      await ctx.telegram
+        .sendMessage(ctx.from.id, `❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' })
+        .catch(() => {});
     }
   });
 
@@ -1965,12 +1969,16 @@ function registerCommunityHandlers(bot, deps) {
       await sbc.deleteRecruitmentPostRow(postId);
       await ctx.answerCbQuery('Annuncio ritirato').catch(() => {});
       try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch (_) {}
-      await ctx.reply('✅ Il tuo annuncio è stato <b>ritirato</b> con successo.', {
-        parse_mode: 'HTML',
-        ...recruitHubKb(),
-      });
+      await ctx.telegram
+        .sendMessage(uid, '✅ Il tuo annuncio è stato <b>ritirato</b> con successo.', {
+          parse_mode: 'HTML',
+          reply_markup: recruitHubKb().reply_markup,
+        })
+        .catch(() => {});
     } catch (e) {
-      await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
+      await ctx.telegram
+        .sendMessage(uid, `❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' })
+        .catch(() => {});
     }
     await refreshPrivateReplyKeyboardRef(ctx);
   });
