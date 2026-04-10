@@ -702,6 +702,8 @@ async function tryHandleEarlyMessage(
   { isLinkedChatContext, sendMainMenu, sendGuestMenu, backMenuKb, tauth, createGlobalReport }
 ) {
   const rk = refreshPrivateReplyKeyboardRef;
+  // Le callback query (pulsanti) sono gestite dai bot.action() — non intercettarle qui.
+  if (ctx.callbackQuery) return false;
   const uid = ctx.from?.id;
   if (uid == null || ctx.chat?.type !== 'private' || isLinkedChatContext(ctx)) return false;
 
