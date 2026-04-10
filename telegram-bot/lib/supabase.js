@@ -252,56 +252,59 @@ async function listEnabledTelegramChatLinks() {
   });
 }
 
+// Tutti i flag booleani della tabella telegram_chat_notification_settings.
+const NOTIF_BOOL_KEYS = [
+  // Categorie master
+  'war_alerts_enabled', 'cwl_alerts_enabled', 'capital_raids_enabled',
+  'clan_games_enabled', 'clan_activity_enabled',
+  // Guerra Classica
+  'war_prep_start', 'war_start_alert', 'war_missing_4h', 'war_missing_1h',
+  'war_missing_15m', 'war_3star', 'war_result',
+  // CWL
+  'cwl_prep_start', 'cwl_round_start', 'cwl_missing_4h', 'cwl_missing_1h',
+  'cwl_missing_15m', 'cwl_round_end', 'cwl_end',
+  'cwl_league_promotion', 'cwl_league_demotion',
+  // Raid Capitale
+  'raid_start', 'raid_district_destroyed', 'raid_clan_cleared',
+  'raid_capital_fallen', 'raid_end', 'raid_loot_milestone',
+  // Attività Clan
+  'clan_member_join', 'clan_member_leave', 'clan_role_promoted',
+  'clan_role_demoted', 'clan_level_up', 'clan_war_streak', 'clan_name_change',
+];
+
+function _defaultNotifSettings(chatId) {
+  const obj = { telegram_chat_id: Number(chatId) };
+  for (const k of NOTIF_BOOL_KEYS) obj[k] = false;
+  return obj;
+}
+
 async function getChatNotificationSettings(chatId) {
   const client = sb();
-  if (!client) {
-    return {
-      telegram_chat_id: Number(chatId),
-      war_alerts_enabled: false,
-      cwl_alerts_enabled: false,
-      capital_raids_enabled: false,
-      clan_games_enabled: false,
-    };
-  }
   const id = Number(chatId);
+  if (!client) return _defaultNotifSettings(id);
   const { data, error } = await client
     .from('telegram_chat_notification_settings')
     .select('*')
     .eq('telegram_chat_id', id)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return (
-    data || {
-      telegram_chat_id: id,
-      war_alerts_enabled: false,
-      cwl_alerts_enabled: false,
-      capital_raids_enabled: false,
-      clan_games_enabled: false,
-    }
-  );
+  return data || _defaultNotifSettings(id);
 }
 
 async function upsertChatNotificationSettings(chatId, patch, updatedBy) {
   const client = sb();
   if (!client) return;
-  const id = Number(chatId);
+  const id   = Number(chatId);
   const prev = await getChatNotificationSettings(id);
-  const row = {
-    telegram_chat_id: id,
-    war_alerts_enabled:
-      patch.war_alerts_enabled !== undefined ? patch.war_alerts_enabled === true : prev.war_alerts_enabled === true,
-    cwl_alerts_enabled:
-      patch.cwl_alerts_enabled !== undefined ? patch.cwl_alerts_enabled === true : prev.cwl_alerts_enabled === true,
-    capital_raids_enabled:
-      patch.capital_raids_enabled !== undefined
-        ? patch.capital_raids_enabled === true
-        : prev.capital_raids_enabled === true,
-    clan_games_enabled:
-      patch.clan_games_enabled !== undefined ? patch.clan_games_enabled === true : prev.clan_games_enabled === true,
-    updated_by: updatedBy != null ? Number(updatedBy) : null,
-    updated_at: new Date().toISOString(),
-  };
-  const { error } = await client.from('telegram_chat_notification_settings').upsert(row, { onConflict: 'telegram_chat_id' });
+  const row  = { telegram_chat_id: id };
+  for (const k of NOTIF_BOOL_KEYS) {
+    row[k] = patch[k] !== undefined ? patch[k] === true : prev[k] === true;
+  }
+  row.updated_by = updatedBy != null ? Number(updatedBy) : null;
+  row.updated_at = new Date().toISOString();
+  const { error } = await client
+    .from('telegram_chat_notification_settings')
+    .upsert(row, { onConflict: 'telegram_chat_id' });
   if (error) throw new Error(error.message);
 }
 

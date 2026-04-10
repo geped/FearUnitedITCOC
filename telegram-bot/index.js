@@ -13,6 +13,8 @@ const cv = require('./lib/community-validation');
 const comm = require('./lib/community-handlers');
 const privateUi = require('./lib/private-ui-cleanup');
 const bonusAssist = require('./lib/bonus-assistant');
+const notifUi = require('./lib/notification-settings-ui');
+const notifExt = require('./lib/notifications-extended');
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -47,14 +49,6 @@ const BONUS_WIZARD_PAGE = 6;
 const bonusWizardByUid = new Map();
 
 let cachedTgBotUsername = (process.env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '');
-/** Anti-spam avvisi guerra: chatId -> key avvisi già inviati per endTime corrente. */
-const warAlertMemory = new Map();
-/**
- * Anti-spam avvisi raid capitale.
- * key: `${chatId}:raid:${startTime}` → { initialized: bool, destroyed: Set<`${enemyTag}:${districtId}`> }
- * Sul primo poll dopo un restart si inizializza senza inviare (evita ri-notifiche di distretti già noti).
- */
-const raidAlertMemory = new Map();
 /** Traccia l'ultimo messaggio menù per chat (privata + gruppo): consente la cancellazione al re-invio di /cocboard. */
 const _lastMenuMsgByChat = new Map();
 function _trackMenuMsg(chatId, messageId) {
@@ -382,6 +376,7 @@ function isPublicCallbackData(d) {
     d === 'notif_cwl' ||
     d === 'notif_raids' ||
     d === 'notif_games' ||
+    d.startsWith('notif_cat:') ||
     d === 'support_open' ||
     d === 'support_user_manage' ||
     d === 'support_user_menu' ||
@@ -1568,10 +1563,15 @@ async function mainMenuKeyboard(ctx, user, hasClanTag, clanTag, clanName) {
   }
   if (showClanRows) {
     if (grp) {
-      rows.push([
-        Markup.button.callback(shortClanButtonLabel(clanName, clanTag), 'clan_home'),
-        Markup.button.callback('🔔 Gestione avvisi', 'notif_menu'),
-      ]);
+      // "Gestione avvisi" visibile solo a Capo / Co-Capo / Admin
+      if (user && isCapoOrCoCapoForBonus(user)) {
+        rows.push([
+          Markup.button.callback(shortClanButtonLabel(clanName, clanTag), 'clan_home'),
+          Markup.button.callback('🔔 Gestione avvisi', 'notif_menu'),
+        ]);
+      } else {
+        rows.push([Markup.button.callback(shortClanButtonLabel(clanName, clanTag), 'clan_home')]);
+      }
     } else {
       rows.push([Markup.button.callback(shortClanButtonLabel(clanName, clanTag), 'clan_home')]);
     }
@@ -1766,20 +1766,6 @@ function clanBackKb() {
   return Markup.inlineKeyboard([[Markup.button.callback('« Indietro', 'clan_home'), Markup.button.callback('« Menù', 'menu')]]);
 }
 
-function notifLabel(on) {
-  return on ? '✅ ON' : '⚪ OFF';
-}
-
-async function notificationMenuKb(chatId) {
-  const s = await sb.getChatNotificationSettings(chatId).catch(() => ({}));
-  return Markup.inlineKeyboard([
-    [Markup.button.callback(`⚔️ Guerra ${notifLabel(s.war_alerts_enabled === true)}`, 'notif_war')],
-    [Markup.button.callback(`🏆 CWL ${notifLabel(s.cwl_alerts_enabled === true)}`, 'notif_cwl')],
-    [Markup.button.callback(`🏛 Raid capitale ${notifLabel(s.capital_raids_enabled === true)}`, 'notif_raids')],
-    [Markup.button.callback(`🎯 Giochi del clan ${notifLabel(s.clan_games_enabled === true)}`, 'notif_games')],
-    [Markup.button.callback('« Menù', 'menu')],
-  ]);
-}
 
 function buildMembersKb(page, pages) {
   const row = [];
@@ -4107,43 +4093,13 @@ function setupBot(bot) {
       });
   });
 
-  bot.action('notif_menu', async (ctx) => {
-    safeAnswerCb(ctx);
-    if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
-    const kb = await notificationMenuKb(ctx.chat.id);
-    const body =
-      `🔔 <b>Notifiche chat</b>\n\n` +
-      `Configura avvisi automatici per questa chat.\n` +
-      `<i>Predefinito: tutto OFF.</i>\n` +
-      `<i>Solo admin chat o admin CoCBoard possono modificare.</i>`;
-    try {
-      await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
-    } catch (_) {
-      await ctx.reply(body, { parse_mode: 'HTML', ...kb });
-    }
+  // Impostazioni notifiche (menu gerarchico per categorie + toggle singoli flag)
+  notifUi.setup(bot, {
+    sb,
+    safeAnswerCb,
+    isLinkedChatContext,
+    isCapoOrCoCapo: isCapoOrCoCapoForBonus,
   });
-
-  async function toggleChatNotif(ctx, key) {
-    if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
-    const tgAdmin = await isTelegramChatAdmin(ctx);
-    const sess = ctx.from?.id != null ? await tauth.getValidSession(ctx.from.id).catch(() => null) : null;
-    const appAdmin = isCoCboardAdminUser(sess?.user);
-    if (!tgAdmin && !appAdmin) {
-      await ctx.answerCbQuery('Solo amministratori chat o admin CoCBoard.').catch(() => {});
-      return;
-    }
-    const cur = await sb.getChatNotificationSettings(ctx.chat.id).catch(() => ({}));
-    const next = !(cur?.[key] === true);
-    await sb.upsertChatNotificationSettings(ctx.chat.id, { [key]: next }, ctx.from?.id).catch(() => {});
-    await ctx.answerCbQuery(next ? 'Attivata' : 'Disattivata').catch(() => {});
-    const kb = await notificationMenuKb(ctx.chat.id);
-    await ctx.editMessageReplyMarkup(kb.reply_markup).catch(() => {});
-  }
-
-  bot.action('notif_war', async (ctx) => toggleChatNotif(ctx, 'war_alerts_enabled'));
-  bot.action('notif_cwl', async (ctx) => toggleChatNotif(ctx, 'cwl_alerts_enabled'));
-  bot.action('notif_raids', async (ctx) => toggleChatNotif(ctx, 'capital_raids_enabled'));
-  bot.action('notif_games', async (ctx) => toggleChatNotif(ctx, 'clan_games_enabled'));
 
   bot.action('nav_search', async (ctx) => {
     safeAnswerCb(ctx);
@@ -4920,228 +4876,6 @@ function setupBot(bot) {
   });
 }
 
-function parseCocTimeToDate(raw) {
-  const s = String(raw || '').trim();
-  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})\.\d{3}Z$/.exec(s);
-  if (!m) return null;
-  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6])));
-}
-
-function listMissingWarAttacks(warData) {
-  const side = warData?.clan || {};
-  const apm = Number(warData?.attacksPerMember || 2);
-  const members = Array.isArray(side.members) ? side.members : [];
-  return members
-    .map((m) => {
-      const made = Array.isArray(m.attacks) ? m.attacks.length : 0;
-      const missing = Math.max(0, apm - made);
-      return { name: m.name || m.tag || 'Sconosciuto', made, missing };
-    })
-    .filter((m) => m.missing > 0)
-    .sort((a, b) => b.missing - a.missing || a.name.localeCompare(b.name, 'it'));
-}
-
-function warOutcomeLabel(warData) {
-  const c = warData?.clan || {};
-  const o = warData?.opponent || {};
-  const cs = Number(c.stars || 0);
-  const os = Number(o.stars || 0);
-  const cd = Number(c.destructionPercentage || 0);
-  const od = Number(o.destructionPercentage || 0);
-  if (cs > os) return '✅ Vinta';
-  if (cs < os) return '❌ Persa';
-  if (cd > od) return '✅ Vinta (tie-break distruzione)';
-  if (cd < od) return '❌ Persa (tie-break distruzione)';
-  return '⚖️ Pareggio';
-}
-
-function minuteCountdownLabel(ms) {
-  const totalMin = Math.max(0, Math.floor(ms / 60000));
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  if (h <= 0) return `${m}m`;
-  return `${h}h ${m}m`;
-}
-
-function formatWarAlertBody(warData, missing, minsLeft) {
-  const c = warData?.clan || {};
-  const o = warData?.opponent || {};
-  const isCwl = String(warData?.warType || '').toLowerCase() === 'cwl';
-  const modeLabel = isCwl ? 'CWL in corso' : 'Guerra in corso';
-  const lineScore = `${c.stars || 0}★ vs ${o.stars || 0}★`;
-  const lineDest = `${Number(c.destructionPercentage || 0).toFixed(2)}% vs ${Number(o.destructionPercentage || 0).toFixed(2)}%`;
-  if (!missing.length) {
-    return (
-      `🚨 <b>Attenzione ${fmt.escapeHtml(c.name || 'Clan')}!</b>\n` +
-      `⚔️ <b>${modeLabel}</b> · ${lineScore} · ${lineDest}\n` +
-      `⏳ Mancano <b>${fmt.escapeHtml(minsLeft)}</b> alla fine\n\n` +
-      `✅ Non ci sono utenti da avvisare!\n` +
-      `<b>Tutti hanno già fatto il numero richiesto di attacchi</b> 🥳`
-    );
-  }
-  const list = missing.slice(0, 15).map((m) => `• ${fmt.escapeHtml(m.name)} (${m.missing} att.)`).join('\n');
-  return (
-    `🚨 <b>Attenzione ${fmt.escapeHtml(c.name || 'Clan')}!</b>\n` +
-    `⚔️ <b>${modeLabel}</b> · ${lineScore} · ${lineDest}\n` +
-    `⏳ Mancano <b>${fmt.escapeHtml(minsLeft)}</b> alla fine\n\n` +
-    `È il momento di controllare gli attacchi mancanti:\n${list}`
-  );
-}
-
-function formatWarFinalRecap(warData, missing) {
-  const c = warData?.clan || {};
-  const o = warData?.opponent || {};
-  const isCwl = String(warData?.warType || '').toLowerCase() === 'cwl';
-  const modeLabel = isCwl ? 'Recap finale CWL' : 'Recap finale guerra';
-  const lineScore = `${c.stars || 0}★ vs ${o.stars || 0}★`;
-  const lineDest = `${Number(c.destructionPercentage || 0).toFixed(2)}% vs ${Number(o.destructionPercentage || 0).toFixed(2)}%`;
-  const out = warOutcomeLabel(warData);
-  if (!missing.length) {
-    return (
-      `📣 <b>${modeLabel}</b>\n` +
-      `${out} · ${lineScore} · ${lineDest}\n\n` +
-      `✅ Tutti hanno completato gli attacchi richiesti.`
-    );
-  }
-  const list = missing.slice(0, 20).map((m) => `• ${fmt.escapeHtml(m.name)} (${m.missing} att.)`).join('\n');
-  return (
-    `📣 <b>${modeLabel}</b>\n` +
-    `${out} · ${lineScore} · ${lineDest}\n\n` +
-    `<b>Attacchi mancanti registrati:</b>\n${list}`
-  );
-}
-
-async function runWarAlertsMaintenance(bot) {
-  let links = [];
-  try {
-    links = await sb.listEnabledTelegramChatLinks();
-  } catch (e) {
-    console.warn('[cocboard-bot] war alerts list links', e.message || e);
-    return;
-  }
-  for (const link of links) {
-    const chatId = Number(link.telegram_chat_id);
-    const clanTag = link.clan_tag;
-    if (!Number.isFinite(chatId) || !clanTag) continue;
-    try {
-      const notif = await sb.getChatNotificationSettings(chatId).catch(() => null);
-      const warAlertsOn = notif?.war_alerts_enabled === true;
-      const cwlAlertsOn = notif?.cwl_alerts_enabled === true;
-      const war = await api.currentWar(clanTag);
-      const state = String(war?.state || '');
-      if (!state || state === 'notInWar') continue;
-      const isCwl = String(war?.warType || '').toLowerCase() === 'cwl';
-      if (isCwl && !cwlAlertsOn) continue;
-      if (!isCwl && !warAlertsOn) continue;
-      const end = parseCocTimeToDate(war?.endTime);
-      if (!end) continue;
-      const keyRoot = `${chatId}:${war.endTime}`;
-      const now = Date.now();
-      const leftMs = end.getTime() - now;
-      const missing = listMissingWarAttacks(war);
-      let sent = warAlertMemory.get(keyRoot);
-      if (!sent) {
-        sent = new Set();
-        warAlertMemory.set(keyRoot, sent);
-      }
-      if (state === 'inWar') {
-        const minsLeft = Math.ceil(leftMs / 60000);
-        if (minsLeft <= 60 && minsLeft > 15 && !sent.has('t60')) {
-          const body = formatWarAlertBody(war, missing, minuteCountdownLabel(Math.max(0, leftMs)));
-          await bot.telegram.sendMessage(chatId, body, { parse_mode: 'HTML', disable_web_page_preview: true });
-          sent.add('t60');
-        }
-        if (minsLeft <= 15 && minsLeft > 0 && !sent.has('t15')) {
-          const body = formatWarAlertBody(war, missing, minuteCountdownLabel(Math.max(0, leftMs)));
-          await bot.telegram.sendMessage(chatId, body, { parse_mode: 'HTML', disable_web_page_preview: true });
-          sent.add('t15');
-        }
-      }
-      if ((state === 'warEnded' || leftMs <= 0) && !sent.has('final')) {
-        const body = formatWarFinalRecap(war, missing);
-        await bot.telegram.sendMessage(chatId, body, { parse_mode: 'HTML', disable_web_page_preview: true });
-        sent.add('final');
-        // Salva automaticamente la war conclusa (solo war classiche; CWL ignorata dal save-war endpoint)
-        api.saveWar(clanTag).catch((e) => console.warn('[cocboard-bot] auto-save war', clanTag, e.message || e));
-      }
-    } catch (e) {
-      if (isTelegramChatStaleError(e)) {
-        await sb.deleteTelegramChatLink(chatId).catch(() => {});
-      } else {
-        console.warn('[cocboard-bot] war alerts chat', chatId, e.message || e);
-      }
-    }
-  }
-  if (warAlertMemory.size > 600) {
-    // Cleanup semplice per evitare crescita non limitata dopo molte guerre.
-    const first = warAlertMemory.keys().next();
-    if (!first.done) warAlertMemory.delete(first.value);
-  }
-}
-
-async function runRaidAlertsMaintenance(bot) {
-  let links = [];
-  try {
-    links = await sb.listEnabledTelegramChatLinks();
-  } catch (e) {
-    console.warn('[cocboard-bot] raid alerts list links', e.message || e);
-    return;
-  }
-  for (const link of links) {
-    const chatId = Number(link.telegram_chat_id);
-    const clanTag = link.clan_tag;
-    if (!Number.isFinite(chatId) || !clanTag) continue;
-    try {
-      const notif = await sb.getChatNotificationSettings(chatId).catch(() => null);
-      if (notif?.capital_raids_enabled !== true) continue;
-      const raidData = await api.capitalRaids(clanTag);
-      const current = (raidData?.items || [])[0];
-      if (!current || current.state !== 'ongoing') continue;
-      const startTime = current.startTime;
-      const memKey = `${chatId}:raid:${startTime}`;
-      if (!raidAlertMemory.has(memKey)) {
-        // Primo poll dopo restart: registra distretti già distrutti senza notificare
-        const already = new Set();
-        for (const entry of (current.attackLog || [])) {
-          const et = entry.defender?.tag || 'unknown';
-          for (const d of (entry.districts || [])) {
-            if ((d.destructionPercent || 0) >= 100) already.add(`${et}:${d.id}`);
-          }
-        }
-        raidAlertMemory.set(memKey, { initialized: true, destroyed: already });
-        continue;
-      }
-      const mem = raidAlertMemory.get(memKey);
-      for (const entry of (current.attackLog || [])) {
-        const enemyTag = entry.defender?.tag || 'unknown';
-        const enemyName = fmt.escapeHtml(entry.defender?.name || 'Clan sconosciuto');
-        for (const d of (entry.districts || [])) {
-          if ((d.destructionPercent || 0) < 100) continue;
-          const dk = `${enemyTag}:${d.id}`;
-          if (mem.destroyed.has(dk)) continue;
-          mem.destroyed.add(dk);
-          const body =
-            `🏰 <b>Raid Capitale</b>\n` +
-            `⚔️ Distretto <b>${fmt.escapeHtml(d.name || 'Sconosciuto')}</b> ` +
-            `di <i>${enemyName}</i> completamente distrutto! ` +
-            `(+${(d.totalLooted || 0).toLocaleString('it-IT')} oro)`;
-          await bot.telegram.sendMessage(chatId, body, { parse_mode: 'HTML', disable_web_page_preview: true });
-        }
-      }
-    } catch (e) {
-      if (isTelegramChatStaleError(e)) {
-        await sb.deleteTelegramChatLink(chatId).catch(() => {});
-      } else {
-        console.warn('[cocboard-bot] raid alerts chat', chatId, e.message || e);
-      }
-    }
-  }
-  if (raidAlertMemory.size > 500) {
-    const first = raidAlertMemory.keys().next();
-    if (!first.done) raidAlertMemory.delete(first.value);
-  }
-}
-
 async function runCommunityMaintenance(bot) {
   try {
     await sbcCommunity.tickGlobalEpochIfNeeded();
@@ -5222,12 +4956,14 @@ async function main() {
   setupBot(bot);
 
   runCommunityMaintenance(bot).catch(() => {});
-  runWarAlertsMaintenance(bot).catch(() => {});
-  runRaidAlertsMaintenance(bot).catch(() => {});
+  notifExt.runExtendedWarAlerts(bot, sb).catch(() => {});
+  notifExt.runExtendedRaidAlerts(bot, sb).catch(() => {});
+  notifExt.runClanActivityAlerts(bot, sb).catch(() => {});
   setInterval(() => {
     runCommunityMaintenance(bot).catch(() => {});
-    runWarAlertsMaintenance(bot).catch(() => {});
-    runRaidAlertsMaintenance(bot).catch(() => {});
+    notifExt.runExtendedWarAlerts(bot, sb).catch(() => {});
+    notifExt.runExtendedRaidAlerts(bot, sb).catch(() => {});
+    notifExt.runClanActivityAlerts(bot, sb).catch(() => {});
   }, 60_000);
 
   // Self-ping ogni 12 minuti per evitare spin-down Render free tier.
