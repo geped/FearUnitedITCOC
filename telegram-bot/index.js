@@ -49,6 +49,18 @@ const bonusWizardByUid = new Map();
 let cachedTgBotUsername = (process.env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '');
 /** Anti-spam avvisi guerra: chatId -> key avvisi già inviati per endTime corrente. */
 const warAlertMemory = new Map();
+/** Traccia l'ultimo messaggio menù per chat (privata + gruppo): consente la cancellazione al re-invio di /cocboard. */
+const _lastMenuMsgByChat = new Map();
+function _trackMenuMsg(chatId, messageId) {
+  if (chatId != null && messageId != null) _lastMenuMsgByChat.set(Number(chatId), Number(messageId));
+}
+async function _deleteTrackedMenuMsg(telegram, chatId) {
+  if (chatId == null) return;
+  const mid = _lastMenuMsgByChat.get(Number(chatId));
+  if (!mid) return;
+  _lastMenuMsgByChat.delete(Number(chatId));
+  await telegram.deleteMessage(Number(chatId), mid).catch(() => {});
+}
 const TELEGRAPH_TUTORIAL_URL = (process.env.TELEGRAPH_TUTORIAL_URL || 'https://telegra.ph/CoCBoard-Bot-Guida-04-07').trim();
 
 async function ensureTgBotUsername(telegram) {
@@ -1426,11 +1438,14 @@ async function sendGuestMenu(ctx) {
   if (ctx.callbackQuery) {
     try {
       await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
+      _trackMenuMsg(ctx.chat?.id, ctx.callbackQuery.message?.message_id);
     } catch (_) {
-      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+      const m = await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+      _trackMenuMsg(ctx.chat?.id, m?.message_id);
     }
   } else {
-    await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+    const m = await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+    _trackMenuMsg(ctx.chat?.id, m?.message_id);
   }
   if (!group) await refreshPrivateReplyKeyboard(ctx);
 }
@@ -1452,10 +1467,16 @@ async function sendLinkedGroupGuestMenu(ctx, clanTag) {
   rows.push([Markup.button.callback('❓ Aiuto', 'helpbtn')]);
   const kb = Markup.inlineKeyboard(rows);
   if (ctx.callbackQuery) {
-    try { await ctx.editMessageText(intro, { parse_mode: 'HTML', ...kb }); }
-    catch (_) { await ctx.reply(intro, { parse_mode: 'HTML', ...kb }); }
+    try {
+      await ctx.editMessageText(intro, { parse_mode: 'HTML', ...kb });
+      _trackMenuMsg(ctx.chat?.id, ctx.callbackQuery.message?.message_id);
+    } catch (_) {
+      const m = await ctx.reply(intro, { parse_mode: 'HTML', ...kb });
+      _trackMenuMsg(ctx.chat?.id, m?.message_id);
+    }
   } else {
-    await ctx.reply(intro, { parse_mode: 'HTML', ...kb });
+    const m = await ctx.reply(intro, { parse_mode: 'HTML', ...kb });
+    _trackMenuMsg(ctx.chat?.id, m?.message_id);
   }
 }
 
@@ -1718,11 +1739,14 @@ async function sendMainMenu(ctx) {
   if (ctx.callbackQuery) {
     try {
       await ctx.editMessageText(intro, { parse_mode: 'HTML', ...kb });
+      _trackMenuMsg(ctx.chat?.id, ctx.callbackQuery.message?.message_id);
     } catch (_) {
-      await ctx.reply(intro, { parse_mode: 'HTML', ...kb });
+      const m = await ctx.reply(intro, { parse_mode: 'HTML', ...kb });
+      _trackMenuMsg(ctx.chat?.id, m?.message_id);
     }
   } else {
-    await ctx.reply(intro, { parse_mode: 'HTML', ...kb });
+    const m = await ctx.reply(intro, { parse_mode: 'HTML', ...kb });
+    _trackMenuMsg(ctx.chat?.id, m?.message_id);
   }
   if (!grp && ctx.chat?.type === 'private') await refreshPrivateReplyKeyboard(ctx);
 }
@@ -2690,6 +2714,10 @@ function setupBot(bot) {
     try {
       await ensureTgBotUsername(ctx.telegram);
       const requestedTab = parseRequestedMiniAppTabFromCommand(ctx);
+      // Cancella il menù precedente se il comando arriva fresco (non da callback).
+      if (!ctx.callbackQuery && ctx.chat?.id) {
+        await _deleteTrackedMenuMsg(ctx.telegram, ctx.chat.id);
+      }
       // Hard reset stati transient all'avvio menù, evita blocchi su primo ingresso.
       pendingAuth.delete(ctx.from.id);
       pendingSearch.delete(ctx.from.id);
