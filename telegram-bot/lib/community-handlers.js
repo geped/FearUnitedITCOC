@@ -8,6 +8,7 @@ const sbc = require('./supabase-community');
 const cv = require('./community-validation');
 const tgh = require('./telegram-html');
 const privateUi = require('./private-ui-cleanup');
+const cocboardApi = require('./cocboard-api');
 
 function displayFromUser(user) {
   const meta = user?.user_metadata || {};
@@ -70,16 +71,27 @@ function submissionBodyHtmlPart(sub) {
   return escapeHtml(sub.body_text || '');
 }
 
-function buildApprovedPostTextFromSubmission(sub, expDate) {
+function buildApprovedPostTextFromSubmission(sub, expDate, isVerifiedClan = false) {
   const link = sub.clan_profile_url;
   const bodyPart = submissionBodyHtmlPart(sub);
+  const badge = isVerifiedClan ? ' ✅ <i>Clan CoCBoard</i>' : '';
   return (
-    `📣 <b>Reclutamento</b> (pubblicato dal bot)\n` +
+    `📣 <b>Reclutamento</b> (pubblicato dal bot)${badge}\n` +
     `⏳ <i>Fino a:</i> ${escapeHtml(expDate.toLocaleString('it-IT', { timeZone: 'UTC' }))} UTC\n` +
     `👤 <i>Presentato come:</i> ${escapeHtml(sub.submitter_display)}\n\n` +
     bodyPart +
     `\n\n🔗 <a href="${escapeHtml(link)}">Apri profilo clan (CoC)</a>`
   );
+}
+
+/** Formatta il tempo rimanente in italiano. */
+function formatRemainingTime(expiresAtIso) {
+  const msLeft = new Date(expiresAtIso).getTime() - Date.now();
+  if (msLeft <= 0) return 'scaduto';
+  const h = Math.floor(msLeft / 3600000);
+  const m = Math.floor((msLeft % 3600000) / 60000);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
 }
 
 async function broadcastRecruitmentDelivers(telegram, postText, photoFileId) {
@@ -473,12 +485,40 @@ async function joinGlobalAsCocboardProfile(ctx, tauth) {
   await promptGlobalProfileShareChoice(ctx, tauth);
 }
 
-async function submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFileId, uid, subLabel }) {
+async function submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFileId, uid, subLabel, clanTag }) {
   const v = cv.recruitmentTextValid(bodyText);
   if (!v.ok) {
     await ctx.reply(`❌ ${v.reason}`, { parse_mode: 'HTML' });
     return false;
   }
+  // Determina clan_tag: dal parametro esplicito o estratto dal link
+  const resolvedClanTag = clanTag || cv.extractClanTagFromUrl(v.link);
+
+  // Blocco duplicati per clan
+  if (resolvedClanTag) {
+    const clanCheck = await sbc.checkClanAlreadyBlocked(resolvedClanTag).catch(() => ({ blocked: false }));
+    if (clanCheck.blocked) {
+      await ctx.reply(
+        '❌ Esiste già un annuncio per questo clan: è pubblicato o in attesa di approvazione.\n' +
+          'Potrai inviare un nuovo annuncio dopo la scadenza del precedente (24h dalla pubblicazione).',
+        { parse_mode: 'HTML', ...recruitBackKb() }
+      );
+      return false;
+    }
+  }
+
+  // Blocco: utente ha già un annuncio attivo
+  const userActive = await sbc.checkUserAlreadyHasActivePost(uid).catch(() => null);
+  if (userActive) {
+    const remaining = formatRemainingTime(userActive.expires_at);
+    await ctx.reply(
+      `❌ Hai già un annuncio attivo (scade tra <b>${escapeHtml(remaining)}</b>).\n` +
+        'Potrai inviare un nuovo annuncio dopo la scadenza del precedente.',
+      { parse_mode: 'HTML', ...recruitBackKb() }
+    );
+    return false;
+  }
+
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const n = await sbc.countSubmissionsSince(uid, since);
   if (n >= 5) {
@@ -489,7 +529,7 @@ async function submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFil
     bodyHtml && String(bodyHtml).trim() ? bodyHtml : tgh.messageEntitiesToHtml(bodyText, []);
   let sid;
   try {
-    sid = await sbc.insertRecruitmentSubmission(uid, subLabel, bodyText, v.link, photoFileId, htmlStore);
+    sid = await sbc.insertRecruitmentSubmission(uid, subLabel, bodyText, v.link, photoFileId, htmlStore, resolvedClanTag);
   } catch (e) {
     await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
     return false;
@@ -518,6 +558,7 @@ function recruitHubKb() {
 
 function recruitSendKb() {
   return Markup.inlineKeyboard([
+    [Markup.button.callback('🚀 Pubblica adesso', 'comm_recruit_instant')],
     [Markup.button.callback('⚡ Invia subito (un messaggio)', 'comm_recruit_quick')],
     [Markup.button.callback('📝 Invia annuncio guidato', 'comm_recruit_guided')],
     [Markup.button.callback('« Indietro', 'comm_recruit')],
@@ -565,6 +606,94 @@ function formatGuidedPreviewHtml(st) {
     `🔗 <a href="${escapeHtml(link)}">Apri link clan (CoC)</a>` +
     `${st.photo_file_id ? '\n\n📷 <i>Con immagine allegata</i>' : ''}`
   );
+}
+
+/** Costruisce l'HTML del post "pubblica adesso" da salvare nel DB e inviare ai subscriber. */
+function buildInstantPostHtml(st, expDate) {
+  const raw = String(st.clan_tag_raw || '').toUpperCase();
+  const tagHash = `#${raw}`;
+  const link = st.clan_link || cv.buildOfficialClanLinkFromTag(raw);
+  const badge = st.is_verified_clan ? ' ✅ <i>Clan CoCBoard</i>' : '';
+
+  let header = `📣 <b>Reclutamento</b> — Pubblicato adesso${badge}\n`;
+  header += `⏳ <i>Fino a:</i> ${escapeHtml(expDate.toLocaleString('it-IT', { timeZone: 'UTC' }))} UTC\n`;
+  header += `🏷 <code>${escapeHtml(tagHash)}</code>`;
+  if (st.clan_name) header += ` — <b>${escapeHtml(st.clan_name)}</b>`;
+  if (st.clan_level != null) header += ` · Lv ${escapeHtml(String(st.clan_level))}`;
+  if (st.clan_members != null) header += ` · ${escapeHtml(String(st.clan_members))}/50 membri`;
+  header += '\n';
+
+  let body = '';
+  if (st.clan_desc && st.clan_desc_confirmed) {
+    body += `📜 <i>${escapeHtml(st.clan_desc.slice(0, 500))}</i>\n\n`;
+  }
+  if (st.preset_text) {
+    body += `${escapeHtml(st.preset_text)}\n\n`;
+  }
+
+  return (
+    header +
+    '\n' +
+    body +
+    `🔗 <a href="${escapeHtml(link)}">Apri profilo clan (CoC)</a>`
+  );
+}
+
+/** Anteprima del post "pubblica adesso" nel wizard. */
+function formatInstantPreviewHtml(st) {
+  const raw = String(st.clan_tag_raw || '').toUpperCase();
+  const tagHash = `#${raw}`;
+  const link = st.clan_link || cv.buildOfficialClanLinkFromTag(raw);
+  const badge = st.is_verified_clan ? ' ✅ <i>Clan CoCBoard</i>' : '';
+
+  let lines = [`📎 <b>Anteprima — Pubblica adesso</b>${badge}\n`];
+  lines.push(`🏷 <code>${escapeHtml(tagHash)}</code>`);
+  if (st.clan_name) lines[lines.length - 1] += ` — <b>${escapeHtml(st.clan_name)}</b>`;
+  if (st.clan_level != null) lines[lines.length - 1] += ` · Lv ${st.clan_level}`;
+  if (st.clan_members != null) lines[lines.length - 1] += ` · ${st.clan_members}/50 membri`;
+  if (st.clan_desc && st.clan_desc_confirmed) {
+    lines.push(`📜 <i>${escapeHtml(st.clan_desc.slice(0, 500))}</i>`);
+  }
+  if (st.preset_text) {
+    lines.push(`\n${escapeHtml(st.preset_text)}`);
+  }
+  lines.push(`\n🔗 <a href="${escapeHtml(link)}">Apri profilo clan (CoC)</a>`);
+  return lines.join('\n');
+}
+
+/** Keyboard con i 10 testi preimpostati per "pubblica adesso". */
+function instantPresetKb() {
+  const rows = [];
+  for (let i = 0; i < cv.RECRUIT_INSTANT_PRESET_TEXTS.length; i += 2) {
+    const row = [Markup.button.callback(`${i + 1}`, `rci_preset:${i}`)];
+    if (i + 1 < cv.RECRUIT_INSTANT_PRESET_TEXTS.length) {
+      row.push(Markup.button.callback(`${i + 2}`, `rci_preset:${i + 1}`));
+    }
+    rows.push(row);
+  }
+  rows.push([Markup.button.callback('⏭ Senza testo aggiuntivo', 'rci_no_preset')]);
+  rows.push([Markup.button.callback('❌ Annulla', 'rci_cancel')]);
+  return Markup.inlineKeyboard(rows);
+}
+
+/** Mostra lo step scelta testo preimpostato per il wizard istantaneo. */
+async function showInstantPresetStep(ctx, uid) {
+  const presets = cv.RECRUIT_INSTANT_PRESET_TEXTS;
+  const lines = presets.map((t, i) => `<b>${i + 1}.</b> ${escapeHtml(t)}`).join('\n');
+  await ctx.reply(
+    `✏️ <b>Passo — Testo preimpostato (opzionale)</b>\n\n` +
+      `Scegli una delle seguenti mini-descrizioni da aggiungere all'annuncio, oppure procedi senza.\n\n` +
+      lines,
+    { parse_mode: 'HTML', ...instantPresetKb() }
+  );
+}
+
+/** Keyboard anteprima "pubblica adesso". */
+function instantConfirmKb() {
+  return Markup.inlineKeyboard([
+    [Markup.button.callback('✅ Pubblica adesso', 'rci_confirm')],
+    [Markup.button.callback('🔄 Ricomincia', 'rci_restart'), Markup.button.callback('❌ Annulla', 'rci_cancel')],
+  ]);
 }
 
 async function tryHandleEarlyMessage(
@@ -747,6 +876,59 @@ async function tryHandleEarlyMessage(
         st.step = 'preview';
         pendingCommunity.set(uid, st);
         await ctx.reply(formatGuidedPreviewHtml(st), { parse_mode: 'HTML', ...guidedPreviewKb() });
+        return true;
+      }
+      return true;
+    }
+
+    if (st.kind === 'recruit_instant') {
+      if (st.step === 'tag') {
+        if (!ctx.message?.text || txt.startsWith('/')) return true;
+        const norm = cv.normClanTagForUrl(txt);
+        if (!norm) {
+          await ctx.reply('Tag non valido. Invia solo lettere e numeri (es. <code>#2J2VLPP9R</code>).', { parse_mode: 'HTML' });
+          return true;
+        }
+        st.clan_tag_raw = norm;
+        st.step = 'link';
+        pendingCommunity.set(uid, st);
+        const generatedLink = cv.buildOfficialClanLinkFromTag(norm);
+        await ctx.reply(
+          `🔗 <b>Passo 2 — Link clan</b>\n\n` +
+            `Link generato dal tag: <code>${escapeHtml(generatedLink)}</code>\n\n` +
+            `Invia un link ufficiale CoC diverso oppure premi <b>Usa questo link</b>.`,
+          {
+            parse_mode: 'HTML',
+            ...Markup.inlineKeyboard([
+              [Markup.button.callback('✅ Usa link generato dal tag', 'rci_skip_link')],
+              [Markup.button.callback('❌ Annulla', 'rci_cancel')],
+            ]),
+          }
+        );
+        return true;
+      }
+      if (st.step === 'link') {
+        if (!ctx.message?.text || txt.startsWith('/')) return true;
+        const link = cv.extractOfficialClanLink(txt) || (cv.isOfficialClanProfileLink(txt.trim()) ? txt.trim() : null);
+        if (!link || !cv.isOfficialClanProfileLink(link)) {
+          await ctx.reply('Link non valido. Usa il formato ufficiale CoC oppure /annulla_reclutamento.', { parse_mode: 'HTML' });
+          return true;
+        }
+        st.clan_link = link;
+        st.step = 'desc_choice';
+        pendingCommunity.set(uid, st);
+        await ctx.reply(
+          `📜 <b>Passo 3 — Descrizione clan (opzionale)</b>\n\n` +
+            `Vuoi aggiungere la <b>descrizione ufficiale del clan</b> (estratta dal gioco tramite CoC API)?`,
+          {
+            parse_mode: 'HTML',
+            ...Markup.inlineKeyboard([
+              [Markup.button.callback('📥 Sì, aggiungi descrizione', 'rci_add_desc')],
+              [Markup.button.callback('⏭ No, salta', 'rci_skip_desc')],
+              [Markup.button.callback('❌ Annulla', 'rci_cancel')],
+            ]),
+          }
+        );
         return true;
       }
       return true;
@@ -1204,11 +1386,16 @@ function registerCommunityHandlers(bot, deps) {
         });
       const chatId = ctx.chat.id;
       for (const row of rows) {
-        const ownerKb =
-          uid != null && cv.isBotOwnerTelegramUser(uid)
-            ? Markup.inlineKeyboard([[Markup.button.callback('🗑 Rimuovi annuncio', `rad:${row.id}`)]])
-            : null;
-        const mids = await sendOneActivePostToChat(ctx.telegram, chatId, row, ownerKb);
+        const remaining = formatRemainingTime(row.expires_at);
+        const kbRows = [];
+        kbRows.push([Markup.button.callback(`⏳ Scade tra ${remaining}`, 'noop')]);
+        if (uid != null && cv.isBotOwnerTelegramUser(uid)) {
+          kbRows.push([Markup.button.callback('🗑 Rimuovi annuncio', `rad:${row.id}`)]);
+        } else if (uid != null && row.submitter_telegram_user_id === uid) {
+          kbRows.push([Markup.button.callback('🗑 Ritira il mio annuncio', `rci_withdraw:${row.id}`)]);
+        }
+        const postKb = kbRows.length ? Markup.inlineKeyboard(kbRows) : null;
+        const mids = await sendOneActivePostToChat(ctx.telegram, chatId, row, postKb);
         if (uid != null) for (const mid of mids) privateUi.notePrivateUiMessage(uid, mid);
         await sleep(45);
       }
@@ -1462,6 +1649,7 @@ function registerCommunityHandlers(bot, deps) {
       photoFileId: st.photo_file_id,
       uid,
       subLabel,
+      clanTag: st.clan_tag_raw || null,
     });
     await refreshPrivateReplyKeyboardRef(ctx);
   });
@@ -1472,6 +1660,318 @@ function registerCommunityHandlers(bot, deps) {
     if (uid != null) pendingCommunity.delete(uid);
     await ctx.answerCbQuery('Annullato').catch(() => {});
     await ctx.reply('Bozza guidata annullata.', { parse_mode: 'HTML', ...recruitSendKb() });
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  // ─── Pubblica adesso — wizard istantaneo ────────────────────────────────────
+
+  bot.action('comm_recruit_instant', async (ctx) => {
+    if (isLinkedChatContext(ctx)) return;
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    pendingCommunity.set(uid, { kind: 'recruit_instant', step: 'tag' });
+    await ctx
+      .editMessageText(
+        `🚀 <b>Pubblica adesso</b> — passo 1/3\n\n` +
+          `Invia il <b>tag del clan</b> da promuovere (es. <code>#2J2VLPP9R</code>).\n\n` +
+          `<i>Questo metodo pubblica immediatamente senza moderazione. L'annuncio resta attivo 24h.</i>`,
+        {
+          parse_mode: 'HTML',
+          ...Markup.inlineKeyboard([[Markup.button.callback('❌ Annulla', 'rci_cancel')]]),
+        }
+      )
+      .catch(() => {});
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action('rci_skip_link', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    const st = uid != null ? pendingCommunity.get(uid) : null;
+    if (!st || st.kind !== 'recruit_instant' || st.step !== 'link') {
+      await ctx.answerCbQuery('Sessione scaduta.').catch(() => {});
+      return;
+    }
+    st.clan_link = cv.buildOfficialClanLinkFromTag(st.clan_tag_raw);
+    st.step = 'desc_choice';
+    pendingCommunity.set(uid, st);
+    await ctx.answerCbQuery('OK').catch(() => {});
+    await ctx.reply(
+      `📜 <b>Passo 3 — Descrizione clan (opzionale)</b>\n\n` +
+        `Vuoi aggiungere la <b>descrizione ufficiale del clan</b> (estratta dal gioco tramite CoC API)?`,
+      {
+        parse_mode: 'HTML',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('📥 Sì, aggiungi descrizione', 'rci_add_desc')],
+          [Markup.button.callback('⏭ No, salta', 'rci_skip_desc')],
+          [Markup.button.callback('❌ Annulla', 'rci_cancel')],
+        ]),
+      }
+    );
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action('rci_add_desc', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    const st = uid != null ? pendingCommunity.get(uid) : null;
+    if (!st || st.kind !== 'recruit_instant' || st.step !== 'desc_choice') {
+      await ctx.answerCbQuery('Sessione scaduta.').catch(() => {});
+      return;
+    }
+    await ctx.answerCbQuery('Caricamento…').catch(() => {});
+    const loadMsg = await ctx.reply('⏳ Recupero informazioni dal gioco…', { parse_mode: 'HTML' }).catch(() => null);
+    try {
+      const info = await cocboardApi.clanInfo(`#${st.clan_tag_raw}`);
+      st.clan_name = info.name || null;
+      st.clan_level = info.clanLevel ?? null;
+      st.clan_members = info.members ?? null;
+      st.clan_desc = info.description || null;
+      st.clan_desc_confirmed = false;
+      st.step = 'desc_confirm';
+      pendingCommunity.set(uid, st);
+      if (loadMsg?.message_id) {
+        try { await ctx.telegram.deleteMessage(uid, loadMsg.message_id); } catch (_) {}
+      }
+      const descPreview = st.clan_desc
+        ? `📜 <b>Descrizione trovata:</b>\n<i>${escapeHtml(st.clan_desc.slice(0, 500))}</i>`
+        : '⚠️ Nessuna descrizione disponibile per questo clan.';
+      await ctx.reply(
+        `${descPreview}\n\nVuoi aggiungerla all'annuncio?`,
+        {
+          parse_mode: 'HTML',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('✅ Sì, aggiungi', 'rci_desc_ok'), Markup.button.callback('❌ No, salta', 'rci_desc_no')],
+          ]),
+        }
+      );
+    } catch (e) {
+      if (loadMsg?.message_id) {
+        try { await ctx.telegram.deleteMessage(uid, loadMsg.message_id); } catch (_) {}
+      }
+      await ctx.reply(
+        `⚠️ Impossibile recuperare info clan: ${escapeHtml(String(e.message || 'errore'))}.\n` +
+          'Continua senza descrizione.',
+        {
+          parse_mode: 'HTML',
+          ...Markup.inlineKeyboard([[Markup.button.callback('➡️ Continua', 'rci_skip_desc')]]),
+        }
+      );
+    }
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action('rci_desc_ok', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    const st = uid != null ? pendingCommunity.get(uid) : null;
+    if (!st || st.kind !== 'recruit_instant') {
+      await ctx.answerCbQuery('Sessione scaduta.').catch(() => {});
+      return;
+    }
+    st.clan_desc_confirmed = true;
+    st.step = 'preset_choice';
+    pendingCommunity.set(uid, st);
+    await ctx.answerCbQuery('Descrizione aggiunta ✅').catch(() => {});
+    await showInstantPresetStep(ctx, uid);
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action('rci_desc_no', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    const st = uid != null ? pendingCommunity.get(uid) : null;
+    if (!st || st.kind !== 'recruit_instant') {
+      await ctx.answerCbQuery('Sessione scaduta.').catch(() => {});
+      return;
+    }
+    st.clan_desc_confirmed = false;
+    st.step = 'preset_choice';
+    pendingCommunity.set(uid, st);
+    await ctx.answerCbQuery('OK').catch(() => {});
+    await showInstantPresetStep(ctx, uid);
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action('rci_skip_desc', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    const st = uid != null ? pendingCommunity.get(uid) : null;
+    if (!st || st.kind !== 'recruit_instant') {
+      await ctx.answerCbQuery('Sessione scaduta.').catch(() => {});
+      return;
+    }
+    st.clan_desc_confirmed = false;
+    st.step = 'preset_choice';
+    pendingCommunity.set(uid, st);
+    await ctx.answerCbQuery('OK').catch(() => {});
+    await showInstantPresetStep(ctx, uid);
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action(/^rci_preset:(\d+)$/, async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    const st = uid != null ? pendingCommunity.get(uid) : null;
+    if (!st || st.kind !== 'recruit_instant') {
+      await ctx.answerCbQuery('Sessione scaduta.').catch(() => {});
+      return;
+    }
+    const idx = Number(ctx.match[1]);
+    const text = cv.RECRUIT_INSTANT_PRESET_TEXTS[idx] || null;
+    st.preset_text = text;
+    st.step = 'preview';
+    pendingCommunity.set(uid, st);
+    await ctx.answerCbQuery(text ? `Testo ${idx + 1} selezionato` : 'OK').catch(() => {});
+    await ctx.reply(formatInstantPreviewHtml(st), { parse_mode: 'HTML', ...instantConfirmKb() });
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action('rci_no_preset', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    const st = uid != null ? pendingCommunity.get(uid) : null;
+    if (!st || st.kind !== 'recruit_instant') {
+      await ctx.answerCbQuery('Sessione scaduta.').catch(() => {});
+      return;
+    }
+    st.preset_text = null;
+    st.step = 'preview';
+    pendingCommunity.set(uid, st);
+    await ctx.answerCbQuery('OK').catch(() => {});
+    await ctx.reply(formatInstantPreviewHtml(st), { parse_mode: 'HTML', ...instantConfirmKb() });
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action('rci_confirm', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    const st = uid != null ? pendingCommunity.get(uid) : null;
+    if (!st || st.kind !== 'recruit_instant' || st.step !== 'preview') {
+      await ctx.answerCbQuery('Niente da pubblicare.').catch(() => {});
+      return;
+    }
+    pendingCommunity.delete(uid);
+
+    // Blocco duplicati per clan
+    const clanCheck = await sbc.checkClanAlreadyBlocked(st.clan_tag_raw).catch(() => ({ blocked: false }));
+    if (clanCheck.blocked) {
+      await ctx.reply(
+        '❌ Esiste già un annuncio per questo clan: è pubblicato o in attesa di approvazione.\n' +
+          'Potrai inviare un nuovo annuncio dopo la scadenza del precedente (24h dalla pubblicazione).',
+        { parse_mode: 'HTML', ...recruitBackKb() }
+      );
+      await refreshPrivateReplyKeyboardRef(ctx);
+      return;
+    }
+
+    // Blocco: utente ha già un annuncio attivo
+    const userActive = await sbc.checkUserAlreadyHasActivePost(uid).catch(() => null);
+    if (userActive) {
+      const remaining = formatRemainingTime(userActive.expires_at);
+      await ctx.reply(
+        `❌ Hai già un annuncio attivo (scade tra <b>${escapeHtml(remaining)}</b>).\n` +
+          'Potrai inviare un nuovo annuncio dopo la scadenza del precedente.',
+        { parse_mode: 'HTML', ...recruitBackKb() }
+      );
+      await refreshPrivateReplyKeyboardRef(ctx);
+      return;
+    }
+
+    const sess = await tauth.getValidSession(uid);
+    const disp = sess?.user ? displayFromUser(sess.user) : null;
+    const subLabel = disp ? (disp.tag ? `${disp.name} (${disp.tag})` : disp.name) : guestTelegramLabel(ctx.from);
+    const link = st.clan_link || cv.buildOfficialClanLinkFromTag(st.clan_tag_raw);
+    const exp = new Date(Date.now() + cv.RECRUIT_TTL_MS);
+    const expStr = exp.toISOString();
+    const approvedAt = new Date().toISOString();
+
+    const isVerifiedClan = await sbc.isClanRegisteredInCocboard(st.clan_tag_raw).catch(() => false);
+    st.is_verified_clan = isVerifiedClan;
+
+    const postHtml = buildInstantPostHtml(st, exp);
+
+    let sid;
+    try {
+      sid = await sbc.insertRecruitmentSubmission(uid, subLabel, postHtml, link, null, postHtml, st.clan_tag_raw, 'auto_published');
+    } catch (e) {
+      await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML', ...recruitBackKb() });
+      await refreshPrivateReplyKeyboardRef(ctx);
+      return;
+    }
+
+    const delivered = await broadcastRecruitmentDelivers(ctx.telegram, postHtml, null);
+    await sbc.insertRecruitmentPost(sid, postHtml, null, approvedAt, expStr, delivered, uid);
+
+    await ctx.reply(
+      `✅ <b>Annuncio pubblicato!</b>\n\n` +
+        `Inviato a <b>${delivered.length}</b> iscritti al feed reclutamento.\n` +
+        `⏳ Scade il <b>${escapeHtml(exp.toLocaleString('it-IT', { timeZone: 'UTC' }))}</b> UTC.\n\n` +
+        `<i>Potrai ritirarlo in anticipo da "Annunci attivi".</i>`,
+      { parse_mode: 'HTML', ...recruitHubKb() }
+    );
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action('rci_restart', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    if (uid != null) pendingCommunity.set(uid, { kind: 'recruit_instant', step: 'tag' });
+    await ctx.answerCbQuery('Ricominciato').catch(() => {});
+    await ctx.reply(
+      `🚀 <b>Pubblica adesso</b> — passo 1/3\n\n` +
+        `Invia il <b>tag del clan</b> da promuovere (es. <code>#2J2VLPP9R</code>).`,
+      {
+        parse_mode: 'HTML',
+        ...Markup.inlineKeyboard([[Markup.button.callback('❌ Annulla', 'rci_cancel')]]),
+      }
+    );
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action('rci_cancel', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    if (uid != null) pendingCommunity.delete(uid);
+    await ctx.answerCbQuery('Annullato').catch(() => {});
+    await ctx.reply('Wizard annullato.', { parse_mode: 'HTML', ...recruitSendKb() });
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action(/^rci_withdraw:(\d+)$/, async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    const postId = Number(ctx.match[1]);
+    try {
+      const row = await sbc.getRecruitmentPostById(postId);
+      if (!row) {
+        await ctx.answerCbQuery('Annuncio non trovato.').catch(() => {});
+        return;
+      }
+      if (row.submitter_telegram_user_id !== uid) {
+        await ctx.answerCbQuery('Non sei il proprietario di questo annuncio.').catch(() => {});
+        return;
+      }
+      // Rimuovi i messaggi inviati agli iscritti
+      const ids = Array.isArray(row.delivered_message_ids) ? row.delivered_message_ids : [];
+      for (const entry of ids) {
+        if (entry?.chat_id != null && entry?.message_id != null) {
+          try { await ctx.telegram.deleteMessage(entry.chat_id, entry.message_id); } catch (_) {}
+          await sleep(30);
+        }
+      }
+      await sbc.deleteRecruitmentPostRow(postId);
+      await ctx.answerCbQuery('Annuncio ritirato').catch(() => {});
+      try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch (_) {}
+      await ctx.reply('✅ Il tuo annuncio è stato <b>ritirato</b> con successo.', {
+        parse_mode: 'HTML',
+        ...recruitHubKb(),
+      });
+    } catch (e) {
+      await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
+    }
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
@@ -1491,9 +1991,10 @@ function registerCommunityHandlers(bot, deps) {
     const exp = new Date(Date.now() + cv.RECRUIT_TTL_MS);
     const expStr = exp.toISOString();
     const approvedAt = new Date().toISOString();
-    const postText = buildApprovedPostTextFromSubmission(sub, exp);
+    const isVerifiedClan = sub.clan_tag ? await sbc.isClanRegisteredInCocboard(sub.clan_tag).catch(() => false) : false;
+    const postText = buildApprovedPostTextFromSubmission(sub, exp, isVerifiedClan);
     const delivered = await broadcastRecruitmentDelivers(ctx.telegram, postText, sub.photo_file_id);
-    await sbc.insertRecruitmentPost(sid, postText, sub.photo_file_id, approvedAt, expStr, delivered);
+    await sbc.insertRecruitmentPost(sid, postText, sub.photo_file_id, approvedAt, expStr, delivered, sub.submitter_telegram_user_id);
     await ctx.answerCbQuery('Approvato e inviato.').catch(() => {});
     try {
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] });

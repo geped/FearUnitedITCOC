@@ -126,6 +126,29 @@ function buildOpenPlayerProfileUrl(displayTag, lang = 'it') {
   return `https://link.clashofclans.com/${loc}?action=OpenPlayerProfile&tag=${raw}`;
 }
 
+/** Estrae tag normalizzato (senza #, uppercase) dal link ufficiale CoC clan. */
+function extractClanTagFromUrl(url) {
+  if (!url || typeof url !== 'string') return null;
+  const m = /[?&]tag=([0-9A-Z]+)/i.exec(url);
+  if (!m) return null;
+  const t = m[1].trim().toUpperCase();
+  return /^[0-9A-Z]{3,15}$/.test(t) ? t : null;
+}
+
+/** 10 testi preimpostati per annunci "Pubblica adesso" (indice 0-9). */
+const RECRUIT_INSTANT_PRESET_TEXTS = [
+  'Clan attivo cerca nuovi guerrieri. Unisciti alla nostra famiglia!',
+  'Cerchiamo giocatori motivati per guerre e CWL. Candidati ora!',
+  'Clan amichevole e competitivo. Posti disponibili — entra e combatti con noi!',
+  'Sempre in guerra! Cerchiamo attaccanti affidabili per rinforzare il roster.',
+  'Ambiente sano e team coordinato. Aperto a tutti i livelli, purché attivi.',
+  'CWL di alto livello — cerchiamo TH14+ affidabili e presenti.',
+  'Clan italiano in crescita. Atmosfera rilassata, donate costanti, guerre regolari.',
+  'No inattivi! Presenti nelle guerre, veloci nelle donate — è tutto ciò che chiediamo.',
+  'Squadra unita e divertimento garantito. Sei il benvenuto — unisciti a noi!',
+  'Clan solido con storico di vittorie. Posti limitati — candidati subito!',
+];
+
 /** Per attributo href in parse_mode HTML (Telegram richiede &amp;). */
 function escapeTelegramHtmlHref(url) {
   return String(url || '')
@@ -201,4 +224,6 @@ module.exports = {
   validateGlobalChatMessageBody,
   checkGlobalChatRateLimit,
   GLOBAL_CHAT_RATE_MAX,
+  extractClanTagFromUrl,
+  RECRUIT_INSTANT_PRESET_TEXTS,
 };

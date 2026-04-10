@@ -217,7 +217,7 @@ async function listRecruitmentFeedUserIds() {
   return (data || []).map((r) => Number(r.telegram_user_id));
 }
 
-async function insertRecruitmentSubmission(submitterId, display, bodyText, clanUrl, photoFileId, bodyHtml) {
+async function insertRecruitmentSubmission(submitterId, display, bodyText, clanUrl, photoFileId, bodyHtml, clanTag, status = 'pending') {
   const c = client();
   if (!c) throw new Error('Supabase non configurato.');
   const html =
@@ -229,7 +229,8 @@ async function insertRecruitmentSubmission(submitterId, display, bodyText, clanU
     body_html: html,
     clan_profile_url: String(clanUrl).slice(0, 512),
     photo_file_id: photoFileId ? String(photoFileId).slice(0, 256) : null,
-    status: 'pending',
+    status,
+    clan_tag: clanTag ? String(clanTag).toUpperCase().replace(/^#/, '').slice(0, 20) : null,
   };
   const { data, error } = await c.from('telegram_recruitment_submissions').insert(row).select('id').single();
   if (error) throw new Error(error.message);
@@ -259,7 +260,7 @@ async function setSubmissionStatus(id, status, reviewerId) {
   if (error) throw new Error(error.message);
 }
 
-async function insertRecruitmentPost(submissionId, postText, photoFileId, approvedAtIso, expiresAtIso, deliveredIds) {
+async function insertRecruitmentPost(submissionId, postText, photoFileId, approvedAtIso, expiresAtIso, deliveredIds, submitterTelegramUserId) {
   const c = client();
   if (!c) throw new Error('Supabase non configurato.');
   const row = {
@@ -269,6 +270,7 @@ async function insertRecruitmentPost(submissionId, postText, photoFileId, approv
     approved_at: approvedAtIso,
     expires_at: expiresAtIso,
     delivered_message_ids: deliveredIds,
+    submitter_telegram_user_id: submitterTelegramUserId != null ? Number(submitterTelegramUserId) : null,
   };
   const { data, error } = await c.from('telegram_recruitment_posts').insert(row).select('id').single();
   if (error) throw new Error(error.message);
@@ -361,6 +363,102 @@ async function getRecruitmentPostById(postId) {
     .eq('id', Number(postId))
     .maybeSingle();
   if (error) throw new Error(error.message);
+  return data || null;
+}
+
+/**
+ * Controlla se esiste già un annuncio pendente o attivo per questo clan.
+ * @param {string} clanTag - tag normalizzato senza # (es. '2J2VLPP9R')
+ * @returns {Promise<{ blocked: boolean, hasPending?: boolean, hasActive?: boolean }>}
+ */
+async function checkClanAlreadyBlocked(clanTag) {
+  const c = client();
+  if (!c || !clanTag) return { blocked: false };
+  const tag = String(clanTag).toUpperCase().replace(/^#/, '');
+  if (!tag) return { blocked: false };
+  const now = new Date().toISOString();
+
+  // Submission in attesa per questo clan?
+  const { count: pendingCount, error: pe } = await c
+    .from('telegram_recruitment_submissions')
+    .select('*', { count: 'exact', head: true })
+    .eq('clan_tag', tag)
+    .eq('status', 'pending');
+  if (!pe && (pendingCount || 0) > 0) return { blocked: true, hasPending: true };
+
+  // Post attivo (scadenza futura) per questo clan?
+  const { data: subs, error: se } = await c
+    .from('telegram_recruitment_submissions')
+    .select('id')
+    .eq('clan_tag', tag)
+    .in('status', ['approved', 'auto_published']);
+  if (se || !subs || subs.length === 0) return { blocked: false };
+
+  const ids = subs.map((s) => s.id);
+  const { count: activeCount, error: ae } = await c
+    .from('telegram_recruitment_posts')
+    .select('*', { count: 'exact', head: true })
+    .in('submission_id', ids)
+    .gt('expires_at', now);
+  if (!ae && (activeCount || 0) > 0) return { blocked: true, hasActive: true };
+
+  return { blocked: false };
+}
+
+/**
+ * Controlla se l'utente ha già un annuncio attivo (qualsiasi clan).
+ * @returns {Promise<{ id: number, expires_at: string } | null>}
+ */
+async function checkUserAlreadyHasActivePost(userId) {
+  const c = client();
+  if (!c) return null;
+  const now = new Date().toISOString();
+  const { data, error } = await c
+    .from('telegram_recruitment_posts')
+    .select('id, expires_at')
+    .eq('submitter_telegram_user_id', Number(userId))
+    .gt('expires_at', now)
+    .order('expires_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return null;
+  return data || null;
+}
+
+/**
+ * Verifica se il clan è collegato a una chat CoCBoard (badge verificato).
+ * @param {string} clanTag - tag normalizzato senza # (es. '2J2VLPP9R')
+ * @returns {Promise<boolean>}
+ */
+async function isClanRegisteredInCocboard(clanTag) {
+  const c = client();
+  if (!c || !clanTag) return false;
+  const tag = `#${String(clanTag).toUpperCase().replace(/^#/, '')}`;
+  const { count, error } = await c
+    .from('telegram_chat_links')
+    .select('telegram_chat_id', { count: 'exact', head: true })
+    .eq('clan_tag', tag);
+  if (error) return false;
+  return (count || 0) > 0;
+}
+
+/**
+ * Restituisce il post attivo (se esiste) creato da questo submitter.
+ * @returns {Promise<{ id: number, expires_at: string, submission_id: number } | null>}
+ */
+async function getActivePostBySubmitter(userId) {
+  const c = client();
+  if (!c) return null;
+  const now = new Date().toISOString();
+  const { data, error } = await c
+    .from('telegram_recruitment_posts')
+    .select('id, expires_at, submission_id')
+    .eq('submitter_telegram_user_id', Number(userId))
+    .gt('expires_at', now)
+    .order('expires_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return null;
   return data || null;
 }
 
@@ -509,6 +607,10 @@ module.exports = {
   listPendingRecruitmentSubmissions,
   countPendingRecruitmentSubmissions,
   getRecruitmentPostById,
+  checkClanAlreadyBlocked,
+  checkUserAlreadyHasActivePost,
+  isClanRegisteredInCocboard,
+  getActivePostBySubmitter,
   getMemberThExpByPlayerTag,
   getGlobalModerationRow,
   isTelegramStaffModerator,

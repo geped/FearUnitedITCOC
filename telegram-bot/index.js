@@ -4892,6 +4892,23 @@ async function runCommunityMaintenance(bot) {
         }
       }
       await sbcCommunity.deleteRecruitmentPostRow(row.id);
+      // Notifica scadenza all'autore (se disponibile)
+      if (row.submitter_telegram_user_id) {
+        try {
+          const { Markup } = require('telegraf');
+          await bot.telegram.sendMessage(
+            row.submitter_telegram_user_id,
+            '⏰ Il tuo <b>annuncio di reclutamento</b> è scaduto (24h concluse).\n\n' +
+              'Vuoi pubblicarne uno nuovo? Vai su <b>Community → Reclutamento → Invia annuncio</b>.',
+            {
+              parse_mode: 'HTML',
+              reply_markup: Markup.inlineKeyboard([
+                [Markup.button.callback('🚀 Pubblica nuovo annuncio', 'comm_recruit_send')],
+              ]).reply_markup,
+            }
+          );
+        } catch (_) {}
+      }
     }
     await sb.purgeExpiredSupportTickets().catch(() => 0);
   } catch (e) {
