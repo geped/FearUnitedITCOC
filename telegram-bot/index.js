@@ -333,6 +333,7 @@ function isGroupClanReadCallback(d) {
   if (d === 'info' || d === 'cwl' || d === 'war_menu') return true;
   if (d === 'bonus:hist' || d === 'bonus:hof') return true;
   if (/^bonus:\d+$/.test(d)) return true;
+  if (/^bonus:sv:\d{4}-\d{2}$/.test(d)) return true;
   if (/^mb\d+$/.test(d)) return true;
   if (d.startsWith('cwl_v:')) return true;
   if (d.startsWith('war:')) return true;
@@ -1982,7 +1983,7 @@ async function editOrReplyCwl(ctx, text, kb) {
 
 function bonusHistHofBackKb() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('« Bonus attuali', 'bonus:0'), Markup.button.callback('« Menù', 'menu')],
+    [Markup.button.callback('« Bonus', 'bonus:0'), Markup.button.callback('« Menù', 'menu')],
   ]);
 }
 
@@ -2045,7 +2046,7 @@ function bonusAssignSeasonLabelIt(season) {
 async function renderBonusAssignSeasonPick(ctx, clanTag) {
   const seasons = await sb.listCwlSeasonsForClan(clanTag).catch(() => []);
   const backKb = Markup.inlineKeyboard([
-    [Markup.button.callback('« Ranking bonus', 'bonus:0')],
+    [Markup.button.callback('« Bonus', 'bonus:0')],
     [Markup.button.callback('« Menù', 'menu')],
   ]);
   if (!seasons.length) {
@@ -2061,7 +2062,7 @@ async function renderBonusAssignSeasonPick(ctx, clanTag) {
     return;
   }
   const rows = seasons.map((s) => [Markup.button.callback(`📅 ${bonusAssignSeasonLabelIt(s)}`, `bonus:azp:${s}`)]);
-  rows.push([Markup.button.callback('« Ranking bonus', 'bonus:0')]);
+  rows.push([Markup.button.callback('« Bonus', 'bonus:0')]);
   const txt =
     `${fmt.DIV}\n✏️ <b>Assegna bonus CWL</b>\n${fmt.DIV}\n\n` +
     `Scegli la <b>stessa stagione</b> (<code>YYYY-MM</code>) che usi sul sito. ` +
@@ -2110,7 +2111,7 @@ async function renderBonusAssignPage(ctx, clanTag, season, page) {
     Markup.button.callback('« Stagioni', 'bonus:as'),
     Markup.button.callback('« Modalità', `bonus:azp:${season}`),
   ]);
-  kbRows.push([Markup.button.callback('« Ranking', 'bonus:0')]);
+  kbRows.push([Markup.button.callback('« Bonus', 'bonus:0')]);
   try {
     await ctx.editMessageText(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(kbRows) });
   } catch (_) {
@@ -2131,7 +2132,7 @@ async function renderBonusAssignModePick(ctx, clanTag, season) {
     [Markup.button.callback('✏️ Manuale', `bonus:azm:${season}`)],
     [Markup.button.callback('🧮 Assistito', `bonus:aw:${season}`)],
     [Markup.button.callback('« Stagioni', 'bonus:as')],
-    [Markup.button.callback('« Ranking', 'bonus:0')],
+    [Markup.button.callback('« Bonus', 'bonus:0')],
   ]);
   try {
     await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
@@ -2272,7 +2273,7 @@ async function renderBonusWizardCandidatePage(ctx, page) {
     Markup.button.callback('💾 Salva', `bonus:awy:${season}`),
     Markup.button.callback('« Criteri', `bonus:awr:${season}`),
   ]);
-  kb.push([Markup.button.callback('« Modalità stagione', `bonus:azp:${season}`), Markup.button.callback('« Ranking', 'bonus:0')]);
+  kb.push([Markup.button.callback('« Modalità stagione', `bonus:azp:${season}`), Markup.button.callback('« Bonus', 'bonus:0')]);
   try {
     await ctx.editMessageText(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(kb) });
   } catch (_) {
@@ -2280,18 +2281,11 @@ async function renderBonusWizardCandidatePage(ctx, page) {
   }
 }
 
-async function buildBonusKeyboard(ctx, page, pages) {
-  const row = [];
-  if (pages > 1) {
-    if (page > 0) row.push(Markup.button.callback('◀', `bonus:${page - 1}`));
-    row.push(Markup.button.callback(`· ${page + 1}/${pages} ·`, 'noop'));
-    if (page < pages - 1) row.push(Markup.button.callback('▶', `bonus:${page + 1}`));
-  }
-  const rows = row.length ? [row] : [];
-  rows.push([Markup.button.callback('📅 Storico per stagione', 'bonus:hist'), Markup.button.callback('🏆 Classifica riceventi', 'bonus:hof')]);
-  // Privato o gruppo/canale collegato: storico/HoF per tutti; assegnazione solo Capo/Co-Capo (controllata nei callback).
+async function buildBonusKeyboard(ctx) {
+  const rows = [];
+  rows.push([Markup.button.callback('📅 Storico per stagione', 'bonus:hist')]);
   if (ctx.cocboardUser && isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
-    rows.push([Markup.button.callback('✏️ Assegna bonus', 'bonus:as')]);
+    rows.push([Markup.button.callback('✏️ Assegna / Modifica bonus', 'bonus:as')]);
   }
   if (!isLinkedChatContext(ctx) && ctx.cocboardUser) {
     try {
@@ -2303,6 +2297,24 @@ async function buildBonusKeyboard(ctx, page, pages) {
   }
   rows.push([Markup.button.callback('« Menù', 'menu')]);
   return Markup.inlineKeyboard(rows);
+}
+
+async function renderBonusSeasonPicker(ctx, clanTag) {
+  const seasons = await sb.listCwlSeasonsForClan(clanTag).catch(() => []);
+  const backKb = Markup.inlineKeyboard([
+    [Markup.button.callback('« Bonus', 'bonus:0'), Markup.button.callback('« Menù', 'menu')],
+  ]);
+  if (!seasons.length) {
+    const txt = `${fmt.DIV}\n📅 <b>Storico bonus per stagione</b>\n${fmt.DIV}\n\n<i>Nessun dato storico per questo clan.</i>`;
+    try { await ctx.editMessageText(txt, { parse_mode: 'HTML', ...backKb }); }
+    catch (_) { await ctx.reply(txt, { parse_mode: 'HTML', ...backKb }); }
+    return;
+  }
+  const rows = seasons.map((s) => [Markup.button.callback(`📅 ${bonusAssignSeasonLabelIt(s)}`, `bonus:sv:${s}`)]);
+  rows.push([Markup.button.callback('« Bonus', 'bonus:0'), Markup.button.callback('« Menù', 'menu')]);
+  const txt = `${fmt.DIV}\n📅 <b>Storico bonus per stagione</b>\n${fmt.DIV}\n\nScegli la stagione da visualizzare:`;
+  try { await ctx.editMessageText(txt, { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) }); }
+  catch (_) { await ctx.reply(txt, { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) }); }
 }
 
 async function registerBotCommands(telegram) {
@@ -3163,15 +3175,15 @@ function setupBot(bot) {
 
   bot.command('bonus', async (ctx) => {
     await cmdNeedClan(ctx, async (clanTag) => {
-      let rows = null;
+      let hist = [];
       try {
-        rows = await sb.fetchBonusesForClan(clanTag);
+        hist = await sb.fetchCwlHistoryBonusRows(clanTag);
       } catch (_) {
-        rows = null;
+        hist = [];
       }
-      const { text, page, pages } = fmt.formatBonusesPage(rows || [], 0, clanTag);
-      const kb = await buildBonusKeyboard(ctx, page, pages);
-      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+      const body = fmt.formatBonusReceiversLeaderboard(hist);
+      const kb = await buildBonusKeyboard(ctx);
+      await ctx.reply(body, { parse_mode: 'HTML', ...kb });
     });
   });
 
@@ -4364,24 +4376,23 @@ function setupBot(bot) {
 
   bot.action(/^bonus:(\d+)$/, async (ctx) => {
     await answerCbLoading(ctx);
-    const page = Number(ctx.match[1]) || 0;
     const clanTag = await resolveEffectiveClanTag(ctx);
     if (!clanTag) {
       await ctx.answerCbQuery('Nessun clan').catch(() => {});
       return;
     }
-    let rows = null;
+    let hist = [];
     try {
-      rows = await sb.fetchBonusesForClan(clanTag);
+      hist = await sb.fetchCwlHistoryBonusRows(clanTag);
     } catch (_) {
-      rows = null;
+      hist = [];
     }
-    const { text, page: p, pages } = fmt.formatBonusesPage(rows || [], page, clanTag);
-    const kb = await buildBonusKeyboard(ctx, p, pages);
+    const body = fmt.formatBonusReceiversLeaderboard(hist);
+    const kb = await buildBonusKeyboard(ctx);
     try {
-      await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
+      await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb });
     } catch (_) {
-      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+      await ctx.reply(body, { parse_mode: 'HTML', ...kb });
     }
   });
 
@@ -4392,15 +4403,40 @@ function setupBot(bot) {
       await ctx.answerCbQuery('Nessun clan').catch(() => {});
       return;
     }
-    let hist = [];
-    try {
-      hist = await sb.fetchCwlHistoryBonusRows(clanTag);
-    } catch (e) {
-      await ctx.answerCbQuery(String(e.message || 'Errore dati').slice(0, 200)).catch(() => {});
+    await renderBonusSeasonPicker(ctx, clanTag);
+  });
+
+  bot.action(/^bonus:sv:(\d{4}-\d{2})$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) {
+      await ctx.answerCbQuery('Nessun clan').catch(() => {});
       return;
     }
-    const body = fmt.formatBonusHistoryBySeason(hist);
-    await editOrReplyChunkedHtml(ctx, body, bonusHistHofBackKb());
+    const season = ctx.match[1];
+    let rows = [];
+    try {
+      rows = await sb.fetchCwlHistoryFullSeason(clanTag, season);
+    } catch (e) {
+      await ctx.answerCbQuery(String(e.message || 'Errore').slice(0, 200)).catch(() => {});
+      return;
+    }
+    const received = rows.filter((r) => r.bonus_assigned).sort((a, b) => (b.bonus_score ?? 0) - (a.bonus_score ?? 0));
+    const label = fmt.escapeHtml(bonusAssignSeasonLabelIt(season));
+    let body = `${fmt.DIV}\n🏆 <b>Bonus assegnati</b> · <i>${label}</i>\n${fmt.DIV}\n\n`;
+    if (!received.length) {
+      body += `<i>Nessun bonus assegnato per questa stagione.</i>`;
+    } else {
+      body += received.map((r, i) => {
+        const sc = r.bonus_score != null ? r.bonus_score : '—';
+        return `${i + 1}. <b>${fmt.escapeHtml(r.player_name)}</b> — merito <b>${sc}</b>`;
+      }).join('\n');
+    }
+    const kb = Markup.inlineKeyboard([
+      [Markup.button.callback('« Stagioni', 'bonus:hist'), Markup.button.callback('« Bonus', 'bonus:0')],
+    ]);
+    try { await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb }); }
+    catch (_) { await ctx.reply(body, { parse_mode: 'HTML', ...kb }); }
   });
 
   bot.action('bonus:hof', async (ctx) => {
@@ -4611,7 +4647,7 @@ function setupBot(bot) {
         await ctx.editMessageText(done, {
           parse_mode: 'HTML',
           ...Markup.inlineKeyboard([
-            [Markup.button.callback('« Bonus ranking', 'bonus:0')],
+            [Markup.button.callback('« Bonus', 'bonus:0')],
             [Markup.button.callback('« Menù', 'menu')],
           ]),
         });
