@@ -37,7 +37,7 @@ UI in italiano, single-page application vanilla JS.
 │   │   ├── proxy-client.js   # Helper proxyFetch() condiviso tra endpoints
 │   │   └── require-role.js   # Middleware auth JWT + verifica ruolo
 │   ├── admin/users.js        # CRUD utenti (solo admin — verifica ruolo JWT)
-│   ├── auto-save-wars.js     # Cron salvataggio automatico guerre (20:00 UTC)
+│   ├── auto-save-wars.js     # Cron salvataggio automatico guerre + CWL (20:00 UTC)
 │   ├── clan-info.js          # Info clan (via proxy)
 │   ├── clan-members.js       # Lista membri live (via proxy)
 │   ├── cwl-stats.js          # Stats CWL live (via proxy)
@@ -270,14 +270,21 @@ In gruppo usa `url` button (limitazione API Telegram: `webApp` non supportato in
 Tab disponibili per ospiti: `cwl_warlog`, `warlog`, `bonus`, `members`, `cerca`, `rankings`.
 Tab bloccata per ospiti: `profilo` → rimanda alla chat privata per login.
 
-### Assegnazione bonus CWL
+### Sezione Bonus CWL (bot)
 
-Visibile solo a ruoli **admin**, **capo**, **co-capo** (funzione `isCapoOrCoCapoForBonus`).
-Percorso: Il mio clan → Bonus → ✏️ Assegna bonus → scelta stagione → modalità:
+**Schermata principale** (`bonus:0`): mostra **Classifica riceventi** (chi ha ricevuto più bonus in assoluto nelle stagioni storiche, da `cwl_history`).
+Pulsanti: 📅 Storico per stagione | ✏️ Assegna / Modifica bonus (solo Capo/Co-Capo/Admin) | 🌐 web | « Menù.
+
+**Storico per stagione** (`bonus:hist`): season picker con bottoni per ogni stagione (più recente prima).
+`bonus:sv:YYYY-MM`: mostra i giocatori con `bonus_assigned=true` per quella stagione, ordinati per score desc.
+
+**Assegnazione / Modifica** (`bonus:as`): visibile solo a ruoli **admin**, **capo**, **co-capo** (`isCapoOrCoCapoForBonus`).
+Percorso: scelta stagione → modalità:
 - **Manuale**: toggle singolo giocatore per pagina
 - **Assistito**: scelta numero bonus + criteri (Standard/Strict/Solo peso TH/Solo score) → ranking automatico → conferma
 
-I bonus vengono scritti su `cwl_history` con flag `bonus_assigned`.
+Funziona anche se i bonus sono già assegnati (modifica possibile).
+I bonus vengono scritti su `cwl_history` con flag `bonus_assigned` e score `bonus_score`.
 
 ### Community
 
@@ -358,5 +365,5 @@ npm test
 9. **Formula bonus** deve restare allineata tra `api/generate-bonuses.js`, `bonus-assistant.js` e test.
 10. **Ruoli per assegnazione bonus**: `admin`, `capo`, `co-capo` — controllati da `isCapoOrCoCapoForBonus` nel bot e `require-role.js` sul sito.
 11. **Middleware ordine** nel bot è critico: guardMiddleware → usage → coc_off → UI tracking → wipe → global leave → router → session gate. Non riordinare.
-12. **`isGroupClanReadCallback`** è la whitelist dei callback accessibili da ospiti in gruppi collegati. Aggiungere callback qui richiede verifica che non espongano dati sensibili.
+12. **`isGroupClanReadCallback`** è la whitelist dei callback accessibili da ospiti in gruppi collegati. Include: `menu`, `noop`, `clan_home`, `clan_webapps`, `info`, `cwl`, `war_menu`, `bonus:hist`, `bonus:hof`, pattern `bonus:\d+`, `bonus:sv:\d{4}-\d{2}`, `mb\d+`, `cwl_v:`, `war:`. Aggiungere callback qui richiede verifica che non espongano dati sensibili.
 13. **Le immagini TH** livello 1–18 sono `.webp` in `th/webp/`; i file root sono stati rimossi. 
