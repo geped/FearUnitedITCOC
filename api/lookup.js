@@ -23,6 +23,10 @@ module.exports = async (req, res) => {
             const clanTag = req.query.clanTag;
             if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });
             proxyPath = `/current-war?clanTag=${encodeURIComponent(clanTag)}`;
+        } else if (type === 'capital-raids') {
+            const clanTag = req.query.clanTag;
+            if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });
+            proxyPath = `/capital-raids?clanTag=${encodeURIComponent(clanTag)}`;
         } else if (type === 'proxy-ip') {
             // IP pubblico in uscita del proxy Render (quello da whitelist su developer.clashofclans.com)
             proxyPath = '/myip';

@@ -5,6 +5,13 @@ module.exports = async (req, res) => {
         if (!proxyUrl) return res.status(500).json({ error: 'RENDER_PROXY_URL non configurata.' });
         const syncHeaders = { 'x-sync-key': process.env.SYNC_SECRET || '' };
         const clanTag = req.query.clanTag || req.body?.clanTag;
+
+        // Ping bot per tenerlo sveglio (evita spin-down Render free tier)
+        const botUrl = process.env.BOT_HEALTH_URL;
+        if (botUrl) {
+            fetch(botUrl, { signal: AbortSignal.timeout(5000) }).catch(() => {});
+        }
+
         if (clanTag) {
             const r = await fetch(`${proxyUrl}/save-war?clanTag=${encodeURIComponent(clanTag)}`, {
                 method: 'POST', headers: syncHeaders,

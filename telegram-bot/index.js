@@ -49,6 +49,12 @@ const bonusWizardByUid = new Map();
 let cachedTgBotUsername = (process.env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '');
 /** Anti-spam avvisi guerra: chatId -> key avvisi già inviati per endTime corrente. */
 const warAlertMemory = new Map();
+/**
+ * Anti-spam avvisi raid capitale.
+ * key: `${chatId}:raid:${startTime}` → { initialized: bool, destroyed: Set<`${enemyTag}:${districtId}`> }
+ * Sul primo poll dopo un restart si inizializza senza inviare (evita ri-notifiche di distretti già noti).
+ */
+const raidAlertMemory = new Map();
 /** Traccia l'ultimo messaggio menù per chat (privata + gruppo): consente la cancellazione al re-invio di /cocboard. */
 const _lastMenuMsgByChat = new Map();
 function _trackMenuMsg(chatId, messageId) {
@@ -5055,6 +5061,8 @@ async function runWarAlertsMaintenance(bot) {
         const body = formatWarFinalRecap(war, missing);
         await bot.telegram.sendMessage(chatId, body, { parse_mode: 'HTML', disable_web_page_preview: true });
         sent.add('final');
+        // Salva automaticamente la war conclusa (solo war classiche; CWL ignorata dal save-war endpoint)
+        api.saveWar(clanTag).catch((e) => console.warn('[cocboard-bot] auto-save war', clanTag, e.message || e));
       }
     } catch (e) {
       if (isTelegramChatStaleError(e)) {
@@ -5068,6 +5076,69 @@ async function runWarAlertsMaintenance(bot) {
     // Cleanup semplice per evitare crescita non limitata dopo molte guerre.
     const first = warAlertMemory.keys().next();
     if (!first.done) warAlertMemory.delete(first.value);
+  }
+}
+
+async function runRaidAlertsMaintenance(bot) {
+  let links = [];
+  try {
+    links = await sb.listEnabledTelegramChatLinks();
+  } catch (e) {
+    console.warn('[cocboard-bot] raid alerts list links', e.message || e);
+    return;
+  }
+  for (const link of links) {
+    const chatId = Number(link.telegram_chat_id);
+    const clanTag = link.clan_tag;
+    if (!Number.isFinite(chatId) || !clanTag) continue;
+    try {
+      const notif = await sb.getChatNotificationSettings(chatId).catch(() => null);
+      if (notif?.capital_raids_enabled !== true) continue;
+      const raidData = await api.capitalRaids(clanTag);
+      const current = (raidData?.items || [])[0];
+      if (!current || current.state !== 'ongoing') continue;
+      const startTime = current.startTime;
+      const memKey = `${chatId}:raid:${startTime}`;
+      if (!raidAlertMemory.has(memKey)) {
+        // Primo poll dopo restart: registra distretti già distrutti senza notificare
+        const already = new Set();
+        for (const entry of (current.attackLog || [])) {
+          const et = entry.defender?.tag || 'unknown';
+          for (const d of (entry.districts || [])) {
+            if ((d.destructionPercent || 0) >= 100) already.add(`${et}:${d.id}`);
+          }
+        }
+        raidAlertMemory.set(memKey, { initialized: true, destroyed: already });
+        continue;
+      }
+      const mem = raidAlertMemory.get(memKey);
+      for (const entry of (current.attackLog || [])) {
+        const enemyTag = entry.defender?.tag || 'unknown';
+        const enemyName = fmt.escapeHtml(entry.defender?.name || 'Clan sconosciuto');
+        for (const d of (entry.districts || [])) {
+          if ((d.destructionPercent || 0) < 100) continue;
+          const dk = `${enemyTag}:${d.id}`;
+          if (mem.destroyed.has(dk)) continue;
+          mem.destroyed.add(dk);
+          const body =
+            `🏰 <b>Raid Capitale</b>\n` +
+            `⚔️ Distretto <b>${fmt.escapeHtml(d.name || 'Sconosciuto')}</b> ` +
+            `di <i>${enemyName}</i> completamente distrutto! ` +
+            `(+${(d.totalLooted || 0).toLocaleString('it-IT')} oro)`;
+          await bot.telegram.sendMessage(chatId, body, { parse_mode: 'HTML', disable_web_page_preview: true });
+        }
+      }
+    } catch (e) {
+      if (isTelegramChatStaleError(e)) {
+        await sb.deleteTelegramChatLink(chatId).catch(() => {});
+      } else {
+        console.warn('[cocboard-bot] raid alerts chat', chatId, e.message || e);
+      }
+    }
+  }
+  if (raidAlertMemory.size > 500) {
+    const first = raidAlertMemory.keys().next();
+    if (!first.done) raidAlertMemory.delete(first.value);
   }
 }
 
@@ -5152,10 +5223,24 @@ async function main() {
 
   runCommunityMaintenance(bot).catch(() => {});
   runWarAlertsMaintenance(bot).catch(() => {});
+  runRaidAlertsMaintenance(bot).catch(() => {});
   setInterval(() => {
     runCommunityMaintenance(bot).catch(() => {});
     runWarAlertsMaintenance(bot).catch(() => {});
+    runRaidAlertsMaintenance(bot).catch(() => {});
   }, 60_000);
+
+  // Self-ping ogni 12 minuti per evitare spin-down Render free tier.
+  // Usa l'URL esterno del servizio (RENDER_EXTERNAL_URL) — i self-ping localhost non evitano il suspend.
+  const selfUrl = (process.env.RENDER_EXTERNAL_URL || '').trim().replace(/\/$/, '');
+  if (selfUrl) {
+    const KEEP_ALIVE_MS = 12 * 60 * 1000;
+    setInterval(() => {
+      fetch(`${selfUrl}/health`, { signal: AbortSignal.timeout(10000) })
+        .then(() => console.log('[bot-keep-alive] ping ok', new Date().toISOString()))
+        .catch((e) => console.warn('[bot-keep-alive] ping failed:', e.message));
+    }, KEEP_ALIVE_MS);
+  }
 
   const webhookDomain = pickWebhookDomain();
   const webhookSecretPath = pickWebhookPath();

@@ -3827,29 +3827,7 @@ function closeClassicWarDetail() {
   modal.addEventListener('transitionend', () => modal.remove(), { once: true });
 }
 
-async function saveCurrentWar() {
-  const btn = document.getElementById('btn-save-war');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Salvataggio…'; }
-  try {
-    const r = await fetch(`/api/auto-save-wars${clanQ()}`, { method: 'POST' });
-    const data = await r.json();
-    if (data.skipped) {
-      const reason = data.reason === 'notInWar' || data.reason?.includes('state=')
-        ? 'Nessuna war conclusa da salvare al momento.'
-        : `Saltato: ${data.reason}`;
-      alert(reason);
-    } else if (data.saved) {
-      alert(`✅ War salvata! Risultato: ${data.result === 'win' ? 'Vittoria' : data.result === 'lose' ? 'Sconfitta' : 'Pareggio'}`);
-      loadWarLog();
-    } else {
-      alert(data.error || 'Errore sconosciuto');
-    }
-  } catch (e) {
-    alert('⚠️ Errore di rete. Riprova.');
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '💾 Salva War'; }
-  }
-}
+// saveCurrentWar rimosso — le war vengono salvate automaticamente dal bot e dal cron Vercel
 
 // ── CRONOLOGIA LEGHE CWL ─────────────────────────────────────────────────────
 
