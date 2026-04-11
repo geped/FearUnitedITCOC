@@ -228,7 +228,8 @@ async function insertRecruitmentSubmission(submitterId, display, bodyText, clanU
     body_text: String(bodyText),
     body_html: html,
     clan_profile_url: String(clanUrl).slice(0, 512),
-    photo_file_id: photoFileId ? String(photoFileId).slice(0, 256) : null,
+    // Può essere file_id Telegram oppure URL HTTPS (es. stemma CoC da API)
+    photo_file_id: photoFileId ? String(photoFileId).slice(0, 2048) : null,
     status,
     clan_tag: clanTag ? String(clanTag).toUpperCase().replace(/^#/, '').slice(0, 20) : null,
   };
@@ -266,7 +267,7 @@ async function insertRecruitmentPost(submissionId, postText, photoFileId, approv
   const row = {
     submission_id: Number(submissionId),
     post_text: String(postText),
-    photo_file_id: photoFileId || null,
+    photo_file_id: photoFileId ? String(photoFileId).slice(0, 2048) : null,
     approved_at: approvedAtIso,
     expires_at: expiresAtIso,
     delivered_message_ids: deliveredIds,

@@ -66,6 +66,13 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/** URL stemma ufficiale da risposta CoC API (`/api/clan-info`). */
+function pickClanBadgeUrl(badgeUrls) {
+  if (!badgeUrls || typeof badgeUrls !== 'object') return null;
+  const u = badgeUrls.medium || badgeUrls.large || badgeUrls.small;
+  return u && String(u).trim().startsWith('https://') ? String(u).trim() : null;
+}
+
 function submissionBodyHtmlPart(sub) {
   if (sub.body_html && String(sub.body_html).trim()) return sub.body_html;
   return escapeHtml(sub.body_text || '');
@@ -657,6 +664,9 @@ function formatInstantPreviewHtml(st) {
   if (st.preset_text) {
     lines.push(`\n${escapeHtml(st.preset_text)}`);
   }
+  if (st.include_clan_badge && st.clan_badge_url) {
+    lines.push('\n🛡 <i>Stemma clan ufficiale allegato all’annuncio.</i>');
+  }
   lines.push(`\n🔗 <a href="${escapeHtml(link)}">Apri profilo clan (CoC)</a>`);
   return lines.join('\n');
 }
@@ -685,6 +695,33 @@ async function showInstantPresetStep(ctx, uid) {
       `Scegli una delle seguenti mini-descrizioni da aggiungere all'annuncio, oppure procedi senza.\n\n` +
       lines,
     { parse_mode: 'HTML', ...instantPresetKb() }
+  );
+}
+
+/** Dopo descrizione/stemma API: chiede se allegare solo lo stemma ufficiale CoC (nessun upload utente). */
+async function showInstantBadgeStep(ctx, uid) {
+  const st = pendingCommunity.get(uid);
+  if (!st || st.kind !== 'recruit_instant') return;
+  st.step = 'badge_confirm';
+  if (!st.clan_badge_url) {
+    st.include_clan_badge = false;
+    pendingCommunity.set(uid, st);
+    await showInstantPresetStep(ctx, uid);
+    return;
+  }
+  pendingCommunity.set(uid, st);
+  await ctx.reply(
+    `🛡 <b>Stemma clan</b>\n\n` +
+      `Vuoi allegare lo <b>stemma ufficiale</b> del clan (CoC API) all’annuncio?\n\n` +
+      `<i>Solo immagine ufficiale Supercell — nessun caricamento da parte tua.</i>`,
+    {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('✅ Sì, includi stemma', 'rci_badge_yes')],
+        [Markup.button.callback('⏭ No, annuncio solo testo', 'rci_badge_no')],
+        [Markup.button.callback('❌ Annulla', 'rci_cancel')],
+      ]),
+    }
   );
 }
 
@@ -1678,7 +1715,7 @@ function registerCommunityHandlers(bot, deps) {
     if (uid == null) return;
     pendingCommunity.set(uid, { kind: 'recruit_instant', step: 'tag' });
     const instantTagText =
-      `🚀 <b>Pubblica adesso</b> — passo 1/3\n\n` +
+      `🚀 <b>Pubblica adesso</b> — passo 1/4\n\n` +
       `Invia il <b>tag del clan</b> da promuovere (es. <code>#2J2VLPP9R</code>).\n\n` +
       `<i>Questo metodo pubblica immediatamente senza moderazione. L'annuncio resta attivo 24h.</i>`;
     const instantTagKb = Markup.inlineKeyboard([[Markup.button.callback('❌ Annulla', 'rci_cancel')]]);
@@ -1733,6 +1770,7 @@ function registerCommunityHandlers(bot, deps) {
       st.clan_level = info.clanLevel ?? null;
       st.clan_members = info.members ?? null;
       st.clan_desc = info.description || null;
+      st.clan_badge_url = pickClanBadgeUrl(info.badgeUrls);
       st.clan_desc_confirmed = false;
       st.step = 'desc_confirm';
       pendingCommunity.set(uid, st);
@@ -1776,10 +1814,9 @@ function registerCommunityHandlers(bot, deps) {
       return;
     }
     st.clan_desc_confirmed = true;
-    st.step = 'preset_choice';
     pendingCommunity.set(uid, st);
     await ctx.answerCbQuery('Descrizione aggiunta ✅').catch(() => {});
-    await showInstantPresetStep(ctx, uid);
+    await showInstantBadgeStep(ctx, uid);
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
@@ -1792,10 +1829,9 @@ function registerCommunityHandlers(bot, deps) {
       return;
     }
     st.clan_desc_confirmed = false;
-    st.step = 'preset_choice';
     pendingCommunity.set(uid, st);
     await ctx.answerCbQuery('OK').catch(() => {});
-    await showInstantPresetStep(ctx, uid);
+    await showInstantBadgeStep(ctx, uid);
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
@@ -1808,6 +1844,57 @@ function registerCommunityHandlers(bot, deps) {
       return;
     }
     st.clan_desc_confirmed = false;
+    pendingCommunity.set(uid, st);
+    await ctx.answerCbQuery('OK').catch(() => {});
+
+    if (!st.clan_badge_url) {
+      const loadMsg = await ctx.reply('⏳ Recupero stemma dal gioco…', { parse_mode: 'HTML' }).catch(() => null);
+      try {
+        const info = await cocboardApi.clanInfo(`#${st.clan_tag_raw}`);
+        st.clan_name = st.clan_name || info.name || null;
+        if (st.clan_level == null) st.clan_level = info.clanLevel ?? null;
+        if (st.clan_members == null) st.clan_members = info.members ?? null;
+        st.clan_badge_url = pickClanBadgeUrl(info.badgeUrls);
+      } catch (_) {
+        /* stemma opzionale */
+      }
+      if (loadMsg?.message_id) {
+        try {
+          await ctx.telegram.deleteMessage(uid, loadMsg.message_id);
+        } catch (_) {}
+      }
+      pendingCommunity.set(uid, st);
+    }
+
+    await showInstantBadgeStep(ctx, uid);
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action('rci_badge_yes', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    const st = uid != null ? pendingCommunity.get(uid) : null;
+    if (!st || st.kind !== 'recruit_instant' || st.step !== 'badge_confirm') {
+      await ctx.answerCbQuery('Sessione scaduta.').catch(() => {});
+      return;
+    }
+    st.include_clan_badge = true;
+    st.step = 'preset_choice';
+    pendingCommunity.set(uid, st);
+    await ctx.answerCbQuery('Stemma incluso').catch(() => {});
+    await showInstantPresetStep(ctx, uid);
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action('rci_badge_no', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    const st = uid != null ? pendingCommunity.get(uid) : null;
+    if (!st || st.kind !== 'recruit_instant' || st.step !== 'badge_confirm') {
+      await ctx.answerCbQuery('Sessione scaduta.').catch(() => {});
+      return;
+    }
+    st.include_clan_badge = false;
     st.step = 'preset_choice';
     pendingCommunity.set(uid, st);
     await ctx.answerCbQuery('OK').catch(() => {});
@@ -1897,9 +1984,12 @@ function registerCommunityHandlers(bot, deps) {
 
     const postHtml = buildInstantPostHtml(st, exp);
 
+    const stemmaPhoto =
+      st.include_clan_badge === true && st.clan_badge_url ? String(st.clan_badge_url) : null;
+
     let sid;
     try {
-      sid = await sbc.insertRecruitmentSubmission(uid, subLabel, postHtml, link, null, postHtml, st.clan_tag_raw, 'auto_published');
+      sid = await sbc.insertRecruitmentSubmission(uid, subLabel, postHtml, link, stemmaPhoto, postHtml, st.clan_tag_raw, 'auto_published');
     } catch (e) {
       await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML', ...recruitBackKb() });
       await refreshPrivateReplyKeyboardRef(ctx);
@@ -1907,7 +1997,7 @@ function registerCommunityHandlers(bot, deps) {
     }
 
     // Nessun broadcast: "pubblica adesso" è visibile solo in "Annunci attivi".
-    await sbc.insertRecruitmentPost(sid, postHtml, null, approvedAt, expStr, [], uid);
+    await sbc.insertRecruitmentPost(sid, postHtml, stemmaPhoto, approvedAt, expStr, [], uid);
 
     await ctx.reply(
       `✅ <b>Annuncio pubblicato!</b>\n\n` +
@@ -1925,7 +2015,7 @@ function registerCommunityHandlers(bot, deps) {
     if (uid != null) pendingCommunity.set(uid, { kind: 'recruit_instant', step: 'tag' });
     await ctx.answerCbQuery('Ricominciato').catch(() => {});
     const restartText =
-      `🚀 <b>Pubblica adesso</b> — passo 1/3\n\n` +
+      `🚀 <b>Pubblica adesso</b> — passo 1/4\n\n` +
       `Invia il <b>tag del clan</b> da promuovere (es. <code>#2J2VLPP9R</code>).`;
     await ctx.reply(restartText, {
       parse_mode: 'HTML',
