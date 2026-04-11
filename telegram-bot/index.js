@@ -1896,7 +1896,7 @@ function buildWarLiveNavKb(data, spec, webAppUrl) {
   }
 
   const rows = [
-    [tab(view === 'ov', '📊 Panoramica', 'wl_v:ov'), tab(view === 'prev', '🔭 Anteprima TH', 'wl_v:prev')],
+    [tab(view === 'ov', '📊 Panoramica', 'wl_v:ov'), tab(view === 'prev', '👁 Anteprima', 'wl_v:prev')],
     [tab(view === 'p' && side === 'us',   `👥 ${(data.clan?.name || 'Noi').slice(0,10)}`, `wl_v:p:us:0`)],
     [tab(view === 'p' && side === 'them', `⚔️ ${(data.opponent?.name || 'Avv').slice(0,10)}`, `wl_v:p:them:0`)],
   ];

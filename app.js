@@ -4658,7 +4658,7 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj, modalC
     chart: '<svg class="cdm-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M3 13h2v8H3v-8zm8-6h2v14h-2V7zm8 4h2v10h-2V11z"/></svg>',
     sword: '<svg class="cdm-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M14.5 2l1.4 1.4-4.3 4.3 2.1 2.1 4.3-4.3L19.5 7 9 17.5 6.5 20 4 17.5 6.5 15 16 5.5l-1.5-1.5 4-4zM7.2 18.3L8.8 19.9 7.1 21.6 5.5 20l1.7-1.7z"/></svg>',
     eye: '<svg class="cdm-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5C21.3 7.6 17 4.5 12 4.5zm0 12a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>',
-    balance: '<svg class="cdm-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 2C6.5 6 3 9.6 3 14a9 9 0 0 0 18 0c0-4.4-3.5-8-9-12zm0 15.5A5.5 5.5 0 0 1 6.5 12 12 12 0 0 1 12 5.6 12 12 0 0 1 17.5 12 5.5 5.5 0 0 1 12 17.5z"/></svg>',
+    balance: '<svg class="cdm-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/></svg>',
     sync: '<svg class="cdm-ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4V1L7 6l5 5V7c2.76 0 5 2.24 5 5 0 1.13-.4 2.16-1.03 3l1.46 1.46A7.93 7.93 0 0 0 20 12c0-2.21-.9-4.22-2.35-5.65zM12 19c-2.76 0-5-2.24-5-5 0-1.13.4-2.16 1.03-3L6.57 9.54A7.93 7.93 0 0 0 4 12c0 3.31 2.69 6 6 6v3l5-5-5-5v3z"/></svg>'
   };
 
@@ -7060,42 +7060,66 @@ async function openWarLiveModal() {
   const usPlayersHtml = _wlBuildPlayersHtml(data, 'us');
   const themPlayersHtml = _wlBuildPlayersHtml(data, 'them');
 
-  // ── TH panel ──
+  // ── TH / Anteprima panel (same layout as CWL Anteprima) ──
   const usMembers = us.members || [], themMembers = them.members || [];
-  const usCounts = {}, themCounts = {};
-  usMembers.forEach(m => { const t = m.townhallLevel || 1; usCounts[t] = (usCounts[t] || 0) + 1; });
-  themMembers.forEach(m => { const t = m.townhallLevel || 1; themCounts[t] = (themCounts[t] || 0) + 1; });
-  const thLevels = [];
-  for (let i = 18; i >= 1; i--) { if (usCounts[i] || themCounts[i]) thLevels.push(i); }
-  let thHtml;
-  if (!thLevels.length) {
-    thHtml = '<p class="wl-empty">Nessun dato TH.</p>';
-  } else {
-    const maxCount = Math.max(...thLevels.map(l => Math.max(usCounts[l]||0, themCounts[l]||0)), 1);
-    const thRows = thLevels.map(l => {
-      const u = usCounts[l] || 0, t = themCounts[l] || 0;
-      const thN = String(l).padStart(2, '0');
-      const thImg = `<img src="th/webp/level_${thN}.webp" alt="TH${l}" class="wl-th-icon" loading="lazy">`;
-      const uBar = u > 0 ? `<div class="wl-bar wl-bar-us" style="width:${Math.round(u/maxCount*100)}%">${u}</div>` : '<div class="wl-bar-zero">0</div>';
-      const tBar = t > 0 ? `<div class="wl-bar wl-bar-them" style="width:${Math.round(t/maxCount*100)}%">${t}</div>` : '<div class="wl-bar-zero">0</div>';
-      return `<tr class="wl-prev-row">
-        <td class="wl-prev-us">${uBar}</td>
-        <td class="wl-prev-th">${thImg}</td>
-        <td class="wl-prev-them">${tBar}</td>
-      </tr>`;
-    }).join('');
-    thHtml = `<div class="wl-prev-legend">
-      <span class="wl-leg-us">${escH(us.name || 'Noi')}</span>
-      <span class="wl-leg-them">${escH(them.name || 'Avversario')}</span>
-    </div>
-    <div class="table-wrap"><table class="wl-prev-table"><tbody>${thRows}</tbody></table></div>`;
+  const STATE_LABEL_PREV = { inWar:'In guerra', warStarted:'In guerra', preparation:'Preparazione', warEnded:'Terminata' };
+  const stateLabel = STATE_LABEL_PREV[data.state] || data.state || '—';
+  let countdownHtmlPrev = '';
+  const startT = data.startTime ? parseCocTimeWeb(data.startTime) : null;
+  const endT = data.endTime ? parseCocTimeWeb(data.endTime) : null;
+  const nowT = Date.now();
+  if (data.state === 'preparation' && startT) {
+    const diff = startT - nowT;
+    if (diff > 0) { const mm = Math.ceil(diff / 60000); countdownHtmlPrev = `<span class="prev-countdown">⏱ Inizio tra ${mm < 60 ? mm + ' min' : Math.floor(mm/60) + 'h ' + (mm%60) + 'm'}</span>`; }
+  } else if (endT) {
+    const diff = endT - nowT;
+    if (diff > 0) { const h = Math.floor(diff / 3600000), m = Math.floor((diff % 3600000) / 60000); countdownHtmlPrev = `<span class="prev-countdown">⏱ Fine tra ${h}h ${m}m</span>`; }
   }
+
+  function wlThComp(members) {
+    if (!members?.length) return '<span style="color:var(--text-3)">—</span>';
+    const counts = {};
+    members.forEach(m => { const lv = m.townhallLevel || 0; if (lv) counts[lv] = (counts[lv] || 0) + 1; });
+    const entries = Object.entries(counts).sort((a, b) => +b[0] - +a[0]);
+    if (!entries.length) return '<span style="color:var(--text-3)">—</span>';
+    const summaryText = entries.map(([lv, n]) => `TH${lv}: ${n}`).join(' · ');
+    const grid = entries.map(([lv, n]) => {
+      const thN = String(lv).padStart(2, '0');
+      return `<div class="prev-th-item"><img src="th/webp/level_${thN}.webp" class="th-imgv" alt="TH${lv}" loading="lazy"><span class="prev-th-count">${n} pl.</span></div>`;
+    }).join('');
+    return `<div class="prev-th-summary">${summaryText}</div><div class="prev-th-grid">${grid}</div>`;
+  }
+
+  const thHtml = `<div class="prev-state-bar">
+      <span class="prev-state-label">${stateLabel}</span>
+      ${countdownHtmlPrev}
+      <span class="prev-size">👥 ${data.teamSize || '?'} vs ${data.teamSize || '?'}</span>
+    </div>
+    <div class="prev-war-split">
+      <div class="prev-war-side prev-war-side--us">
+        <div class="prev-side-header">${usBadge}<span>${escH(us.name || 'Noi')}</span></div>
+        ${wlThComp(usMembers)}
+        <div class="prev-score">⭐ ${us.stars ?? 0} &nbsp; 💥 ${us.destructionPercentage != null ? us.destructionPercentage.toFixed(1) + '%' : '0.0%'}</div>
+      </div>
+      <div class="prev-war-vs">VS</div>
+      <div class="prev-war-side prev-war-side--opp">
+        <div class="prev-side-header">${themBadge}<span>${escH(them.name || 'Avversario')}</span></div>
+        ${wlThComp(themMembers)}
+        <div class="prev-score">⭐ ${them.stars ?? 0} &nbsp; 💥 ${them.destructionPercentage != null ? them.destructionPercentage.toFixed(1) + '%' : '0.0%'}</div>
+      </div>
+    </div>`;
 
   // ── Confronto panel loaded async on tab switch ──
   const confrontoHtml = '<div class="profilo-loading" style="display:flex;gap:0.5rem;align-items:center;padding:0.75rem"><div class="spinner"></div><span>Seleziona la scheda Confronto per caricare i dati.</span></div>';
 
   // ── Build modal ──
-  const CDM_ICO_SYNC = '<svg class="cdm-ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4V1L7 6l5 5V7c2.76 0 5 2.24 5 5 0 1.13-.4 2.16-1.03 3l1.46 1.46A7.93 7.93 0 0 0 20 12c0-2.21-.9-4.22-2.35-5.65zM12 19c-2.76 0-5-2.24-5-5 0-1.13.4-2.16 1.03-3L6.57 9.54A7.93 7.93 0 0 0 4 12c0 3.31 2.69 6 6 6v3l5-5-5-5v3z"/></svg>';
+  const WL_ICO = {
+    sync:    '<svg class="cdm-ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4V1L7 6l5 5V7c2.76 0 5 2.24 5 5 0 1.13-.4 2.16-1.03 3l1.46 1.46A7.93 7.93 0 0 0 20 12c0-2.21-.9-4.22-2.35-5.65zM12 19c-2.76 0-5-2.24-5-5 0-1.13.4-2.16 1.03-3L6.57 9.54A7.93 7.93 0 0 0 4 12c0 3.31 2.69 6 6 6v3l5-5-5-5v3z"/></svg>',
+    chart:   '<svg class="cdm-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M3 13h2v8H3v-8zm8-6h2v14h-2V7zm8 4h2v10h-2V11z"/></svg>',
+    eye:     '<svg class="cdm-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 4.5C7 4.5 2.7 7.6 1 12c1.7 4.4 6 7.5 11 7.5s9.3-3.1 11-7.5C21.3 7.6 17 4.5 12 4.5zm0 12a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zm0-7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/></svg>',
+    balance: '<svg class="cdm-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/></svg>',
+    sword:   '<svg class="cdm-ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M14.5 2l1.4 1.4-4.3 4.3 2.1 2.1 4.3-4.3L19.5 7 9 17.5 6.5 20 4 17.5 6.5 15 16 5.5l-1.5-1.5 4-4zM7.2 18.3L8.8 19.9 7.1 21.6 5.5 20l1.7-1.7z"/></svg>',
+  };
 
   const defaultTab = data.state === 'inWar' ? 'panoramica' : 'panoramica';
 
@@ -7107,7 +7131,7 @@ async function openWarLiveModal() {
       <div class="cdm-header">
         <div class="cdm-header-left">
           <div>
-            <div class="cdm-header-season">⚔️ War Classica Live</div>
+            <div class="cdm-header-season">${WL_ICO.sword} War Classica Live</div>
             <div class="cdm-header-league" style="color:var(--text-3)">${_wlStateLabel(data.state)} — ${data.teamSize || '?'}v${data.teamSize || '?'}</div>
           </div>
         </div>
@@ -7115,12 +7139,12 @@ async function openWarLiveModal() {
         <button class="cdm-close" onclick="closeWarLiveModal()">✕</button>
       </div>
       <div class="cdm-modal-toolbar">
-        <button type="button" class="btn-secondary btn-sm" onclick="refreshWarLiveModal()">${CDM_ICO_SYNC} Aggiorna stato</button>
+        <button type="button" class="btn-secondary btn-sm" onclick="refreshWarLiveModal()">${WL_ICO.sync} Aggiorna stato</button>
       </div>
       <div class="cdm-mtabs">
-        <button type="button" class="cdm-mtab cdm-mtab--active" id="wlm-mtab-panoramica" onclick="_wlmSwitchTab('panoramica')">📊 Panoramica</button>
-        <button type="button" class="cdm-mtab" id="wlm-mtab-th" onclick="_wlmSwitchTab('th')">🔭 TH</button>
-        <button type="button" class="cdm-mtab" id="wlm-mtab-confronto" onclick="_wlmSwitchTab('confronto')">⚖ Confronto</button>
+        <button type="button" class="cdm-mtab cdm-mtab--active" id="wlm-mtab-panoramica" onclick="_wlmSwitchTab('panoramica')">${WL_ICO.chart} Panoramica</button>
+        <button type="button" class="cdm-mtab" id="wlm-mtab-th" onclick="_wlmSwitchTab('th')">${WL_ICO.eye} Anteprima</button>
+        <button type="button" class="cdm-mtab" id="wlm-mtab-confronto" onclick="_wlmSwitchTab('confronto')">${WL_ICO.balance} Confronto</button>
       </div>
 
       <div id="wlm-panel-panoramica">
@@ -7149,8 +7173,6 @@ async function openWarLiveModal() {
     modal.classList.add('cdm-overlay--visible');
     const cdEl = document.getElementById('wlm-countdown');
     if (cdEl) _wlModalCountdown(data, cdEl);
-    _wlLoadPlayerHeroes(data, 'us');
-    _wlLoadPlayerHeroes(data, 'them');
   });
 }
 
