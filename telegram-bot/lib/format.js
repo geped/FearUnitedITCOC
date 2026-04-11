@@ -1066,6 +1066,7 @@ function formatWarLivePlayers(data, side = 'us', page = 0) {
   const sideLabel = side === 'us' ? `🏠 ${escapeHtml(data.clan?.name || 'Nostro clan')}` : `⚔️ ${escapeHtml(data.opponent?.name || 'Avversario')}`;
   const members   = [...(sideObj?.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
   const atkPer    = data.attacksPerMember || 2;
+  const inWar     = data.state === 'inWar' || data.state === 'warEnded';
 
   if (!members.length) {
     return `${DIV}\n👥 <b>Giocatori — ${sideLabel}</b>\n${DIV}\n\n<i>Nessun dato giocatori.</i>`;
@@ -1076,6 +1077,14 @@ function formatWarLivePlayers(data, side = 'us', page = 0) {
   const p          = Math.min(Math.max(0, page), totalPages - 1);
   const slice      = members.slice(p * PAGE_SIZE, (p + 1) * PAGE_SIZE);
 
+  // Defender lookup (both sides) for attack target resolution
+  const defMap = {};
+  [...(data.clan?.members || []), ...(data.opponent?.members || [])].forEach(m => {
+    defMap[m.tag] = { name: m.name, pos: m.mapPosition, th: m.townhallLevel };
+  });
+
+  const starsStr = (n) => '★'.repeat(n) + '☆'.repeat(Math.max(0, 3 - n));
+
   const lines = [
     DIV,
     `👥 <b>Giocatori — ${sideLabel}</b>`,
@@ -1084,19 +1093,32 @@ function formatWarLivePlayers(data, side = 'us', page = 0) {
   ];
 
   for (const m of slice) {
-    const pos    = m.mapPosition ?? '?';
-    const th     = m.townhallLevel ?? '?';
-    const name   = escapeHtml(m.name || '—');
-    const bk     = heroLevelShort(m, 'Barbarian King');
-    const aq     = heroLevelShort(m, 'Archer Queen');
-    const gw     = heroLevelShort(m, 'Grand Warden');
-    const rc     = heroLevelShort(m, 'Royal Champion');
-    const atkDone = m.attacks?.length ?? 0;
-    const inWar   = data.state === 'inWar' || data.state === 'warEnded';
-    const atkStr  = inWar ? ` · ⚔️${atkDone}/${atkPer}` : '';
-    const warn    = (data.state === 'inWar' && atkDone < atkPer) ? ' ⚠️' : '';
-    lines.push(`<b>${pos}.</b> TH${th} <b>${name}</b>${atkStr}${warn}`);
-    lines.push(`   BK <b>${bk}</b> · AQ <b>${aq}</b> · GW <b>${gw}</b> · RC <b>${rc}</b>`);
+    const pos  = m.mapPosition ?? '?';
+    const th   = m.townhallLevel ?? '?';
+    const name = escapeHtml(m.name || '—');
+
+    if (!inWar) {
+      lines.push(`<b>${pos}.</b> TH${th} <b>${name}</b>`);
+      continue;
+    }
+
+    const attacks = [...(m.attacks || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const totalStars = attacks.reduce((s, a) => s + (a.stars ?? 0), 0);
+    const atkDone = attacks.length;
+    const warn = (data.state === 'inWar' && atkDone < atkPer) ? ' ⚠️' : '';
+
+    lines.push(`\n<b>${pos}.</b> TH${th} <b>${name}</b> — ${totalStars}★${warn}`);
+    for (let i = 0; i < atkPer; i++) {
+      const a = attacks[i];
+      if (!a) {
+        lines.push(`   ▸ Attacco ${i + 1}: <i>Non utilizzato</i>`);
+        continue;
+      }
+      const def = defMap[a.defenderTag];
+      const defLabel = def ? `#${def.pos} ${escapeHtml(def.name)} (TH${def.th})` : (a.defenderTag ?? '?');
+      const destr = (a.destructionPercentage ?? 0).toFixed(0);
+      lines.push(`   ▸ Attacco ${i + 1}: ${starsStr(a.stars ?? 0)} ${destr}% → ${defLabel}`);
+    }
   }
 
   return lines.join('\n');
@@ -1112,42 +1134,113 @@ function formatWarLivePreview(data) {
   const o = data.opponent || {};
   const cMembers = c.members || [];
   const oMembers = o.members || [];
+  const countdown = warLiveCountdown(data);
 
   const countTh = (arr) => {
     const map = {};
-    for (const m of arr) { const t = m.townhallLevel ?? 0; map[t] = (map[t] || 0) + 1; }
+    for (const m of arr) { const t = m.townhallLevel ?? 0; if (t) map[t] = (map[t] || 0) + 1; }
     return map;
   };
+  const thCompStr = (thMap) => {
+    const entries = Object.entries(thMap).sort((a, b) => +b[0] - +a[0]);
+    if (!entries.length) return '—';
+    return entries.map(([lv, n]) => `TH${lv}: <b>${n}</b>`).join(' · ');
+  };
+
   const cTh = countTh(cMembers);
   const oTh = countTh(oMembers);
-  const allThs = [...new Set([...Object.keys(cTh), ...Object.keys(oTh)].map(Number))].sort((a, b) => b - a);
 
-  const avgTh = (arr) => arr.length ? (arr.reduce((s, m) => s + (m.townhallLevel ?? 0), 0) / arr.length).toFixed(1) : '—';
-  const cAvg = avgTh(cMembers);
-  const oAvg = avgTh(oMembers);
+  const cName = escapeHtml(c.name || 'Noi');
+  const oName = escapeHtml(o.name || 'Avversario');
+  const teamSize = data.teamSize || '?';
+  const stateLabel = warLiveStateLabel(data.state);
 
-  const cName = escapeHtml((c.name || 'Noi').slice(0, 10));
-  const oName = escapeHtml((o.name || 'Avv').slice(0, 10));
+  const lines = [
+    DIV,
+    `👁 <b>Anteprima</b>`,
+    DIV,
+    `📌 ${stateLabel} — 👥 ${teamSize}v${teamSize}`,
+  ];
+  if (countdown) lines.push(countdown);
+  lines.push('');
 
-  const rows = [`TH  │ ${cName.padEnd(10)} │ ${oName}`];
-  rows.push(`────┼────────────┼────────────`);
-  for (const th of allThs) {
-    const cv = cTh[th] ?? 0;
-    const ov = oTh[th] ?? 0;
-    const diff = cv > ov ? ' ▲' : cv < ov ? ' ▼' : '';
-    rows.push(`TH${String(th).padEnd(2)} │ ${String(cv).padEnd(2)} ${'█'.repeat(Math.min(cv, 8)).padEnd(8)} │ ${String(ov).padEnd(2)} ${'█'.repeat(Math.min(ov, 8))}${diff}`);
+  lines.push(`🏠 <b>${cName}</b>`);
+  lines.push(`   ${thCompStr(cTh)}`);
+  lines.push(`   ⭐ ${c.stars ?? 0} — 💥 ${(c.destructionPercentage ?? 0).toFixed(1)}%`);
+  lines.push('');
+  lines.push(`⚔️ <b>${oName}</b>`);
+  lines.push(`   ${thCompStr(oTh)}`);
+  lines.push(`   ⭐ ${o.stars ?? 0} — 💥 ${(o.destructionPercentage ?? 0).toFixed(1)}%`);
+
+  return lines.join('\n');
+}
+
+const WAR_LIVE_CONFRONTO_PER_PAGE = 10;
+
+function formatWarLiveConfronto(data, page = 0) {
+  const c = data.clan || {};
+  const o = data.opponent || {};
+  const ourMembers  = [...(c.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const themMembers = [...(o.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const maxRows     = Math.max(ourMembers.length, themMembers.length);
+
+  if (!maxRows) {
+    return `${DIV}\n⚖ <b>Confronto</b>\n${DIV}\n\n<i>Nessun dato.</i>`;
   }
-  rows.push(`────┼────────────┼────────────`);
-  rows.push(`Avg │ TH ${String(cAvg).padEnd(7)} │ TH ${oAvg}`);
 
-  return `${DIV}\n🔭 <b>Anteprima TH</b>\n${DIV}\n\n<pre>${rows.join('\n')}</pre>`;
+  const heroSum = (m) => {
+    if (!m?.heroes) return '—';
+    const bk = m.heroes.find(h => h.name === 'Barbarian King')?.level ?? 0;
+    const aq = m.heroes.find(h => h.name === 'Archer Queen')?.level ?? 0;
+    const gw = m.heroes.find(h => h.name === 'Grand Warden')?.level ?? 0;
+    const rc = m.heroes.find(h => h.name === 'Royal Champion')?.level ?? 0;
+    const total = bk + aq + gw + rc;
+    return total > 0 ? String(total) : '—';
+  };
+
+  const totalPages = Math.max(1, Math.ceil(maxRows / WAR_LIVE_CONFRONTO_PER_PAGE));
+  const p = Math.min(Math.max(0, page), totalPages - 1);
+  const start = p * WAR_LIVE_CONFRONTO_PER_PAGE;
+  const end = Math.min(start + WAR_LIVE_CONFRONTO_PER_PAGE, maxRows);
+
+  const cName = escapeHtml((c.name || 'Noi').slice(0, 8));
+  const oName = escapeHtml((o.name || 'Avv').slice(0, 8));
+
+  const lines = [
+    DIV,
+    `⚖ <b>Confronto — Σ Eroi</b>`,
+    `<i>Pagina ${p + 1}/${totalPages}</i>`,
+    DIV,
+    '',
+  ];
+
+  const header = `#  │ TH │ Σ  │ ${cName.padEnd(8)} ║ ${oName.padEnd(8)} │ TH │ Σ`;
+  const sep    = `───┼────┼────┼──────────╬──────────┼────┼───`;
+
+  const rows = [header, sep];
+  for (let i = start; i < end; i++) {
+    const a = ourMembers[i];
+    const b = themMembers[i];
+    const pos = String(i + 1).padStart(2);
+    const aTh  = a ? `TH${String(a.townhallLevel ?? '?').padEnd(2)}` : '    ';
+    const aSum = a ? String(heroSum(a)).padStart(3) : '  —';
+    const aName = a ? escapeHtml((a.name || '—').slice(0, 8)).padEnd(8) : '        ';
+    const bTh  = b ? `TH${String(b.townhallLevel ?? '?').padEnd(2)}` : '    ';
+    const bSum = b ? String(heroSum(b)).padStart(3) : '  —';
+    const bName = b ? escapeHtml((b.name || '—').slice(0, 8)).padEnd(8) : '        ';
+    rows.push(`${pos} │ ${aTh}│${aSum} │ ${aName} ║ ${bName} │ ${bTh}│${bSum}`);
+  }
+
+  lines.push(`<pre>${rows.join('\n')}</pre>`);
+  return lines.join('\n');
+}
+
+function getWarLiveConfrontoPageCount(data) {
+  const maxRows = Math.max(data?.clan?.members?.length ?? 0, data?.opponent?.members?.length ?? 0);
+  return Math.max(1, Math.ceil(maxRows / WAR_LIVE_CONFRONTO_PER_PAGE));
 }
 
 function formatWarLivePlan(data, page = 0) {
-  if (data.state === 'preparation') {
-    return `${DIV}\n📋 <b>Planner attacchi</b>\n${DIV}\n\n<i>Disponibile durante il giorno di guerra.</i>`;
-  }
-
   const c      = data.clan || {};
   const o      = data.opponent || {};
   const atkPer = data.attacksPerMember || 2;
@@ -1224,6 +1317,7 @@ function formatWarLiveScreen(data, view = 'ov', pPage = 0, side = 'us') {
   switch (view) {
     case 'p':    text = formatWarLivePlayers(data, side, pPage); break;
     case 'prev': text = formatWarLivePreview(data); break;
+    case 'cf':   text = formatWarLiveConfronto(data, pPage); break;
     case 'plan': text = formatWarLivePlan(data, pPage); break;
     default:     text = formatWarLiveOverview(data); view = 'ov'; break;
   }
@@ -1283,9 +1377,12 @@ module.exports = {
   formatWarLiveOverview,
   formatWarLivePlayers,
   formatWarLivePreview,
+  formatWarLiveConfronto,
   formatWarLivePlan,
   getWarLivePlayersPageCount,
+  getWarLiveConfrontoPageCount,
   getWarLivePlanPageCount,
   WAR_LIVE_PLAYERS_PER_PAGE,
+  WAR_LIVE_CONFRONTO_PER_PAGE,
   WAR_LIVE_PLAN_PER_PAGE,
 };

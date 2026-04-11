@@ -1885,9 +1885,11 @@ function buildWarLiveNavKb(data, spec, webAppUrl) {
   const usPages   = noWar ? 1 : fmt.getWarLivePlayersPageCount(data, 'us');
   const themPages = noWar ? 1 : fmt.getWarLivePlayersPageCount(data, 'them');
   const planPages = noWar ? 1 : fmt.getWarLivePlanPageCount(data);
+  const cfPages   = noWar ? 1 : fmt.getWarLiveConfrontoPageCount(data);
   const usPg   = Math.min(Math.max(0, pPage), usPages - 1);
   const thPg   = Math.min(Math.max(0, pPage), themPages - 1);
   const planPg = Math.min(Math.max(0, pPage), planPages - 1);
+  const cfPg   = Math.min(Math.max(0, pPage), cfPages - 1);
 
   if (noWar) {
     return Markup.inlineKeyboard([
@@ -1897,15 +1899,11 @@ function buildWarLiveNavKb(data, spec, webAppUrl) {
 
   const rows = [
     [tab(view === 'ov', '📊 Panoramica', 'wl_v:ov'), tab(view === 'prev', '👁 Anteprima', 'wl_v:prev')],
+    [tab(view === 'cf', '⚖ Confronto', 'wl_v:cf:0'), tab(view === 'plan', '📋 Planner', `wl_v:plan:0`)],
     [tab(view === 'p' && side === 'us',   `👥 ${(data.clan?.name || 'Noi').slice(0,10)}`, `wl_v:p:us:0`)],
     [tab(view === 'p' && side === 'them', `⚔️ ${(data.opponent?.name || 'Avv').slice(0,10)}`, `wl_v:p:them:0`)],
   ];
 
-  if (data.state !== 'preparation') {
-    rows.push([tab(view === 'plan', '📋 Planner attacchi', `wl_v:plan:0`)]);
-  }
-
-  // Paginazione players
   if (view === 'p' && side === 'us' && usPages > 1) {
     rows.push([
       Markup.button.callback('◀', `wl_v:p:us:${Math.max(0, usPg - 1)}`),
@@ -1920,12 +1918,18 @@ function buildWarLiveNavKb(data, spec, webAppUrl) {
       Markup.button.callback('▶', `wl_v:p:them:${Math.min(themPages - 1, thPg + 1)}`),
     ]);
   }
-  // Paginazione planner
   if (view === 'plan' && planPages > 1) {
     rows.push([
       Markup.button.callback('◀', `wl_v:plan:${Math.max(0, planPg - 1)}`),
       Markup.button.callback(`· ${planPg + 1}/${planPages} ·`, 'noop'),
       Markup.button.callback('▶', `wl_v:plan:${Math.min(planPages - 1, planPg + 1)}`),
+    ]);
+  }
+  if (view === 'cf' && cfPages > 1) {
+    rows.push([
+      Markup.button.callback('◀', `wl_v:cf:${Math.max(0, cfPg - 1)}`),
+      Markup.button.callback(`· ${cfPg + 1}/${cfPages} ·`, 'noop'),
+      Markup.button.callback('▶', `wl_v:cf:${Math.min(cfPages - 1, cfPg + 1)}`),
     ]);
   }
 
@@ -4840,14 +4844,14 @@ function setupBot(bot) {
     const clanTag = await resolveEffectiveClanTag(ctx);
     if (!clanTag) { await ctx.answerCbQuery('Nessun clan collegato').catch(() => {}); return; }
     const parts = (ctx.match[1] || '').split(':');
-    // wl_v:ov | wl_v:prev | wl_v:p:us:N | wl_v:p:them:N | wl_v:plan:N
+    // wl_v:ov | wl_v:prev | wl_v:cf:N | wl_v:p:us:N | wl_v:p:them:N | wl_v:plan:N
     let view = parts[0] || 'ov';
     let side = 'us';
     let pPage = 0;
     if (view === 'p') {
       side  = parts[1] === 'them' ? 'them' : 'us';
       pPage = Math.max(0, parseInt(parts[2] ?? '0', 10) || 0);
-    } else if (view === 'plan') {
+    } else if (view === 'plan' || view === 'cf') {
       pPage = Math.max(0, parseInt(parts[1] ?? '0', 10) || 0);
     }
     const { text, kb } = await loadAndShowWarLive(ctx, clanTag, { view, pPage, side });
