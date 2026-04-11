@@ -25,7 +25,7 @@ function escapeHtml(s) {
  */
 function telegramHtmlPlainBlock(plain) {
   if (plain == null || plain === '') return '';
-  return escapeHtml(String(plain)).replace(/\n/g, '<br/>');
+  return escapeHtml(String(plain)).replace(/\n/g, '<br>');
 }
 
 function parseTagArg(text) {
@@ -878,7 +878,31 @@ function mergeCwlSeasonBrowseData(warLogApiData, dbSeasonsList) {
   return { seasonsSorted, summariesBySeason: summaries };
 }
 
-function formatWarLogCwlSeasonListPage(seasonsSorted, summariesBySeason, page) {
+const CWL_LOG_PLAYERS_PAGE_SIZE = 8;
+
+/** Normalizza tag clan per confronto (come sul sito). */
+function normClanTagFmt(tag) {
+  if (!tag) return '';
+  const t = String(tag).trim().toUpperCase();
+  return t.startsWith('#') ? t : `#${t}`;
+}
+
+function buildCwlSeasonListButtonLabel(season, metaRow, summary) {
+  const stars = metaRow?.stars != null ? metaRow.stars : summary?.stars ?? 0;
+  const posLabel =
+    metaRow?.position != null && metaRow.position !== ''
+      ? `${Number(metaRow.position)}°`
+      : '—';
+  const league = metaRow?.league ? String(metaRow.league).slice(0, 22) : '—';
+  let s = `📅 ${season} · ${posLabel} · ${league} · ⭐${stars}`;
+  if (s.length > 64) s = `${s.slice(0, 61)}…`;
+  return s;
+}
+
+/**
+ * @param {Record<string, object>} metaBySeason — da cwl_seasons (chiave YYYY-MM)
+ */
+function formatWarLogCwlSeasonListPage(seasonsSorted, summariesBySeason, page, metaBySeason) {
   const n = seasonsSorted.length;
   const totalPages = Math.max(1, Math.ceil(n / WAR_LOG_CWL_SEASON_PAGE_SIZE));
   const p = Math.min(Math.max(0, page), totalPages - 1);
@@ -887,7 +911,7 @@ function formatWarLogCwlSeasonListPage(seasonsSorted, summariesBySeason, page) {
 
   let body = `${DIV}\n🏆 <b>Cronologia leghe (CWL)</b>\n${DIV}\n\n`;
   body +=
-    '<i>Scegli una stagione per vedere tutti i turni e gli attacchi (come sul sito, dati salvati quando disponibili).</i>\n\n';
+    '<i>Scegli una stagione: Lega, Player e Turni (dati salvati su CoCBoard quando disponibili).</i>\n\n';
   if (!n) {
     body += '<i>Nessuna stagione CWL nel log API né in archivio salvato.</i>';
     return body;
@@ -896,12 +920,192 @@ function formatWarLogCwlSeasonListPage(seasonsSorted, summariesBySeason, page) {
   for (let i = 0; i < slice.length; i++) {
     const s = slice[i];
     const m = summariesBySeason[s] || { wins: 0, losses: 0, draws: 0, wars: 0, stars: 0 };
-    const wn = m.wars || 0;
-    body +=
-      `📅 <b>${escapeHtml(s)}</b> · ${wn} turn${wn === 1 ? 'o' : 'i'} · ` +
-      `✅${m.wins} ❌${m.losses} ⚖️${m.draws} · ⭐${m.stars}\n`;
+    const metaRow = metaBySeason?.[s] || null;
+    const stars = metaRow?.stars != null ? metaRow.stars : m.stars;
+    const posLabel =
+      metaRow?.position != null && metaRow.position !== ''
+        ? `${Number(metaRow.position)}°`
+        : '—';
+    const league = metaRow?.league ? escapeHtml(String(metaRow.league)) : '—';
+    body += `📅 <b>${escapeHtml(s)}</b> · ${posLabel} · ${league} · ⭐${stars}\n`;
   }
   return body;
+}
+
+/** Distruzione “totale” in stile CoCBoard (stesso criterio della salvataggio in cwl_seasons). */
+function cwlGroupStandingTotalDestruction(c) {
+  const td = Number(c.totalDestr) || 0;
+  const ts = Number(c.teamSize) || 15;
+  return Math.round(td * ts);
+}
+
+function parseGroupStandingsJson(metaRow) {
+  if (!metaRow) return null;
+  const raw = metaRow.group_standings ?? metaRow.groupStandings;
+  if (!raw) return null;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw);
+    } catch (_) {
+      return null;
+    }
+  }
+  return null;
+}
+
+function parseRosterJson(metaRow) {
+  if (!metaRow) return null;
+  const raw = metaRow.roster;
+  if (!raw) return null;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') {
+    try {
+      return JSON.parse(raw);
+    } catch (_) {
+      return null;
+    }
+  }
+  return null;
+}
+
+function formatCwlSeasonHubHtml(season, metaRow, summary) {
+  const stars = metaRow?.stars != null ? metaRow.stars : summary?.stars ?? 0;
+  const posLabel =
+    metaRow?.position != null && metaRow.position !== ''
+      ? `${Number(metaRow.position)}°`
+      : '—';
+  const league = metaRow?.league ? escapeHtml(String(metaRow.league)) : '—';
+  const parts = [
+    `${DIV}\n🏆 <b>CWL ${escapeHtml(season)}</b>\n${DIV}\n`,
+    `<b>${posLabel}</b> in classifica · <b>${league}</b> · ⭐<b>${stars}</b>\n\n`,
+    '<i>Scegli cosa visualizzare:</i>',
+  ];
+  return parts.join('');
+}
+
+function formatCwlLeagueStandingsHtml(groupStandings, ourClanTag) {
+  const us = normClanTagFmt(ourClanTag);
+  if (!groupStandings?.length) {
+    return '<i>Classifica di gruppo non disponibile per questa stagione (salvataggio incompleto).</i>';
+  }
+  const sorted = [...groupStandings].sort((a, b) => {
+    if ((b.stars ?? 0) !== (a.stars ?? 0)) return (b.stars ?? 0) - (a.stars ?? 0);
+    const bd = cwlGroupStandingTotalDestruction(b);
+    const ad = cwlGroupStandingTotalDestruction(a);
+    return bd - ad;
+  });
+  const lines = [];
+  lines.push('<b>Classifica gruppo</b>\n');
+  for (let i = 0; i < sorted.length; i++) {
+    const c = sorted[i];
+    const medal = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`;
+    const mark = normClanTagFmt(c.tag) === us ? '➤ ' : '';
+    const name = escapeHtml(String(c.name || '—').slice(0, 28));
+    const dest = cwlGroupStandingTotalDestruction(c);
+    lines.push(`${medal} ${mark}<b>${name}</b>`);
+    lines.push(`   ⭐ ${c.stars ?? 0} · 💥 ${dest} <i>(tot.)</i>`);
+  }
+  return lines.join('\n');
+}
+
+function formatCwlPlayersLogHtml(players, page) {
+  if (!players?.length) {
+    return '<i>Elenco giocatori non disponibile per questa stagione (salvataggio roster sul sito).</i>';
+  }
+  const sorted = [...players].sort((a, b) => (b.stars ?? 0) - (a.stars ?? 0));
+  const totalPages = Math.max(1, Math.ceil(sorted.length / CWL_LOG_PLAYERS_PAGE_SIZE));
+  const p = Math.min(Math.max(0, page), totalPages - 1);
+  const start = p * CWL_LOG_PLAYERS_PAGE_SIZE;
+  const slice = sorted.slice(start, start + CWL_LOG_PLAYERS_PAGE_SIZE);
+
+  let body = `<b>Giocatori</b> <i>(${sorted.length} · pag. ${p + 1}/${totalPages})</i>\n\n`;
+  for (let i = 0; i < slice.length; i++) {
+    const pl = slice[i];
+    const idx = start + i + 1;
+    const th = pl.th_level ?? pl.thLevel ?? '?';
+    const avg =
+      pl.attacks_made > 0
+        ? `${(Number(pl.destruction) / pl.attacks_made).toFixed(1)}%`
+        : '—';
+    const nm = escapeHtml(String(pl.name || '—').slice(0, 22));
+    body += `${idx}. TH${th} <b>${nm}</b>\n`;
+    body += `   ⭐ ${pl.stars ?? 0} · 💥 ${avg} · ⚔ ${pl.attacks_made ?? 0}/${pl.attacks_required ?? 1}\n`;
+  }
+  return body;
+}
+
+function formatCwlTurnsOverviewHtml(dbWarsRows) {
+  const rows = [...(dbWarsRows || [])].sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
+  if (!rows.length) {
+    return '<i>Nessun turno salvato.</i>';
+  }
+  let body = '<b>Turni</b> — scegli un turno per i dettagli attacchi.\n\n';
+  for (const row of rows) {
+    const rn = row.round ?? '?';
+    const opp = escapeHtml(String(row.opp_name || '—').slice(0, 26));
+    body += `⚔ <b>T${rn}</b> vs ${opp}\n`;
+    body += `   ⭐ ${row.our_stars ?? 0}–${row.opp_stars ?? 0} · 💥 ${Number(row.our_destr ?? 0).toFixed(1)}% — ${Number(row.opp_destr ?? 0).toFixed(1)}%\n\n`;
+  }
+  return body;
+}
+
+function formatCwlAttackLinesForMember(m, defMap, atkPer) {
+  const attacks = [...(m.attacks || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const lines = [];
+  const th = normMemberTh(m);
+  lines.push(`#${String(m.mapPosition ?? '?').padStart(2, ' ')} ${String(m.name || '—').slice(0, 18)}  TH${th}`);
+  for (let i = 0; i < atkPer; i++) {
+    const a = attacks[i];
+    if (!a) {
+      lines.push(`  Att${i + 1}: non usato`);
+      continue;
+    }
+    const def = defMap[a.defenderTag];
+    const defL = def ? `#${def.pos} ${def.name}` : String(a.defenderTag || '?');
+    const dp = Number(a.destructionPercentage ?? a.destruction ?? 0);
+    lines.push(`  Att${i + 1} → ${defL}: ${a.stars ?? 0}★ ${dp.toFixed(0)}%`);
+  }
+  return lines.join('\n');
+}
+
+function formatCwlRoundSideAttacksHtml(sideMembers, defMap, atkPer, title) {
+  const sortM = (arr) => [...(arr || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const arr = sortM(sideMembers);
+  if (!arr.length) {
+    return `<i>${escapeHtml(title)}: nessun dato.</i>`;
+  }
+  const block = arr.map((m) => formatCwlAttackLinesForMember(m, defMap, atkPer)).join('\n\n');
+  return `<b>${escapeHtml(title)}</b>\n\n${telegramHtmlPlainBlock(block)}`;
+}
+
+/** Header compatto per scelta lato (turno salvato in cwl_wars). */
+function formatCwlSavedRoundBridgeHtml(row) {
+  if (!row) return '<i>Turno non trovato.</i>';
+  const opp = escapeHtml(String(row.opp_name || '—').slice(0, 28));
+  return (
+    `⚔️ <b>Turno ${row.round ?? '?'}</b> vs <b>${opp}</b>\n` +
+    `⭐ ${row.our_stars ?? 0}–${row.opp_stars ?? 0} · 💥 ${Number(row.our_destr ?? 0).toFixed(1)}% — ${Number(row.opp_destr ?? 0).toFixed(1)}%\n\n` +
+    `<i>Scegli il lato:</i>`
+  );
+}
+
+/** Dettaglio attacchi un lato per riga cwl_wars (usa stesso defMap del sito). */
+function formatCwlSavedRoundSideHtml(row, side /* 'us' | 'op' */) {
+  if (!row) return '<i>Turno non trovato.</i>';
+  const atkPer = 1;
+  const defMap = buildDefMapFromCwlRoundRow(row);
+  const clanM = parseMembersJson(row.our_members);
+  const oppM = parseMembersJson(row.opp_members);
+  if (side === 'us') {
+    return formatCwlRoundSideAttacksHtml(clanM, defMap, atkPer, 'Il mio clan');
+  }
+  return formatCwlRoundSideAttacksHtml(oppM, defMap, atkPer, 'Clan avversario');
+}
+
+function getCwlPlayersLogPageCount(players) {
+  const n = (players || []).length;
+  return Math.max(1, Math.ceil(n / CWL_LOG_PLAYERS_PAGE_SIZE));
 }
 
 function cwlResultLabelIt(r) {
@@ -1258,8 +1462,8 @@ function chunkForTelegram(html) {
     const preEnd = win.lastIndexOf('</pre>');
     if (preEnd !== -1) cut = preEnd + 6;
     if (cut <= 0) {
-      const brEnd = win.lastIndexOf('<br/>');
-      if (brEnd > MAX_MESSAGE * 0.4) cut = brEnd + 5;
+      const brEnd = win.lastIndexOf('<br>');
+      if (brEnd > MAX_MESSAGE * 0.4) cut = brEnd + 4;
     }
     if (cut <= 0) {
       cut = rest.lastIndexOf('\n', MAX_MESSAGE);
@@ -1867,6 +2071,19 @@ module.exports = {
   formatClassicWarDetailHtml,
   mergeCwlSeasonBrowseData,
   formatWarLogCwlSeasonListPage,
+  CWL_LOG_PLAYERS_PAGE_SIZE,
+  normClanTagFmt,
+  buildCwlSeasonListButtonLabel,
+  parseGroupStandingsJson,
+  parseRosterJson,
+  formatCwlSeasonHubHtml,
+  formatCwlLeagueStandingsHtml,
+  formatCwlPlayersLogHtml,
+  getCwlPlayersLogPageCount,
+  formatCwlTurnsOverviewHtml,
+  formatCwlRoundSideAttacksHtml,
+  formatCwlSavedRoundBridgeHtml,
+  formatCwlSavedRoundSideHtml,
   formatCwlSeasonDetailHtml,
   formatWarLogDateShort,
   formatAddBotToGroupHelp,

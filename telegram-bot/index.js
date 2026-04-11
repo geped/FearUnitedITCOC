@@ -345,6 +345,7 @@ function isGroupClanReadCallback(d) {
   if (/^mb\d+$/.test(d)) return true;
   if (d.startsWith('cwl_v:')) return true;
   if (d.startsWith('war:')) return true;
+  if (d.startsWith('cw:')) return true;
   if (d === 'war_live') return true;
   if (d.startsWith('wl_v:')) return true;
   return false;
@@ -4888,7 +4889,123 @@ function setupBot(bot) {
     return Markup.inlineKeyboard(rows);
   }
 
-  function buildCwlSeasonListKb(seasonsSorted, page) {
+  async function loadCwlSeasonBundle(clanTag, season) {
+    let data = {};
+    try {
+      data = await api.warLog(clanTag);
+    } catch (_) {
+      data = {};
+    }
+    let dbWars = [];
+    let meta = null;
+    try {
+      [dbWars, meta] = await Promise.all([
+        sb.getCwlWarsForSeason(clanTag, season),
+        sb.getCwlSeasonSavedMeta(clanTag, season),
+      ]);
+    } catch (_) {
+      dbWars = [];
+    }
+    let live = null;
+    try {
+      const cs = await api.cwlStats(clanTag);
+      if (cs && cs.season === season && cs.state !== 'notInWar') live = cs;
+    } catch (_) {}
+    return { data, dbWars, meta, live };
+  }
+
+  function enrichCwlMetaWithLive(meta, live, clanTag) {
+    const base = meta && typeof meta === 'object' ? { ...meta } : {};
+    if (!live || live.state === 'notInWar' || !live.season) return base;
+    const us = fmt.normClanTagFmt(clanTag);
+    const ourRow = (live.groupStandings || []).find((c) => fmt.normClanTagFmt(c.tag) === us);
+    return {
+      ...base,
+      league: live.leagueNameIt || live.leagueNameEn || base.league,
+      position: live.ourPosition ?? base.position,
+      stars: ourRow?.stars ?? base.stars,
+    };
+  }
+
+  function resolveCwlGroupStandings(meta, live) {
+    if (live?.groupStandings?.length) return live.groupStandings;
+    return fmt.parseGroupStandingsJson(meta) || [];
+  }
+
+  function resolveCwlPlayers(meta, live) {
+    if (live?.players?.length) return live.players;
+    return fmt.parseRosterJson(meta) || [];
+  }
+
+  function buildCwlHubKb(season) {
+    return Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🏅 Lega', `cw:lg:${season}`),
+        Markup.button.callback('👥 Player', `cw:pl:${season}:0`),
+        Markup.button.callback('⚔ Turni', `cw:tr:${season}`),
+      ],
+      [Markup.button.callback('« Elenco stagioni CWL', 'war:cwl')],
+      [
+        Markup.button.callback('« Registro guerre', 'war_menu'),
+        Markup.button.callback('« Menù', 'menu'),
+      ],
+    ]);
+  }
+
+  function buildCwlBackToHubKb(season) {
+    return Markup.inlineKeyboard([
+      [Markup.button.callback('« Stagione CWL', `war:cws:${season}`)],
+      [Markup.button.callback('« Elenco stagioni CWL', 'war:cwl')],
+      [Markup.button.callback('« Menù', 'menu')],
+    ]);
+  }
+
+  function buildCwlPlayersNavKb(season, page, totalPages) {
+    const p = Math.min(Math.max(0, page), Math.max(0, totalPages - 1));
+    const nav = [];
+    if (p > 0) nav.push(Markup.button.callback('◀', `cw:pl:${season}:${p - 1}`));
+    if (totalPages > 1) nav.push(Markup.button.callback(`· ${p + 1}/${totalPages} ·`, 'noop'));
+    if (p < totalPages - 1) nav.push(Markup.button.callback('▶', `cw:pl:${season}:${p + 1}`));
+    const rows = [];
+    if (nav.length) rows.push(nav);
+    rows.push([Markup.button.callback('« Stagione CWL', `war:cws:${season}`)]);
+    rows.push([
+      Markup.button.callback('« Elenco stagioni CWL', 'war:cwl'),
+      Markup.button.callback('« Menù', 'menu'),
+    ]);
+    return Markup.inlineKeyboard(rows);
+  }
+
+  function buildCwlTurnsRoundKb(season, dbWars) {
+    const sorted = [...(dbWars || [])].sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
+    const out = [];
+    const nav = [];
+    for (const r of sorted) {
+      const rn = Number(r.round);
+      if (!Number.isFinite(rn)) continue;
+      nav.push(Markup.button.callback(`T${rn}`, `cw:rd:${season}:${rn}`));
+    }
+    for (let i = 0; i < nav.length; i += 4) out.push(nav.slice(i, i + 4));
+    out.push([Markup.button.callback('« Stagione CWL', `war:cws:${season}`)]);
+    out.push([
+      Markup.button.callback('« Elenco stagioni CWL', 'war:cwl'),
+      Markup.button.callback('« Menù', 'menu'),
+    ]);
+    return Markup.inlineKeyboard(out);
+  }
+
+  function buildCwlRoundBridgeKb(season, round) {
+    return Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🏠 Il mio clan', `cw:us:${season}:${round}`),
+        Markup.button.callback('⚔ Avversario', `cw:op:${season}:${round}`),
+      ],
+      [Markup.button.callback('« Turni', `cw:tr:${season}`)],
+      [Markup.button.callback('« Stagione CWL', `war:cws:${season}`)],
+    ]);
+  }
+
+  function buildCwlSeasonListKb(seasonsSorted, page, summariesBySeason, metaBySeason) {
     const per = fmt.WAR_LOG_CWL_SEASON_PAGE_SIZE;
     const n = seasonsSorted.length;
     const totalPages = Math.max(1, Math.ceil(n / per));
@@ -4897,7 +5014,10 @@ function setupBot(bot) {
     const slice = seasonsSorted.slice(start, start + per);
     const rows = [];
     for (const season of slice) {
-      const label = `📅 ${season}`.slice(0, 64);
+      const summary =
+        summariesBySeason?.[season] || { wins: 0, losses: 0, draws: 0, wars: 0, stars: 0 };
+      const metaRow = metaBySeason?.[season] || null;
+      const label = fmt.buildCwlSeasonListButtonLabel(season, metaRow, summary);
       rows.push([Markup.button.callback(label, `war:cws:${season}`)]);
     }
     const nav = [];
@@ -4986,8 +5106,28 @@ function setupBot(bot) {
       dbSeasons = [];
     }
     const merged = fmt.mergeCwlSeasonBrowseData(data, dbSeasons);
-    const text = fmt.formatWarLogCwlSeasonListPage(merged.seasonsSorted, merged.summariesBySeason, page);
-    const kb = buildCwlSeasonListKb(merged.seasonsSorted, page);
+    let metaBySeason = {};
+    try {
+      const metaRows = await sb.listCwlSeasonsRows(clanTag);
+      for (const r of metaRows) {
+        if (!r?.season) continue;
+        metaBySeason[r.season] = r;
+        if (!merged.summariesBySeason[r.season]) {
+          merged.summariesBySeason[r.season] = { wins: 0, losses: 0, draws: 0, wars: 0, stars: 0 };
+        }
+      }
+      const seasonSet = new Set([...merged.seasonsSorted, ...Object.keys(metaBySeason)]);
+      merged.seasonsSorted = [...seasonSet].sort((a, b) => b.localeCompare(a));
+    } catch (_) {
+      metaBySeason = {};
+    }
+    const text = fmt.formatWarLogCwlSeasonListPage(
+      merged.seasonsSorted,
+      merged.summariesBySeason,
+      page,
+      metaBySeason
+    );
+    const kb = buildCwlSeasonListKb(merged.seasonsSorted, page, merged.summariesBySeason, metaBySeason);
     try {
       await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
     } catch (_) {
@@ -5064,27 +5204,22 @@ function setupBot(bot) {
       await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
       return;
     }
-    let data;
+    const { data, dbWars, meta, live } = await loadCwlSeasonBundle(clanTag, season);
+    let mergedSummary = { wins: 0, losses: 0, draws: 0, wars: 0, stars: 0 };
     try {
-      data = await api.warLog(clanTag);
-    } catch (e) {
-      await ctx.answerCbQuery(String(e.message || 'Errore').slice(0, 180)).catch(() => {});
-      return;
-    }
-    let dbWars = [];
-    let meta = null;
-    try {
-      [dbWars, meta] = await Promise.all([
-        sb.getCwlWarsForSeason(clanTag, season),
-        sb.getCwlSeasonSavedMeta(clanTag, season),
-      ]);
-    } catch (_) {
-      dbWars = [];
-    }
-    if (data?.reason === 'accessDenied' && (!dbWars || !dbWars.length)) {
+      const m = fmt.mergeCwlSeasonBrowseData(data?.reason === 'accessDenied' ? { items: [] } : data, []);
+      mergedSummary = m.summariesBySeason[season] || mergedSummary;
+    } catch (_) {}
+    const enrichedMeta = enrichCwlMetaWithLive(meta, live, clanTag);
+    if (
+      data?.reason === 'accessDenied' &&
+      (!dbWars || !dbWars.length) &&
+      !meta &&
+      !live
+    ) {
       const text =
         `${fmt.DIV}\n🏆 <b>CWL ${fmt.escapeHtml(season)}</b>\n${fmt.DIV}\n\n` +
-        `<i>⚠️ Registro di guerra privato in CoC e nessun turno salvato su CoCBoard per questa stagione.</i>`;
+        `<i>⚠️ Registro di guerra privato in CoC e nessun dato salvato su CoCBoard per questa stagione.</i>`;
       const kb = Markup.inlineKeyboard([
         [Markup.button.callback('« Elenco stagioni CWL', 'war:cwl')],
         [Markup.button.callback('« Menù', 'menu')],
@@ -5096,14 +5231,93 @@ function setupBot(bot) {
       }
       return;
     }
-    if (data?.reason === 'accessDenied') data = { items: [] };
+    const hubText = fmt.formatCwlSeasonHubHtml(season, enrichedMeta || meta, mergedSummary);
+    await editOrReplyChunkedHtml(ctx, hubText, buildCwlHubKb(season));
+  });
 
-    const text = fmt.formatCwlSeasonDetailHtml(season, data, dbWars, meta);
+  bot.action(/^cw:lg:(\d{4}-\d{2})$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    const season = ctx.match[1];
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) {
+      await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
+      return;
+    }
+    const { meta, live } = await loadCwlSeasonBundle(clanTag, season);
+    const gs = resolveCwlGroupStandings(meta, live);
+    const head = `${fmt.DIV}\n🏅 <b>Lega — CWL ${fmt.escapeHtml(season)}</b>\n${fmt.DIV}\n\n`;
+    const body = fmt.formatCwlLeagueStandingsHtml(gs, clanTag);
+    await editOrReplyChunkedHtml(ctx, head + body, buildCwlBackToHubKb(season));
+  });
+
+  bot.action(/^cw:pl:(\d{4}-\d{2}):(\d+)$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    const season = ctx.match[1];
+    const page = Math.max(0, parseInt(ctx.match[2], 10) || 0);
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) {
+      await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
+      return;
+    }
+    const { meta, live } = await loadCwlSeasonBundle(clanTag, season);
+    const players = resolveCwlPlayers(meta, live);
+    const totalPages = fmt.getCwlPlayersLogPageCount(players);
+    const p = Math.min(page, totalPages - 1);
+    const head = `${fmt.DIV}\n👥 <b>Player — CWL ${fmt.escapeHtml(season)}</b>\n${fmt.DIV}\n\n`;
+    const body = fmt.formatCwlPlayersLogHtml(players, p);
+    await editOrReplyChunkedHtml(ctx, head + body, buildCwlPlayersNavKb(season, p, totalPages));
+  });
+
+  bot.action(/^cw:tr:(\d{4}-\d{2})$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    const season = ctx.match[1];
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) {
+      await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
+      return;
+    }
+    const { dbWars } = await loadCwlSeasonBundle(clanTag, season);
+    const head = `${fmt.DIV}\n⚔️ <b>Turni — CWL ${fmt.escapeHtml(season)}</b>\n${fmt.DIV}\n\n`;
+    const body = fmt.formatCwlTurnsOverviewHtml(dbWars);
+    await editOrReplyChunkedHtml(ctx, head + body, buildCwlTurnsRoundKb(season, dbWars));
+  });
+
+  bot.action(/^cw:rd:(\d{4}-\d{2}):(\d+)$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    const season = ctx.match[1];
+    const round = parseInt(ctx.match[2], 10) || 0;
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) {
+      await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
+      return;
+    }
+    const { dbWars } = await loadCwlSeasonBundle(clanTag, season);
+    const row = dbWars.find((r) => Number(r.round) === round);
+    const text = `${fmt.DIV}\n${fmt.formatCwlSavedRoundBridgeHtml(row)}\n${fmt.DIV}`;
+    await editOrReplyChunkedHtml(ctx, text, buildCwlRoundBridgeKb(season, round));
+  });
+
+  bot.action(/^cw:(us|op):(\d{4}-\d{2}):(\d+)$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    const side = ctx.match[1] === 'us' ? 'us' : 'op';
+    const season = ctx.match[2];
+    const round = parseInt(ctx.match[3], 10) || 0;
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) {
+      await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
+      return;
+    }
+    const { dbWars } = await loadCwlSeasonBundle(clanTag, season);
+    const row = dbWars.find((r) => Number(r.round) === round);
+    const body = fmt.formatCwlSavedRoundSideHtml(row, side);
+    const head =
+      `${fmt.DIV}\n⚔️ <b>CWL ${fmt.escapeHtml(season)}</b> · turno <b>${round}</b>\n${fmt.DIV}\n\n`;
     const kb = Markup.inlineKeyboard([
-      [Markup.button.callback('« Elenco stagioni CWL', 'war:cwl')],
-      [Markup.button.callback('« Registro guerre', 'war_menu'), Markup.button.callback('« Menù', 'menu')],
+      [Markup.button.callback('« Scelta lato', `cw:rd:${season}:${round}`)],
+      [Markup.button.callback('« Turni', `cw:tr:${season}`)],
+      [Markup.button.callback('« Stagione CWL', `war:cws:${season}`)],
     ]);
-    await editOrReplyChunkedHtml(ctx, text, kb);
+    await editOrReplyChunkedHtml(ctx, head + body, kb);
   });
 
   // ─── GUERRA CLASSICA LIVE ────────────────────────────────────────────────

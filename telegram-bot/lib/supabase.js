@@ -1048,6 +1048,20 @@ async function getCwlSeasonSavedMeta(clanTagRaw, season) {
   return data || null;
 }
 
+/** Tutte le righe cwl_seasons per il clan (lega, posizione, roster, classifica gruppo). */
+async function listCwlSeasonsRows(clanTagRaw) {
+  const client = sb();
+  if (!client) return [];
+  const tag = normClanTagSql(clanTagRaw);
+  const { data, error } = await client
+    .from('cwl_seasons')
+    .select('*')
+    .eq('clan_tag', tag)
+    .order('season', { ascending: false });
+  if (error) return [];
+  return data || [];
+}
+
 /** Stagioni distinte presenti in cwl_wars (salvate automaticamente). */
 async function listCwlWarSeasonsFromDb(clanTagRaw) {
   const client = sb();
@@ -1101,6 +1115,7 @@ module.exports = {
   getCwlWarsForSeason,
   getCwlSeasonSavedMeta,
   listCwlWarSeasonsFromDb,
+  listCwlSeasonsRows,
   getChatNotificationSettings,
   upsertChatNotificationSettings,
   insertUsageEvent,
