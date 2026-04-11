@@ -4930,6 +4930,12 @@ function setupBot(bot) {
     } else if (view === 'plan' || view === 'cf') {
       pPage = Math.max(0, parseInt(parts[1] ?? '0', 10) || 0);
     }
+    // Confronto richiede fetch eroi (lento): mostra barra di caricamento prima
+    if (view === 'cf') {
+      try {
+        await ctx.editMessageText('⏳ <b>Confronto eroi</b>\n\n<i>Caricamento dati eroi in corso…</i>', { parse_mode: 'HTML' });
+      } catch (_) {}
+    }
     const { text, kb } = await loadAndShowWarLive(ctx, clanTag, { view, pPage, side });
     try { await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb }); }
     catch (_) { await ctx.reply(text, { parse_mode: 'HTML', ...kb }); }

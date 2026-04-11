@@ -1310,23 +1310,33 @@ function formatWarLivePlan(data, page = 0) {
 
   const pad = (s, len) => String(s ?? '').slice(0, len).padEnd(len);
 
+  // Assegnazione esclusiva: ogni avversario viene assegnato a un solo attaccante.
+  // Calcolo per tutti i needAtk upfront così la paginazione è coerente.
+  const assignedOpps = new Set();
+  const playerAssignments = new Map(); // tag → [{s, opp}]
+  for (const m of needAtk) {
+    const attackerTh = m.townhallLevel ?? 0;
+    const available  = openBases.filter(opp => !assignedOpps.has(opp.tag));
+    const scored = available.map(opp => {
+      const s = defStatus[opp.tag];
+      const thDiff    = Math.abs(attackerTh - (s.th ?? 0));
+      const penalties = s.times * 3 + s.bestStars * 5;
+      return { s, opp, score: thDiff * 2 + penalties };
+    }).sort((a, b) => a.score - b.score);
+    const targets = scored.slice(0, atkPer); // 1 target per 15v15 (atkPer=1), 2 per 30v30
+    for (const { opp } of targets) assignedOpps.add(opp.tag);
+    playerAssignments.set(m.tag, targets);
+  }
+
   const rows = [];
   for (const m of slice) {
     const atkLeft    = atkPer - (m.attacks?.length ?? 0);
     const attackerTh = m.townhallLevel ?? 0;
     rows.push(`#${String(m.mapPosition ?? '?').padStart(2)} ${pad(m.name || '—', 11)} TH${attackerTh} — ${atkLeft} atk`);
 
-    // Suggerimenti personalizzati: score per questo attaccante
-    const scored = openBases.map(opp => {
-      const s = defStatus[opp.tag];
-      const thDiff     = Math.abs(attackerTh - (s.th ?? 0));
-      const penalties  = s.times * 3 + s.bestStars * 5; // preferisce basi intatte con pochi TH
-      return { s, score: thDiff * 2 + penalties };
-    }).sort((a, b) => a.score - b.score);
-
-    const suggestions = scored.slice(0, 2); // max 2 target per giocatore
-    if (suggestions.length) {
-      for (const { s } of suggestions) {
+    const targets = playerAssignments.get(m.tag) || [];
+    if (targets.length) {
+      for (const { s } of targets) {
         const status = s.bestStars === 0 ? '[intatta]' : `[${s.bestStars}★ ${Number(s.bestDest).toFixed(0)}%]`;
         rows.push(`  → #${String(s.pos).padStart(2)} ${pad(s.name, 10)} TH${s.th} ${status}`);
       }

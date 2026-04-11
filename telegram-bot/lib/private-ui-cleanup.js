@@ -73,6 +73,8 @@ function callbackSkipsUiWipe(data) {
   ) {
     return true;
   }
+  // Navigazione interna war/cwl live (stessa bolla: edit testo)
+  if (d.startsWith('wl_v:') || d.startsWith('cwl_v:')) return true;
   // Assegnazione bonus (stessa bolla: edit testo + tastiera)
   if (
     d === 'bonus:as' ||
