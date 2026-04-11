@@ -4858,44 +4858,252 @@ function setupBot(bot) {
     }
   });
 
+  function buildClassicWarListKb(itemsSorted, page) {
+    const per = fmt.WAR_LOG_CLASSIC_PAGE_SIZE;
+    const n = itemsSorted.length;
+    const totalPages = Math.max(1, Math.ceil(n / per));
+    const p = Math.min(Math.max(0, page), totalPages - 1);
+    const start = p * per;
+    const slice = itemsSorted.slice(start, start + per);
+    const rows = [];
+    for (let i = 0; i < slice.length; i++) {
+      const globalIdx = start + i;
+      const w = slice[i];
+      const icon = w.result === 'win' ? '✅' : w.result === 'lose' ? '❌' : '⚖️';
+      const ds = fmt.formatWarLogDateShort(w.endTime);
+      const opp = String(w.opponent?.name || '?').slice(0, 18);
+      const label = `${icon} ${ds} ${opp}`.slice(0, 64);
+      rows.push([Markup.button.callback(label, `war:cd:${globalIdx}`)]);
+    }
+    const nav = [];
+    if (p > 0) nav.push(Markup.button.callback('◀', `war:cl:${p - 1}`));
+    if (totalPages > 1) nav.push(Markup.button.callback(`· ${p + 1}/${totalPages} ·`, 'noop'));
+    if (p < totalPages - 1) nav.push(Markup.button.callback('▶', `war:cl:${p + 1}`));
+    if (nav.length) rows.push(nav);
+    rows.push([Markup.button.callback('« Registro guerre', 'war_menu')]);
+    rows.push([
+      Markup.button.callback('« Indietro', 'clan_home'),
+      Markup.button.callback('« Menù', 'menu'),
+    ]);
+    return Markup.inlineKeyboard(rows);
+  }
+
+  function buildCwlSeasonListKb(seasonsSorted, page) {
+    const per = fmt.WAR_LOG_CWL_SEASON_PAGE_SIZE;
+    const n = seasonsSorted.length;
+    const totalPages = Math.max(1, Math.ceil(n / per));
+    const p = Math.min(Math.max(0, page), totalPages - 1);
+    const start = p * per;
+    const slice = seasonsSorted.slice(start, start + per);
+    const rows = [];
+    for (const season of slice) {
+      const label = `📅 ${season}`.slice(0, 64);
+      rows.push([Markup.button.callback(label, `war:cws:${season}`)]);
+    }
+    const nav = [];
+    if (p > 0) nav.push(Markup.button.callback('◀', `war:cwl:l:${p - 1}`));
+    if (totalPages > 1) nav.push(Markup.button.callback(`· ${p + 1}/${totalPages} ·`, 'noop'));
+    if (p < totalPages - 1) nav.push(Markup.button.callback('▶', `war:cwl:l:${p + 1}`));
+    if (nav.length) rows.push(nav);
+    rows.push([Markup.button.callback('« Registro guerre', 'war_menu')]);
+    rows.push([
+      Markup.button.callback('« Indietro', 'clan_home'),
+      Markup.button.callback('« Menù', 'menu'),
+    ]);
+    return Markup.inlineKeyboard(rows);
+  }
+
+  async function renderWarLogClassicList(ctx, page) {
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) {
+      await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
+      return;
+    }
+    let data;
+    try {
+      data = await api.warLog(clanTag);
+    } catch (e) {
+      await ctx.answerCbQuery(String(e.message || 'Errore').slice(0, 180)).catch(() => {});
+      return;
+    }
+    if (data?.reason === 'accessDenied') {
+      const text =
+        `${fmt.DIV}\n🏹 <b>War classiche</b>\n${fmt.DIV}\n\n` +
+        `<i>⚠️ Registro di guerra privato in CoC. Imposta «Pubblico» nelle impostazioni clan.</i>`;
+      const kb = Markup.inlineKeyboard([
+        [Markup.button.callback('« Registro guerre', 'war_menu')],
+        [Markup.button.callback('« Menù', 'menu')],
+      ]);
+      try {
+        await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
+      } catch (_) {
+        await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+      }
+      return;
+    }
+    const itemsSorted = fmt.getSortedClassicWars(data);
+    const text = fmt.formatWarLogClassicListPage(itemsSorted, page);
+    const kb = buildClassicWarListKb(itemsSorted, page);
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
+    } catch (_) {
+      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+    }
+  }
+
+  async function renderWarLogCwlList(ctx, page) {
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) {
+      await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
+      return;
+    }
+    let data;
+    try {
+      data = await api.warLog(clanTag);
+    } catch (e) {
+      await ctx.answerCbQuery(String(e.message || 'Errore').slice(0, 180)).catch(() => {});
+      return;
+    }
+    if (data?.reason === 'accessDenied') {
+      const text =
+        `${fmt.DIV}\n🏆 <b>Cronologia CWL</b>\n${fmt.DIV}\n\n` +
+        `<i>⚠️ Registro di guerra privato in CoC.</i>`;
+      const kb = Markup.inlineKeyboard([
+        [Markup.button.callback('« Registro guerre', 'war_menu')],
+        [Markup.button.callback('« Menù', 'menu')],
+      ]);
+      try {
+        await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
+      } catch (_) {
+        await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+      }
+      return;
+    }
+    let dbSeasons = [];
+    try {
+      dbSeasons = await sb.listCwlWarSeasonsFromDb(clanTag);
+    } catch (_) {
+      dbSeasons = [];
+    }
+    const merged = fmt.mergeCwlSeasonBrowseData(data, dbSeasons);
+    const text = fmt.formatWarLogCwlSeasonListPage(merged.seasonsSorted, merged.summariesBySeason, page);
+    const kb = buildCwlSeasonListKb(merged.seasonsSorted, page);
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
+    } catch (_) {
+      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+    }
+  }
+
   bot.action('war:classic', async (ctx) => {
+    await answerCbLoading(ctx);
+    await renderWarLogClassicList(ctx, 0);
+  });
+
+  bot.action(/^war:cl:(\d+)$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    const page = Math.max(0, parseInt(ctx.match[1], 10) || 0);
+    await renderWarLogClassicList(ctx, page);
+  });
+
+  bot.action(/^war:cd:(\d+)$/, async (ctx) => {
     await answerCbLoading(ctx);
     const clanTag = await resolveEffectiveClanTag(ctx);
     if (!clanTag) {
       await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
       return;
     }
-    const data = await api.warLog(clanTag);
-    const text = fmt.formatWarLogClassic(data);
-    const kb = Markup.inlineKeyboard([
-      [Markup.button.callback('« Registro guerre', 'war_menu')],
-      [Markup.button.callback('« Indietro', 'clan_home'), Markup.button.callback('« Menù', 'menu')],
-    ]);
+    const idx = parseInt(ctx.match[1], 10) || 0;
+    let data;
     try {
-      await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
-    } catch (_) {
-      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+      data = await api.warLog(clanTag);
+    } catch (e) {
+      await ctx.answerCbQuery(String(e.message || 'Errore').slice(0, 180)).catch(() => {});
+      return;
     }
+    if (data?.reason === 'accessDenied') {
+      await ctx.answerCbQuery('Registro privato').catch(() => {});
+      return;
+    }
+    const itemsSorted = fmt.getSortedClassicWars(data);
+    const w = itemsSorted[idx];
+    if (!w?.endTime) {
+      await ctx.answerCbQuery('Voce non trovata').catch(() => {});
+      return;
+    }
+    let enriched = null;
+    try {
+      enriched = await sb.getClassicWarSaved(clanTag, w.endTime);
+    } catch (_) {
+      enriched = null;
+    }
+    const detail = fmt.formatClassicWarDetailHtml(w, enriched);
+    const kb = Markup.inlineKeyboard([
+      [Markup.button.callback('« Elenco war classiche', 'war:classic')],
+      [Markup.button.callback('« Registro guerre', 'war_menu'), Markup.button.callback('« Menù', 'menu')],
+    ]);
+    await editOrReplyChunkedHtml(ctx, detail, kb);
   });
 
   bot.action('war:cwl', async (ctx) => {
     await answerCbLoading(ctx);
+    await renderWarLogCwlList(ctx, 0);
+  });
+
+  bot.action(/^war:cwl:l:(\d+)$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    const page = Math.max(0, parseInt(ctx.match[1], 10) || 0);
+    await renderWarLogCwlList(ctx, page);
+  });
+
+  bot.action(/^war:cws:(\d{4}-\d{2})$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    const season = ctx.match[1];
     const clanTag = await resolveEffectiveClanTag(ctx);
     if (!clanTag) {
       await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
       return;
     }
-    const data = await api.warLog(clanTag);
-    const text = fmt.formatWarLogCwlHistory(data);
-    const kb = Markup.inlineKeyboard([
-      [Markup.button.callback('« Registro guerre', 'war_menu')],
-      [Markup.button.callback('« Indietro', 'clan_home'), Markup.button.callback('« Menù', 'menu')],
-    ]);
+    let data;
     try {
-      await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
-    } catch (_) {
-      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+      data = await api.warLog(clanTag);
+    } catch (e) {
+      await ctx.answerCbQuery(String(e.message || 'Errore').slice(0, 180)).catch(() => {});
+      return;
     }
+    let dbWars = [];
+    let meta = null;
+    try {
+      [dbWars, meta] = await Promise.all([
+        sb.getCwlWarsForSeason(clanTag, season),
+        sb.getCwlSeasonSavedMeta(clanTag, season),
+      ]);
+    } catch (_) {
+      dbWars = [];
+    }
+    if (data?.reason === 'accessDenied' && (!dbWars || !dbWars.length)) {
+      const text =
+        `${fmt.DIV}\n🏆 <b>CWL ${fmt.escapeHtml(season)}</b>\n${fmt.DIV}\n\n` +
+        `<i>⚠️ Registro di guerra privato in CoC e nessun turno salvato su CoCBoard per questa stagione.</i>`;
+      const kb = Markup.inlineKeyboard([
+        [Markup.button.callback('« Elenco stagioni CWL', 'war:cwl')],
+        [Markup.button.callback('« Menù', 'menu')],
+      ]);
+      try {
+        await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
+      } catch (_) {
+        await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+      }
+      return;
+    }
+    if (data?.reason === 'accessDenied') data = { items: [] };
+
+    const text = fmt.formatCwlSeasonDetailHtml(season, data, dbWars, meta);
+    const kb = Markup.inlineKeyboard([
+      [Markup.button.callback('« Elenco stagioni CWL', 'war:cwl')],
+      [Markup.button.callback('« Registro guerre', 'war_menu'), Markup.button.callback('« Menù', 'menu')],
+    ]);
+    await editOrReplyChunkedHtml(ctx, text, kb);
   });
 
   // ─── GUERRA CLASSICA LIVE ────────────────────────────────────────────────

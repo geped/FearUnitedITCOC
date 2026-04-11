@@ -670,6 +670,340 @@ function formatWarLog(data) {
   return formatWarLogClassic(data);
 }
 
+// ─── Registro guerre: browse + dettaglio (allineato alla web app + Supabase) ───
+
+const WAR_LOG_CLASSIC_PAGE_SIZE = 5;
+const WAR_LOG_CWL_SEASON_PAGE_SIZE = 7;
+
+function seasonFromWarEndTime(endTime) {
+  if (!endTime || endTime.length < 6) return '';
+  return endTime.slice(0, 4) + '-' + endTime.slice(4, 6);
+}
+
+function normMemberTh(m) {
+  return m.townhallLevel ?? m.thLevel ?? m.th_level ?? 0;
+}
+
+function parseMembersJson(maybeJson) {
+  if (!maybeJson) return null;
+  if (Array.isArray(maybeJson)) return maybeJson;
+  if (typeof maybeJson === 'string') {
+    try {
+      return JSON.parse(maybeJson);
+    } catch (_) {
+      return null;
+    }
+  }
+  return null;
+}
+
+/** Elenco war classiche ordinate dalla più recente (stesso filtro del sito). */
+function getSortedClassicWars(data) {
+  const items = filterClassicWarItems(data?.items || data);
+  return items.sort((a, b) => (b.endTime || '').localeCompare(a.endTime || ''));
+}
+
+function formatWarLogDateIt(endTime) {
+  if (!endTime) return '—';
+  const m = /^(\d{4})(\d{2})(\d{2})T/.exec(endTime);
+  if (!m) return '—';
+  const mo = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+  const mi = Number(m[2]) - 1;
+  return `${Number(m[3])} ${mo[mi] ?? m[2]} ${m[1]}`;
+}
+
+function formatWarLogDateShort(endTime) {
+  if (!endTime) return '—';
+  const m = /^(\d{4})(\d{2})(\d{2})/.exec(endTime);
+  if (!m) return '—';
+  return `${m[3]}/${m[2]}/${m[1].slice(2)}`;
+}
+
+function buildDefMapFromSides(clanMembers, oppMembers) {
+  const defMap = {};
+  const add = (members) => {
+    for (const m of members || []) {
+      if (m?.tag) defMap[m.tag] = { name: m.name, pos: m.mapPosition };
+    }
+  };
+  add(clanMembers);
+  add(oppMembers);
+  return defMap;
+}
+
+function buildDefMapForClassicWar(w, enriched) {
+  let clanM = w.clan?.members;
+  let oppM = w.opponent?.members;
+  if (enriched) {
+    const om = parseMembersJson(enriched.our_members);
+    const pm = parseMembersJson(enriched.opp_members);
+    if (om?.length) clanM = om;
+    if (pm?.length) oppM = pm;
+  }
+  return buildDefMapFromSides(clanM, oppM);
+}
+
+function formatClassicMemberAttacksPre(m, defMap, atkPer) {
+  const attacks = [...(m.attacks || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const lines = [];
+  const th = normMemberTh(m);
+  lines.push(`#${String(m.mapPosition ?? '?').padStart(2, ' ')} ${String(m.name || '—').slice(0, 18)}  TH${th}`);
+  for (let i = 0; i < atkPer; i++) {
+    const a = attacks[i];
+    if (!a) {
+      lines.push(`  Att${i + 1}: non usato`);
+      continue;
+    }
+    const def = defMap[a.defenderTag];
+    const defL = def ? `#${def.pos} ${def.name}` : String(a.defenderTag || '?');
+    lines.push(
+      `  Att${i + 1} → ${defL}: ${a.stars ?? 0}★ ${(a.destructionPercentage ?? 0).toFixed(0)}%`
+    );
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Dettaglio war classica (HTML) — dati API + override Supabase se presenti.
+ * @param {object} w — item war-log API
+ * @param {object|null} enriched — riga classic_wars o null
+ */
+function formatClassicWarDetailHtml(w, enriched) {
+  const atkPer = enriched?.atk_per_member ?? w.attacksPerMember ?? 2;
+  const teamSize = enriched?.team_size ?? w.teamSize ?? '?';
+  const fmtDate = formatWarLogDateIt(w.endTime);
+  const res = w.result ? String(w.result) : '';
+  const resLabel = res === 'win' ? 'VITTORIA' : res === 'lose' ? 'SCONFITTA' : res === 'tie' ? 'PAREGGIO' : (res || '—').toUpperCase();
+
+  const cName = w.clan?.name ?? enriched?.our_name ?? 'Noi';
+  const oName = w.opponent?.name ?? enriched?.opp_name ?? 'Avversario';
+  const cStars = w.clan?.stars ?? enriched?.our_stars ?? 0;
+  const oStars = w.opponent?.stars ?? enriched?.opp_stars ?? 0;
+  const cDest = Number(w.clan?.destructionPercentage ?? enriched?.our_destr ?? 0).toFixed(1);
+  const oDest = Number(w.opponent?.destructionPercentage ?? enriched?.opp_destr ?? 0).toFixed(1);
+
+  const defMap = buildDefMapForClassicWar(w, enriched);
+  let clanM = parseMembersJson(enriched?.our_members) ?? w.clan?.members;
+  let oppM = parseMembersJson(enriched?.opp_members) ?? w.opponent?.members;
+
+  const hasDetail = (clanM?.length || 0) + (oppM?.length || 0) > 0;
+  const savedNote = enriched
+    ? '<i>📦 Dati completi da salvataggio CoCBoard.</i>\n'
+    : '<i>⚠️ Salvataggio dettagliato non disponibile: mostriamo solo il riepilogo API. Sul sito il salvataggio è automatico dopo la war.</i>\n';
+
+  const parts = [
+    `${DIV}\n🏹 <b>War classica</b> · ${escapeHtml(fmtDate)}\n${DIV}\n`,
+    savedNote,
+    `<b>${escapeHtml(resLabel)}</b> · <b>${teamSize}v${teamSize}</b> · ${atkPer} att/gioc.\n`,
+    `🛡 <b>${escapeHtml(cName)}</b> ⭐${cStars} · 💥${cDest}%\n`,
+    `⚔️ <b>${escapeHtml(oName)}</b> ⭐${oStars} · 💥${oDest}%\n`,
+  ];
+
+  if (!hasDetail) {
+    parts.push('\n<i>Nessun roster/attacchi nel dato disponibile.</i>');
+    return parts.join('');
+  }
+
+  const sortM = (arr) => [...(arr || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const ourBlock = sortM(clanM)
+    .map((m) => formatClassicMemberAttacksPre(m, defMap, atkPer))
+    .join('\n\n');
+  const oppBlock = sortM(oppM)
+    .map((m) => formatClassicMemberAttacksPre(m, defMap, atkPer))
+    .join('\n\n');
+
+  parts.push('\n<b>━━ La nostra squadra ━━</b>\n\n');
+  parts.push(`<pre>${escapeHtml(ourBlock)}</pre>\n`);
+  parts.push('\n<b>━━ ' + escapeHtml(oName) + ' ━━</b>\n\n');
+  parts.push(`<pre>${escapeHtml(oppBlock)}</pre>`);
+
+  return parts.join('');
+}
+
+function formatWarLogClassicListPage(itemsSorted, page) {
+  const n = itemsSorted.length;
+  const totalPages = Math.max(1, Math.ceil(n / WAR_LOG_CLASSIC_PAGE_SIZE));
+  const p = Math.min(Math.max(0, page), totalPages - 1);
+  const start = p * WAR_LOG_CLASSIC_PAGE_SIZE;
+  const slice = itemsSorted.slice(start, start + WAR_LOG_CLASSIC_PAGE_SIZE);
+
+  let body = `${DIV}\n🏹 <b>War classiche</b>\n${DIV}\n\n`;
+  body +=
+    '<i>Tocca un pulsante per il dettaglio (stessi dati del sito: attacchi e roster se salvati su CoCBoard).</i>\n\n';
+  if (!n) {
+    body += '<i>Nessuna war classica nel log, oppure registro non pubblico in CoC.</i>';
+    return body;
+  }
+  body += `<i>Elenco ${n} guerre · pag. ${p + 1}/${totalPages}</i>\n\n`;
+  for (let i = 0; i < slice.length; i++) {
+    const w = slice[i];
+    const gIdx = start + i + 1;
+    const ic = w.result === 'win' ? '✅' : w.result === 'lose' ? '❌' : '⚖️';
+    const ds = formatWarLogDateIt(w.endTime);
+    body +=
+      `${gIdx}. ${ic} <b>${escapeHtml(ds)}</b> · ⭐${w.clan?.stars ?? 0}–${w.opponent?.stars ?? 0} · ` +
+      `<b>${escapeHtml((w.opponent?.name || '—').slice(0, 36))}</b>\n`;
+  }
+  return body;
+}
+
+/** Unisce stagioni CWL da API war-log e da cwl_wars (DB). */
+function mergeCwlSeasonBrowseData(warLogApiData, dbSeasonsList) {
+  const summaries = {};
+  const raw = filterCwlWarItems(warLogApiData?.items || []);
+  for (const w of raw) {
+    const s = seasonFromWarEndTime(w.endTime);
+    if (!s) continue;
+    if (!summaries[s]) summaries[s] = { wins: 0, losses: 0, draws: 0, wars: 0, stars: 0 };
+    const ws = summaries[s];
+    ws.wars++;
+    if (w.result === 'win') ws.wins++;
+    else if (w.result === 'lose') ws.losses++;
+    else ws.draws++;
+    ws.stars += w.clan?.stars || 0;
+  }
+  for (const s of dbSeasonsList || []) {
+    if (!summaries[s]) summaries[s] = { wins: 0, losses: 0, draws: 0, wars: 0, stars: 0 };
+  }
+  const seasonsSorted = Object.keys(summaries).sort((a, b) => b.localeCompare(a));
+  return { seasonsSorted, summariesBySeason: summaries };
+}
+
+function formatWarLogCwlSeasonListPage(seasonsSorted, summariesBySeason, page) {
+  const n = seasonsSorted.length;
+  const totalPages = Math.max(1, Math.ceil(n / WAR_LOG_CWL_SEASON_PAGE_SIZE));
+  const p = Math.min(Math.max(0, page), totalPages - 1);
+  const start = p * WAR_LOG_CWL_SEASON_PAGE_SIZE;
+  const slice = seasonsSorted.slice(start, start + WAR_LOG_CWL_SEASON_PAGE_SIZE);
+
+  let body = `${DIV}\n🏆 <b>Cronologia leghe (CWL)</b>\n${DIV}\n\n`;
+  body +=
+    '<i>Scegli una stagione per vedere tutti i turni e gli attacchi (come sul sito, dati salvati quando disponibili).</i>\n\n';
+  if (!n) {
+    body += '<i>Nessuna stagione CWL nel log API né in archivio salvato.</i>';
+    return body;
+  }
+  body += `<i>${n} stagion${n === 1 ? 'e' : 'i'} · pag. ${p + 1}/${totalPages}</i>\n\n`;
+  for (let i = 0; i < slice.length; i++) {
+    const s = slice[i];
+    const m = summariesBySeason[s] || { wins: 0, losses: 0, draws: 0, wars: 0, stars: 0 };
+    const wn = m.wars || 0;
+    body +=
+      `📅 <b>${escapeHtml(s)}</b> · ${wn} turn${wn === 1 ? 'o' : 'i'} · ` +
+      `✅${m.wins} ❌${m.losses} ⚖️${m.draws} · ⭐${m.stars}\n`;
+  }
+  return body;
+}
+
+function cwlResultLabelIt(r) {
+  const x = String(r || '').toLowerCase();
+  if (x === 'win') return 'Vittoria';
+  if (x === 'lose') return 'Sconfitta';
+  if (x === 'tie' || x === 'draw') return 'Pareggio';
+  return r || '—';
+}
+
+function buildDefMapFromCwlRoundRow(row) {
+  const clanM = parseMembersJson(row.our_members);
+  const oppM = parseMembersJson(row.opp_members);
+  let defMap = buildDefMapFromSides(clanM, oppM);
+  const dm = row.defender_map;
+  if (dm && typeof dm === 'object') {
+    defMap = { ...defMap };
+    for (const [tag, info] of Object.entries(dm)) {
+      if (!defMap[tag] && info) {
+        defMap[tag] = { name: info.name || info.n, pos: info.mapPosition ?? info.pos };
+      }
+    }
+  }
+  return defMap;
+}
+
+function formatCwlRoundBlockHtml(r, defMap, atkPer) {
+  const sortM = (arr) => [...(arr || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const our = sortM(r.clan.members);
+  const opp = sortM(r.opponent.members);
+  if (!our.length && !opp.length) {
+    return '<i>Nessun roster nel dato — solo punteggio aggregato.</i>\n';
+  }
+  const oName = r.opponent.name || 'Avversario';
+  const ourTxt = our.map((m) => formatClassicMemberAttacksPre(m, defMap, atkPer)).join('\n\n');
+  const oppTxt = opp.map((m) => formatClassicMemberAttacksPre(m, defMap, atkPer)).join('\n\n');
+  let out = '<b>━━ La nostra squadra ━━</b>\n\n';
+  out += our.length ? `<pre>${escapeHtml(ourTxt)}</pre>\n` : '<i>—</i>\n';
+  out += '\n<b>━━ ' + escapeHtml(oName) + ' ━━</b>\n\n';
+  out += opp.length ? `<pre>${escapeHtml(oppTxt)}</pre>` : '<i>—</i>';
+  return out;
+}
+
+/**
+ * Dettaglio stagione CWL: turni da cwl_wars se presenti, altrimenti solo API aggregate.
+ */
+function formatCwlSeasonDetailHtml(season, warLogApiData, dbWarsRows, seasonMeta) {
+  const lines = [`${DIV}\n🏆 <b>CWL ${escapeHtml(season)}</b>\n${DIV}\n`];
+
+  if (seasonMeta?.league) {
+    lines.push(
+      `Lega: <b>${escapeHtml(String(seasonMeta.league))}</b>` +
+        (seasonMeta.position != null ? ` · Posizione gruppo: <b>${escapeHtml(String(seasonMeta.position))}</b>` : '') +
+        '\n\n'
+    );
+  }
+
+  const dbSorted = [...(dbWarsRows || [])].sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
+
+  if (dbSorted.length) {
+    lines.push('<i>📦 Turni con dettaglio da salvataggio CoCBoard.</i>\n\n');
+    for (const row of dbSorted) {
+      const atkPer = 1;
+      const defMap = buildDefMapFromCwlRoundRow(row);
+      const r = {
+        roundNumber: row.round,
+        result: row.result,
+        clan: {
+          stars: row.our_stars ?? 0,
+          destruction: Number(row.our_destr ?? 0),
+          members: parseMembersJson(row.our_members),
+        },
+        opponent: {
+          name: row.opp_name || 'Avversario',
+          stars: row.opp_stars ?? 0,
+          destruction: Number(row.opp_destr ?? 0),
+          members: parseMembersJson(row.opp_members),
+        },
+      };
+      const lbl = cwlResultLabelIt(r.result);
+      lines.push(`━━ <b>Turno ${r.roundNumber}</b> · ${escapeHtml(lbl)} ━━\n`);
+      lines.push(
+        `vs <b>${escapeHtml(r.opponent.name)}</b> · ⭐ ${r.clan.stars}–${r.opponent.stars} · ` +
+          `💥 ${r.clan.destruction.toFixed(1)}% — ${r.opponent.destruction.toFixed(1)}%\n\n`
+      );
+      lines.push(formatCwlRoundBlockHtml(r, defMap, atkPer));
+      lines.push('\n');
+    }
+    return lines.join('');
+  }
+
+  // Fallback: solo war-log API (senza membri)
+  const raw = filterCwlWarItems(warLogApiData?.items || []);
+  const filtered = raw.filter((w) => seasonFromWarEndTime(w.endTime) === season);
+  filtered.sort((a, b) => (a.endTime || '').localeCompare(b.endTime || ''));
+  if (!filtered.length) {
+    lines.push('<i>Nessun dato per questa stagione (né API né archivio).</i>');
+    return lines.join('');
+  }
+  lines.push('<i>Solo riepilogo da API war-log (nessun salvataggio turni su CoCBoard per questa stagione).</i>\n\n');
+  filtered.forEach((w, i) => {
+    const lbl = cwlResultLabelIt(w.result);
+    lines.push(
+      `━━ <b>Turno ${i + 1}</b> · ${escapeHtml(lbl)} ━━\n` +
+        `vs <b>${escapeHtml(w.opponent?.name || '—')}</b> · ⭐ ${w.clan?.stars ?? 0}–${w.opponent?.stars ?? 0} · ` +
+        `💥 ${Number(w.clan?.destructionPercentage ?? 0).toFixed(1)}% — ${Number(w.opponent?.destructionPercentage ?? 0).toFixed(1)}%\n\n`
+    );
+  });
+  return lines.join('');
+}
+
 function formatAddBotToGroupHelp({ botUsername, clanTag, linkToken }) {
   const u = botUsername ? `@${String(botUsername).replace(/^@/, '')}` : 'il bot';
   const tagLine = clanTag ? `\n🏷 <b>Clan:</b> <code>${escapeHtml(clanTag)}</code>\n` : '';
@@ -1508,6 +1842,15 @@ module.exports = {
   formatWarLog,
   formatWarLogClassic,
   formatWarLogCwlHistory,
+  WAR_LOG_CLASSIC_PAGE_SIZE,
+  WAR_LOG_CWL_SEASON_PAGE_SIZE,
+  getSortedClassicWars,
+  formatWarLogClassicListPage,
+  formatClassicWarDetailHtml,
+  mergeCwlSeasonBrowseData,
+  formatWarLogCwlSeasonListPage,
+  formatCwlSeasonDetailHtml,
+  formatWarLogDateShort,
   formatAddBotToGroupHelp,
   formatGroupMenuBanner,
   formatGroupClanGateLong,

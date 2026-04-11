@@ -1003,6 +1003,65 @@ async function applyBonusSelectionForSeason(clanTagRaw, season, selectedNames) {
   return payload.length;
 }
 
+/** Dettaglio war classica salvato (attacchi / roster) — come tabella classic_wars sul sito. */
+async function getClassicWarSaved(clanTagRaw, endTime) {
+  const client = sb();
+  if (!client || !endTime) return null;
+  const tag = normClanTagSql(clanTagRaw);
+  const { data, error } = await client
+    .from('classic_wars')
+    .select('*')
+    .eq('clan_tag', tag)
+    .eq('end_time', endTime)
+    .maybeSingle();
+  if (error) return null;
+  return data || null;
+}
+
+/** Turni CWL salvati per stagione (cwl_wars), ordinati per round. */
+async function getCwlWarsForSeason(clanTagRaw, season) {
+  const client = sb();
+  if (!client || !season) return [];
+  const tag = normClanTagSql(clanTagRaw);
+  const { data, error } = await client
+    .from('cwl_wars')
+    .select('*')
+    .eq('clan_tag', tag)
+    .eq('season', season)
+    .order('round', { ascending: true });
+  if (error) return [];
+  return data || [];
+}
+
+/** Meta stagione CWL (lega, posizione, …) da cwl_seasons. */
+async function getCwlSeasonSavedMeta(clanTagRaw, season) {
+  const client = sb();
+  if (!client || !season) return null;
+  const tag = normClanTagSql(clanTagRaw);
+  const { data, error } = await client
+    .from('cwl_seasons')
+    .select('*')
+    .eq('clan_tag', tag)
+    .eq('season', season)
+    .maybeSingle();
+  if (error) return null;
+  return data || null;
+}
+
+/** Stagioni distinte presenti in cwl_wars (salvate automaticamente). */
+async function listCwlWarSeasonsFromDb(clanTagRaw) {
+  const client = sb();
+  if (!client) return [];
+  const tag = normClanTagSql(clanTagRaw);
+  const { data, error } = await client.from('cwl_wars').select('season').eq('clan_tag', tag);
+  if (error) return [];
+  const seen = new Set();
+  for (const r of data || []) {
+    if (r?.season) seen.add(r.season);
+  }
+  return [...seen].sort((a, b) => b.localeCompare(a));
+}
+
 module.exports = {
   sb,
   getFullRow,
@@ -1038,6 +1097,10 @@ module.exports = {
   fetchBonusAssignedNamesForSeason,
   fetchMembersThByNameForClan,
   applyBonusSelectionForSeason,
+  getClassicWarSaved,
+  getCwlWarsForSeason,
+  getCwlSeasonSavedMeta,
+  listCwlWarSeasonsFromDb,
   getChatNotificationSettings,
   upsertChatNotificationSettings,
   insertUsageEvent,
