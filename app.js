@@ -7085,7 +7085,7 @@ async function openWarLiveModal() {
     const summaryText = entries.map(([lv, n]) => `TH${lv}: ${n}`).join(' · ');
     const grid = entries.map(([lv, n]) => {
       const thN = String(lv).padStart(2, '0');
-      return `<div class="prev-th-item"><img src="th/webp/level_${thN}.webp" class="th-imgv" alt="TH${lv}" loading="lazy"><span class="prev-th-count">${n} pl.</span></div>`;
+      return `<div class="prev-th-item">${thImgV(+lv)}<span class="prev-th-count">${n} pl.</span></div>`;
     }).join('');
     return `<div class="prev-th-summary">${summaryText}</div><div class="prev-th-grid">${grid}</div>`;
   }
