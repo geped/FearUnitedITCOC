@@ -699,17 +699,17 @@ async function showInstantPresetStep(ctx, uid) {
 }
 
 /** Dopo descrizione/stemma API: chiede se allegare solo lo stemma ufficiale CoC (nessun upload utente). */
-async function showInstantBadgeStep(ctx, uid) {
-  const st = pendingCommunity.get(uid);
+async function showInstantBadgeStep(ctx, uid, pendingMap) {
+  const st = pendingMap.get(uid);
   if (!st || st.kind !== 'recruit_instant') return;
   st.step = 'badge_confirm';
   if (!st.clan_badge_url) {
     st.include_clan_badge = false;
-    pendingCommunity.set(uid, st);
+    pendingMap.set(uid, st);
     await showInstantPresetStep(ctx, uid);
     return;
   }
-  pendingCommunity.set(uid, st);
+  pendingMap.set(uid, st);
   await ctx.reply(
     `🛡 <b>Stemma clan</b>\n\n` +
       `Vuoi allegare lo <b>stemma ufficiale</b> del clan (CoC API) all’annuncio?\n\n` +
@@ -1816,7 +1816,7 @@ function registerCommunityHandlers(bot, deps) {
     st.clan_desc_confirmed = true;
     pendingCommunity.set(uid, st);
     await ctx.answerCbQuery('Descrizione aggiunta ✅').catch(() => {});
-    await showInstantBadgeStep(ctx, uid);
+    await showInstantBadgeStep(ctx, uid, pendingCommunity);
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
@@ -1831,7 +1831,7 @@ function registerCommunityHandlers(bot, deps) {
     st.clan_desc_confirmed = false;
     pendingCommunity.set(uid, st);
     await ctx.answerCbQuery('OK').catch(() => {});
-    await showInstantBadgeStep(ctx, uid);
+    await showInstantBadgeStep(ctx, uid, pendingCommunity);
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
@@ -1866,7 +1866,7 @@ function registerCommunityHandlers(bot, deps) {
       pendingCommunity.set(uid, st);
     }
 
-    await showInstantBadgeStep(ctx, uid);
+    await showInstantBadgeStep(ctx, uid, pendingCommunity);
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
