@@ -20,12 +20,12 @@ function escapeHtml(s) {
 }
 
 /**
- * Testo multi-riga “monospaziato” per Telegram HTML senza `<pre>`.
- * I chunk lunghi spezzano il messaggio a capo: `<pre>` non chiuso causava 400 Bad Request.
+ * Testo multi-riga senza `<pre>` (escape HTML). I newline restano `\n`: in parse_mode HTML
+ * Telegram non supporta il tag `<br>` (400 Unsupported start tag "br") — solo `\n` per andare a capo.
  */
 function telegramHtmlPlainBlock(plain) {
   if (plain == null || plain === '') return '';
-  return escapeHtml(String(plain)).replace(/\n/g, '<br>');
+  return escapeHtml(String(plain));
 }
 
 function parseTagArg(text) {
@@ -1035,6 +1035,18 @@ function formatCwlPlayersLogHtml(players, page) {
   return body;
 }
 
+/** Esito turno CWL dal punto di vista del clan salvato (campo result in cwl_wars). */
+function formatCwlRoundOutcomeHtml(row) {
+  const r = String(row?.result || '').toLowerCase();
+  if (r === 'win') return '✅ <b>Vittoria</b>';
+  if (r === 'lose') return '❌ <b>Sconfitta</b>';
+  if (r === 'tie' || r === 'draw') return '⚖️ <b>Pareggio</b>';
+  if (r === 'preparation') return '🛡 <i>Preparazione</i>';
+  if (r === 'ongoing') return '⚔️ <i>In corso</i>';
+  if (!row?.result) return '<i>Esito —</i>';
+  return `<i>Esito: ${escapeHtml(String(row.result))}</i>`;
+}
+
 function formatCwlTurnsOverviewHtml(dbWarsRows) {
   const rows = [...(dbWarsRows || [])].sort((a, b) => (a.round ?? 0) - (b.round ?? 0));
   if (!rows.length) {
@@ -1045,6 +1057,7 @@ function formatCwlTurnsOverviewHtml(dbWarsRows) {
     const rn = row.round ?? '?';
     const opp = escapeHtml(String(row.opp_name || '—').slice(0, 26));
     body += `⚔ <b>T${rn}</b> vs ${opp}\n`;
+    body += `   ${formatCwlRoundOutcomeHtml(row)}\n`;
     body += `   ⭐ ${row.our_stars ?? 0}–${row.opp_stars ?? 0} · 💥 ${Number(row.our_destr ?? 0).toFixed(1)}% — ${Number(row.opp_destr ?? 0).toFixed(1)}%\n\n`;
   }
   return body;
@@ -1085,6 +1098,7 @@ function formatCwlSavedRoundBridgeHtml(row) {
   const opp = escapeHtml(String(row.opp_name || '—').slice(0, 28));
   return (
     `⚔️ <b>Turno ${row.round ?? '?'}</b> vs <b>${opp}</b>\n` +
+    `${formatCwlRoundOutcomeHtml(row)}\n` +
     `⭐ ${row.our_stars ?? 0}–${row.opp_stars ?? 0} · 💥 ${Number(row.our_destr ?? 0).toFixed(1)}% — ${Number(row.opp_destr ?? 0).toFixed(1)}%\n\n` +
     `<i>Scegli il lato:</i>`
   );
