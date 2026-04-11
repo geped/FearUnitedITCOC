@@ -63,8 +63,13 @@ async function _deleteTrackedMenuMsg(telegram, chatId) {
   _lastMenuMsgByChat.delete(Number(chatId));
   await telegram.deleteMessage(Number(chatId), mid).catch(() => {});
 }
-const TELEGRAPH_TUTORIAL_URL = (process.env.TELEGRAPH_TUTORIAL_URL || 'https://telegra.ph/CoCBoard-Bot-Guida-04-07').trim();
 const WELCOME_IMAGE_PATH = path.join(__dirname, 'assets', 'benvenuto.png');
+
+/** URL della guida interna (guida.html sul sito). Null se env non configurato. */
+function guideUrl() {
+  const base = (process.env.COCBOARD_SITE_HOME_URL || '').trim().replace(/\/$/, '');
+  return base ? `${base}/guida.html` : null;
+}
 
 async function ensureTgBotUsername(telegram) {
   if (cachedTgBotUsername) return cachedTgBotUsername;
@@ -253,8 +258,6 @@ const GROUP_LIGHT_CALLBACKS = new Set([
   'noop',
   'nav_search',
   'nav_rank',
-  'helpbtn',
-  'auth_guest_help',
   'auth_logout',
   'srch_p',
   'srch_c',
@@ -425,13 +428,15 @@ function isCommunityOpenGuestCallback(d) {
 
 /** Ospite in chat privata: scorciatoie web solo dopo login (menù autenticato). */
 function buildPrivateGuestKb() {
-  return Markup.inlineKeyboard([
+  const rows = [
     [Markup.button.callback('🔑 Accedi', 'auth_login'), Markup.button.callback('📝 Registrati', 'auth_register')],
     [Markup.button.callback('💬 Community', 'comm_hub')],
     [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
     [Markup.button.callback('📩 Contatta amministratore', 'support_open')],
-    [Markup.button.callback('ℹ️ Guida e tutorial', 'auth_guest_help')],
-  ]);
+  ];
+  const gUrl = guideUrl();
+  if (gUrl) rows.push([Markup.button.webApp('📘 Guida e tutorial', gUrl)]);
+  return Markup.inlineKeyboard(rows);
 }
 
 /** Gruppo: login solo in privato; cerca/classifica pubbliche. */
@@ -441,11 +446,9 @@ function buildGroupGuestKb(botUsername) {
   if (url) {
     rows.push([Markup.button.url('🔐 Accedi / Registrati (privato)', url)]);
   }
-  rows.push(
-    [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
-    [Markup.button.url('📘 Tutorial', TELEGRAPH_TUTORIAL_URL)],
-    [Markup.button.callback('ℹ️ Guida gruppo', 'auth_guest_help')]
-  );
+  rows.push([Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')]);
+  const gUrl = guideUrl();
+  if (gUrl) rows.push([Markup.button.url('📘 Guida', gUrl)]);
   return Markup.inlineKeyboard(rows);
 }
 
@@ -1453,10 +1456,13 @@ async function sendGuestMenu(ctx) {
     }
   } else {
     if (!group && fs.existsSync(WELCOME_IMAGE_PATH)) {
-      await ctx.replyWithPhoto(
+      const photoMsg = await ctx.replyWithPhoto(
         { source: fs.createReadStream(WELCOME_IMAGE_PATH) },
         { parse_mode: 'HTML' }
-      ).catch(() => {});
+      ).catch(() => null);
+      if (photoMsg?.message_id && ctx.from?.id != null) {
+        privateUi.notePrivateUiMessage(ctx.from.id, photoMsg.message_id);
+      }
     }
     const m = await ctx.reply(text, { parse_mode: 'HTML', ...kb });
     _trackMenuMsg(ctx.chat?.id, m?.message_id);
@@ -1477,8 +1483,8 @@ async function sendLinkedGroupGuestMenu(ctx, clanTag) {
   if (url) {
     rows.push([Markup.button.url('🔐 Accedi / Registrati (privato)', url)]);
   }
-  rows.push([Markup.button.url('📘 Tutorial', TELEGRAPH_TUTORIAL_URL)]);
-  rows.push([Markup.button.callback('❓ Aiuto', 'helpbtn')]);
+  const gUrl = guideUrl();
+  if (gUrl) rows.push([Markup.button.url('📘 Guida', gUrl)]);
   const kb = Markup.inlineKeyboard(rows);
   if (ctx.callbackQuery) {
     try {
@@ -1606,10 +1612,15 @@ async function mainMenuKeyboard(ctx, user, hasClanTag, clanTag, clanName) {
   if (!grp) {
     rows.push([Markup.button.callback('📩 Contatta amministratore', 'support_open')]);
   }
-  rows.push(
-    [Markup.button.callback('⚙️ Account', 'acct'), Markup.button.callback('❓ Aiuto', 'helpbtn')],
-    [Markup.button.callback('🚪 Logout', 'auth_logout')]
-  );
+  const gUrl = guideUrl();
+  const acctBtn = Markup.button.callback('⚙️ Account', 'acct');
+  if (gUrl) {
+    const guideBtn = grp ? Markup.button.url('📘 Guida', gUrl) : Markup.button.webApp('📘 Guida', gUrl);
+    rows.push([acctBtn, guideBtn]);
+  } else {
+    rows.push([acctBtn]);
+  }
+  rows.push([Markup.button.callback('🚪 Logout', 'auth_logout')]);
   return Markup.inlineKeyboard(rows);
 }
 
@@ -2406,7 +2417,6 @@ async function registerBotCommands(telegram) {
     const priv = [
       { command: 'start', description: 'Menù principale' },
       { command: 'cocboard', description: 'Menù CoCBoard' },
-      { command: 'help', description: 'Aiuto' },
       { command: 'assistenza', description: 'Apri ticket supporto' },
       { command: 'adminbot', description: 'Pannello staff bot (admin / moderatori)' },
       { command: 'cerca', description: 'Cerca villaggio o clan' },
@@ -2418,7 +2428,6 @@ async function registerBotCommands(telegram) {
       { command: 'cocboard', description: 'Menù CoCBoard' },
       { command: 'cerca', description: 'Cerca villaggio o clan' },
       { command: 'classifica', description: 'Classifiche trofei' },
-      { command: 'help', description: 'Aiuto' },
       { command: 'assistenza', description: 'Supporto in privato' },
       { command: 'coc_off', description: 'Spegni bot in questa chat (admin)' },
       { command: 'coc_on', description: 'Riattiva bot in questa chat (admin)' },
@@ -2505,12 +2514,18 @@ function setupBot(bot) {
     return next();
   });
 
-  /** Privato + comando /…: stessa pulizia (es. /start dopo un elenco annunci). */
+  /** Privato + comando /…: pulisce bolle UI precedenti e cancella il comando stesso. */
   bot.use(async (ctx, next) => {
     if (ctx.chat?.type !== 'private' || ctx.from?.id == null || !ctx.message?.text) return next();
     const t = ctx.message.text.trim();
     if (!t.startsWith('/')) return next();
+    const cmdMsgId = ctx.message.message_id;
+    const chatId   = ctx.chat.id;
     await privateUi.wipePrivateConversationUi(ctx.telegram, ctx.from.id);
+    // Cancella il messaggio comando che l'utente ha digitato
+    if (cmdMsgId != null) {
+      try { await ctx.telegram.deleteMessage(chatId, cmdMsgId); } catch (_) {}
+    }
     return next();
   });
 
@@ -3420,13 +3435,19 @@ function setupBot(bot) {
 
   bot.action('auth_guest_help', async (ctx) => {
     safeAnswerCb(ctx);
-    await ensureTgBotUsername(ctx.telegram);
-    const text = isLinkedChatContext(ctx) ? fmt.formatGroupHelp() : fmt.formatGuestHelp();
-    const kb = isLinkedChatContext(ctx) ? buildGroupGuestKb(cachedTgBotUsername) : buildPrivateGuestKb();
-    try {
-      await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
-    } catch (_) {
-      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+    const gUrl = guideUrl();
+    if (gUrl) {
+      const isGrp = isLinkedChatContext(ctx);
+      const guideBtn = isGrp ? Markup.button.url('📘 Apri Guida', gUrl) : Markup.button.webApp('📘 Apri Guida', gUrl);
+      const kb = Markup.inlineKeyboard([[guideBtn], [Markup.button.callback('« Menù', 'menu')]]);
+      const body = `📘 <b>Guida CoCBoard</b>\n\nTrovi tutte le istruzioni nella guida interattiva.`;
+      try { await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb }); }
+      catch (_) { await ctx.reply(body, { parse_mode: 'HTML', ...kb }); }
+    } else {
+      await ensureTgBotUsername(ctx.telegram);
+      const kb = isLinkedChatContext(ctx) ? buildGroupGuestKb(cachedTgBotUsername) : buildPrivateGuestKb();
+      try { await ctx.editMessageText(fmt.formatGuestHelp(), { parse_mode: 'HTML', ...kb }); }
+      catch (_) { await ctx.reply(fmt.formatGuestHelp(), { parse_mode: 'HTML', ...kb }); }
     }
   });
 
@@ -4173,16 +4194,14 @@ function setupBot(bot) {
 
   bot.action('helpbtn', async (ctx) => {
     safeAnswerCb(ctx);
-    const body =
-      `${fmt.DIV}\n📖 <b>Aiuto rapido</b>\n${fmt.DIV}\n\n` +
-      `• <b>Cerca / Classifica / Community</b> — anche da ospite\n` +
-      `• Dopo login: scorciatoie <b>(web)</b> (CWL live = turni in Registri guerre; Bonus = bonus)\n` +
-      `• <code>/setclan</code> · <code>/player</code> · <code>/cerca_clan</code> · <code>/esci</code>\n` +
-      `• Dettagli: <code>/help</code>`;
+    const gUrl = guideUrl();
+    const rows = [[Markup.button.callback('« Menù', 'menu')]];
+    if (gUrl) rows.unshift([Markup.button.url('📘 Apri Guida', gUrl)]);
+    const body = `📘 <b>Guida CoCBoard</b>\n\nTrovi tutte le istruzioni nella guida interattiva.`;
     await ctx
-      .editMessageText(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('« Menù', 'menu')]]) })
+      .editMessageText(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) })
       .catch(async () => {
-        await ctx.reply(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('« Menù', 'menu')]]) });
+        await ctx.reply(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) });
       });
   });
 
@@ -4912,13 +4931,17 @@ function setupBot(bot) {
       }
       if (nn.status !== 'member' && nn.status !== 'administrator') return;
       if (chat.type !== 'group' && chat.type !== 'supergroup') return;
-      await ctx.reply(fmt.formatGroupBotAdded(), {
-        parse_mode: 'HTML',
-        ...Markup.inlineKeyboard([
+      {
+        const addedRows = [
           [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
-          [Markup.button.callback('❓ Aiuto', 'helpbtn')],
-        ]),
-      });
+        ];
+        const gUrl = guideUrl();
+        if (gUrl) addedRows.push([Markup.button.url('📘 Guida', gUrl)]);
+        await ctx.reply(fmt.formatGroupBotAdded(), {
+          parse_mode: 'HTML',
+          ...Markup.inlineKeyboard(addedRows),
+        });
+      }
     } catch (_) {}
   });
 

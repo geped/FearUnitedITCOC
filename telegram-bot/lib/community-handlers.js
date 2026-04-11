@@ -11,7 +11,7 @@ const privateUi = require('./private-ui-cleanup');
 const cocboardApi = require('./cocboard-api');
 
 /** Nome mostrato in chat globale per il creatore del bot (modalità «Entra come admin»). */
-const GLOBAL_BOT_OWNER_DISPLAY = 'CoCBoard Admin👾';
+const GLOBAL_BOT_OWNER_DISPLAY = '👾CoCBoard Admin👾';
 
 function displayFromUser(user) {
   const meta = user?.user_metadata || {};
@@ -2174,17 +2174,17 @@ function registerCommunityHandlers(bot, deps) {
     const approvedAt = new Date().toISOString();
     const isVerifiedClan = sub.clan_tag ? await sbc.isClanRegisteredInCocboard(sub.clan_tag).catch(() => false) : false;
     const postText = buildApprovedPostTextFromSubmission(sub, exp, isVerifiedClan);
-    const delivered = await broadcastRecruitmentDelivers(ctx.telegram, postText, sub.photo_file_id);
-    await sbc.insertRecruitmentPost(sid, postText, sub.photo_file_id, approvedAt, expStr, delivered, sub.submitter_telegram_user_id);
-    await ctx.answerCbQuery('Approvato e inviato.').catch(() => {});
+    // Nessun broadcast: l'annuncio è visibile solo in "Annunci attivi".
+    await sbc.insertRecruitmentPost(sid, postText, sub.photo_file_id, approvedAt, expStr, [], sub.submitter_telegram_user_id);
+    await ctx.answerCbQuery('Approvato.').catch(() => {});
     try {
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
     } catch (_) {}
-    await ctx.reply(`✅ Bozza #${sid} approvata. Inviata a ${delivered.length} iscritti al feed.`, { parse_mode: 'HTML' }).catch(() => {});
+    await ctx.reply(`✅ Bozza #${sid} approvata e pubblicata (24h in Annunci attivi).`, { parse_mode: 'HTML' }).catch(() => {});
     await ctx.telegram
       .sendMessage(
         sub.submitter_telegram_user_id,
-        '✅ Il tuo annuncio di reclutamento è stato <b>approvato</b> e pubblicato dal bot (24h).',
+        '✅ Il tuo annuncio di reclutamento è stato <b>approvato</b> e pubblicato.\nVisibile in <b>Reclutamento → Annunci attivi</b> per 24h.',
         { parse_mode: 'HTML' }
       )
       .catch(() => {});

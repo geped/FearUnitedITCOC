@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>CoCBoard · Guida</title>
+<style>
+:root {
+  --bg:      #0D0B08;
+  --bg-1:    #110E09;
+  --bg-2:    #1A150E;
+  --bg-3:    #221A0F;
+  --border:  #2A2010;
+  --gold:    #C9A962;
+  --gold-dim:rgba(201,169,98,0.13);
+  --text:    #EEEAE0;
+  --text-2:  #C8BCA8;
+  --text-3:  #7A6A50;
+  --green:   #27AE60;
+  --red:     #C0392B;
+  --radius:  6px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; background: var(--bg); }
+
+body {
+  font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.65;
+  padding: 0 0 env(safe-area-inset-bottom, 20px);
+}
+
+/* ── Header ── */
+.header {
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 20px 14px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.header-inner {
+  max-width: 640px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--gold-dim);
+  border: 1px solid var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.header h1 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gold);
+  letter-spacing: .01em;
+}
+.header p {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+
+/* ── TOC ── */
+.toc {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: 20px auto;
+  max-width: 640px;
+}
+.toc-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--text-3);
+  margin-bottom: 8px;
+}
+.toc a {
+  display: block;
+  color: var(--gold);
+  text-decoration: none;
+  font-size: 13px;
+  padding: 3px 0;
+  border-left: 2px solid transparent;
+  padding-left: 8px;
+  transition: border-color .15s, color .15s;
+}
+.toc a:hover { border-color: var(--gold); color: var(--text); }
+
+/* ── Main content ── */
+.content {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 16px 40px;
+}
+
+.section {
+  margin-top: 36px;
+}
+
+h2 {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--gold);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 18px 0 8px;
+}
+
+p { color: var(--text-2); margin-bottom: 10px; }
+p + p { margin-top: 0; }
+p b, li b { color: var(--text); }
+
+ul, ol {
+  padding-left: 18px;
+  color: var(--text-2);
+  margin-bottom: 10px;
+}
+li { margin: 4px 0; }
+
+code {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: 'IBM Plex Mono', 'Courier New', monospace;
+  font-size: 13px;
+  color: var(--gold);
+}
+
+/* ── Callout / Note ── */
+.note {
+  background: var(--gold-dim);
+  border-left: 3px solid var(--gold);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin: 14px 0;
+  color: var(--text-2);
+  font-size: 14px;
+}
+.note b { color: var(--gold); }
+
+/* ── Pill badge ── */
+.badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 20px;
+  letter-spacing: .04em;
+}
+.badge-guest { background: rgba(42,32,16,.8); color: var(--text-3); border: 1px solid var(--border); }
+.badge-auth  { background: rgba(39,174,96,.15); color: var(--green); border: 1px solid rgba(39,174,96,.3); }
+
+/* ── Command table ── */
+.cmd-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0 14px;
+}
+.cmd-table th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-3);
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.cmd-table td {
+  padding: 7px 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.cmd-table td:first-child { width: 48%; }
+.cmd-table tr:last-child td { border-bottom: none; }
+
+/* ── Steps ── */
+.steps { counter-reset: step; list-style: none; padding: 0; }
+.steps li {
+  counter-increment: step;
+  display: flex;
+  gap: 12px;
+  margin: 10px 0;
+  align-items: flex-start;
+}
+.steps li::before {
+  content: counter(step);
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--gold-dim);
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+.steps li span { color: var(--text-2); }
+
+/* ── Footer ── */
+.footer {
+  text-align: center;
+  color: var(--text-3);
+  font-size: 12px;
+  padding: 30px 16px 20px;
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-inner">
+    <div class="logo">⚔️</div>
+    <div>
+      <h1>CoCBoard · Guida</h1>
+      <p>Tutto quello che devi sapere sul bot</p>
+    </div>
+  </div>
+</div>
+
+<div class="toc">
+  <div class="toc-title">Indice</div>
+  <a href="#senza-account">Cosa puoi fare subito</a>
+  <a href="#accesso">Registrarsi o accedere</a>
+  <a href="#gruppo">Usare il bot nel gruppo</a>
+  <a href="#community">Community</a>
+  <a href="#bonus">Bonus CWL</a>
+  <a href="#miniapp">Mini App</a>
+  <a href="#notifiche">Notifiche guerra</a>
+  <a href="#supporto">Supporto</a>
+  <a href="#comandi">Comandi disponibili</a>
+</div>
+
+<div class="content">
+
+  <!-- ── Senza account ── -->
+  <div class="section" id="senza-account">
+    <h2>📌 Cosa puoi fare subito <span class="badge badge-guest">ospite</span></h2>
+    <p>Anche senza registrarti hai accesso a:</p>
+    <ul>
+      <li>🌍 <b>Community</b> — chat globale inter-clan e annunci di reclutamento</li>
+      <li>🔍 <b>Cerca</b> — qualsiasi villaggio per #tag o clan per nome</li>
+      <li>📊 <b>Classifica</b> — top trofei Italia e mondo in tempo reale</li>
+    </ul>
+  </div>
+
+  <!-- ── Accesso ── -->
+  <div class="section" id="accesso">
+    <h2>🔐 Registrarsi o accedere <span class="badge badge-auth">account</span></h2>
+    <p>Apri il bot in <b>chat privata</b> e tocca <b>Registrati</b> o <b>Accedi</b>.</p>
+    <ul>
+      <li><b>Registrati</b> — inserisci la tua chiave API di Clash of Clans (trovata in-game: <em>Impostazioni → Altro → Accesso API</em>) per collegare l'account CoC al profilo CoCBoard.</li>
+      <li><b>Accedi</b> — usa il tuo username CoCBoard, il tuo #tag villaggio o la tua email CoCBoard.</li>
+    </ul>
+    <div class="note">🔐 <b>Non scrivere mai password o chiavi API nel gruppo</b> — solo in chat privata con il bot!</div>
+    <p>Una volta loggato sblocchi:</p>
+    <ul>
+      <li>🏰 <b>Il tuo clan</b> — roster, info clan, il tuo profilo</li>
+      <li>🏅 <b>CWL live</b> — andamento della Clan War League in corso</li>
+      <li>⚔️ <b>Guerre</b> — registro guerre classiche</li>
+      <li>🎁 <b>Bonus</b> — classifica e storico assegnazioni bonus CWL</li>
+      <li>🌐 <b>Mini App</b> — dashboard web direttamente da Telegram (senza reinserire la password!)</li>
+    </ul>
+  </div>
+
+  <!-- ── Gruppo ── -->
+  <div class="section" id="gruppo">
+    <h2>👥 Usare il bot nel gruppo del clan</h2>
+    <p>Nel gruppo usa sempre <code>/cocboard</code> per aprire il menù — evita conflitti con altri bot che usano <code>/start</code>.</p>
+    <p><b>Da ospite nel gruppo</b> puoi già cercare giocatori e vedere la classifica.<br>
+    <b>Dopo il login in chat privata</b>, tornando nel gruppo vedrai anche i dati del clan collegato.</p>
+
+    <h3>Collegare il clan al gruppo</h3>
+    <p>Solo il <b>Capo</b> o un <b>Co-Capo</b> può collegare il clan:</p>
+    <ol class="steps">
+      <li><span>Apri il bot in <b>chat privata</b></span></li>
+      <li><span>Vai su <b>Aggiungi a canale/gruppo</b> nel menù</span></li>
+      <li><span>Copia il <b>TOKEN</b> fornito (valido circa 1 ora)</span></li>
+      <li><span>Nel gruppo digita: <code>/linkclan TOKEN</code></span></li>
+    </ol>
+    <p>Si possono collegare fino a <b>3 gruppi o canali</b> per clan.<br>
+    Per scollegare: <code>/unlinkclan</code>.</p>
+  </div>
+
+  <!-- ── Community ── -->
+  <div class="section" id="community">
+    <h2>🌍 Community</h2>
+
+    <h3>Chat globale inter-clan</h3>
+    <p>Una stanza di testo condivisa tra clan diversi, organizzata in <b>finestre temporali</b> da 5 minuti.</p>
+    <ul>
+      <li>Per entrare serve un profilo CoCBoard (verificato ✅) oppure nome e #tag manuale</li>
+      <li>Regole: niente link, niente tag in-game nel corpo, nessuna emoji nel formato manuale</li>
+      <li>Rate limit: massimo 12 messaggi al minuto</li>
+      <li>Per uscire: tocca <b>Esci</b> o usa <code>/esci_chat_global</code></li>
+    </ul>
+
+    <h3>Reclutamento</h3>
+    <p>Pubblicizza il tuo clan o cerca un clan dove entrare!</p>
+    <ul>
+      <li>Invia una <b>bozza</b> (annuncio rapido o guidato passo-passo)</li>
+      <li>Gli annunci approvati restano visibili in <b>Annunci attivi</b></li>
+      <li>Scadono automaticamente dopo <b>24 ore</b></li>
+      <li>Puoi ritirare il tuo annuncio in anticipo da "Annunci attivi"</li>
+    </ul>
+  </div>
+
+  <!-- ── Bonus CWL ── -->
+  <div class="section" id="bonus">
+    <h2>🎁 Bonus CWL</h2>
+    <p>I Capi e Co-Capi possono assegnare i bonus stagionali direttamente dal bot.</p>
+    <ul>
+      <li>🏆 <b>Classifica storica</b> — chi ha ricevuto più bonus nel tempo</li>
+      <li>📅 <b>Storico per stagione</b> — scorri le stagioni passate</li>
+    </ul>
+    <h3>Assegnazione</h3>
+    <ul>
+      <li><b>Manuale</b> — abilita/disabilita singolo giocatore</li>
+      <li><b>Assistita</b> — scegli quanti bonus assegnare e il criterio (Standard / Strict / Solo peso TH / Solo score) → ranking automatico → confermi</li>
+    </ul>
+    <p>Il punteggio bonus si basa su stelle, distruzione media e partecipazione agli attacchi.</p>
+  </div>
+
+  <!-- ── Mini App ── -->
+  <div class="section" id="miniapp">
+    <h2>🌐 Mini App (dashboard web)</h2>
+    <p>Tocca il pulsante <b>(web)</b> o <b>Mini App</b> per aprire la dashboard web CoCBoard direttamente da Telegram.</p>
+    <ul>
+      <li>In <b>chat privata</b>: si apre come Mini App nativa Telegram</li>
+      <li>In <b>gruppo</b>: si apre nel browser; se hai già fatto login dal bot non ti chiede di nuovo la password</li>
+    </ul>
+    <p>Sezioni: Membri, CWL, Registro guerre, Bonus, Cerca, Classifiche, Il tuo profilo.</p>
+  </div>
+
+  <!-- ── Notifiche ── -->
+  <div class="section" id="notifiche">
+    <h2>🔔 Notifiche guerra</h2>
+    <p>Nei gruppi collegati puoi attivare gli avvisi automatici:</p>
+    <ul>
+      <li>⚔️ Countdown guerra e attacchi mancanti</li>
+      <li>🏅 Avvisi CWL</li>
+      <li>🔔 Raid Capitale e Giochi del Clan</li>
+    </ul>
+    <p>Gestisci tutto da <b>Gestione avvisi</b> nel menù del gruppo.</p>
+  </div>
+
+  <!-- ── Supporto ── -->
+  <div class="section" id="supporto">
+    <h2>📩 Supporto</h2>
+    <p>Hai un problema o una domanda?</p>
+    <ul>
+      <li>Usa <code>/assistenza</code> per aprire un ticket — scrivi direttamente con il team in chat privata</li>
+      <li>Il team risponde nella stessa conversazione ticket</li>
+    </ul>
+  </div>
+
+  <!-- ── Comandi ── -->
+  <div class="section" id="comandi">
+    <h2>⌨️ Comandi disponibili</h2>
+
+    <h3>Chat privata</h3>
+    <table class="cmd-table">
+      <tr><th>Comando</th><th>Cosa fa</th></tr>
+      <tr><td><code>/start</code> · <code>/cocboard</code></td><td>Apre il menù principale</td></tr>
+      <tr><td><code>/cerca</code></td><td>Cerca villaggio o clan</td></tr>
+      <tr><td><code>/classifica</code></td><td>Classifiche trofei</td></tr>
+      <tr><td><code>/assistenza</code></td><td>Apri ticket supporto</td></tr>
+      <tr><td><code>/esci_chat_global</code></td><td>Esci dalla chat globale</td></tr>
+      <tr><td><code>/annulla_reclutamento</code></td><td>Annulla bozza reclutamento</td></tr>
+      <tr><td><code>/cancel</code></td><td>Annulla operazione in corso</td></tr>
+    </table>
+
+    <h3>Gruppo / canale</h3>
+    <table class="cmd-table">
+      <tr><th>Comando</th><th>Cosa fa</th></tr>
+      <tr><td><code>/cocboard</code></td><td>Apre il menù (usa questo, non /start)</td></tr>
+      <tr><td><code>/cerca</code></td><td>Cerca villaggio o clan</td></tr>
+      <tr><td><code>/classifica</code></td><td>Classifiche trofei</td></tr>
+      <tr><td><code>/assistenza</code></td><td>Apri ticket (risposta in privato)</td></tr>
+      <tr><td><code>/linkclan TOKEN</code></td><td>Collega il clan al gruppo (Capo/Co-Capo)</td></tr>
+      <tr><td><code>/unlinkclan</code></td><td>Scollega il clan dal gruppo</td></tr>
+      <tr><td><code>/coc_off</code></td><td>Disattiva bot in questa chat (admin)</td></tr>
+      <tr><td><code>/coc_on</code></td><td>Riattiva bot in questa chat (admin)</td></tr>
+      <tr><td><code>/coc_status</code></td><td>Stato bot nella chat</td></tr>
+    </table>
+  </div>
+
+</div>
+
+<div class="footer">
+  CoCBoard · Guida aggiornata aprile 2026<br>
+  I dati arrivano live dall'API ufficiale Clash of Clans.<br>
+  CoCBoard non è affiliato con Supercell.
+</div>
+
+</body>
+</html>
