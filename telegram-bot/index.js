@@ -1920,11 +1920,17 @@ function buildWarLiveNavKb(data, spec, webAppUrl) {
     ]);
   }
 
+  const clanShort = (data.clan?.name || 'Noi').slice(0, 10);
+  const oppShort  = (data.opponent?.name || 'Avv').slice(0, 10);
+  // In Anteprima i due bottoni mostrano le difese; altrove roster completo
+  const usLabel   = view === 'prev' ? `⚔️ Att. ${clanShort}` : `👥 ${clanShort}`;
+  const themLabel = view === 'prev' ? `🛡 Dif. ${clanShort}` : `⚔️ ${oppShort}`;
+
   const rows = [
     [tab(view === 'ov', '📊 Panoramica', 'wl_v:ov'), tab(view === 'prev', '👁 Anteprima', 'wl_v:prev')],
     [tab(view === 'cf', '⚖ Confronto', 'wl_v:cf:0'), tab(view === 'plan', '📋 Planner', `wl_v:plan:0`)],
-    [tab(view === 'p' && side === 'us',   `👥 ${(data.clan?.name || 'Noi').slice(0,10)}`, `wl_v:p:us:0`)],
-    [tab(view === 'p' && side === 'them', `⚔️ ${(data.opponent?.name || 'Avv').slice(0,10)}`, `wl_v:p:them:0`)],
+    [tab(view === 'p' && side === 'us',   usLabel,   `wl_v:p:us:0`)],
+    [tab(view === 'p' && side === 'them', themLabel, `wl_v:p:them:0`)],
   ];
 
   if (view === 'p' && side === 'us' && usPages > 1) {
@@ -1965,8 +1971,32 @@ function buildWarLiveNavKb(data, spec, webAppUrl) {
   return Markup.inlineKeyboard(rows);
 }
 
+/** Arricchisce i membri guerra con i dati hero da player API (per Confronto).
+ *  Fetch in batch da 5 per non sovraccaricare il proxy. */
+async function enrichWarMembersWithHeroes(members) {
+  const BATCH = 5;
+  for (let i = 0; i < members.length; i += BATCH) {
+    const batch = members.slice(i, i + BATCH);
+    const results = await Promise.allSettled(batch.map(m => api.lookupPlayer(m.tag)));
+    for (let j = 0; j < batch.length; j++) {
+      const r = results[j];
+      if (r.status === 'fulfilled' && Array.isArray(r.value?.heroes)) {
+        batch[j].heroes = r.value.heroes;
+      }
+    }
+  }
+}
+
 async function loadAndShowWarLive(ctx, clanTag, viewSpec) {
   const data = await api.currentWar(clanTag);
+  // Arricchisce con eroi solo per la view Confronto (evita 30+ API call inutili)
+  if (viewSpec.view === 'cf' && data?.state && data.state !== 'notInWar') {
+    const allMembers = [
+      ...(data.clan?.members || []),
+      ...(data.opponent?.members || []),
+    ];
+    await enrichWarMembersWithHeroes(allMembers).catch(() => {});
+  }
   let webAppUrl = null;
   if (data?.state && data.state !== 'notInWar' && !isLinkedChatContext(ctx) && ctx.cocboardUser) {
     try {

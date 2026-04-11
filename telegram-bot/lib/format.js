@@ -1044,19 +1044,26 @@ function formatWarLiveOverview(data) {
       : `📊 Risultato: ${wp.label}`);
   }
 
-  // Attacchi rimanenti alert (suggestion 1)
+  // Stato attacchi sempre visibile durante la guerra
   if (data.state === 'inWar') {
     const members = c.members || [];
-    const missing = members.filter(m => (m.attacks?.length ?? 0) < atkPer);
-    if (missing.length > 0) {
-      const hoursLeft = warLiveHoursLeft(data);
-      const urgentThreshold = 4;
-      if (hoursLeft !== null && hoursLeft < urgentThreshold) {
-        lines.push('');
-        lines.push(`⚠️ <b>${missing.length} giocator${missing.length === 1 ? 'e' : 'i'}</b> con attacchi rimanenti — meno di ${Math.ceil(hoursLeft)}h alla fine!`);
-        const nameList = missing.slice(0, 5).map(m => escapeHtml(m.name || '?')).join(', ');
-        lines.push(`   → ${nameList}${missing.length > 5 ? ` +${missing.length - 5}` : ''}`);
-      }
+    const done    = members.filter(m => (m.attacks?.length ?? 0) >= atkPer);
+    const partial = atkPer > 1 ? members.filter(m => (m.attacks?.length ?? 0) === 1) : [];
+    const zero    = members.filter(m => (m.attacks?.length ?? 0) === 0);
+    const hoursLeft = warLiveHoursLeft(data);
+    const isUrgent = hoursLeft !== null && hoursLeft < 4;
+    lines.push('');
+    const partialBit = atkPer > 1 ? ` · 🟡 ${partial.length}` : '';
+    lines.push(`📊 Attacchi: ✅ ${done.length}${partialBit} · 🔴 ${zero.length}`);
+    if (zero.length) {
+      const urgent = isUrgent ? ' ⚠️' : '';
+      lines.push(`🔴 Non ha ancora attaccato${urgent}: ${zero.slice(0, 8).map(m => escapeHtml(m.name || '?')).join(', ')}${zero.length > 8 ? ` +${zero.length - 8}` : ''}`);
+    }
+    if (partial.length && atkPer > 1) {
+      lines.push(`🟡 1 attacco rimasto: ${partial.slice(0, 6).map(m => escapeHtml(m.name || '?')).join(', ')}${partial.length > 6 ? ` +${partial.length - 6}` : ''}`);
+    }
+    if (isUrgent && (zero.length + partial.length > 0)) {
+      lines.push(`⚠️ Meno di ${Math.ceil(hoursLeft)}h alla fine!`);
     }
   }
 
@@ -1134,45 +1141,65 @@ function getWarLivePlayersPageCount(data, side = 'us') {
 function formatWarLivePreview(data) {
   const c = data.clan || {};
   const o = data.opponent || {};
-  const cMembers = c.members || [];
-  const oMembers = o.members || [];
+  const ourMembers  = [...(c.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const themMembers = [...(o.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const atkPer  = data.attacksPerMember || 2;
+  const inWar   = data.state === 'inWar' || data.state === 'warEnded';
   const countdown = warLiveCountdown(data);
 
-  const countTh = (arr) => {
-    const map = {};
-    for (const m of arr) { const t = m.townhallLevel ?? 0; if (t) map[t] = (map[t] || 0) + 1; }
-    return map;
-  };
-  const thCompStr = (thMap) => {
-    const entries = Object.entries(thMap).sort((a, b) => +b[0] - +a[0]);
-    if (!entries.length) return '—';
-    return entries.map(([lv, n]) => `TH${lv}: <b>${n}</b>`).join(' · ');
-  };
+  // Defender lookup per risolvere i tag
+  const defMap = {};
+  [...ourMembers, ...themMembers].forEach(m => {
+    defMap[m.tag] = { name: m.name, pos: m.mapPosition, th: m.townhallLevel };
+  });
 
-  const cTh = countTh(cMembers);
-  const oTh = countTh(oMembers);
+  const st = (n) => '★'.repeat(n ?? 0) + '☆'.repeat(Math.max(0, 3 - (n ?? 0)));
+  const pad = (s, len) => String(s ?? '').slice(0, len).padEnd(len);
 
-  const cName = escapeHtml(c.name || 'Noi');
-  const oName = escapeHtml(o.name || 'Avversario');
-  const teamSize = data.teamSize || '?';
-  const stateLabel = warLiveStateLabel(data.state);
-
-  const lines = [
-    DIV,
-    `👁 <b>Anteprima</b>`,
-    DIV,
-    `📌 ${stateLabel} — 👥 ${teamSize}v${teamSize}`,
-  ];
+  const lines = [DIV, `👁 <b>Anteprima</b>`, DIV];
   if (countdown) lines.push(countdown);
   lines.push('');
 
-  lines.push(`🏠 <b>${cName}</b>`);
-  lines.push(`   ${thCompStr(cTh)}`);
-  lines.push(`   ⭐ ${c.stars ?? 0} — 💥 ${(c.destructionPercentage ?? 0).toFixed(1)}%`);
+  if (!inWar) {
+    // Pre-guerra: composizione TH
+    const countTh = (arr) => { const m = {}; arr.forEach(p => { const t = p.townhallLevel ?? 0; if (t) m[t] = (m[t] || 0) + 1; }); return m; };
+    const thStr = (map) => Object.entries(map).sort((a,b) => +b[0]-+a[0]).map(([lv,n]) => `TH${lv}×${n}`).join(' ') || '—';
+    lines.push(`🏠 <b>${escapeHtml(c.name || 'Noi')}</b>: ${thStr(countTh(ourMembers))}`);
+    lines.push(`⚔️ <b>${escapeHtml(o.name || 'Avversario')}</b>: ${thStr(countTh(themMembers))}`);
+    return lines.join('\n');
+  }
+
+  // ── Attacchi del nostro clan ──
+  const ourAtks = ourMembers.flatMap(m => (m.attacks || []).map(a => ({ m, a }))).sort((x,y) => (x.a.order ?? 0) - (y.a.order ?? 0));
+  const totalUs = ourMembers.length * atkPer;
+  lines.push(`⚔️ <b>Attacchi Noi</b> — ${c.attacks ?? 0}/${totalUs}`);
+  if (!ourAtks.length) {
+    lines.push('<i>Nessun attacco ancora.</i>');
+  } else {
+    const rows = ourAtks.map(({ m, a }) => {
+      const def = defMap[a.defenderTag];
+      const defLabel = def ? `#${String(def.pos).padStart(2)} ${pad(def.name,9)} TH${def.th}` : '?';
+      return `#${String(m.mapPosition ?? '?').padStart(2)} ${pad(m.name,9)} → ${defLabel}: ${st(a.stars)} ${(a.destructionPercentage ?? 0).toFixed(0)}%`;
+    });
+    lines.push(`<pre>${rows.join('\n')}</pre>`);
+  }
+
   lines.push('');
-  lines.push(`⚔️ <b>${oName}</b>`);
-  lines.push(`   ${thCompStr(oTh)}`);
-  lines.push(`   ⭐ ${o.stars ?? 0} — 💥 ${(o.destructionPercentage ?? 0).toFixed(1)}%`);
+
+  // ── Attacchi ricevuti (difese) ──
+  const theirAtks = themMembers.flatMap(m => (m.attacks || []).map(a => ({ m, a }))).sort((x,y) => (x.a.order ?? 0) - (y.a.order ?? 0));
+  const totalThem = themMembers.length * atkPer;
+  lines.push(`🛡 <b>Difese Noi</b> — ricevuti ${o.attacks ?? 0}/${totalThem}`);
+  if (!theirAtks.length) {
+    lines.push('<i>Nessun attacco ricevuto.</i>');
+  } else {
+    const rows = theirAtks.map(({ m, a }) => {
+      const def = defMap[a.defenderTag];
+      const defLabel = def ? `#${String(def.pos).padStart(2)} ${pad(def.name,9)}` : '?';
+      return `#${String(m.mapPosition ?? '?').padStart(2)} ${pad(m.name,9)} → ${defLabel}: ${st(a.stars)} ${(a.destructionPercentage ?? 0).toFixed(0)}%`;
+    });
+    lines.push(`<pre>${rows.join('\n')}</pre>`);
+  }
 
   return lines.join('\n');
 }
@@ -1250,24 +1277,24 @@ function formatWarLivePlan(data, page = 0) {
   const ourMembers = [...(c.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
   const oppMembers = [...(o.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
 
-  // Stato difese avversario
+  // Stato difese avversario (migliore attacco ricevuto per base)
   const defStatus = {};
   for (const opp of oppMembers) {
     const atksOnBase = ourMembers.flatMap(m => (m.attacks || []).filter(a => a.defenderTag === opp.tag));
-    const best = atksOnBase.reduce((b, a) => (a.stars > b.stars || (a.stars === b.stars && a.destructionPercentage > b.destructionPercentage)) ? a : b,
-      { stars: 0, destructionPercentage: 0 });
+    const best = atksOnBase.reduce(
+      (b, a) => (a.stars > b.stars || (a.stars === b.stars && a.destructionPercentage > b.destructionPercentage)) ? a : b,
+      { stars: 0, destructionPercentage: 0 }
+    );
     defStatus[opp.tag] = { pos: opp.mapPosition, name: opp.name, th: opp.townhallLevel, bestStars: best.stars, bestDest: best.destructionPercentage, times: atksOnBase.length };
   }
 
-  const needAtk  = ourMembers.filter(m => (m.attacks?.length ?? 0) < atkPer);
+  const needAtk   = ourMembers.filter(m => (m.attacks?.length ?? 0) < atkPer);
+  const openBases = oppMembers.filter(opp => (defStatus[opp.tag]?.bestStars ?? 0) < 3);
+
   const PAGE_SIZE = WAR_LIVE_PLAN_PER_PAGE;
   const totalPgs  = Math.max(1, Math.ceil(needAtk.length / PAGE_SIZE));
   const p         = Math.min(Math.max(0, page), totalPgs - 1);
   const slice     = needAtk.slice(p * PAGE_SIZE, (p + 1) * PAGE_SIZE);
-
-  // Basi non ancora a 3 stelle
-  const openBases = oppMembers.filter(opp => (defStatus[opp.tag]?.bestStars ?? 0) < 3)
-    .sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
 
   const lines = [
     DIV,
@@ -1277,27 +1304,38 @@ function formatWarLivePlan(data, page = 0) {
   ];
 
   if (!needAtk.length) {
-    lines.push('<i>✅ Tutti i giocatori hanno completato i loro attacchi.</i>');
+    lines.push('<i>✅ Tutti i giocatori hanno completato i propri attacchi.</i>');
     return lines.join('\n');
   }
 
+  const pad = (s, len) => String(s ?? '').slice(0, len).padEnd(len);
+
+  const rows = [];
   for (const m of slice) {
-    const atkLeft = atkPer - (m.attacks?.length ?? 0);
-    lines.push(`\n⚔️ <b>${m.mapPosition ?? '?'}. ${escapeHtml(m.name || '—')}</b> (TH${m.townhallLevel ?? '?'}) — ${atkLeft} attacco/i`);
-    const suggestions = openBases.filter(opp => {
+    const atkLeft    = atkPer - (m.attacks?.length ?? 0);
+    const attackerTh = m.townhallLevel ?? 0;
+    rows.push(`#${String(m.mapPosition ?? '?').padStart(2)} ${pad(m.name || '—', 11)} TH${attackerTh} — ${atkLeft} atk`);
+
+    // Suggerimenti personalizzati: score per questo attaccante
+    const scored = openBases.map(opp => {
       const s = defStatus[opp.tag];
-      // evita di riattaccare con meno di 3★ già ottenute se ne ha 2
-      return s && s.bestStars < 3;
-    }).slice(0, 3);
+      const thDiff     = Math.abs(attackerTh - (s.th ?? 0));
+      const penalties  = s.times * 3 + s.bestStars * 5; // preferisce basi intatte con pochi TH
+      return { s, score: thDiff * 2 + penalties };
+    }).sort((a, b) => a.score - b.score);
+
+    const suggestions = scored.slice(0, 2); // max 2 target per giocatore
     if (suggestions.length) {
-      for (const sugg of suggestions) {
-        const s = defStatus[sugg.tag];
-        const status = s.bestStars === 0 ? '🟥 intatta' : `🟨 ${s.bestStars}⭐ (${Number(s.bestDest).toFixed(0)}%)`;
-        lines.push(`   → #${s.pos} <b>${escapeHtml(sugg.name)}</b> TH${sugg.th} · ${status}`);
+      for (const { s } of suggestions) {
+        const status = s.bestStars === 0 ? '[intatta]' : `[${s.bestStars}★ ${Number(s.bestDest).toFixed(0)}%]`;
+        rows.push(`  → #${String(s.pos).padStart(2)} ${pad(s.name, 10)} TH${s.th} ${status}`);
       }
+    } else {
+      rows.push('  → nessuna base disponibile');
     }
   }
 
+  lines.push(`<pre>${rows.join('\n')}</pre>`);
   return lines.join('\n');
 }
 
