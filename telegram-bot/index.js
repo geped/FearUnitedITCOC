@@ -1,6 +1,8 @@
 'use strict';
 
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
 const { Telegraf, Markup } = require('telegraf');
 
 const { isUserAllowed, rateLimitOk } = require('./lib/access');
@@ -62,6 +64,7 @@ async function _deleteTrackedMenuMsg(telegram, chatId) {
   await telegram.deleteMessage(Number(chatId), mid).catch(() => {});
 }
 const TELEGRAPH_TUTORIAL_URL = (process.env.TELEGRAPH_TUTORIAL_URL || 'https://telegra.ph/CoCBoard-Bot-Guida-04-07').trim();
+const WELCOME_IMAGE_PATH = path.join(__dirname, 'assets', 'benvenuto.png');
 
 async function ensureTgBotUsername(telegram) {
   if (cachedTgBotUsername) return cachedTgBotUsername;
@@ -1449,6 +1452,12 @@ async function sendGuestMenu(ctx) {
       _trackMenuMsg(ctx.chat?.id, m?.message_id);
     }
   } else {
+    if (!group && fs.existsSync(WELCOME_IMAGE_PATH)) {
+      await ctx.replyWithPhoto(
+        { source: fs.createReadStream(WELCOME_IMAGE_PATH) },
+        { parse_mode: 'HTML' }
+      ).catch(() => {});
+    }
     const m = await ctx.reply(text, { parse_mode: 'HTML', ...kb });
     _trackMenuMsg(ctx.chat?.id, m?.message_id);
   }

@@ -29,16 +29,16 @@ function parseTagArg(text) {
 /** Chat privata: login sicuro. */
 function formatGuestWelcomePrivate() {
   return (
-    `⚔️ <b>CoCBoard</b> <i>· gestione clan, CWL e giocatori</i>\n` +
+    `👋 <b>Benvenuto su CoCBoard!</b>\n` +
     `${DIV2}\n\n` +
-    `📌 <b>Da ospite</b>\n` +
-    `• <b>Community</b> — chat globale e reclutamento\n` +
-    `• <b>Cerca</b> · <b>Classifica</b>\n` +
-    `• <b>Guida e tutorial</b> — come funziona il bot\n\n` +
-    `🔐 <b>Dopo Accedi / Registrati</b>\n` +
-    `Menù con clan, CWL, bonus, guerre e pulsanti <b>(web)</b>.\n` +
-    `🌐 <b>Mini App / sito da Telegram:</b> se sei già entrato dal bot, l’apertura con <b>(web)</b> non chiede di nuovo password (sessione sul telefono).\n\n` +
-    `<i>Annulla con <code>/cancel</code> durante login o registrazione.</i>`
+    `Il bot Telegram del tuo clan — dati CoC in tempo reale, CWL, bonus, guerre e molto altro.\n\n` +
+    `📌 <b>Anche senza account puoi:</b>\n` +
+    `• 🌍 <b>Community</b> — chat globale inter-clan e reclutamento\n` +
+    `• 🔍 <b>Cerca</b> — villaggio (#tag) o clan (nome)\n` +
+    `• 📊 <b>Classifica</b> — top trofei Italia e mondo\n\n` +
+    `🔐 <b>Con Accedi / Registrati sblocchi:</b>\n` +
+    `Clan, CWL live, bonus stagionali, registro guerre e il tuo profilo — accessibili anche dalla <b>Mini App</b> web direttamente da Telegram.\n\n` +
+    `👇 <i>Tocca un pulsante qui sotto per iniziare!</i>`
   );
 }
 
@@ -64,18 +64,18 @@ function mapCoCRoleToItalian(role) {
 function formatGuestWelcomeGroup(privateChatUrl) {
   const open =
     privateChatUrl && String(privateChatUrl).trim()
-      ? `\n\n🔗 <a href="${escapeHtml(String(privateChatUrl).trim())}"><b>Apri chat privata con il bot</b></a>\n<i>→ da lì fai Accedi / Registrati in sicurezza.</i>`
-      : '\n\n<i>Cerca il bot in <b>chat privata</b> per Accedi e Registrati.</i>';
+      ? `\n\n🔗 <a href="${escapeHtml(String(privateChatUrl).trim())}"><b>Accedi o registrati in chat privata</b></a>\n<i>→ poi torna qui: si sblocca tutto!</i>`
+      : '\n\n<i>Aprimi in <b>chat privata</b> per Accedi e Registrati.</i>';
   return (
-    `⚔️ <b>CoCBoard</b> <i>in gruppo</i>\n` +
+    `👋 <b>Ciao! Sono CoCBoard</b> <i>· il bot di gestione clan CoC</i>\n` +
     `${DIV2}\n\n` +
-    `📌 <b>Cosa puoi fare qui</b>\n` +
+    `📌 <b>Cosa puoi fare qui:</b>\n` +
     `• 🔍 <b>Cerca</b> — villaggio (#tag) o clan (nome)\n` +
     `• 📊 <b>Classifica</b> — top trofei Italia / mondo\n\n` +
-    `📌 <b>Dopo il login in privato</b>\n` +
-    `Potrai usare <b>nel gruppo</b> anche membro, CWL, bonus e guerre sul tuo clan (stesso account Telegram).\n` +
+    `🔓 <b>Vuoi vedere clan, CWL, bonus e guerre?</b>\n` +
+    `Fai login in chat privata con il bot — poi qui si sblocca tutto (clan collegato).` +
     open +
-    `\n\n<i>Comandi: <code>/cocboard</code> · <code>/cerca</code> · <code>/help</code></i>`
+    `\n\n<i>Usa <code>/cocboard</code> per aprire il menù.</i>`
   );
 }
 
@@ -89,14 +89,16 @@ function formatPrivateOnlyWizard() {
 
 function formatGroupBotAdded() {
   return (
-    `👋 <b>CoCBoard</b> è nel gruppo.\n` +
+    `👋 <b>CoCBoard è arrivato nel gruppo!</b>\n` +
     `${DIV2}\n\n` +
-    `📌 <b>Come si usa</b>\n` +
-    `• Usa i <b>pulsanti</b> qui sotto oppure i comandi che iniziano con <code>/</code> (es. <code>/cerca</code>, <code>/classifica</code>).\n` +
-    `• Apri il menù con <code>/cocboard</code> (evita conflitti con altri bot su <code>/start</code>).\n\n` +
-    `🔐 <b>Login e password</b> solo in <b>chat privata</b> con il bot — mai nel gruppo.\n\n` +
-    `🔗 Dopo che un Capo/Co-Capo collega il clan con il token, qui si vedono anche Membri, CWL e guerre.\n\n` +
-    `<i>Chi gestisce il gruppo può fissare questo messaggio.</i>`
+    `Sono il bot di gestione clan per Clash of Clans — dati live, CWL, bonus e guerre direttamente qui.\n\n` +
+    `📌 <b>Come iniziare:</b>\n` +
+    `• Scrivi <code>/cocboard</code> per aprire il menù (meglio di <code>/start</code>: evita conflitti con altri bot).\n` +
+    `• Usa i <b>pulsanti</b> oppure <code>/cerca</code>, <code>/classifica</code> e gli altri comandi.\n\n` +
+    `🔗 <b>Collegare il clan al gruppo</b>\n` +
+    `Un Capo o Co-Capo deve ottenere il <b>token</b> dal bot (menu → Aggiungi a canale/gruppo) e digitare <code>/linkclan TOKEN</code> qui — poi tutti vedono Membri, CWL e guerre.\n\n` +
+    `🔐 <b>Login e password</b> vanno fatti sempre in <b>chat privata</b> con il bot, mai nel gruppo.\n\n` +
+    `<i>💡 Consiglio: fixa questo messaggio così tutti sanno come usarmi!</i>`
   );
 }
 
