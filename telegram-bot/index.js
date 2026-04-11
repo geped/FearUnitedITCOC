@@ -859,7 +859,7 @@ privateUi.setOnBeforePrivateUiWipe((uid) => {
 });
 
 async function buildPrivateReplyKeyboardMarkup(uid) {
-  const rows = [[Markup.button.text(PRIVATE_RK_MENU), Markup.button.text(PRIVATE_RK_HELP)]];
+  const rows = [[Markup.button.text(PRIVATE_RK_MENU)]];
   if (adminActiveSupportTicket.has(uid)) {
     rows.push([Markup.button.text(SUPPORT_RK_TAKE), Markup.button.text(SUPPORT_RK_WAIT)]);
     rows.push([Markup.button.text(SUPPORT_RK_CLOSE), Markup.button.text(SUPPORT_RK_EXIT)]);
@@ -967,20 +967,17 @@ async function isSupportAdmin(ctx) {
 function supportAdminPanelKb(openGlobalReportsCount = null, webAppUrl = null) {
   const globalLabel =
     Number.isFinite(Number(openGlobalReportsCount)) && Number(openGlobalReportsCount) > 0
-      ? `🚩 Segnalazioni chat globale (${Number(openGlobalReportsCount)})`
-      : '🚩 Segnalazioni chat globale';
+      ? `🚩 Segnalazioni globali (${Number(openGlobalReportsCount)})`
+      : '🚩 Segnalazioni globali';
   const rows = [];
   if (webAppUrl && String(webAppUrl).startsWith('https://')) {
     rows.push([Markup.button.webApp('🌐 CoCBoardBot (Mini App)', webAppUrl)]);
   }
   rows.push(
+    [Markup.button.callback('📬 Segnalazioni attive', 'support_admin_open'), Markup.button.callback('👤 Solo miei', 'support_admin_mine')],
     [Markup.button.callback(globalLabel, 'support_admin_global_reports')],
-    [Markup.button.callback('🗂 Ticket chiusi', 'support_admin_closed')],
-    [Markup.button.callback('🚫 Utenti bannati', 'support_admin_banned_users')],
-    [Markup.button.callback('📬 Segnalazioni attive', 'support_admin_open')],
-    [Markup.button.callback('👤 Solo miei assegnati', 'support_admin_mine')],
-    [Markup.button.callback('📊 Statistiche bot', 'support_admin_stats')],
-    [Markup.button.callback('📄 Export CSV metriche', 'support_admin_csv')],
+    [Markup.button.callback('🗂 Ticket chiusi', 'support_admin_closed'), Markup.button.callback('🚫 Utenti bannati', 'support_admin_banned_users')],
+    [Markup.button.callback('📊 Statistiche', 'support_admin_stats'), Markup.button.callback('📄 Export CSV', 'support_admin_csv')],
     [Markup.button.callback('« Menù', 'menu')],
   );
   return Markup.inlineKeyboard(rows);
@@ -998,16 +995,15 @@ async function supportAdminPanelKbAsync(ctx, openGlobalReportsCount = null) {
 function supportModeratorPanelKb(openGlobalReportsCount = null, webAppUrl = null) {
   const globalLabel =
     Number.isFinite(Number(openGlobalReportsCount)) && Number(openGlobalReportsCount) > 0
-      ? `🚩 Segnalazioni chat globale (${Number(openGlobalReportsCount)})`
-      : '🚩 Segnalazioni chat globale';
+      ? `🚩 Segnalazioni globali (${Number(openGlobalReportsCount)})`
+      : '🚩 Segnalazioni globali';
   const rows = [];
   if (webAppUrl && String(webAppUrl).startsWith('https://')) {
     rows.push([Markup.button.webApp('🌐 CoCBoardBot (Mini App)', webAppUrl)]);
   }
   rows.push(
+    [Markup.button.callback('📬 Ticket attivi', 'support_admin_open'), Markup.button.callback('👤 Solo miei', 'support_admin_mine')],
     [Markup.button.callback(globalLabel, 'support_admin_global_reports')],
-    [Markup.button.callback('📬 Ticket attivi', 'support_admin_open')],
-    [Markup.button.callback('👤 Solo miei assegnati', 'support_admin_mine')],
     [Markup.button.callback('« Menù', 'menu')],
   );
   return Markup.inlineKeyboard(rows);
@@ -1033,6 +1029,9 @@ async function sendSupportAdminPanel(ctx, text) {
     text ||
     (full ? '🛠 <b>Pannello amministratore bot</b>' : '🛡 <b>Pannello moderatori CoCBoardBot</b>');
   const kb = await supportHomeKbAsync(ctx, n);
+  if (ctx.callbackQuery) {
+    try { await ctx.editMessageText(title, { parse_mode: 'HTML', ...kb }); return; } catch (_) {}
+  }
   await ctx.reply(title, { parse_mode: 'HTML', ...kb });
 }
 
@@ -1041,7 +1040,7 @@ function supportTicketListKb(rows, includeClosed = true) {
     Markup.button.callback(`🎫 #${r.id} · utente ${r.telegram_user_id} · ${r.status}`, `support_admin_ticket:${r.id}`),
   ]);
   if (includeClosed) buttons.push([Markup.button.callback('🗂 Ticket chiusi', 'support_admin_closed')]);
-  buttons.push([Markup.button.callback('« CoCBoardBot', 'support_admin_home')]);
+  buttons.push([Markup.button.callback('« CoCBoardBot', 'support_admin_home'), Markup.button.callback('« Menù', 'menu')]);
   return Markup.inlineKeyboard(buttons);
 }
 
@@ -1063,7 +1062,7 @@ function supportTicketAdminKb(ticketId, fullAdmin = true) {
     ]);
   }
   rows.push([Markup.button.callback('« Segnalazioni attive', 'support_admin_open')]);
-  rows.push([Markup.button.callback('🏠 CoCBoardBot', 'support_admin_home')]);
+  rows.push([Markup.button.callback('« CoCBoardBot', 'support_admin_home'), Markup.button.callback('« Menù', 'menu')]);
   return Markup.inlineKeyboard(rows);
 }
 
@@ -1071,7 +1070,7 @@ function globalReportListKb(rows) {
   const buttons = (rows || []).slice(0, 20).map((r) => [
     Markup.button.callback(`🚩 #${r.id} · ${r.status} · utente ${r.reporter_telegram_user_id}`, `support_admin_greport:${r.id}`),
   ]);
-  buttons.push([Markup.button.callback('« CoCBoardBot', 'support_admin_home')]);
+  buttons.push([Markup.button.callback('« CoCBoardBot', 'support_admin_home'), Markup.button.callback('« Menù', 'menu')]);
   return Markup.inlineKeyboard(buttons);
 }
 
@@ -1108,7 +1107,7 @@ function globalReportAdminKb(report, opts = {}) {
     rows.push([Markup.button.callback('🎯 Imposta target manuale', `support_admin_greport_target:${id}`)]);
   }
   if (fullAdmin) rows.push([Markup.button.callback('🚫 Utenti bannati', 'support_admin_banned_users')]);
-  rows.push([Markup.button.callback('« Segnalazioni globali', 'support_admin_global_reports')]);
+  rows.push([Markup.button.callback('« Segnalazioni globali', 'support_admin_global_reports'), Markup.button.callback('« Menù', 'menu')]);
   return Markup.inlineKeyboard(rows);
 }
 
@@ -1119,7 +1118,7 @@ function bannedUsersListKb(rows) {
       `support_admin_banned:${r.telegram_user_id}`
     ),
   ]);
-  buttons.push([Markup.button.callback('« CoCBoardBot', 'support_admin_home')]);
+  buttons.push([Markup.button.callback('« CoCBoardBot', 'support_admin_home'), Markup.button.callback('« Menù', 'menu')]);
   return Markup.inlineKeyboard(buttons);
 }
 
@@ -1137,8 +1136,8 @@ function bannedUserAdminKb(telegramUserId) {
       Markup.button.callback('🔇 24h', `support_admin_mute_userh:${telegramUserId}:24`),
       Markup.button.callback('🔇 48h', `support_admin_mute_userh:${telegramUserId}:48`),
     ],
-    [Markup.button.callback('🚫 Utenti bannati', 'support_admin_banned_users')],
-    [Markup.button.callback('« Pannello admin', 'support_admin_home')],
+    [Markup.button.callback('« Utenti bannati', 'support_admin_banned_users')],
+    [Markup.button.callback('« CoCBoardBot', 'support_admin_home'), Markup.button.callback('« Menù', 'menu')],
   ]);
 }
 
@@ -2971,12 +2970,6 @@ function setupBot(bot) {
       await handleCocboardCommand(ctx);
       return true;
     }
-    if (t === PRIVATE_RK_HELP) {
-      adminActiveSupportTicket.delete(ctx.from.id);
-      await privateUi.wipePrivateConversationUi(ctx.telegram, ctx.from.id);
-      await dispatchHelpCommand(ctx);
-      return true;
-    }
     if (t === PRIVATE_RK_EXIT_GLOBAL) {
       const active = await sbcCommunity.isActiveInGlobalChat(ctx.from.id).catch(() => false);
       if (!active) {
@@ -3636,19 +3629,26 @@ function setupBot(bot) {
   bot.action('support_admin_stats', async (ctx) => {
     safeAnswerCb(ctx);
     if (!(await isSupportAdmin(ctx))) return;
-    const s = (await sb.getAdminDashboardStats().catch(() => null)) || {
-      linkedChats: 0,
-      pausedChats: 0,
-      dau: 0,
-      wau: 0,
-    };
+    const s = (await sb.getAdminDashboardStats().catch(() => null)) || {};
+    const DIV = '──────────────────';
     const body =
-      `📊 <b>Statistiche bot</b>\n\n` +
-      `• Chat collegate: <b>${s.linkedChats}</b>\n` +
-      `• Chat in pausa (/coc_off): <b>${s.pausedChats}</b>\n` +
-      `• Utenti attivi 24h (DAU): <b>${s.dau}</b>\n` +
-      `• Utenti attivi 7gg (WAU): <b>${s.wau}</b>`;
-    await ctx.reply(body, { parse_mode: 'HTML', ...(await supportAdminPanelKbAsync(ctx)) });
+      `📊 <b>Statistiche bot</b>\n${DIV}\n\n` +
+      `<b>Utenti</b>\n` +
+      `• Registrati (account bot): <b>${s.registeredUsers ?? '—'}</b>\n` +
+      `• Attivi ultime 24h (DAU): <b>${s.dau ?? '—'}</b>\n` +
+      `• Attivi ultimi 7gg (WAU): <b>${s.wau ?? '—'}</b>\n\n` +
+      `<b>Chat e clan</b>\n` +
+      `• Gruppi/canali collegati a clan: <b>${s.linkedChats ?? '—'}</b>\n` +
+      `• Chat in pausa (/coc_off): <b>${s.pausedChats ?? '—'}</b>\n\n` +
+      `<b>Moderazione</b>\n` +
+      `• Ban attivi: <b>${s.activeBans ?? '—'}</b>\n` +
+      `• Ticket aperti: <b>${s.openTickets ?? '—'}</b>\n` +
+      `• Segnalazioni globali aperte: <b>${s.openReports ?? '—'}</b>`;
+    const kb = Markup.inlineKeyboard([
+      [Markup.button.callback('« CoCBoardBot', 'support_admin_home'), Markup.button.callback('« Menù', 'menu')],
+    ]);
+    try { await ctx.editMessageText(body, { parse_mode: 'HTML', ...kb }); }
+    catch (_) { await ctx.reply(body, { parse_mode: 'HTML', ...kb }); }
   });
 
   bot.action('support_admin_open', async (ctx) => {
@@ -3657,11 +3657,14 @@ function setupBot(bot) {
     const n = await sb.listGlobalChatReports(['open', 'in_review'], 200).then((r) => (r || []).length).catch(() => 0);
     const full = await isSupportAdmin(ctx);
     const rows = await sb.listActiveSupportTickets(25).catch(() => []);
+    const editOrReply = async (text, opts) => {
+      try { await ctx.editMessageText(text, opts); } catch (_) { await ctx.reply(text, opts); }
+    };
     if (!rows.length) {
-      await ctx.reply('📭 Nessun ticket attivo.', { parse_mode: 'HTML', ...(await supportHomeKbAsync(ctx, n)) });
+      await editOrReply('📭 Nessun ticket attivo.', { parse_mode: 'HTML', ...(await supportHomeKbAsync(ctx, n)) });
       return;
     }
-    await ctx.reply('📬 <b>Ticket assistenza</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows, full) });
+    await editOrReply('📬 <b>Ticket assistenza</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows, full) });
   });
 
   bot.action('support_admin_closed', async (ctx) => {
@@ -3671,11 +3674,14 @@ function setupBot(bot) {
       .listActiveSupportTickets(80)
       .then((all) => (all || []).filter((t) => String(t.status) === 'closed_pending_purge').slice(0, 30))
       .catch(() => []);
+    const editOrReply = async (text, opts) => {
+      try { await ctx.editMessageText(text, opts); } catch (_) { await ctx.reply(text, opts); }
+    };
     if (!rows.length) {
-      await ctx.reply('📭 Nessun ticket chiuso in attesa purge.', { parse_mode: 'HTML', ...(await supportAdminPanelKbAsync(ctx)) });
+      await editOrReply('📭 Nessun ticket chiuso in attesa purge.', { parse_mode: 'HTML', ...(await supportAdminPanelKbAsync(ctx)) });
       return;
     }
-    await ctx.reply('🗂 <b>Ticket chiusi</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows) });
+    await editOrReply('🗂 <b>Ticket chiusi</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows) });
   });
 
   bot.action('support_admin_mine', async (ctx) => {
@@ -3684,11 +3690,14 @@ function setupBot(bot) {
     const n = await sb.listGlobalChatReports(['open', 'in_review'], 200).then((r) => (r || []).length).catch(() => 0);
     const full = await isSupportAdmin(ctx);
     const rows = await sb.listActiveSupportTicketsAssignedTo(ctx.from.id, 25).catch(() => []);
+    const editOrReply = async (text, opts) => {
+      try { await ctx.editMessageText(text, opts); } catch (_) { await ctx.reply(text, opts); }
+    };
     if (!rows.length) {
-      await ctx.reply('📭 Nessun ticket assegnato a te.', { parse_mode: 'HTML', ...(await supportHomeKbAsync(ctx, n)) });
+      await editOrReply('📭 Nessun ticket assegnato a te.', { parse_mode: 'HTML', ...(await supportHomeKbAsync(ctx, n)) });
       return;
     }
-    await ctx.reply('👤 <b>Ticket assegnati a me</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows, full) });
+    await editOrReply('👤 <b>Ticket assegnati a me</b>', { parse_mode: 'HTML', ...supportTicketListKb(rows, full) });
   });
 
   async function renderGlobalReportsAdminList(ctx, statuses, title) {

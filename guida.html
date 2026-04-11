@@ -194,6 +194,15 @@ code {
   border: 1px solid var(--border);
   display: block;
 }
+.section-img-sm {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  float: right;
+  margin: 0 0 10px 14px;
+  border: 2px solid var(--border);
+}
 
 /* ── Steps ── */
 .steps { counter-reset: step; list-style: none; padding: 0; }
@@ -237,7 +246,7 @@ code {
 
 <!-- ── Hero ── -->
 <div class="hero">
-  <img src="assets/cocboardbot_sfondo.png" alt="CoCBoard">
+  <img src="assets/benvenuto.png" alt="CoCBoard Benvenuto">
   <div class="hero-overlay"></div>
   <div class="hero-badge">
     <img class="hero-logo" src="assets/cocboardbot.png" alt="logo">
@@ -269,6 +278,10 @@ code {
     <svg class="toc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
     Community
   </a>
+  <a href="#guerra">
+    <svg class="toc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/><path d="M20.5 10H19V8.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/><path d="M9.5 14c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5S8 21.33 8 20.5v-5c0-.83.67-1.5 1.5-1.5z"/><path d="M3.5 14H5v1.5c0 .83-.67 1.5-1.5 1.5S2 16.33 2 15.5 2.67 14 3.5 14z"/><path d="M14 14.5c0-.83.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-5c-.83 0-1.5-.67-1.5-1.5z"/><path d="M15.5 9H14V7.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S16.33 9 15.5 9z"/><path d="M10 9.5C10 8.67 9.33 8 8.5 8h-5C2.67 8 2 8.67 2 9.5S2.67 11 3.5 11h5c.83 0 1.5-.67 1.5-1.5z"/><path d="M8.5 15H10v1.5c0 .83-.67 1.5-1.5 1.5S7 17.33 7 16.5 7.67 15 8.5 15z"/></svg>
+    Guerra live e CWL live
+  </a>
   <a href="#bonus">
     <svg class="toc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
     Bonus CWL
@@ -299,12 +312,15 @@ code {
       <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
       Cosa puoi fare subito
     </h2>
+    <img class="section-img-sm" src="assets/cocboardbot.png" alt="CoCBoard">
     <p>Anche senza registrarti hai accesso a:</p>
     <ul>
       <li><b>Community</b> — chat globale inter-clan e annunci di reclutamento</li>
       <li><b>Cerca</b> — qualsiasi villaggio per #tag o clan per nome</li>
       <li><b>Classifica</b> — top trofei Italia e mondo in tempo reale</li>
+      <li><b>Guida e tutorial</b> — sei già qui!</li>
     </ul>
+    <p style="clear:both"></p>
   </div>
 
   <!-- ── Accesso ── -->
@@ -324,10 +340,11 @@ code {
     </div>
     <p>Una volta loggato sblocchi:</p>
     <ul>
-      <li><b>Il tuo clan</b> — roster, info clan, il tuo profilo</li>
-      <li><b>CWL live</b> — andamento della Clan War League in corso</li>
-      <li><b>Guerre</b> — registro guerre classiche</li>
-      <li><b>Bonus</b> — classifica e storico assegnazioni bonus CWL</li>
+      <li><b>Il tuo clan</b> — roster, info clan, il tuo profilo personale</li>
+      <li><b>CWL live</b> — andamento della Clan War League in corso con statistiche per turno</li>
+      <li><b>Guerra live</b> — panoramica attacchi, confronto eroi, planner e anteprima in tempo reale</li>
+      <li><b>Registro guerre</b> — storico battaglie classiche del clan</li>
+      <li><b>Bonus CWL</b> — classifica e storico assegnazioni bonus stagionali</li>
       <li><b>Mini App</b> — dashboard web direttamente da Telegram (senza reinserire la password!)</li>
     </ul>
   </div>
@@ -339,8 +356,8 @@ code {
       Usare il bot nel gruppo del clan
     </h2>
     <p>Nel gruppo usa sempre <code>/cocboard</code> per aprire il menù — evita conflitti con altri bot che usano <code>/start</code>.</p>
-    <p><b>Da ospite nel gruppo</b> puoi già cercare giocatori e vedere la classifica.<br>
-    <b>Dopo il login in chat privata</b>, tornando nel gruppo vedrai anche i dati del clan collegato.</p>
+    <p><b>Da ospite nel gruppo</b> puoi già cercare giocatori, vedere la classifica e consultare i dati del clan collegato (membri, bonus, war log).<br>
+    <b>Dopo il login in chat privata</b>, tornando nel gruppo sblocchi il tuo profilo e tutte le funzioni autenticate.</p>
 
     <h3>Collegare il clan al gruppo</h3>
     <p>Solo il <b>Capo</b> o un <b>Co-Capo</b> può collegare il clan:</p>
@@ -351,7 +368,7 @@ code {
       <li><span>Nel gruppo digita: <code>/linkclan TOKEN</code></span></li>
     </ol>
     <p>Si possono collegare fino a <b>3 gruppi o canali</b> per clan.<br>
-    Per scollegare: <code>/unlinkclan</code>.</p>
+    Per scollegare: <code>/unlinkclan</code> (stesso utente o admin del gruppo).</p>
   </div>
 
   <!-- ── Community ── -->
@@ -364,20 +381,50 @@ code {
     <h3>Chat globale inter-clan</h3>
     <p>Una stanza di testo condivisa tra clan diversi, organizzata in <b>finestre temporali</b> da 5 minuti.</p>
     <ul>
-      <li>Per entrare serve un profilo CoCBoard (verificato) oppure nome e #tag manuale</li>
-      <li>Regole: niente link, niente tag in-game nel corpo, nessuna emoji nel formato manuale</li>
+      <li>Per entrare: profilo CoCBoard verificato (✅) oppure nome e #tag manuale</li>
+      <li>Regole: niente link, niente tag in-game nel corpo del messaggio, nessuna emoji nel formato manuale</li>
       <li>Rate limit: massimo 12 messaggi al minuto</li>
-      <li>Per uscire: tocca <b>Esci</b> o usa <code>/esci_chat_global</code></li>
+      <li>Per uscire: tocca <b>Esci</b> oppure usa <code>/esci_chat_global</code></li>
     </ul>
 
     <h3>Reclutamento</h3>
-    <p>Pubblicizza il tuo clan o cerca un clan dove entrare!</p>
+    <p>Pubblicizza il tuo clan o cerca un posto dove entrare!</p>
     <ul>
-      <li>Invia una bozza — <b>annuncio rapido</b> (messaggio diretto) o <b>guidato</b> (passo-passo)</li>
-      <li>Gli annunci approvati restano visibili in <b>Annunci attivi</b></li>
-      <li>Scadono automaticamente dopo <b>24 ore</b></li>
-      <li>Puoi ritirare il tuo annuncio in anticipo da "Annunci attivi"</li>
+      <li><b>Pubblica adesso</b> — invia lo stemma del tuo clan direttamente dalla API CoC</li>
+      <li><b>Messaggio rapido</b> — testo libero per un annuncio veloce</li>
+      <li><b>Annuncio guidato</b> — procedura passo-passo per un annuncio completo</li>
+      <li>Gli annunci approvati restano visibili in <b>Annunci attivi</b> e scadono dopo <b>24 ore</b></li>
     </ul>
+  </div>
+
+  <!-- ── Guerra live e CWL ── -->
+  <div class="section" id="guerra">
+    <h2>
+      <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><path d="M14.5 10c-.83 0-1.5-.67-1.5-1.5v-5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5z"/><path d="M20.5 10H19V8.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/><path d="M9.5 14c.83 0 1.5.67 1.5 1.5v5c0 .83-.67 1.5-1.5 1.5S8 21.33 8 20.5v-5c0-.83.67-1.5 1.5-1.5z"/><path d="M3.5 14H5v1.5c0 .83-.67 1.5-1.5 1.5S2 16.33 2 15.5 2.67 14 3.5 14z"/><path d="M14 14.5c0-.83.67-1.5 1.5-1.5h5c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5h-5c-.83 0-1.5-.67-1.5-1.5z"/><path d="M15.5 9H14V7.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S16.33 9 15.5 9z"/><path d="M10 9.5C10 8.67 9.33 8 8.5 8h-5C2.67 8 2 8.67 2 9.5S2.67 11 3.5 11h5c.83 0 1.5-.67 1.5-1.5z"/><path d="M8.5 15H10v1.5c0 .83-.67 1.5-1.5 1.5S7 17.33 7 16.5 7.67 15 8.5 15z"/></svg>
+      Guerra live e CWL live
+    </h2>
+
+    <h3>Guerra live — sezioni disponibili</h3>
+    <ul>
+      <li><b>Panoramica</b> — stato generale della guerra con riepilogo attacchi eseguiti e mancanti in tempo reale; lista chi ha ancora attacchi aperti con avviso urgente nelle ultime 4 ore</li>
+      <li><b>Anteprima</b> — mostra direttamente tutti gli attacchi compiuti dal tuo clan e le difese subite, senza dover cliccare i pulsanti dei due clan</li>
+      <li><b>Confronto eroi</b> — confronto dei livelli eroi di tutti i membri di entrambi i clan; i dati vengono caricati in tempo reale dall'API (breve attesa)</li>
+      <li><b>Planner</b> — suggerimento target ottimale per ogni attaccante con attacchi rimanenti; assegnazione esclusiva (ogni base è assegnata a un solo player)</li>
+      <li><b>Roster Noi / Attacchi Avversario</b> — lista paginata dei membri con dettaglio attacchi</li>
+    </ul>
+
+    <h3>CWL live — sezioni disponibili</h3>
+    <ul>
+      <li><b>Panoramica</b> — classifica corrente della CWL con stelle e distruzione per round</li>
+      <li><b>Gruppo</b> — tabella tutti i clan del gruppo CWL con posizione e punteggio</li>
+      <li><b>Roster</b> — lista paginata dei partecipanti CWL del tuo clan</li>
+      <li><b>Turni</b> — dettaglio round per round con risultati e statistiche attacchi</li>
+    </ul>
+
+    <div class="note">
+      <svg class="note-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span>Guerra live e CWL live sono accessibili anche da ospite nei <b>gruppi collegati</b> al clan, ma con visibilità ridotta. Dal pulsante <b>Mini App</b> si apre la versione web completa.</span>
+    </div>
   </div>
 
   <!-- ── Bonus CWL ── -->
@@ -388,15 +435,18 @@ code {
     </h2>
     <p>I Capi e Co-Capi possono assegnare i bonus stagionali direttamente dal bot.</p>
     <ul>
-      <li><b>Classifica storica</b> — chi ha ricevuto più bonus nel tempo</li>
-      <li><b>Storico per stagione</b> — scorri le stagioni passate</li>
+      <li><b>Hall of Fame</b> — classifica storica di chi ha ricevuto più bonus nel tempo</li>
+      <li><b>Storico per stagione</b> — scorri le stagioni passate e vedi i riceventi</li>
     </ul>
-    <h3>Assegnazione</h3>
+    <h3>Assegnazione bonus</h3>
+    <p>Visibile solo a <b>Capo</b>, <b>Co-Capo</b> e <b>Admin</b>.</p>
     <ul>
-      <li><b>Manuale</b> — abilita/disabilita singolo giocatore</li>
-      <li><b>Assistita</b> — scegli quanti bonus assegnare e il criterio (Standard / Strict / Solo peso TH / Solo score) → ranking automatico → confermi</li>
+      <li><b>Manuale</b> — abilita/disabilita singolo giocatore con toggle</li>
+      <li><b>Assistita</b> — scegli quanti bonus assegnare e il criterio:<br>
+        <em>Standard · Strict · Solo peso TH · Solo score</em><br>
+        Il bot calcola il ranking in automatico → confermi prima di applicare</li>
     </ul>
-    <p>Il punteggio bonus si basa su stelle, distruzione media e partecipazione agli attacchi.</p>
+    <p>Il punteggio si basa su stelle, distruzione media e partecipazione agli attacchi CWL. Chi ha già ricevuto il bonus il mese scorso parte da punteggio 0 (anti-duplicati).</p>
   </div>
 
   <!-- ── Mini App ── -->
@@ -406,29 +456,33 @@ code {
       Mini App (dashboard web)
     </h2>
 
-    <img class="section-img" src="assets/tutorial.png" alt="CoCBoard Tutorial">
+    <img class="section-img" src="assets/tutorial.png" alt="CoCBoard Tutorial" style="max-width:160px;border-radius:50%;margin:0 auto 16px;display:block;border:2px solid var(--border);">
 
-    <p>Tocca il pulsante <b>(web)</b> o <b>Mini App</b> per aprire la dashboard web CoCBoard direttamente da Telegram.</p>
+    <p>Tocca il pulsante <b>(web)</b> o <b>Mini App</b> per aprire la dashboard CoCBoard direttamente da Telegram.</p>
     <ul>
-      <li>In <b>chat privata</b>: si apre come Mini App nativa Telegram</li>
-      <li>In <b>gruppo</b>: si apre nel browser; se hai già fatto login dal bot non ti chiede di nuovo la password</li>
+      <li>In <b>chat privata</b>: si apre come Mini App nativa Telegram (senza uscire dall'app)</li>
+      <li>In <b>gruppo</b>: si apre nel browser, ma se hai già fatto login dal bot non ti chiede di nuovo la password</li>
     </ul>
-    <p>Sezioni: Membri, CWL, Registro guerre, Bonus, Cerca, Classifiche, Il tuo profilo.</p>
+    <p>Sezioni disponibili: Membri, CWL live, Registro guerre, Bonus, Cerca, Classifiche, Il tuo profilo.</p>
+    <div class="note">
+      <svg class="note-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+      <span>Il login dalla Mini App avviene tramite <b>handoff automatico</b>: il bot passa un token sicuro alla dashboard web, nessuna password da reinserire.</span>
+    </div>
   </div>
 
   <!-- ── Notifiche ── -->
   <div class="section" id="notifiche">
     <h2>
       <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      Notifiche guerra
+      Notifiche guerra (gruppi collegati)
     </h2>
-    <p>Nei gruppi collegati puoi attivare gli avvisi automatici:</p>
+    <p>Nei gruppi collegati al clan puoi attivare avvisi automatici ogni 60 secondi. Gestisci tutto da <b>Gestione avvisi</b> nel menù del gruppo (visibile a Capo/Co-Capo/Admin).</p>
     <ul>
-      <li>Countdown guerra e attacchi mancanti</li>
-      <li>Avvisi CWL</li>
-      <li>Raid Capitale e Giochi del Clan</li>
+      <li><b>Guerra classica</b> — countdown, attacchi mancanti con lista player, recap finale, mismatch TH</li>
+      <li><b>CWL</b> — avvisi durante la Clan War League</li>
+      <li><b>Raid Capitale</b> — promemoria apertura e chiusura</li>
+      <li><b>Giochi del Clan</b> — notifiche evento attivo</li>
     </ul>
-    <p>Gestisci tutto da <b>Gestione avvisi</b> nel menù del gruppo.</p>
   </div>
 
   <!-- ── Supporto ── -->
@@ -439,8 +493,9 @@ code {
     </h2>
     <p>Hai un problema o una domanda?</p>
     <ul>
-      <li>Usa <code>/assistenza</code> per aprire un ticket — scrivi direttamente con il team in chat privata</li>
-      <li>Il team risponde nella stessa conversazione ticket</li>
+      <li>Usa <code>/assistenza</code> oppure tocca <b>Contatta amministratore</b> nel menù per aprire un ticket</li>
+      <li>Puoi scrivere testo + fino a 2 immagini; il team risponde nella stessa conversazione privata</li>
+      <li>Il ticket viene preso in carico dallo staff e puoi seguirne lo stato direttamente in chat</li>
     </ul>
   </div>
 
@@ -458,9 +513,10 @@ code {
       <tr><td><code>/cerca</code></td><td>Cerca villaggio o clan</td></tr>
       <tr><td><code>/classifica</code></td><td>Classifiche trofei</td></tr>
       <tr><td><code>/assistenza</code></td><td>Apri ticket supporto</td></tr>
+      <tr><td><code>/adminbot</code></td><td>Pannello staff bot (admin/moderatori)</td></tr>
       <tr><td><code>/esci_chat_global</code></td><td>Esci dalla chat globale</td></tr>
-      <tr><td><code>/annulla_reclutamento</code></td><td>Annulla bozza reclutamento</td></tr>
-      <tr><td><code>/cancel</code></td><td>Annulla operazione in corso</td></tr>
+      <tr><td><code>/annulla_reclutamento</code></td><td>Annulla bozza reclutamento in corso</td></tr>
+      <tr><td><code>/cancel</code></td><td>Annulla operazione corrente (login, registrazione)</td></tr>
     </table>
 
     <h3>Gruppo / canale</h3>
@@ -474,7 +530,7 @@ code {
       <tr><td><code>/unlinkclan</code></td><td>Scollega il clan dal gruppo</td></tr>
       <tr><td><code>/coc_off</code></td><td>Disattiva bot in questa chat (admin)</td></tr>
       <tr><td><code>/coc_on</code></td><td>Riattiva bot in questa chat (admin)</td></tr>
-      <tr><td><code>/coc_status</code></td><td>Stato bot nella chat</td></tr>
+      <tr><td><code>/coc_status</code></td><td>Stato attuale del bot nella chat</td></tr>
     </table>
   </div>
 
@@ -482,8 +538,7 @@ code {
 
 <div class="footer">
   CoCBoard · Guida aggiornata aprile 2026<br>
-  I dati arrivano live dall'API ufficiale Clash of Clans.<br>
-  CoCBoard non è affiliato con Supercell.
+  Dati live dall'API ufficiale Clash of Clans · CoCBoard non è affiliato con Supercell.
 </div>
 
 </body>

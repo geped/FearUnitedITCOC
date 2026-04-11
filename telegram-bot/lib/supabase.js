@@ -325,22 +325,34 @@ async function getAdminDashboardStats() {
   const client = sb();
   if (!client) return null;
   const now = Date.now();
-  const dayAgo = new Date(now - 24 * 3600 * 1000).toISOString();
+  const dayAgo   = new Date(now - 24 * 3600 * 1000).toISOString();
   const sevenAgo = new Date(now - 7 * 24 * 3600 * 1000).toISOString();
-  const [{ count: linkedChats }, { count: pausedChats }, { data: dauRows }, { data: wauRows }] = await Promise.all([
+  const results = await Promise.allSettled([
     client.from('telegram_chat_links').select('*', { count: 'exact', head: true }),
     client.from('telegram_chat_controls').select('*', { count: 'exact', head: true }).eq('bot_enabled', false),
     client.from('telegram_usage_events').select('telegram_user_id').gte('created_at', dayAgo).not('telegram_user_id', 'is', null),
     client.from('telegram_usage_events').select('telegram_user_id').gte('created_at', sevenAgo).not('telegram_user_id', 'is', null),
-  ]).catch(() => []);
-  const dau = new Set((dauRows || []).map((r) => Number(r.telegram_user_id))).size;
-  const wau = new Set((wauRows || []).map((r) => Number(r.telegram_user_id))).size;
-  return {
-    linkedChats: linkedChats || 0,
-    pausedChats: pausedChats || 0,
-    dau,
-    wau,
-  };
+    // Utenti registrati (righe telegram_links = account bot collegati)
+    client.from('telegram_links').select('*', { count: 'exact', head: true }),
+    // Ban attivi
+    client.from('telegram_user_restrictions').select('*', { count: 'exact', head: true }).eq('restriction_type', 'ban'),
+    // Ticket aperti/in lavorazione
+    client.from('telegram_support_tickets').select('*', { count: 'exact', head: true }).in('status', ['open', 'in_progress', 'waiting_user']),
+    // Segnalazioni globali aperte
+    client.from('telegram_global_moderation').select('*', { count: 'exact', head: true }).in('status', ['open', 'in_review']),
+  ]);
+  const get = (i) => results[i]?.status === 'fulfilled' ? results[i].value : {};
+  const linkedChats    = get(0).count ?? 0;
+  const pausedChats    = get(1).count ?? 0;
+  const dauRows        = get(2).data ?? [];
+  const wauRows        = get(3).data ?? [];
+  const registeredUsers= get(4).count ?? 0;
+  const activeBans     = get(5).count ?? 0;
+  const openTickets    = get(6).count ?? 0;
+  const openReports    = get(7).count ?? 0;
+  const dau = new Set(dauRows.map((r) => Number(r.telegram_user_id))).size;
+  const wau = new Set(wauRows.map((r) => Number(r.telegram_user_id))).size;
+  return { linkedChats, pausedChats, dau, wau, registeredUsers, activeBans, openTickets, openReports };
 }
 
 async function getOpenTicketForUser(telegramUserId) {
