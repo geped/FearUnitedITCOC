@@ -733,6 +733,37 @@ function instantConfirmKb() {
   ]);
 }
 
+/**
+ * Anteprima finale: se lo stemma è incluso, invia prima la foto ufficiale CoC (stesso URL dell’annuncio),
+ * poi il blocco testuale con i pulsanti (altrimenti Telegram mostra solo l’anteprima del link).
+ */
+async function replyInstantPreview(ctx, st) {
+  const html = formatInstantPreviewHtml(st);
+  const kb = instantConfirmKb();
+  if (st.include_clan_badge === true && st.clan_badge_url) {
+    const cap =
+      '📎 <b>Anteprima stemma</b>\n🛡 Immagine ufficiale <b>Supercell</b> — come apparirà in «Annunci attivi».';
+    try {
+      await ctx.replyWithPhoto(st.clan_badge_url, {
+        caption: cap,
+        parse_mode: 'HTML',
+      });
+    } catch (e) {
+      await ctx
+        .reply(
+          `⚠️ Anteprima immagine non disponibile; lo stemma sarà comunque allegato alla pubblicazione.\n<code>${escapeHtml(String(e.message || 'errore').slice(0, 200))}</code>`,
+          { parse_mode: 'HTML' }
+        )
+        .catch(() => {});
+    }
+  }
+  await ctx.reply(html, {
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+    ...kb,
+  });
+}
+
 async function tryHandleEarlyMessage(
   ctx,
   pendingCommunity,
@@ -1916,7 +1947,7 @@ function registerCommunityHandlers(bot, deps) {
     st.step = 'preview';
     pendingCommunity.set(uid, st);
     await ctx.answerCbQuery(text ? `Testo ${idx + 1} selezionato` : 'OK').catch(() => {});
-    await ctx.reply(formatInstantPreviewHtml(st), { parse_mode: 'HTML', ...instantConfirmKb() });
+    await replyInstantPreview(ctx, st);
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
@@ -1932,7 +1963,7 @@ function registerCommunityHandlers(bot, deps) {
     st.step = 'preview';
     pendingCommunity.set(uid, st);
     await ctx.answerCbQuery('OK').catch(() => {});
-    await ctx.reply(formatInstantPreviewHtml(st), { parse_mode: 'HTML', ...instantConfirmKb() });
+    await replyInstantPreview(ctx, st);
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
