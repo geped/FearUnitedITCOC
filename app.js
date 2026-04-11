@@ -7242,84 +7242,207 @@ async function _wlmLoadConfronto() {
     ${plannerHtml}`;
 }
 
-/** CWL-style attack planner for classic wars — works in prep + battle */
+/** Ore rimanenti in guerra (solo inWar + endTime valido). */
+function _wlWarHoursLeft(data) {
+  if (data.state !== 'inWar' || !data.endTime) return null;
+  const t = parseCocTimeWeb(data.endTime);
+  if (!t) return null;
+  const diff = t.getTime() - Date.now();
+  return diff > 0 ? diff / 3600000 : 0;
+}
+
+/** Score planner (lower = migliore) — allineato a telegram-bot/lib/format.js */
+function _wlPlannerScorePrimary(attackerTh, s) {
+  const thDiff = Math.abs(attackerTh - (s.th ?? 0));
+  return thDiff * 2 + (s.bestStars ?? 0) * 5 + (s.times ?? 0) * 3;
+}
+function _wlPlannerScoreSecondary(attackerTh, s) {
+  let sc = _wlPlannerScorePrimary(attackerTh, s);
+  if ((s.bestStars ?? 0) === 2) sc -= 10;
+  return sc;
+}
+
+function _wlPlannerStarsHtml(targetStars, targetDestPct) {
+  const starsHtml = targetStars >= 3
+    ? '<span class="cdm-planner-stars cdm-stars-full">⭐⭐⭐</span>'
+    : targetStars === 2
+    ? '<span class="cdm-planner-stars">⭐⭐☆</span>'
+    : targetStars === 1
+    ? '<span class="cdm-planner-stars">⭐☆☆</span>'
+    : '<span class="cdm-planner-stars cdm-stars-none">☆☆☆</span>';
+  const destHint = targetStars > 0 ? ` <span class="cdm-planner-destr">${targetDestPct.toFixed(0)}%</span>` : '';
+  return starsHtml + destHint;
+}
+
+/** Cinque celle: #, TH, nome, stelle, Δ TH — per un target planner */
+function _wlPlannerTargetFiveCells(attacker, pick, themWarRank, emptyHint) {
+  if (!pick?.opp) {
+    const msg = emptyHint
+      ? `<i>Nessuna base disponibile (${emptyHint})</i>`
+      : '<i>Nessuna base</i>';
+    return `<td class="cdm-cf-pos">—</td><td class="cdm-cf-th">—</td><td class="cdm-cf-name" style="color:var(--text-3)">${msg}</td><td class="cdm-planner-stars-cell">—</td><td>—</td>`;
+  }
+  const { s, opp } = pick;
+  const targetStars = s.bestStars ?? 0;
+  const targetDestPct = s.bestDest ?? 0;
+  const thDelta = (attacker.townhallLevel || 0) - (s.th ?? opp.townhallLevel ?? 0);
+  const deltaClass = thDelta >= 2 ? 'cdm-td-easy' : thDelta <= -2 ? 'cdm-td-hard' : 'cdm-td-fair';
+  const deltaSign = thDelta > 0 ? '+' : '';
+  const bThN = String(opp.townhallLevel || 1).padStart(2, '0');
+  const bThImg = `<img src="th/webp/level_${bThN}.webp" alt="TH${opp.townhallLevel}" class="wl-th-icon" loading="lazy">`;
+  return `<td class="cdm-cf-pos">#${themWarRank.get(opp.tag) ?? '?'}</td>
+      <td class="cdm-cf-th">${bThImg}</td>
+      <td class="cdm-cf-name">${escH(opp.name || '—')}</td>
+      <td class="cdm-planner-stars-cell">${_wlPlannerStarsHtml(targetStars, targetDestPct)}</td>
+      <td class="${deltaClass}">${deltaSign}${thDelta}</td>`;
+}
+
+/** Planner guerra classica — stessa logica del bot Telegram (primario + secondario condizionato). */
 function _wlBuildPlanner(data, usMembers, themMembers, maxAtk) {
   const usWarRank = new Map(usMembers.map((m, i) => [m.tag, i + 1]));
   const themWarRank = new Map(themMembers.map((m, i) => [m.tag, i + 1]));
 
-  function scoreTarget(attacker, target) {
-    const stars = target.bestOpponentAttack?.stars ?? 0;
-    if (stars >= 3) return -9999;
-    const thDiff = (attacker.townhallLevel || 0) - (target.townhallLevel || 0);
-    let score = 100;
-    score -= Math.abs(thDiff) * 15;
-    if (thDiff < 0) score -= 25;
-    score += (3 - stars) * 8;
-    if (!target.bestOpponentAttack) score += 12;
-    if (usWarRank.get(attacker.tag) === themWarRank.get(target.tag)) score += 10;
-    return score;
+  const warStateRaw = data.state || '';
+  const warState = warStateRaw === 'ended' ? 'warEnded' : warStateRaw;
+  const atkPer = maxAtk || 2;
+
+  const defStatus = {};
+  for (const opp of themMembers) {
+    const atksOnBase = usMembers.flatMap(m => (m.attacks || []).filter(a => a.defenderTag === opp.tag));
+    const best = atksOnBase.reduce(
+      (b, a) => (a.stars > b.stars || (a.stars === b.stars && a.destructionPercentage > b.destructionPercentage)) ? a : b,
+      { stars: 0, destructionPercentage: 0 }
+    );
+    defStatus[opp.tag] = {
+      pos: opp.mapPosition, name: opp.name, th: opp.townhallLevel,
+      bestStars: best.stars, bestDest: best.destructionPercentage, times: atksOnBase.length,
+    };
   }
 
-  const needAtk = usMembers.filter(m => {
-    const done = (m.attacks || []).length;
-    return done < maxAtk;
-  });
+  const totalWarMembers = usMembers.length || (data.teamSize ?? 0);
+  const soglia = Math.floor(totalWarMembers / 2) + 1;
+  const attackedCount = usMembers.filter(m => (m.attacks?.length ?? 0) >= 1).length;
+  const mostrarSecondo = warState === 'inWar' && atkPer >= 2 && attackedCount >= soglia;
+
+  const needAtk = usMembers.filter(m => (m.attacks?.length ?? 0) < atkPer);
+  const openBases = themMembers.filter(opp => (defStatus[opp.tag]?.bestStars ?? 0) < 3);
+
+  if (warState === 'warEnded') {
+    return '<p class="wl-empty">🏁 Guerra terminata — nessun suggerimento (war chiusa).</p>';
+  }
 
   if (!needAtk.length) {
     return '<p class="wl-empty">✅ Tutti gli attacchi sono stati usati.</p>';
   }
 
-  const assignedTags = new Set();
+  let hint = '';
+  if (warState === 'preparation') {
+    hint = '<p class="wl-planner-hint" style="margin:0 0 .6rem;font-size:.82rem;color:var(--text-3)">🛡 Preparazione: solo target primari (1 per giocatore, esclusivi).</p>';
+  } else if (warState === 'inWar' && !mostrarSecondo) {
+    hint = '<p class="wl-planner-hint" style="margin:0 0 .6rem;font-size:.82rem;color:var(--text-3)">⚔️ Solo target primari finché non raggiunta la soglia sul 1° attacco.</p>';
+  } else if (mostrarSecondo) {
+    hint = `<p class="wl-planner-hint" style="margin:0 0 .6rem;font-size:.82rem;color:var(--text-3)">⚔️ Soglia 1° attacchi raggiunta (${attackedCount}/${totalWarMembers}, ≥${soglia}): anche target per il 2° attacco.</p>`;
+  }
+
+  const needOrder = [...needAtk].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const assignedPrimary = new Set();
+  const primaryByTag = new Map();
+
+  for (const m of needOrder) {
+    const attackerTh = m.townhallLevel ?? 0;
+    const available = openBases.filter(opp => !assignedPrimary.has(opp.tag));
+    const scored = available
+      .map(opp => {
+        const s = defStatus[opp.tag];
+        return { s, opp, score: _wlPlannerScorePrimary(attackerTh, s) };
+      })
+      .sort((a, b) => a.score - b.score || (a.s.pos ?? 99) - (b.s.pos ?? 99));
+    const best = scored[0];
+    if (best) {
+      assignedPrimary.add(best.opp.tag);
+      primaryByTag.set(m.tag, best);
+    } else {
+      primaryByTag.set(m.tag, null);
+    }
+  }
+
+  const secondaryByTag = new Map();
+  if (mostrarSecondo) {
+    const hoursLeft = _wlWarHoursLeft(data);
+    const timeGe4h = hoursLeft != null && hoursLeft >= 4;
+    const excludedFromPool = new Set();
+    if (timeGe4h) {
+      for (const m of usMembers) {
+        if ((m.attacks?.length ?? 0) !== 0) continue;
+        const prim = primaryByTag.get(m.tag);
+        if (prim?.opp?.tag) excludedFromPool.add(prim.opp.tag);
+      }
+    }
+    const poolOpp = themMembers.filter(opp => {
+      if ((defStatus[opp.tag]?.bestStars ?? 0) >= 3) return false;
+      if (excludedFromPool.has(opp.tag)) return false;
+      return true;
+    });
+    const needSecondary = needOrder.filter(m => (m.attacks?.length ?? 0) >= 1 && (m.attacks?.length ?? 0) < atkPer);
+    const assignedSec = new Set();
+    for (const m of needSecondary) {
+      const attackerTh = m.townhallLevel ?? 0;
+      const available = poolOpp.filter(opp => !assignedSec.has(opp.tag));
+      const scored = available
+        .map(opp => {
+          const s = defStatus[opp.tag];
+          return { s, opp, score: _wlPlannerScoreSecondary(attackerTh, s) };
+        })
+        .sort((a, b) => a.score - b.score || (a.s.pos ?? 99) - (b.s.pos ?? 99));
+      const best = scored[0];
+      if (best) {
+        assignedSec.add(best.opp.tag);
+        secondaryByTag.set(m.tag, best);
+      } else {
+        secondaryByTag.set(m.tag, null);
+      }
+    }
+  }
+
+  const showSecondCol = atkPer >= 2 && mostrarSecondo;
   const rows = [];
   for (const a of needAtk) {
-    const done = (a.attacks || []).length;
-    const missing = maxAtk - done;
-
-    const available = themMembers.filter(t => !assignedTags.has(t.tag));
-    const ranked = available
-      .map(t => ({ target: t, score: scoreTarget(a, t) }))
-      .sort((x, y) => y.score - x.score);
-
-    const best = ranked[0]?.target ?? available[0] ?? themMembers[0];
-    if (best?.tag) assignedTags.add(best.tag);
-
-    const targetStars = best?.bestOpponentAttack?.stars ?? 0;
-    const targetDestPct = best?.bestOpponentAttack?.destructionPercentage ?? 0;
-    const thDelta = (a.townhallLevel || 0) - (best?.townhallLevel || 0);
-    const deltaClass = thDelta >= 2 ? 'cdm-td-easy' : thDelta <= -2 ? 'cdm-td-hard' : 'cdm-td-fair';
-    const deltaSign = thDelta > 0 ? '+' : '';
-    const starsHtml = targetStars >= 3
-      ? '<span class="cdm-planner-stars cdm-stars-full">⭐⭐⭐</span>'
-      : targetStars === 2
-      ? '<span class="cdm-planner-stars">⭐⭐☆</span>'
-      : targetStars === 1
-      ? '<span class="cdm-planner-stars">⭐☆☆</span>'
-      : '<span class="cdm-planner-stars cdm-stars-none">☆☆☆</span>';
-    const destHint = targetStars > 0 ? ` <span class="cdm-planner-destr">${targetDestPct.toFixed(0)}%</span>` : '';
-
+    const missing = atkPer - (a.attacks?.length ?? 0);
+    const prim = primaryByTag.get(a.tag);
     const aThN = String(a.townhallLevel || 1).padStart(2, '0');
-    const bThN = String(best?.townhallLevel || 1).padStart(2, '0');
     const aThImg = `<img src="th/webp/level_${aThN}.webp" alt="TH${a.townhallLevel}" class="wl-th-icon" loading="lazy">`;
-    const bThImg = `<img src="th/webp/level_${bThN}.webp" alt="TH${best?.townhallLevel}" class="wl-th-icon" loading="lazy">`;
+
+    let secCells = '';
+    if (showSecondCol) {
+      const showSec = (a.attacks?.length ?? 0) >= 1 && (a.attacks?.length ?? 0) < atkPer;
+      if (showSec) {
+        const sec = secondaryByTag.get(a.tag);
+        secCells = _wlPlannerTargetFiveCells(a, sec, themWarRank, '2° att.');
+      } else {
+        secCells = '<td class="cdm-cf-pos">—</td><td class="cdm-cf-th">—</td><td class="cdm-cf-name" style="color:var(--text-3)">—</td><td class="cdm-planner-stars-cell">—</td><td>—</td>';
+      }
+    }
 
     rows.push(`<tr>
       <td class="cdm-cf-pos">#${usWarRank.get(a.tag) ?? '?'}</td>
       <td class="cdm-cf-th">${aThImg}</td>
       <td class="cdm-cf-name">${escH(a.name)}</td>
       <td class="cdm-atk-arrow">→</td>
-      <td class="cdm-cf-pos">#${themWarRank.get(best?.tag) ?? '?'}</td>
-      <td class="cdm-cf-th">${bThImg}</td>
-      <td class="cdm-cf-name">${escH(best?.name || '—')}</td>
-      <td class="cdm-planner-stars-cell">${starsHtml}${destHint}</td>
-      <td class="${deltaClass}">${deltaSign}${thDelta}</td>
+      ${_wlPlannerTargetFiveCells(a, prim, themWarRank)}
+      ${showSecondCol ? secCells : ''}
       <td style="text-align:center">${missing}</td>
     </tr>`);
   }
 
-  return `<div class="cdm-attacks-scroll"><table class="cdm-attacks-table cdm-planner-table"><thead><tr>
+  const headSecond = showSecondCol
+    ? '<th>#</th><th></th><th>2° villaggio</th><th>Stelle</th><th>Δ TH</th>'
+    : '';
+  return `${hint}<div class="cdm-attacks-scroll"><table class="cdm-attacks-table cdm-planner-table"><thead><tr>
     <th>#</th><th></th><th>Attaccante</th>
     <th></th>
-    <th>#</th><th></th><th>Target consigliato</th><th>Stelle attuali</th><th>Δ TH</th><th>Atk</th>
+    <th>#</th><th></th><th>1° villaggio</th><th>Stelle</th><th>Δ TH</th>
+    ${headSecond}
+    <th>Atk</th>
   </tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 }
 

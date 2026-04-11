@@ -1269,15 +1269,31 @@ function getWarLiveConfrontoPageCount(data) {
   return Math.max(1, Math.ceil(maxRows / WAR_LIVE_CONFRONTO_PER_PAGE));
 }
 
+/** Score planner (lower = better): |ΔTH|×2 + stelle×5 + attacchi×3 */
+function warLivePlanScorePrimary(attackerTh, s) {
+  const thDiff = Math.abs(attackerTh - (s.th ?? 0));
+  return thDiff * 2 + (s.bestStars ?? 0) * 5 + (s.times ?? 0) * 3;
+}
+
+function warLivePlanScoreSecondary(attackerTh, s) {
+  let sc = warLivePlanScorePrimary(attackerTh, s);
+  if ((s.bestStars ?? 0) === 2) sc -= 10; // preferenza cleanup su 2★
+  return sc;
+}
+
 function formatWarLivePlan(data, page = 0) {
   const c      = data.clan || {};
   const o      = data.opponent || {};
   const atkPer = data.attacksPerMember || 2;
 
+  const warStateRaw = data.state || '';
+  const warState    = warStateRaw === 'ended' ? 'warEnded' : warStateRaw;
+  const warClosed   = warState === 'warEnded';
+
   const ourMembers = [...(c.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
   const oppMembers = [...(o.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
 
-  // Stato difese avversario (migliore attacco ricevuto per base)
+  // Stato offensive sui villaggi avversari (solo le nostre stelle su di loro)
   const defStatus = {};
   for (const opp of oppMembers) {
     const atksOnBase = ourMembers.flatMap(m => (m.attacks || []).filter(a => a.defenderTag === opp.tag));
@@ -1287,6 +1303,12 @@ function formatWarLivePlan(data, page = 0) {
     );
     defStatus[opp.tag] = { pos: opp.mapPosition, name: opp.name, th: opp.townhallLevel, bestStars: best.stars, bestDest: best.destructionPercentage, times: atksOnBase.length };
   }
+
+  const totalWarMembers = ourMembers.length || (data.teamSize ?? 0);
+  const soglia          = Math.floor(totalWarMembers / 2) + 1;
+  const attackedCount   = ourMembers.filter(m => (m.attacks?.length ?? 0) >= 1).length;
+  const mostrarSecondo =
+    warState === 'inWar' && atkPer >= 2 && attackedCount >= soglia;
 
   const needAtk   = ourMembers.filter(m => (m.attacks?.length ?? 0) < atkPer);
   const openBases = oppMembers.filter(opp => (defStatus[opp.tag]?.bestStars ?? 0) < 3);
@@ -1303,29 +1325,92 @@ function formatWarLivePlan(data, page = 0) {
     DIV,
   ];
 
+  if (warClosed) {
+    lines.push('<i>🏁 Guerra terminata — nessun suggerimento (war chiusa).</i>');
+    return lines.join('\n');
+  }
+
   if (!needAtk.length) {
     lines.push('<i>✅ Tutti i giocatori hanno completato i propri attacchi.</i>');
     return lines.join('\n');
   }
 
+  if (warState === 'preparation') {
+    lines.push(`<i>🛡 Preparazione: solo target primari (1 per giocatore, esclusivi).</i>`);
+  } else if (warState === 'inWar' && !mostrarSecondo) {
+    lines.push('<i>⚔️ Solo target primari finché non raggiunta la soglia sul 1° attacco.</i>');
+  } else if (mostrarSecondo) {
+    lines.push(`<i>⚔️ Soglia 1° attacchi raggiunta (${attackedCount}/${totalWarMembers}, ≥${soglia}): anche target per il 2° attacco.</i>`);
+  }
+
   const pad = (s, len) => String(s ?? '').slice(0, len).padEnd(len);
 
-  // Assegnazione esclusiva: ogni avversario viene assegnato a un solo attaccante.
-  // Calcolo per tutti i needAtk upfront così la paginazione è coerente.
-  const assignedOpps = new Set();
-  const playerAssignments = new Map(); // tag → [{s, opp}]
-  for (const m of needAtk) {
+  // ── Target primario: greedy esclusivo in ordine mapPosition, 1 base per attaccante ──
+  const needOrder = [...needAtk].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const assignedPrimary = new Set();
+  /** @type {Map<string, { s: object, opp: object, score: number } | null>} */
+  const primaryByTag = new Map();
+
+  for (const m of needOrder) {
     const attackerTh = m.townhallLevel ?? 0;
-    const available  = openBases.filter(opp => !assignedOpps.has(opp.tag));
-    const scored = available.map(opp => {
-      const s = defStatus[opp.tag];
-      const thDiff    = Math.abs(attackerTh - (s.th ?? 0));
-      const penalties = s.times * 3 + s.bestStars * 5;
-      return { s, opp, score: thDiff * 2 + penalties };
-    }).sort((a, b) => a.score - b.score);
-    const targets = scored.slice(0, atkPer); // 1 target per 15v15 (atkPer=1), 2 per 30v30
-    for (const { opp } of targets) assignedOpps.add(opp.tag);
-    playerAssignments.set(m.tag, targets);
+    const available  = openBases.filter(opp => !assignedPrimary.has(opp.tag));
+    const scored = available
+      .map(opp => {
+        const s = defStatus[opp.tag];
+        return { s, opp, score: warLivePlanScorePrimary(attackerTh, s) };
+      })
+      .sort((a, b) => a.score - b.score || (a.s.pos ?? 99) - (b.s.pos ?? 99));
+    const best = scored[0];
+    if (best) {
+      assignedPrimary.add(best.opp.tag);
+      primaryByTag.set(m.tag, best);
+    } else {
+      primaryByTag.set(m.tag, null);
+    }
+  }
+
+  // ── Target secondario: solo inWar, soglia, atkPer≥2; pool con regole tempo / primari ──
+  /** @type {Map<string, { s: object, opp: object, score: number } | null>} */
+  const secondaryByTag = new Map();
+  if (mostrarSecondo) {
+    const hoursLeft = warLiveHoursLeft(data);
+    const timeGe4h  = hoursLeft == null ? false : hoursLeft >= 4;
+
+    const excludedFromPool = new Set();
+    if (timeGe4h) {
+      for (const m of ourMembers) {
+        if ((m.attacks?.length ?? 0) !== 0) continue;
+        const prim = primaryByTag.get(m.tag);
+        if (prim?.opp?.tag) excludedFromPool.add(prim.opp.tag);
+      }
+    }
+
+    const poolOpp = oppMembers.filter(opp => {
+      if ((defStatus[opp.tag]?.bestStars ?? 0) >= 3) return false;
+      if (excludedFromPool.has(opp.tag)) return false;
+      return true;
+    });
+
+    const needSecondary = needOrder.filter(m => (m.attacks?.length ?? 0) >= 1 && (m.attacks?.length ?? 0) < atkPer);
+    const assignedSec = new Set();
+
+    for (const m of needSecondary) {
+      const attackerTh = m.townhallLevel ?? 0;
+      const available = poolOpp.filter(opp => !assignedSec.has(opp.tag));
+      const scored = available
+        .map(opp => {
+          const s = defStatus[opp.tag];
+          return { s, opp, score: warLivePlanScoreSecondary(attackerTh, s) };
+        })
+        .sort((a, b) => a.score - b.score || (a.s.pos ?? 99) - (b.s.pos ?? 99));
+      const best = scored[0];
+      if (best) {
+        assignedSec.add(best.opp.tag);
+        secondaryByTag.set(m.tag, best);
+      } else {
+        secondaryByTag.set(m.tag, null);
+      }
+    }
   }
 
   const rows = [];
@@ -1334,14 +1419,29 @@ function formatWarLivePlan(data, page = 0) {
     const attackerTh = m.townhallLevel ?? 0;
     rows.push(`#${String(m.mapPosition ?? '?').padStart(2)} ${pad(m.name || '—', 11)} TH${attackerTh} — ${atkLeft} atk`);
 
-    const targets = playerAssignments.get(m.tag) || [];
-    if (targets.length) {
-      for (const { s } of targets) {
-        const status = s.bestStars === 0 ? '[intatta]' : `[${s.bestStars}★ ${Number(s.bestDest).toFixed(0)}%]`;
-        rows.push(`  → #${String(s.pos).padStart(2)} ${pad(s.name, 10)} TH${s.th} ${status}`);
-      }
+    const prim = primaryByTag.get(m.tag);
+    if (prim) {
+      const s = prim.s;
+      const status = s.bestStars === 0 ? '[intatta]' : `[${s.bestStars}★ ${Number(s.bestDest).toFixed(0)}%]`;
+      rows.push(`  1° → #${String(s.pos).padStart(2)} ${pad(s.name, 10)} TH${s.th} ${status}`);
     } else {
-      rows.push('  → nessuna base disponibile');
+      rows.push('  1° → nessuna base disponibile');
+    }
+
+    const showSec =
+      mostrarSecondo &&
+      (m.attacks?.length ?? 0) >= 1 &&
+      (m.attacks?.length ?? 0) < atkPer;
+
+    if (showSec) {
+      const sec = secondaryByTag.get(m.tag);
+      if (sec) {
+        const s = sec.s;
+        const status = s.bestStars === 0 ? '[intatta]' : `[${s.bestStars}★ ${Number(s.bestDest).toFixed(0)}%]`;
+        rows.push(`  2° → #${String(s.pos).padStart(2)} ${pad(s.name, 10)} TH${s.th} ${status}`);
+      } else {
+        rows.push('  2° → nessuna base disponibile (2° att.)');
+      }
     }
   }
 
@@ -1350,6 +1450,10 @@ function formatWarLivePlan(data, page = 0) {
 }
 
 function getWarLivePlanPageCount(data) {
+  const warStateRaw = data?.state || '';
+  const warState    = warStateRaw === 'ended' ? 'warEnded' : warStateRaw;
+  if (warState === 'warEnded') return 1;
+
   const c      = data?.clan;
   const atkPer = data?.attacksPerMember || 2;
   const need   = (c?.members || []).filter(m => (m.attacks?.length ?? 0) < atkPer);
