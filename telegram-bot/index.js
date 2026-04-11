@@ -64,7 +64,8 @@ async function _deleteTrackedMenuMsg(telegram, chatId) {
   await telegram.deleteMessage(Number(chatId), mid).catch(() => {});
 }
 const WELCOME_IMAGE_PATH   = path.join(__dirname, 'assets', 'benvenuto.png');
-const WAR_HEADER_IMAGE_PATH = path.join(__dirname, 'assets', 'cocboardbot_sfondo.png');
+const CWL_HEADER_IMAGE_PATH = path.join(__dirname, 'assets', 'cwl_live.jpeg');
+const WAR_HEADER_IMAGE_PATH = path.join(__dirname, 'assets', 'war_live.jpeg');
 
 /** URL della guida interna (guida.html sul sito). Null se env non configurato. */
 function guideUrl() {
@@ -4438,9 +4439,9 @@ function setupBot(bot) {
       await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
       return;
     }
-    if (ctx.chat?.type === 'private' && ctx.from?.id != null && fs.existsSync(WAR_HEADER_IMAGE_PATH)) {
+    if (ctx.chat?.type === 'private' && ctx.from?.id != null && fs.existsSync(CWL_HEADER_IMAGE_PATH)) {
       const hdr = await ctx.replyWithPhoto(
-        { source: fs.createReadStream(WAR_HEADER_IMAGE_PATH) },
+        { source: fs.createReadStream(CWL_HEADER_IMAGE_PATH) },
         { parse_mode: 'HTML' }
       ).catch(() => null);
       if (hdr?.message_id) privateUi.notePrivateUiMessage(ctx.from.id, hdr.message_id);
