@@ -19,6 +19,15 @@ function escapeHtml(s) {
     .replace(/>/g, '&gt;');
 }
 
+/**
+ * Testo multi-riga “monospaziato” per Telegram HTML senza `<pre>`.
+ * I chunk lunghi spezzano il messaggio a capo: `<pre>` non chiuso causava 400 Bad Request.
+ */
+function telegramHtmlPlainBlock(plain) {
+  if (plain == null || plain === '') return '';
+  return escapeHtml(String(plain)).replace(/\n/g, '<br/>');
+}
+
 function parseTagArg(text) {
   if (!text) return null;
   const t = String(text).trim().toUpperCase();
@@ -813,9 +822,9 @@ function formatClassicWarDetailHtml(w, enriched) {
     .join('\n\n');
 
   parts.push('\n<b>━━ La nostra squadra ━━</b>\n\n');
-  parts.push(`<pre>${escapeHtml(ourBlock)}</pre>\n`);
+  parts.push(telegramHtmlPlainBlock(ourBlock) + '\n');
   parts.push('\n<b>━━ ' + escapeHtml(oName) + ' ━━</b>\n\n');
-  parts.push(`<pre>${escapeHtml(oppBlock)}</pre>`);
+  parts.push(telegramHtmlPlainBlock(oppBlock));
 
   return parts.join('');
 }
@@ -930,9 +939,9 @@ function formatCwlRoundBlockHtml(r, defMap, atkPer) {
   const ourTxt = our.map((m) => formatClassicMemberAttacksPre(m, defMap, atkPer)).join('\n\n');
   const oppTxt = opp.map((m) => formatClassicMemberAttacksPre(m, defMap, atkPer)).join('\n\n');
   let out = '<b>━━ La nostra squadra ━━</b>\n\n';
-  out += our.length ? `<pre>${escapeHtml(ourTxt)}</pre>\n` : '<i>—</i>\n';
+  out += our.length ? telegramHtmlPlainBlock(ourTxt) + '\n' : '<i>—</i>\n';
   out += '\n<b>━━ ' + escapeHtml(oName) + ' ━━</b>\n\n';
-  out += opp.length ? `<pre>${escapeHtml(oppTxt)}</pre>` : '<i>—</i>';
+  out += opp.length ? telegramHtmlPlainBlock(oppTxt) : '<i>—</i>';
   return out;
 }
 
@@ -1244,9 +1253,18 @@ function chunkForTelegram(html) {
   const parts = [];
   let rest = html;
   while (rest.length > MAX_MESSAGE) {
-    // Split at the last newline before MAX_MESSAGE to avoid cutting mid-tag
-    let cut = rest.lastIndexOf('\n', MAX_MESSAGE);
-    if (cut <= 0) cut = MAX_MESSAGE; // no newline found, hard cut
+    const win = rest.slice(0, MAX_MESSAGE);
+    let cut = -1;
+    const preEnd = win.lastIndexOf('</pre>');
+    if (preEnd !== -1) cut = preEnd + 6;
+    if (cut <= 0) {
+      const brEnd = win.lastIndexOf('<br/>');
+      if (brEnd > MAX_MESSAGE * 0.4) cut = brEnd + 5;
+    }
+    if (cut <= 0) {
+      cut = rest.lastIndexOf('\n', MAX_MESSAGE);
+    }
+    if (cut <= 0) cut = MAX_MESSAGE;
     parts.push(rest.slice(0, cut));
     rest = rest.slice(cut);
   }
