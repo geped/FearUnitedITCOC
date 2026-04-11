@@ -3881,6 +3881,7 @@ tbody tr:last-child td { border-bottom: none; }
 .wl-atk-used  { background: rgba(76,217,123,0.15); color: #4cd97b; }
 .wl-atk-empty { background: rgba(255,255,255,0.06); color: var(--text-3); }
 .wl-hero-cell { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-2); white-space: nowrap; }
+.wl-hero-loading { color: var(--text-3); font-size: 0.7rem; }
 .wl-empty { color: var(--text-3); text-align: center; padding: 2rem 0; font-size: 0.9rem; }
 
 /* Preview TH comparison */

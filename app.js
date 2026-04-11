@@ -6792,11 +6792,6 @@ function heroLevel(member, heroName) {
   return h ? h.level : '—';
 }
 
-function _wlHeroSum(member) {
-  if (!member?.heroes) return null;
-  return member.heroes.filter(h => h.village === 'home').reduce((s, h) => s + (h.level || 0), 0);
-}
-
 /** Fetches current war and populates the banner in wl-classic */
 async function _checkWarLiveBanner() {
   const banner = document.getElementById('war-live-banner');
@@ -6907,7 +6902,8 @@ function _wlMissingAttacksAlert(data) {
   </div>`;
 }
 
-/** Build player list table (us or them) for modal panels */
+/** Build player list table (us or them) for modal panels.
+ *  Hero levels are fetched asynchronously and injected after render. */
 function _wlBuildPlayersHtml(data, side) {
   const sideData = side === 'us' ? data.clan : data.opponent;
   if (!sideData?.members?.length) return '<p class="wl-empty">Nessun dato.</p>';
@@ -6924,22 +6920,41 @@ function _wlBuildPlayersHtml(data, side) {
       }
       return '<span class="wl-atk-dot wl-atk-empty">—</span>';
     }).join('');
-    const bk = heroLevel(m, 'Barbarian King');
-    const aq = heroLevel(m, 'Archer Queen');
-    const gw = heroLevel(m, 'Grand Warden');
-    const rc = heroLevel(m, 'Royal Champion');
+    const safeTag = (m.tag || '').replace(/[^a-zA-Z0-9#]/g, '').replace('#', '_');
     return `<tr>
       <td class="wl-pos">${m.mapPosition}</td>
       <td class="wl-th-cell">${thImg}</td>
       <td class="wl-name">${escH(m.name)}</td>
       <td class="wl-atk-cell">${atkBubbles}</td>
-      <td class="wl-hero-cell">${bk}/${aq}/${gw}/${rc}</td>
+      <td class="wl-hero-cell" id="wlm-hero-${side}-${safeTag}"><span class="wl-hero-loading">…</span></td>
     </tr>`;
   }).join('');
   return `<div class="table-wrap"><table class="wl-players-table">
     <thead><tr><th>#</th><th>TH</th><th>Nome</th><th>Attacchi</th><th>BK/AQ/GW/RC</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
+}
+
+/** Async: fetch hero levels for all members on a side and inject into DOM */
+async function _wlLoadPlayerHeroes(data, side) {
+  const sideData = side === 'us' ? data.clan : data.opponent;
+  if (!sideData?.members?.length) return;
+  const members = [...sideData.members].sort((a, b) => a.mapPosition - b.mapPosition);
+  for (const m of members) {
+    const safeTag = (m.tag || '').replace(/[^a-zA-Z0-9#]/g, '').replace('#', '_');
+    const cell = document.getElementById(`wlm-hero-${side}-${safeTag}`);
+    if (!cell) continue;
+    try {
+      const r = await fetch(`/api/lookup?type=player&playerTag=${encodeURIComponent(m.tag)}`);
+      const p = await r.json();
+      if (!r.ok || !p.heroes) { cell.textContent = '—'; continue; }
+      const bk = p.heroes.find(x => x.name === 'Barbarian King');
+      const aq = p.heroes.find(x => x.name === 'Archer Queen');
+      const gw = p.heroes.find(x => x.name === 'Grand Warden');
+      const rc = p.heroes.find(x => x.name === 'Royal Champion');
+      cell.textContent = `${bk?.level ?? '—'}/${aq?.level ?? '—'}/${gw?.level ?? '—'}/${rc?.level ?? '—'}`;
+    } catch (_) { cell.textContent = '—'; }
+  }
 }
 
 /** Open war live detail modal — modeled after CWL detail modal */
@@ -7038,94 +7053,8 @@ async function openWarLiveModal() {
     <div class="table-wrap"><table class="wl-prev-table"><tbody>${thRows}</tbody></table></div>`;
   }
 
-  // ── Confronto panel (planner + hero comparison) ──
-  const sortM = arr => [...(arr || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
-  const sortedUs = sortM(us.members);
-  const sortedThem = sortM(them.members);
-  const n = Math.max(sortedUs.length, sortedThem.length);
-  const heroRows = [];
-  for (let i = 0; i < n; i++) {
-    const a = sortedUs[i], b = sortedThem[i];
-    const hA = a ? _wlHeroSum(a) : null;
-    const hB = b ? _wlHeroSum(b) : null;
-    const thNA = a ? String(a.townhallLevel || 1).padStart(2,'0') : null;
-    const thNB = b ? String(b.townhallLevel || 1).padStart(2,'0') : null;
-    const thImgA = thNA ? `<img src="th/webp/level_${thNA}.webp" alt="TH${a.townhallLevel}" class="wl-th-icon" loading="lazy">` : '—';
-    const thImgB = thNB ? `<img src="th/webp/level_${thNB}.webp" alt="TH${b.townhallLevel}" class="wl-th-icon" loading="lazy">` : '—';
-    heroRows.push(`<tr>
-      <td class="cdm-cf-pos">#${i + 1}</td>
-      <td class="cdm-cf-th">${thImgA}</td>
-      <td class="cdm-cf-name">${a ? escH(a.name) : '—'}</td>
-      <td class="cdm-cf-hero">${hA != null ? hA : '—'}</td>
-      <td class="cdm-cf-vs">vs</td>
-      <td class="cdm-cf-pos">#${i + 1}</td>
-      <td class="cdm-cf-th">${thImgB}</td>
-      <td class="cdm-cf-name">${b ? escH(b.name) : '—'}</td>
-      <td class="cdm-cf-hero">${hB != null ? hB : '—'}</td>
-    </tr>`);
-  }
-
-  // Planner (reuses classic war planner logic)
-  let plannerHtml;
-  if (data.state === 'preparation') {
-    plannerHtml = '<p class="wl-empty">Il planner è disponibile durante la guerra.</p>';
-  } else {
-    const defStatus = {};
-    usMembers.forEach(m => {
-      if (!m.attacks) return;
-      m.attacks.forEach(atk => {
-        const pos = atk.defenderMapPosition;
-        if (!defStatus[pos] || atk.stars > defStatus[pos].stars)
-          defStatus[pos] = { stars: atk.stars, pct: atk.destructionPercentage };
-      });
-    });
-    const needAtk = usMembers.filter(m => (m.attacks ? m.attacks.length : 0) < maxAtk)
-      .sort((a, b) => a.mapPosition - b.mapPosition);
-    if (!needAtk.length) {
-      plannerHtml = '<p class="wl-empty">✅ Tutti gli attacchi sono stati usati.</p>';
-    } else {
-      const openBases = themMembers
-        .filter(m => !defStatus[m.mapPosition] || defStatus[m.mapPosition].stars < 3)
-        .sort((a, b) => a.mapPosition - b.mapPosition);
-      const planCards = needAtk.map(m => {
-        const thN = String(m.townhallLevel || 1).padStart(2, '0');
-        const thImg = `<img src="th/webp/level_${thN}.webp" alt="TH${m.townhallLevel}" class="wl-th-icon" loading="lazy">`;
-        const used = m.attacks ? m.attacks.length : 0;
-        const remaining = maxAtk - used;
-        const suggestions = openBases
-          .filter(b => b.townhallLevel <= m.townhallLevel)
-          .slice(0, remaining)
-          .map(b => {
-            const bThN = String(b.townhallLevel || 1).padStart(2, '0');
-            const bThImg = `<img src="th/webp/level_${bThN}.webp" alt="TH${b.townhallLevel}" class="wl-th-icon" loading="lazy">`;
-            const ds = defStatus[b.mapPosition];
-            const dsLabel = ds ? `${ds.stars}&#11088; ${ds.pct}%` : 'Intatto';
-            return `<div class="wl-plan-suggestion">
-              ${bThImg} <strong>#${b.mapPosition}</strong> ${escH(b.name)} — <span class="wl-ds-label">${dsLabel}</span>
-            </div>`;
-          }).join('') || '<div class="wl-plan-no-sugg">Nessun bersaglio disponibile</div>';
-        return `<div class="wl-plan-card">
-          <div class="wl-plan-attacker">
-            ${thImg} <strong>#${m.mapPosition}</strong> ${escH(m.name)}
-            <span class="wl-plan-atk-left">${remaining} attacch${remaining===1?'o':'i'} rimast${remaining===1?'o':'i'}</span>
-          </div>
-          <div class="wl-plan-suggestions">${suggestions}</div>
-        </div>`;
-      }).join('');
-      plannerHtml = `<div class="wl-plan-wrap">${planCards}</div>`;
-    }
-  }
-
-  const confrontoHtml = `
-    <div class="cdm-attacks-scroll"><table class="cdm-confronto-table">
-      <thead><tr>
-        <th>#</th><th>TH</th><th>Player</th><th>Σ eroi</th>
-        <th class="cdm-cf-vs-th">vs</th>
-        <th>#</th><th>TH</th><th>Player</th><th>Σ eroi</th>
-      </tr></thead><tbody>${heroRows.join('')}</tbody>
-    </table></div>
-    <h4 style="margin:1rem 0 0.5rem;font-size:0.9rem;color:var(--text-1)">📋 Planner attacchi</h4>
-    ${plannerHtml}`;
+  // ── Confronto panel loaded async on tab switch ──
+  const confrontoHtml = '<div class="profilo-loading" style="display:flex;gap:0.5rem;align-items:center;padding:0.75rem"><div class="spinner"></div><span>Seleziona la scheda Confronto per caricare i dati.</span></div>';
 
   // ── Build modal ──
   const CDM_ICO_SYNC = '<svg class="cdm-ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4V1L7 6l5 5V7c2.76 0 5 2.24 5 5 0 1.13-.4 2.16-1.03 3l1.46 1.46A7.93 7.93 0 0 0 20 12c0-2.21-.9-4.22-2.35-5.65zM12 19c-2.76 0-5-2.24-5-5 0-1.13.4-2.16 1.03-3L6.57 9.54A7.93 7.93 0 0 0 4 12c0 3.31 2.69 6 6 6v3l5-5-5-5v3z"/></svg>';
@@ -7177,10 +7106,13 @@ async function openWarLiveModal() {
 
   modal.addEventListener('click', closeWarLiveModal);
   document.body.appendChild(modal);
+  _wlmConfrontoLoaded = false;
   requestAnimationFrame(() => {
     modal.classList.add('cdm-overlay--visible');
     const cdEl = document.getElementById('wlm-countdown');
     if (cdEl) _wlModalCountdown(data, cdEl);
+    _wlLoadPlayerHeroes(data, 'us');
+    _wlLoadPlayerHeroes(data, 'them');
   });
 }
 
@@ -7192,6 +7124,143 @@ function _wlmSwitchTab(tab) {
     const btn = document.getElementById(`wlm-mtab-${p}`);
     if (btn) btn.classList.toggle('cdm-mtab--active', p === tab);
   });
+  if (tab === 'confronto' && !window._wlmConfrontoLoaded) _wlmLoadConfronto();
+}
+
+let _wlmConfrontoLoaded = false;
+
+/** Async: load confronto panel with hero sums + planner */
+async function _wlmLoadConfronto() {
+  const panel = document.getElementById('wlm-panel-confronto');
+  if (!panel || !_warLiveData) return;
+  _wlmConfrontoLoaded = true;
+
+  const data = _warLiveData;
+  const us = data.clan || {}, them = data.opponent || {};
+  const usMembers = [...(us.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const themMembers = [...(them.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const n = Math.max(usMembers.length, themMembers.length);
+  const maxAtk = data.attacksPerMember || 2;
+
+  panel.innerHTML = '<div class="profilo-loading" style="display:flex;gap:0.5rem;align-items:center;padding:0.75rem"><div class="spinner"></div><span>Caricamento livelli eroi…</span></div>';
+
+  // Fetch hero sums for all players
+  const heroRows = [];
+  for (let i = 0; i < n; i++) {
+    const a = usMembers[i], b = themMembers[i];
+    const hA = a ? await _getHeroLevelsSum(a.tag) : null;
+    const hB = b ? await _getHeroLevelsSum(b.tag) : null;
+    const thNA = a ? String(a.townhallLevel || 1).padStart(2,'0') : null;
+    const thNB = b ? String(b.townhallLevel || 1).padStart(2,'0') : null;
+    const thImgA = thNA ? `<img src="th/webp/level_${thNA}.webp" alt="TH${a.townhallLevel}" class="wl-th-icon" loading="lazy">` : '—';
+    const thImgB = thNB ? `<img src="th/webp/level_${thNB}.webp" alt="TH${b.townhallLevel}" class="wl-th-icon" loading="lazy">` : '—';
+    heroRows.push(`<tr>
+      <td class="cdm-cf-pos">#${i + 1}</td>
+      <td class="cdm-cf-th">${thImgA}</td>
+      <td class="cdm-cf-name">${a ? escH(a.name) : '—'}</td>
+      <td class="cdm-cf-hero">${hA != null ? hA : '—'}</td>
+      <td class="cdm-cf-vs">vs</td>
+      <td class="cdm-cf-pos">#${i + 1}</td>
+      <td class="cdm-cf-th">${thImgB}</td>
+      <td class="cdm-cf-name">${b ? escH(b.name) : '—'}</td>
+      <td class="cdm-cf-hero">${hB != null ? hB : '—'}</td>
+    </tr>`);
+  }
+
+  // Planner (CWL-style scoring — works in preparation + battle)
+  const plannerHtml = _wlBuildPlanner(data, usMembers, themMembers, maxAtk);
+
+  panel.innerHTML = `
+    <div class="cdm-attacks-scroll"><table class="cdm-confronto-table">
+      <thead><tr>
+        <th>#</th><th>TH</th><th>Player</th><th>Σ eroi</th>
+        <th class="cdm-cf-vs-th">vs</th>
+        <th>#</th><th>TH</th><th>Player</th><th>Σ eroi</th>
+      </tr></thead><tbody>${heroRows.join('')}</tbody>
+    </table></div>
+    <h4 style="margin:1rem 0 0.5rem;font-size:0.9rem;color:var(--text-1)">📋 Planner attacchi</h4>
+    ${plannerHtml}`;
+}
+
+/** CWL-style attack planner for classic wars — works in prep + battle */
+function _wlBuildPlanner(data, usMembers, themMembers, maxAtk) {
+  const usWarRank = new Map(usMembers.map((m, i) => [m.tag, i + 1]));
+  const themWarRank = new Map(themMembers.map((m, i) => [m.tag, i + 1]));
+
+  function scoreTarget(attacker, target) {
+    const stars = target.bestOpponentAttack?.stars ?? 0;
+    if (stars >= 3) return -9999;
+    const thDiff = (attacker.townhallLevel || 0) - (target.townhallLevel || 0);
+    let score = 100;
+    score -= Math.abs(thDiff) * 15;
+    if (thDiff < 0) score -= 25;
+    score += (3 - stars) * 8;
+    if (!target.bestOpponentAttack) score += 12;
+    if (usWarRank.get(attacker.tag) === themWarRank.get(target.tag)) score += 10;
+    return score;
+  }
+
+  const needAtk = usMembers.filter(m => {
+    const done = (m.attacks || []).length;
+    return done < maxAtk;
+  });
+
+  if (!needAtk.length) {
+    return '<p class="wl-empty">✅ Tutti gli attacchi sono stati usati.</p>';
+  }
+
+  const assignedTags = new Set();
+  const rows = [];
+  for (const a of needAtk) {
+    const done = (a.attacks || []).length;
+    const missing = maxAtk - done;
+
+    const available = themMembers.filter(t => !assignedTags.has(t.tag));
+    const ranked = available
+      .map(t => ({ target: t, score: scoreTarget(a, t) }))
+      .sort((x, y) => y.score - x.score);
+
+    const best = ranked[0]?.target ?? available[0] ?? themMembers[0];
+    if (best?.tag) assignedTags.add(best.tag);
+
+    const targetStars = best?.bestOpponentAttack?.stars ?? 0;
+    const targetDestPct = best?.bestOpponentAttack?.destructionPercentage ?? 0;
+    const thDelta = (a.townhallLevel || 0) - (best?.townhallLevel || 0);
+    const deltaClass = thDelta >= 2 ? 'cdm-td-easy' : thDelta <= -2 ? 'cdm-td-hard' : 'cdm-td-fair';
+    const deltaSign = thDelta > 0 ? '+' : '';
+    const starsHtml = targetStars >= 3
+      ? '<span class="cdm-planner-stars cdm-stars-full">⭐⭐⭐</span>'
+      : targetStars === 2
+      ? '<span class="cdm-planner-stars">⭐⭐☆</span>'
+      : targetStars === 1
+      ? '<span class="cdm-planner-stars">⭐☆☆</span>'
+      : '<span class="cdm-planner-stars cdm-stars-none">☆☆☆</span>';
+    const destHint = targetStars > 0 ? ` <span class="cdm-planner-destr">${targetDestPct.toFixed(0)}%</span>` : '';
+
+    const aThN = String(a.townhallLevel || 1).padStart(2, '0');
+    const bThN = String(best?.townhallLevel || 1).padStart(2, '0');
+    const aThImg = `<img src="th/webp/level_${aThN}.webp" alt="TH${a.townhallLevel}" class="wl-th-icon" loading="lazy">`;
+    const bThImg = `<img src="th/webp/level_${bThN}.webp" alt="TH${best?.townhallLevel}" class="wl-th-icon" loading="lazy">`;
+
+    rows.push(`<tr>
+      <td class="cdm-cf-pos">#${usWarRank.get(a.tag) ?? '?'}</td>
+      <td class="cdm-cf-th">${aThImg}</td>
+      <td class="cdm-cf-name">${escH(a.name)}</td>
+      <td class="cdm-atk-arrow">→</td>
+      <td class="cdm-cf-pos">#${themWarRank.get(best?.tag) ?? '?'}</td>
+      <td class="cdm-cf-th">${bThImg}</td>
+      <td class="cdm-cf-name">${escH(best?.name || '—')}</td>
+      <td class="cdm-planner-stars-cell">${starsHtml}${destHint}</td>
+      <td class="${deltaClass}">${deltaSign}${thDelta}</td>
+      <td style="text-align:center">${missing}</td>
+    </tr>`);
+  }
+
+  return `<div class="cdm-attacks-scroll"><table class="cdm-attacks-table cdm-planner-table"><thead><tr>
+    <th>#</th><th></th><th>Attaccante</th>
+    <th></th>
+    <th>#</th><th></th><th>Target consigliato</th><th>Stelle attuali</th><th>Δ TH</th><th>Atk</th>
+  </tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
 }
 
 function _wlmPlayerSwitch(side) {
@@ -7211,6 +7280,8 @@ function closeWarLiveModal() {
 
 async function refreshWarLiveModal() {
   _warLiveData = null;
+  _wlmConfrontoLoaded = false;
+  _cwlHeroLvlCache = {};
   await openWarLiveModal();
   await _checkWarLiveBanner();
 }
