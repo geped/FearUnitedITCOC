@@ -3666,3 +3666,221 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .wl-row-clickable { cursor: pointer; transition: background 0.12s; }
 .wl-row-clickable:hover { background: var(--gold-glow); }
+
+/* ─────────────────────────────────────────────────────────────
+   GUERRA CLASSICA LIVE
+   ───────────────────────────────────────────────────────────── */
+.wl-live-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+.wl-live-state-badge {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--gold);
+    min-width: 80px;
+}
+.wl-live-countdown {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--text-2);
+    flex: 1;
+}
+.wl-live-refresh-btn {
+    margin-left: auto;
+}
+.wl-live-section { margin-top: 0.5rem; }
+
+/* Alert attacchi mancanti */
+.wl-alert {
+    border-radius: 8px;
+    padding: 0.6rem 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.88rem;
+}
+.wl-alert-warn   { background: rgba(255,200,0,0.12); border: 1px solid rgba(255,200,0,0.3); color: #f0d060; }
+.wl-alert-urgent { background: rgba(255,60,60,0.12); border: 1px solid rgba(255,60,60,0.35); color: #ff7070; }
+
+/* VS header (Panoramica) */
+.wl-vs-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+.wl-vs-side { flex: 1; min-width: 0; }
+.wl-vs-right { text-align: right; }
+.wl-vs-name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-1);
+}
+.wl-vs-stars {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--gold);
+    margin: 0.15rem 0;
+}
+.wl-vs-dest { font-size: 0.8rem; color: var(--text-3); }
+.wl-vs-center {
+    text-align: center;
+    flex-shrink: 0;
+    padding: 0 0.5rem;
+}
+.wl-vs-size { font-size: 0.78rem; color: var(--text-3); margin-bottom: 0.2rem; }
+.wl-vs-vs { font-weight: 900; font-size: 1.1rem; color: var(--text-2); }
+
+/* Win probability bar */
+.wl-wp-bar-wrap {
+    margin-bottom: 1rem;
+}
+.wl-wp-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 0.3rem;
+}
+.wl-wp-win  { color: #4cd97b; }
+.wl-wp-loss { color: #ff6b6b; }
+.wl-wp-neutral { color: var(--text-2); }
+.wl-wp-bar {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--border);
+    overflow: hidden;
+}
+.wl-wp-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.4s ease;
+}
+.wl-wp-fill.wl-wp-win  { background: #4cd97b; }
+.wl-wp-fill.wl-wp-loss { background: #ff6b6b; }
+.wl-wp-fill.wl-wp-neutral { background: var(--gold); }
+
+/* Stats grid */
+.wl-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+    margin-bottom: 0.5rem;
+}
+.wl-stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.6rem 0.8rem;
+}
+.wl-stat-label { font-size: 0.75rem; color: var(--text-3); margin-bottom: 0.15rem; }
+.wl-stat-val   { font-size: 1rem; font-weight: 700; color: var(--text-1); font-family: 'IBM Plex Mono', monospace; }
+
+/* Players table */
+.wl-players-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.wl-players-table th {
+    text-align: left;
+    color: var(--text-3);
+    font-weight: 600;
+    padding: 0.35rem 0.4rem;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+.wl-players-table td { padding: 0.3rem 0.4rem; vertical-align: middle; }
+.wl-players-table tr:not(:last-child) td { border-bottom: 1px solid rgba(255,255,255,0.04); }
+.wl-pos { color: var(--text-3); font-family: 'IBM Plex Mono', monospace; font-size: 0.78rem; min-width: 22px; }
+.wl-th-cell { width: 32px; }
+.wl-th-icon { width: 26px; height: 26px; object-fit: contain; display: block; }
+.wl-name { font-weight: 600; color: var(--text-1); }
+.wl-atk-cell { white-space: nowrap; }
+.wl-atk-dot {
+    display: inline-block;
+    font-size: 0.72rem;
+    padding: 0.1rem 0.3rem;
+    border-radius: 4px;
+    margin-right: 2px;
+    font-family: 'IBM Plex Mono', monospace;
+}
+.wl-atk-used  { background: rgba(76,217,123,0.15); color: #4cd97b; }
+.wl-atk-empty { background: rgba(255,255,255,0.06); color: var(--text-3); }
+.wl-hero-cell { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-2); white-space: nowrap; }
+.wl-empty { color: var(--text-3); text-align: center; padding: 2rem 0; font-size: 0.9rem; }
+
+/* Preview TH comparison */
+.wl-prev-legend {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    padding: 0 0.25rem;
+}
+.wl-leg-us   { color: #4a9eff; }
+.wl-leg-them { color: #ff7070; }
+.wl-prev-table { width: 100%; border-collapse: collapse; }
+.wl-prev-row td { padding: 0.2rem 0.3rem; vertical-align: middle; }
+.wl-prev-us, .wl-prev-them { width: 44%; }
+.wl-prev-us   { text-align: right; }
+.wl-prev-them { text-align: left; }
+.wl-prev-th   { width: 12%; text-align: center; padding: 0.15rem 0.4rem; }
+.wl-bar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0 0.35rem;
+    height: 22px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    font-family: 'IBM Plex Mono', monospace;
+    min-width: 24px;
+    transition: width 0.3s ease;
+}
+.wl-bar-us   { background: rgba(74,158,255,0.25); color: #4a9eff; justify-content: flex-end; }
+.wl-bar-them { background: rgba(255,112,112,0.2);  color: #ff7070; justify-content: flex-start; }
+.wl-bar-zero { display: inline-block; height: 22px; color: var(--text-3); font-size: 0.75rem; line-height: 22px; padding: 0 0.3rem; }
+
+/* Attack planner */
+.wl-plan-wrap { display: flex; flex-direction: column; gap: 0.75rem; }
+.wl-plan-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+}
+.wl-plan-attacker {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-1);
+}
+.wl-plan-atk-left {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: var(--gold);
+    font-weight: 500;
+}
+.wl-plan-suggestions { display: flex; flex-direction: column; gap: 0.3rem; }
+.wl-plan-suggestion {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    color: var(--text-2);
+    background: rgba(255,255,255,0.03);
+    border-radius: 6px;
+    padding: 0.3rem 0.5rem;
+}
+.wl-plan-no-sugg { font-size: 0.8rem; color: var(--text-3); font-style: italic; padding: 0.25rem 0; }
+.wl-ds-label { font-family: 'IBM Plex Mono', monospace; font-size: 0.75rem; color: var(--text-3); }

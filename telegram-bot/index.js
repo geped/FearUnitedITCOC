@@ -108,8 +108,8 @@ function webLaunchButton(ctx, label, url, tab, clanTag) {
   return Markup.button.webApp(label, url);
 }
 
-const MINI_APP_WEB_TABS = new Set(['cwl_warlog', 'warlog', 'bonus', 'members', 'profilo', 'cerca', 'rankings']);
-const MINI_APP_GUEST_ALLOWED_TABS = new Set(['cwl_warlog', 'warlog', 'bonus', 'members', 'cerca', 'rankings']);
+const MINI_APP_WEB_TABS = new Set(['cwl_warlog', 'warlog', 'war_live', 'bonus', 'members', 'profilo', 'cerca', 'rankings']);
+const MINI_APP_GUEST_ALLOWED_TABS = new Set(['cwl_warlog', 'warlog', 'war_live', 'bonus', 'members', 'cerca', 'rankings']);
 
 function parseRequestedMiniAppTabFromCommand(ctx) {
   const txt = String(ctx.message?.text || '').trim();
@@ -337,6 +337,8 @@ function isGroupClanReadCallback(d) {
   if (/^mb\d+$/.test(d)) return true;
   if (d.startsWith('cwl_v:')) return true;
   if (d.startsWith('war:')) return true;
+  if (d === 'war_live') return true;
+  if (d.startsWith('wl_v:')) return true;
   return false;
 }
 
@@ -1626,7 +1628,8 @@ async function renderClanHubMenu(ctx) {
   } else {
     rows.push([Markup.button.callback('🎁 Bonus', 'bonus:0')]);
   }
-  rows.push([Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('📜 Registro guerre', 'war_menu')]);
+  rows.push([Markup.button.callback('🏆 CWL live', 'cwl'), Markup.button.callback('⚔️ Guerra live', 'war_live')]);
+  rows.push([Markup.button.callback('📜 Registro guerre', 'war_menu')]);
   rows.push(
     [Markup.button.callback('📱 Visualizza come mini app', 'clan_webapps')],
     [Markup.button.callback('« Menù', 'menu')]
@@ -1644,9 +1647,10 @@ async function renderClanWebAppsMenu(ctx) {
     `Apri le sezioni web del clan direttamente da Telegram.`;
   const rows = [];
   const webPairsBase = [
-    ['🏆 CWL live (web)', 'cwl_warlog', '📜 Registro guerre (web)', 'warlog'],
-    ['🎁 Bonus (web)', 'bonus', '🏰 Info / Membri (web)', 'members'],
-    ['🔍 Cerca (web)', 'cerca', '📊 Classifica (web)', 'rankings'],
+    ['🏆 CWL live (web)', 'cwl_warlog', '⚔️ Guerra live (web)', 'war_live'],
+    ['📜 Registro guerre (web)', 'warlog', '🎁 Bonus (web)', 'bonus'],
+    ['🏰 Info / Membri (web)', 'members', '🔍 Cerca (web)', 'cerca'],
+    ['📊 Classifica (web)', 'rankings', null, null],
   ];
   const sess = await tauth.getValidSession(ctx.from?.id).catch(() => null);
   const isAuthed = !!sess?.user;
@@ -1872,6 +1876,80 @@ function warSubmenuKb() {
     ],
     [Markup.button.callback('« Indietro', 'clan_home'), Markup.button.callback('« Menù', 'menu')],
   ]);
+}
+
+function buildWarLiveNavKb(data, spec, webAppUrl) {
+  const { view, pPage, side } = spec;
+  const noWar = !data || data.state === 'notInWar';
+  const tab = (active, label, cb) => Markup.button.callback(active ? `· ${label} ·` : label, cb);
+  const usPages   = noWar ? 1 : fmt.getWarLivePlayersPageCount(data, 'us');
+  const themPages = noWar ? 1 : fmt.getWarLivePlayersPageCount(data, 'them');
+  const planPages = noWar ? 1 : fmt.getWarLivePlanPageCount(data);
+  const usPg   = Math.min(Math.max(0, pPage), usPages - 1);
+  const thPg   = Math.min(Math.max(0, pPage), themPages - 1);
+  const planPg = Math.min(Math.max(0, pPage), planPages - 1);
+
+  if (noWar) {
+    return Markup.inlineKeyboard([
+      [Markup.button.callback('« Indietro', 'clan_home'), Markup.button.callback('« Menù', 'menu')],
+    ]);
+  }
+
+  const rows = [
+    [tab(view === 'ov', '📊 Panoramica', 'wl_v:ov'), tab(view === 'prev', '🔭 Anteprima TH', 'wl_v:prev')],
+    [tab(view === 'p' && side === 'us',   `👥 ${(data.clan?.name || 'Noi').slice(0,10)}`, `wl_v:p:us:0`)],
+    [tab(view === 'p' && side === 'them', `⚔️ ${(data.opponent?.name || 'Avv').slice(0,10)}`, `wl_v:p:them:0`)],
+  ];
+
+  if (data.state !== 'preparation') {
+    rows.push([tab(view === 'plan', '📋 Planner attacchi', `wl_v:plan:0`)]);
+  }
+
+  // Paginazione players
+  if (view === 'p' && side === 'us' && usPages > 1) {
+    rows.push([
+      Markup.button.callback('◀', `wl_v:p:us:${Math.max(0, usPg - 1)}`),
+      Markup.button.callback(`· ${usPg + 1}/${usPages} ·`, 'noop'),
+      Markup.button.callback('▶', `wl_v:p:us:${Math.min(usPages - 1, usPg + 1)}`),
+    ]);
+  }
+  if (view === 'p' && side === 'them' && themPages > 1) {
+    rows.push([
+      Markup.button.callback('◀', `wl_v:p:them:${Math.max(0, thPg - 1)}`),
+      Markup.button.callback(`· ${thPg + 1}/${themPages} ·`, 'noop'),
+      Markup.button.callback('▶', `wl_v:p:them:${Math.min(themPages - 1, thPg + 1)}`),
+    ]);
+  }
+  // Paginazione planner
+  if (view === 'plan' && planPages > 1) {
+    rows.push([
+      Markup.button.callback('◀', `wl_v:plan:${Math.max(0, planPg - 1)}`),
+      Markup.button.callback(`· ${planPg + 1}/${planPages} ·`, 'noop'),
+      Markup.button.callback('▶', `wl_v:plan:${Math.min(planPages - 1, planPg + 1)}`),
+    ]);
+  }
+
+  if (webAppUrl) {
+    rows.push([Markup.button.webApp('🌐 Apri Guerra live (web)', webAppUrl)]);
+  }
+
+  if (view !== 'ov') rows.push([Markup.button.callback('« Guerra live', 'wl_v:ov')]);
+  rows.push([Markup.button.callback('« Indietro', 'clan_home'), Markup.button.callback('« Menù', 'menu')]);
+  return Markup.inlineKeyboard(rows);
+}
+
+async function loadAndShowWarLive(ctx, clanTag, viewSpec) {
+  const data = await api.currentWar(clanTag);
+  let webAppUrl = null;
+  if (data?.state && data.state !== 'notInWar' && !isLinkedChatContext(ctx) && ctx.cocboardUser) {
+    try {
+      webAppUrl = await buildWebAppHandoffUrl(ctx, { open_tab: 'war_live' });
+      if (webAppUrl && !String(webAppUrl).startsWith('https://')) webAppUrl = null;
+    } catch (_) {}
+  }
+  const formatted = fmt.formatWarLiveScreen(data, viewSpec.view, viewSpec.pPage, viewSpec.side);
+  const kb = buildWarLiveNavKb(data, formatted, webAppUrl);
+  return { text: formatted.text, kb, data };
 }
 
 function buildCwlNavKb(data, spec, webAppUrl) {
@@ -4745,6 +4823,36 @@ function setupBot(bot) {
     } catch (_) {
       await ctx.reply(text, { parse_mode: 'HTML', ...kb });
     }
+  });
+
+  // ─── GUERRA CLASSICA LIVE ────────────────────────────────────────────────
+  bot.action('war_live', async (ctx) => {
+    await answerCbLoading(ctx);
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) { await ctx.answerCbQuery('Nessun clan collegato').catch(() => {}); return; }
+    const { text, kb } = await loadAndShowWarLive(ctx, clanTag, { view: 'ov', pPage: 0, side: 'us' });
+    try { await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb }); }
+    catch (_) { await ctx.reply(text, { parse_mode: 'HTML', ...kb }); }
+  });
+
+  bot.action(/^wl_v:(.+)$/, async (ctx) => {
+    await answerCbLoading(ctx);
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) { await ctx.answerCbQuery('Nessun clan collegato').catch(() => {}); return; }
+    const parts = (ctx.match[1] || '').split(':');
+    // wl_v:ov | wl_v:prev | wl_v:p:us:N | wl_v:p:them:N | wl_v:plan:N
+    let view = parts[0] || 'ov';
+    let side = 'us';
+    let pPage = 0;
+    if (view === 'p') {
+      side  = parts[1] === 'them' ? 'them' : 'us';
+      pPage = Math.max(0, parseInt(parts[2] ?? '0', 10) || 0);
+    } else if (view === 'plan') {
+      pPage = Math.max(0, parseInt(parts[1] ?? '0', 10) || 0);
+    }
+    const { text, kb } = await loadAndShowWarLive(ctx, clanTag, { view, pPage, side });
+    try { await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb }); }
+    catch (_) { await ctx.reply(text, { parse_mode: 'HTML', ...kb }); }
   });
 
   bot.action('add_group_bot', async (ctx) => {

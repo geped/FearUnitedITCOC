@@ -918,6 +918,318 @@ function chunkForTelegram(html) {
   return parts;
 }
 
+// ─── GUERRA CLASSICA LIVE ────────────────────────────────────────────────────
+
+const WAR_LIVE_PLAYERS_PER_PAGE = 10;
+const WAR_LIVE_PLAN_PER_PAGE = 12;
+
+/** Parsa il formato ora CoC "20230814T100000.000Z" → Date */
+function parseCocTime(t) {
+  if (!t) return null;
+  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/.exec(t);
+  if (!m) return null;
+  return new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}Z`);
+}
+
+function warLiveStateLabel(state) {
+  switch (state) {
+    case 'preparation': return '🛡 Giorno di preparazione';
+    case 'inWar':       return '⚔️ Giorno di guerra';
+    case 'warEnded':    return '🏁 Guerra terminata';
+    default:            return '😴 Non in guerra';
+  }
+}
+
+/** Countdown (suggestion 3) */
+function warLiveCountdown(data) {
+  const now = Date.now();
+  let target = null;
+  let prefix = '';
+  if (data.state === 'preparation') { target = parseCocTime(data.startTime); prefix = 'Inizio guerra'; }
+  else if (data.state === 'inWar')  { target = parseCocTime(data.endTime);   prefix = 'Fine guerra'; }
+  if (!target) return null;
+  const diff = target - now;
+  if (diff <= 0) return `⏱ ${prefix}: <b>terminato</b>`;
+  const h = Math.floor(diff / 3_600_000);
+  const m = Math.floor((diff % 3_600_000) / 60_000);
+  const s = Math.floor((diff % 60_000) / 1_000);
+  if (h > 0) return `⏱ ${prefix}: <b>${h}h ${String(m).padStart(2,'0')}m</b>`;
+  return `⏱ ${prefix}: <b>${m}m ${String(s).padStart(2,'0')}s</b>`;
+}
+
+function warLiveHoursLeft(data) {
+  if (data.state !== 'inWar' || !data.endTime) return null;
+  const t = parseCocTime(data.endTime);
+  if (!t) return null;
+  const diff = t - Date.now();
+  return diff > 0 ? diff / 3_600_000 : 0;
+}
+
+function heroLevelShort(member, heroName) {
+  if (!member?.heroes) return '—';
+  const h = member.heroes.find(h => h.name === heroName);
+  return h ? String(h.level) : '—';
+}
+
+/** Stima vittoria (suggestion 6) */
+function warLiveWinProbability(data) {
+  const c = data?.clan;
+  const o = data?.opponent;
+  const teamSize = data?.teamSize || 0;
+  if (!c || !o || !teamSize) return null;
+  const cStars = c.stars ?? 0;
+  const oStars = o.stars ?? 0;
+  const cDest  = c.destructionPercentage ?? 0;
+  const oDest  = o.destructionPercentage ?? 0;
+
+  if (data.state === 'warEnded') {
+    if (cStars > oStars) return { label: '🏆 Vittoria', pct: null };
+    if (cStars < oStars) return { label: '❌ Sconfitta', pct: null };
+    if (cDest > oDest)   return { label: '🏆 Vittoria (distruzione)', pct: null };
+    if (cDest < oDest)   return { label: '❌ Sconfitta (distruzione)', pct: null };
+    return { label: '⚖️ Pareggio', pct: null };
+  }
+  if (data.state !== 'inWar') return null;
+
+  const maxStars = teamSize * 3;
+  const starDiff = cStars - oStars;
+  let pct;
+  if (starDiff !== 0) {
+    pct = 50 + (starDiff / maxStars) * 120;
+  } else {
+    pct = 50 + (cDest - oDest) * 0.5;
+  }
+  pct = Math.round(Math.min(99, Math.max(1, pct)));
+  const label = pct >= 65 ? '🟢 In vantaggio' : pct >= 50 ? '🟡 Equilibrio' : pct >= 35 ? '🟠 In svantaggio' : '🔴 Situazione critica';
+  return { label, pct };
+}
+
+function formatWarLiveOverview(data) {
+  const c = data.clan || {};
+  const o = data.opponent || {};
+  const teamSize = data.teamSize || '?';
+  const atkPer  = data.attacksPerMember || 2;
+  const cStars   = c.stars ?? 0;
+  const oStars   = o.stars ?? 0;
+  const cAtk     = c.attacks ?? 0;
+  const oAtk     = o.attacks ?? 0;
+  const cDest    = Number(c.destructionPercentage ?? 0).toFixed(1);
+  const oDest    = Number(o.destructionPercentage ?? 0).toFixed(1);
+  const totalAtk = Number.isFinite(Number(teamSize)) ? Number(teamSize) * atkPer : '?';
+  const starIcon = cStars > oStars ? '🏆' : cStars < oStars ? '❌' : '⚖️';
+  const countdown = warLiveCountdown(data);
+  const wp = warLiveWinProbability(data);
+
+  const lines = [
+    DIV,
+    `⚔️ <b>Guerra classica live</b>`,
+    DIV,
+    `📌 Stato: <b>${warLiveStateLabel(data.state)}</b>`,
+  ];
+  if (countdown) lines.push(countdown);
+  lines.push('');
+  lines.push(`🏠 <b>${escapeHtml(c.name || '—')}</b>  vs  <b>${escapeHtml(o.name || '—')}</b>`);
+  lines.push(`👥 ${teamSize}v${teamSize} · ${atkPer} attacchi/giocatore`);
+  lines.push('');
+  lines.push(`⭐ Stelle:      <b>${cStars}</b>  ${starIcon}  <b>${oStars}</b>`);
+  lines.push(`⚔️ Attacchi:   <b>${cAtk}/${totalAtk}</b>  ·  Avv. <b>${oAtk}/${totalAtk}</b>`);
+  lines.push(`💥 Distruzione: <b>${cDest}%</b>  ·  Avv. <b>${oDest}%</b>`);
+
+  if (wp) {
+    lines.push('');
+    lines.push(wp.pct != null
+      ? `📊 Stima vittoria: ${wp.label} (<b>${wp.pct}%</b>)`
+      : `📊 Risultato: ${wp.label}`);
+  }
+
+  // Attacchi rimanenti alert (suggestion 1)
+  if (data.state === 'inWar') {
+    const members = c.members || [];
+    const missing = members.filter(m => (m.attacks?.length ?? 0) < atkPer);
+    if (missing.length > 0) {
+      const hoursLeft = warLiveHoursLeft(data);
+      const urgentThreshold = 4;
+      if (hoursLeft !== null && hoursLeft < urgentThreshold) {
+        lines.push('');
+        lines.push(`⚠️ <b>${missing.length} giocator${missing.length === 1 ? 'e' : 'i'}</b> con attacchi rimanenti — meno di ${Math.ceil(hoursLeft)}h alla fine!`);
+        const nameList = missing.slice(0, 5).map(m => escapeHtml(m.name || '?')).join(', ');
+        lines.push(`   → ${nameList}${missing.length > 5 ? ` +${missing.length - 5}` : ''}`);
+      }
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function formatWarLivePlayers(data, side = 'us', page = 0) {
+  const sideObj   = side === 'us' ? data.clan : data.opponent;
+  const sideLabel = side === 'us' ? `🏠 ${escapeHtml(data.clan?.name || 'Nostro clan')}` : `⚔️ ${escapeHtml(data.opponent?.name || 'Avversario')}`;
+  const members   = [...(sideObj?.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const atkPer    = data.attacksPerMember || 2;
+
+  if (!members.length) {
+    return `${DIV}\n👥 <b>Giocatori — ${sideLabel}</b>\n${DIV}\n\n<i>Nessun dato giocatori.</i>`;
+  }
+
+  const PAGE_SIZE  = WAR_LIVE_PLAYERS_PER_PAGE;
+  const totalPages = Math.ceil(members.length / PAGE_SIZE);
+  const p          = Math.min(Math.max(0, page), totalPages - 1);
+  const slice      = members.slice(p * PAGE_SIZE, (p + 1) * PAGE_SIZE);
+
+  const lines = [
+    DIV,
+    `👥 <b>Giocatori — ${sideLabel}</b>`,
+    `<i>Pagina ${p + 1}/${totalPages}</i>`,
+    DIV,
+  ];
+
+  for (const m of slice) {
+    const pos    = m.mapPosition ?? '?';
+    const th     = m.townhallLevel ?? '?';
+    const name   = escapeHtml(m.name || '—');
+    const bk     = heroLevelShort(m, 'Barbarian King');
+    const aq     = heroLevelShort(m, 'Archer Queen');
+    const gw     = heroLevelShort(m, 'Grand Warden');
+    const rc     = heroLevelShort(m, 'Royal Champion');
+    const atkDone = m.attacks?.length ?? 0;
+    const inWar   = data.state === 'inWar' || data.state === 'warEnded';
+    const atkStr  = inWar ? ` · ⚔️${atkDone}/${atkPer}` : '';
+    const warn    = (data.state === 'inWar' && atkDone < atkPer) ? ' ⚠️' : '';
+    lines.push(`<b>${pos}.</b> TH${th} <b>${name}</b>${atkStr}${warn}`);
+    lines.push(`   BK <b>${bk}</b> · AQ <b>${aq}</b> · GW <b>${gw}</b> · RC <b>${rc}</b>`);
+  }
+
+  return lines.join('\n');
+}
+
+function getWarLivePlayersPageCount(data, side = 'us') {
+  const sideObj = side === 'us' ? data?.clan : data?.opponent;
+  return Math.max(1, Math.ceil((sideObj?.members?.length ?? 0) / WAR_LIVE_PLAYERS_PER_PAGE));
+}
+
+function formatWarLivePreview(data) {
+  const c = data.clan || {};
+  const o = data.opponent || {};
+  const cMembers = c.members || [];
+  const oMembers = o.members || [];
+
+  const countTh = (arr) => {
+    const map = {};
+    for (const m of arr) { const t = m.townhallLevel ?? 0; map[t] = (map[t] || 0) + 1; }
+    return map;
+  };
+  const cTh = countTh(cMembers);
+  const oTh = countTh(oMembers);
+  const allThs = [...new Set([...Object.keys(cTh), ...Object.keys(oTh)].map(Number))].sort((a, b) => b - a);
+
+  const avgTh = (arr) => arr.length ? (arr.reduce((s, m) => s + (m.townhallLevel ?? 0), 0) / arr.length).toFixed(1) : '—';
+  const cAvg = avgTh(cMembers);
+  const oAvg = avgTh(oMembers);
+
+  const cName = escapeHtml((c.name || 'Noi').slice(0, 10));
+  const oName = escapeHtml((o.name || 'Avv').slice(0, 10));
+
+  const rows = [`TH  │ ${cName.padEnd(10)} │ ${oName}`];
+  rows.push(`────┼────────────┼────────────`);
+  for (const th of allThs) {
+    const cv = cTh[th] ?? 0;
+    const ov = oTh[th] ?? 0;
+    const diff = cv > ov ? ' ▲' : cv < ov ? ' ▼' : '';
+    rows.push(`TH${String(th).padEnd(2)} │ ${String(cv).padEnd(2)} ${'█'.repeat(Math.min(cv, 8)).padEnd(8)} │ ${String(ov).padEnd(2)} ${'█'.repeat(Math.min(ov, 8))}${diff}`);
+  }
+  rows.push(`────┼────────────┼────────────`);
+  rows.push(`Avg │ TH ${String(cAvg).padEnd(7)} │ TH ${oAvg}`);
+
+  return `${DIV}\n🔭 <b>Anteprima TH</b>\n${DIV}\n\n<pre>${rows.join('\n')}</pre>`;
+}
+
+function formatWarLivePlan(data, page = 0) {
+  if (data.state === 'preparation') {
+    return `${DIV}\n📋 <b>Planner attacchi</b>\n${DIV}\n\n<i>Disponibile durante il giorno di guerra.</i>`;
+  }
+
+  const c      = data.clan || {};
+  const o      = data.opponent || {};
+  const atkPer = data.attacksPerMember || 2;
+
+  const ourMembers = [...(c.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const oppMembers = [...(o.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+
+  // Stato difese avversario
+  const defStatus = {};
+  for (const opp of oppMembers) {
+    const atksOnBase = ourMembers.flatMap(m => (m.attacks || []).filter(a => a.defenderTag === opp.tag));
+    const best = atksOnBase.reduce((b, a) => (a.stars > b.stars || (a.stars === b.stars && a.destructionPercentage > b.destructionPercentage)) ? a : b,
+      { stars: 0, destructionPercentage: 0 });
+    defStatus[opp.tag] = { pos: opp.mapPosition, name: opp.name, th: opp.townhallLevel, bestStars: best.stars, bestDest: best.destructionPercentage, times: atksOnBase.length };
+  }
+
+  const needAtk  = ourMembers.filter(m => (m.attacks?.length ?? 0) < atkPer);
+  const PAGE_SIZE = WAR_LIVE_PLAN_PER_PAGE;
+  const totalPgs  = Math.max(1, Math.ceil(needAtk.length / PAGE_SIZE));
+  const p         = Math.min(Math.max(0, page), totalPgs - 1);
+  const slice     = needAtk.slice(p * PAGE_SIZE, (p + 1) * PAGE_SIZE);
+
+  // Basi non ancora a 3 stelle
+  const openBases = oppMembers.filter(opp => (defStatus[opp.tag]?.bestStars ?? 0) < 3)
+    .sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+
+  const lines = [
+    DIV,
+    `📋 <b>Planner attacchi</b>`,
+    `<i>${needAtk.length} giocator${needAtk.length === 1 ? 'e' : 'i'} con attacchi rimanenti — pag. ${p + 1}/${totalPgs}</i>`,
+    DIV,
+  ];
+
+  if (!needAtk.length) {
+    lines.push('<i>✅ Tutti i giocatori hanno completato i loro attacchi.</i>');
+    return lines.join('\n');
+  }
+
+  for (const m of slice) {
+    const atkLeft = atkPer - (m.attacks?.length ?? 0);
+    lines.push(`\n⚔️ <b>${m.mapPosition ?? '?'}. ${escapeHtml(m.name || '—')}</b> (TH${m.townhallLevel ?? '?'}) — ${atkLeft} attacco/i`);
+    const suggestions = openBases.filter(opp => {
+      const s = defStatus[opp.tag];
+      // evita di riattaccare con meno di 3★ già ottenute se ne ha 2
+      return s && s.bestStars < 3;
+    }).slice(0, 3);
+    if (suggestions.length) {
+      for (const sugg of suggestions) {
+        const s = defStatus[sugg.tag];
+        const status = s.bestStars === 0 ? '🟥 intatta' : `🟨 ${s.bestStars}⭐ (${Number(s.bestDest).toFixed(0)}%)`;
+        lines.push(`   → #${s.pos} <b>${escapeHtml(sugg.name)}</b> TH${sugg.th} · ${status}`);
+      }
+    }
+  }
+
+  return lines.join('\n');
+}
+
+function getWarLivePlanPageCount(data) {
+  const c      = data?.clan;
+  const atkPer = data?.attacksPerMember || 2;
+  const need   = (c?.members || []).filter(m => (m.attacks?.length ?? 0) < atkPer);
+  return Math.max(1, Math.ceil(need.length / WAR_LIVE_PLAN_PER_PAGE));
+}
+
+function formatWarLiveScreen(data, view = 'ov', pPage = 0, side = 'us') {
+  if (!data || data.state === 'notInWar') {
+    return {
+      text: `${DIV}\n⚔️ <b>Guerra classica live</b>\n${DIV}\n\n<i>Nessuna guerra in corso al momento.</i>`,
+      view: 'ov', pPage: 0, side: 'us',
+    };
+  }
+  let text;
+  switch (view) {
+    case 'p':    text = formatWarLivePlayers(data, side, pPage); break;
+    case 'prev': text = formatWarLivePreview(data); break;
+    case 'plan': text = formatWarLivePlan(data, pPage); break;
+    default:     text = formatWarLiveOverview(data); view = 'ov'; break;
+  }
+  return { text, view, pPage, side };
+}
+
 module.exports = {
   MEMBERS_PER_PAGE,
   BONUS_PER_PAGE,
@@ -967,4 +1279,13 @@ module.exports = {
   formatSetclanHelp,
   formatAccountPanel,
   chunkForTelegram,
+  formatWarLiveScreen,
+  formatWarLiveOverview,
+  formatWarLivePlayers,
+  formatWarLivePreview,
+  formatWarLivePlan,
+  getWarLivePlayersPageCount,
+  getWarLivePlanPageCount,
+  WAR_LIVE_PLAYERS_PER_PAGE,
+  WAR_LIVE_PLAN_PER_PAGE,
 };

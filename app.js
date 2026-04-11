@@ -38,7 +38,7 @@ const db = window.sb;
   try {
     const p = new URLSearchParams(window.location.search);
     const ot = p.get('open_tab');
-    const allowed = new Set(['members', 'cerca', 'cwl', 'cwl_warlog', 'login', 'warlog', 'profilo', 'rankings', 'bonus', 'botadmin']);
+    const allowed = new Set(['members', 'cerca', 'cwl', 'cwl_warlog', 'login', 'warlog', 'war_live', 'profilo', 'rankings', 'bonus', 'botadmin']);
     if (allowed.has(ot)) {
       window.__cocboardOpenTab = ot;
     } else {
@@ -376,7 +376,7 @@ void (async function cocboardTelegramHandoffBootstrap() {
     // Telegram Mini App con tab pubblico + clan tag noto: modalità ospite senza login
     // Nessuna config Supabase richiesta — usa utente guest fittizio (sola lettura)
     const isTgMiniApp = !!(window.Telegram?.WebApp?.initData);
-    const guestTabs = new Set(['cwl_warlog', 'cwl', 'warlog', 'bonus', 'members', 'cerca', 'rankings']);
+    const guestTabs = new Set(['cwl_warlog', 'cwl', 'warlog', 'war_live', 'bonus', 'members', 'cerca', 'rankings']);
     if (isTgMiniApp && guestTabs.has(window.__cocboardOpenTab) && window.__cocboardGuestClanTag) {
       const guestUser = { id: null, is_anonymous: true, user_metadata: {}, app_metadata: {} };
       await showApp(guestUser);
@@ -991,6 +991,11 @@ async function applyCocboardTelegramWebDeepLinks() {
       activateTab('warlog');
       return;
     }
+    if (ot === 'war_live' && window._userClanTag) {
+      delete window.__cocboardOpenTab;
+      activateTab('war_live');
+      return;
+    }
     if (ot === 'profilo') {
       delete window.__cocboardOpenTab;
       activateTab('profilo');
@@ -1055,6 +1060,7 @@ async function applyCocboardTelegramWebDeepLinkWarlogRounds(initialRound) {
 const TAB_TITLES = {
   members:   'Clan',
   warlog:    'Registri Guerre',
+  war_live:  'Guerra Live',
   cwl:       'Bonus CWL',
   profilo:   'Il mio Profilo',
   cerca:     'Cerca',
@@ -1085,6 +1091,7 @@ function activateTab(tabId) {
     }
   }
   if (tabId === 'warlog') setTimeout(loadWarLog, 80);
+  if (tabId === 'war_live') setTimeout(loadWarLive, 80);
   if (tabId === 'cwl') setTimeout(loadAssignBonus, 80);
   if (tabId === 'profilo') setTimeout(loadProfile, 80);
   if (tabId === 'rankings') { setTimeout(loadRankings, 80); setTimeout(renderFavoriti, 80); _detectUserCountry(); }
@@ -6746,5 +6753,361 @@ function _renderRankClans(el, items) {
       }).join('')}
     </tbody>
   </table></div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   GUERRA CLASSICA LIVE
+   ═══════════════════════════════════════════════════════════════ */
+
+let _warLiveData = null;
+let _warLiveCountdownTimer = null;
+let _warLiveActiveSubTab = 'ov';
+
+function parseCocTimeWeb(t) {
+  if (!t) return null;
+  const m = t.match(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/);
+  if (!m) return null;
+  return new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]));
+}
+
+function wlStateLabel(state) {
+  if (state === 'preparation') return '🛡 Preparazione';
+  if (state === 'inWar') return '⚔️ In guerra';
+  if (state === 'warEnded') return '🏁 Guerra terminata';
+  return '— Nessuna guerra';
+}
+
+function wlStartCountdown(data) {
+  if (_warLiveCountdownTimer) clearInterval(_warLiveCountdownTimer);
+  const el = document.getElementById('wl-live-countdown');
+  if (!el || !data) return;
+  function update() {
+    const now = Date.now();
+    let target, label;
+    if (data.state === 'preparation') {
+      target = parseCocTimeWeb(data.startTime);
+      label = 'Inizio guerra';
+    } else if (data.state === 'inWar') {
+      target = parseCocTimeWeb(data.endTime);
+      label = 'Fine guerra';
+    } else {
+      el.textContent = '';
+      return;
+    }
+    if (!target) { el.textContent = ''; return; }
+    const diff = target.getTime() - now;
+    if (diff <= 0) { el.textContent = label + ': terminato'; clearInterval(_warLiveCountdownTimer); return; }
+    const h = Math.floor(diff / 3600000);
+    const min = Math.floor((diff % 3600000) / 60000);
+    const sec = Math.floor((diff % 60000) / 1000);
+    el.textContent = label + ': ' + (h > 0 ? h + 'h ' : '') + min + 'm ' + sec + 's';
+  }
+  update();
+  _warLiveCountdownTimer = setInterval(update, 1000);
+}
+
+function wlWinProbability(data) {
+  if (!data || data.state === 'preparation') return null;
+  const us = data.clan, them = data.opponent;
+  if (!us || !them) return null;
+  const usStar = us.stars || 0, themStar = them.stars || 0;
+  const teamSize = data.teamSize || 1;
+  const diff = usStar - themStar;
+  let pct = 50 + (diff / (teamSize * 3)) * 120;
+  pct = Math.min(99, Math.max(1, Math.round(pct)));
+  let cls = 'wl-wp-neutral', label;
+  if (pct >= 70) { cls = 'wl-wp-win'; label = 'Probabile vittoria'; }
+  else if (pct <= 30) { cls = 'wl-wp-loss'; label = 'Probabile sconfitta'; }
+  else { label = 'In bilico'; }
+  return { pct, cls, label };
+}
+
+function escH(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function heroLevel(member, heroName) {
+  if (!member || !member.heroes) return '—';
+  const h = member.heroes.find(x => x.name === heroName);
+  return h ? h.level : '—';
+}
+
+function wlMissingAttacksAlert(data) {
+  if (!data || data.state !== 'inWar') return '';
+  const endTime = parseCocTimeWeb(data.endTime);
+  if (!endTime) return '';
+  const hoursLeft = (endTime.getTime() - Date.now()) / 3600000;
+  if (hoursLeft > 6) return '';
+  const members = (data.clan && data.clan.members) || [];
+  const maxAtk = data.attacksPerMember || 2;
+  const missing = members.filter(m => {
+    const used = m.attacks ? m.attacks.length : 0;
+    return used < maxAtk;
+  });
+  if (!missing.length) return '';
+  const urgency = hoursLeft < 2 ? 'wl-alert-urgent' : 'wl-alert-warn';
+  return `<div class="wl-alert ${urgency}">
+    ⚠️ <strong>${missing.length} giocator${missing.length===1?'e':'i'}</strong> con attacch${missing.length===1?'o':'i'} mancant${missing.length===1?'e':'i'} — ${Math.round(hoursLeft*10)/10}h rimaste
+  </div>`;
+}
+
+function wlRenderOverview(data) {
+  const el = document.getElementById('wl-ov-content');
+  if (!el) return;
+  if (!data || data.state === 'notInWar') {
+    el.innerHTML = '<p class="wl-empty">Nessuna guerra in corso.</p>';
+    return;
+  }
+  const us = data.clan || {}, them = data.opponent || {};
+  const wp = wlWinProbability(data);
+  const alertHtml = wlMissingAttacksAlert(data);
+
+  let wpHtml = '';
+  if (wp) {
+    wpHtml = `<div class="wl-wp-bar-wrap">
+      <div class="wl-wp-label ${wp.cls}">${wp.label} (${wp.pct}%)</div>
+      <div class="wl-wp-bar"><div class="wl-wp-fill ${wp.cls}" style="width:${wp.pct}%"></div></div>
+    </div>`;
+  }
+
+  const maxAtk = data.attacksPerMember || 2;
+  const usAttUsed = (us.attacks || 0);
+  const usTotal = (data.teamSize || 0) * maxAtk;
+  const themAttUsed = (them.attacks || 0);
+
+  el.innerHTML = `
+    ${alertHtml}
+    <div class="wl-vs-header">
+      <div class="wl-vs-side">
+        <div class="wl-vs-name">${escH(us.name || '—')}</div>
+        <div class="wl-vs-stars">⭐ ${us.stars || 0}</div>
+        <div class="wl-vs-dest">${us.destructionPercentage != null ? (us.destructionPercentage).toFixed(2) + '%' : '—'}</div>
+      </div>
+      <div class="wl-vs-center">
+        <div class="wl-vs-size">${data.teamSize || '?'}v${data.teamSize || '?'}</div>
+        <div class="wl-vs-vs">VS</div>
+      </div>
+      <div class="wl-vs-side wl-vs-right">
+        <div class="wl-vs-name">${escH(them.name || '—')}</div>
+        <div class="wl-vs-stars">⭐ ${them.stars || 0}</div>
+        <div class="wl-vs-dest">${them.destructionPercentage != null ? (them.destructionPercentage).toFixed(2) + '%' : '—'}</div>
+      </div>
+    </div>
+    ${wpHtml}
+    <div class="wl-stats-grid">
+      <div class="wl-stat-card"><div class="wl-stat-label">Attacchi usati</div><div class="wl-stat-val">${usAttUsed} / ${usTotal}</div></div>
+      <div class="wl-stat-card"><div class="wl-stat-label">Avversario attacchi</div><div class="wl-stat-val">${themAttUsed} / ${usTotal}</div></div>
+    </div>`;
+}
+
+function wlRenderPlayersTable(data, side) {
+  const elId = side === 'us' ? 'wl-players-us-content' : 'wl-players-them-content';
+  const el = document.getElementById(elId);
+  if (!el || !data) return;
+  const sideData = side === 'us' ? data.clan : data.opponent;
+  if (!sideData || !sideData.members) {
+    el.innerHTML = '<p class="wl-empty">Nessun dato.</p>';
+    return;
+  }
+  const members = [...sideData.members].sort((a, b) => a.mapPosition - b.mapPosition);
+  const maxAtk = data.attacksPerMember || 2;
+  const rows = members.map(m => {
+    const thN = String(m.townhallLevel || 1).padStart(2, '0');
+    const thImg = `<img src="th/webp/level_${thN}.webp" alt="TH${m.townhallLevel}" class="wl-th-icon" loading="lazy">`;
+    const used = m.attacks ? m.attacks.length : 0;
+    const atkBubbles = Array.from({length: maxAtk}, (_, i) => {
+      if (i < used) {
+        const atk = m.attacks[i];
+        return `<span class="wl-atk-dot wl-atk-used" title="${atk.stars}&#11088; ${atk.destructionPercentage}%">${atk.stars}&#11088;</span>`;
+      }
+      return '<span class="wl-atk-dot wl-atk-empty">—</span>';
+    }).join('');
+    const bk = heroLevel(m, 'Barbarian King');
+    const aq = heroLevel(m, 'Archer Queen');
+    const gw = heroLevel(m, 'Grand Warden');
+    const rc = heroLevel(m, 'Royal Champion');
+    return `<tr>
+      <td class="wl-pos">${m.mapPosition}</td>
+      <td class="wl-th-cell">${thImg}</td>
+      <td class="wl-name">${escH(m.name)}</td>
+      <td class="wl-atk-cell">${atkBubbles}</td>
+      <td class="wl-hero-cell">${bk}/${aq}/${gw}/${rc}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<div class="table-wrap"><table class="wl-players-table">
+    <thead><tr><th>#</th><th>TH</th><th>Nome</th><th>Attacchi</th><th>BK/AQ/GW/RC</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+}
+
+function wlRenderPreview(data) {
+  const el = document.getElementById('wl-preview-content');
+  if (!el || !data) return;
+  const us = data.clan || {}, them = data.opponent || {};
+  const usMembers = us.members || [], themMembers = them.members || [];
+  const usCounts = {}, themCounts = {};
+  usMembers.forEach(m => { const t = m.townhallLevel || 1; usCounts[t] = (usCounts[t] || 0) + 1; });
+  themMembers.forEach(m => { const t = m.townhallLevel || 1; themCounts[t] = (themCounts[t] || 0) + 1; });
+  const levels = [];
+  for (let i = 18; i >= 1; i--) {
+    if (usCounts[i] || themCounts[i]) levels.push(i);
+  }
+  if (!levels.length) { el.innerHTML = '<p class="wl-empty">Nessun dato TH.</p>'; return; }
+  const maxCount = Math.max(...levels.map(l => Math.max(usCounts[l]||0, themCounts[l]||0)), 1);
+  const rows = levels.map(l => {
+    const u = usCounts[l] || 0, t = themCounts[l] || 0;
+    const thN = String(l).padStart(2, '0');
+    const thImg = `<img src="th/webp/level_${thN}.webp" alt="TH${l}" class="wl-th-icon" loading="lazy">`;
+    const uBar = u > 0 ? `<div class="wl-bar wl-bar-us" style="width:${Math.round(u/maxCount*100)}%">${u}</div>` : '<div class="wl-bar-zero">0</div>';
+    const tBar = t > 0 ? `<div class="wl-bar wl-bar-them" style="width:${Math.round(t/maxCount*100)}%">${t}</div>` : '<div class="wl-bar-zero">0</div>';
+    return `<tr class="wl-prev-row">
+      <td class="wl-prev-us">${uBar}</td>
+      <td class="wl-prev-th">${thImg}</td>
+      <td class="wl-prev-them">${tBar}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<div class="wl-prev-legend">
+    <span class="wl-leg-us">${escH(us.name || 'Noi')}</span>
+    <span class="wl-leg-them">${escH(them.name || 'Avversario')}</span>
+  </div>
+  <div class="table-wrap"><table class="wl-prev-table"><tbody>${rows}</tbody></table></div>`;
+}
+
+function wlRenderPlan(data) {
+  const el = document.getElementById('wl-plan-content');
+  if (!el || !data) return;
+  if (data.state === 'preparation') {
+    el.innerHTML = '<p class="wl-empty">Il planner è disponibile durante la guerra.</p>';
+    return;
+  }
+  const us = data.clan || {}, them = data.opponent || {};
+  const usMembers = us.members || [], themMembers = them.members || [];
+  const maxAtk = data.attacksPerMember || 2;
+
+  // Build defense status map: opponentMapPosition → bestStars from our attacks
+  const defStatus = {};
+  usMembers.forEach(m => {
+    if (!m.attacks) return;
+    m.attacks.forEach(atk => {
+      const pos = atk.defenderMapPosition;
+      if (!defStatus[pos] || atk.stars > defStatus[pos].stars) {
+        defStatus[pos] = { stars: atk.stars, pct: atk.destructionPercentage };
+      }
+    });
+  });
+
+  // Members with remaining attacks
+  const needAtk = usMembers.filter(m => {
+    const used = m.attacks ? m.attacks.length : 0;
+    return used < maxAtk;
+  }).sort((a, b) => a.mapPosition - b.mapPosition);
+
+  if (!needAtk.length) {
+    el.innerHTML = '<p class="wl-empty">✅ Tutti gli attacchi sono stati usati.</p>';
+    return;
+  }
+
+  // Open bases (not 3-starred yet)
+  const openBases = themMembers
+    .filter(m => !defStatus[m.mapPosition] || defStatus[m.mapPosition].stars < 3)
+    .sort((a, b) => a.mapPosition - b.mapPosition);
+
+  const cards = needAtk.map(m => {
+    const thN = String(m.townhallLevel || 1).padStart(2, '0');
+    const thImg = `<img src="th/webp/level_${thN}.webp" alt="TH${m.townhallLevel}" class="wl-th-icon" loading="lazy">`;
+    const used = m.attacks ? m.attacks.length : 0;
+    const remaining = maxAtk - used;
+
+    const suggestions = openBases
+      .filter(b => b.townhallLevel <= m.townhallLevel)
+      .slice(0, remaining)
+      .map(b => {
+        const bThN = String(b.townhallLevel || 1).padStart(2, '0');
+        const bThImg = `<img src="th/webp/level_${bThN}.webp" alt="TH${b.townhallLevel}" class="wl-th-icon" loading="lazy">`;
+        const ds = defStatus[b.mapPosition];
+        const dsLabel = ds ? `${ds.stars}&#11088; ${ds.pct}%` : 'Intatto';
+        return `<div class="wl-plan-suggestion">
+          ${bThImg} <strong>#${b.mapPosition}</strong> ${escH(b.name)} — <span class="wl-ds-label">${dsLabel}</span>
+        </div>`;
+      }).join('') || '<div class="wl-plan-no-sugg">Nessun bersaglio disponibile</div>';
+
+    return `<div class="wl-plan-card">
+      <div class="wl-plan-attacker">
+        ${thImg} <strong>#${m.mapPosition}</strong> ${escH(m.name)}
+        <span class="wl-plan-atk-left">${remaining} attacch${remaining===1?'o':'i'} rimast${remaining===1?'o':'i'}</span>
+      </div>
+      <div class="wl-plan-suggestions">${suggestions}</div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `<div class="wl-plan-wrap">${cards}</div>`;
+}
+
+function wlSwitchTab(tabId, btn) {
+  _warLiveActiveSubTab = tabId;
+  const wlSection = document.getElementById('tab-war_live');
+  if (wlSection) {
+    wlSection.querySelectorAll('.subtab-btn').forEach(b => b.classList.toggle('active', b === btn));
+    wlSection.querySelectorAll('.wl-live-section').forEach(s => {
+      s.style.display = s.id === 'wl-tab-' + tabId ? '' : 'none';
+    });
+  }
+  if (!_warLiveData) return;
+  if (tabId === 'ov') wlRenderOverview(_warLiveData);
+  else if (tabId === 'players_us') wlRenderPlayersTable(_warLiveData, 'us');
+  else if (tabId === 'players_them') wlRenderPlayersTable(_warLiveData, 'them');
+  else if (tabId === 'preview') wlRenderPreview(_warLiveData);
+  else if (tabId === 'plan') wlRenderPlan(_warLiveData);
+}
+
+async function loadWarLive() {
+  const badge = document.getElementById('wl-live-state-badge');
+  const refreshBtn = document.querySelector('#tab-war_live .wl-live-refresh-btn');
+  const loadingEl = document.getElementById('wl-live-loading');
+  const nowarEl = document.getElementById('wl-live-nowar');
+  const contentEl = document.getElementById('wl-live-content');
+
+  if (badge) badge.textContent = 'Caricamento…';
+  if (refreshBtn) refreshBtn.disabled = true;
+  if (loadingEl) loadingEl.style.display = '';
+  if (nowarEl) nowarEl.style.display = 'none';
+  if (contentEl) contentEl.style.display = 'none';
+
+  try {
+    const clanTag = window._userClanTag || '';
+    const r = await fetch('/api/war-log?type=current' + (clanTag ? '&clanTag=' + encodeURIComponent(clanTag) : ''));
+    const raw = await r.json();
+    const data = raw.state ? raw : (raw.data || raw);
+    _warLiveData = data;
+
+    if (loadingEl) loadingEl.style.display = 'none';
+
+    if (!data || data.state === 'notInWar' || !data.state) {
+      if (badge) badge.textContent = '— Nessuna guerra';
+      if (nowarEl) nowarEl.style.display = '';
+      return;
+    }
+
+    if (badge) badge.textContent = wlStateLabel(data.state);
+    if (contentEl) contentEl.style.display = '';
+    wlStartCountdown(data);
+
+    // Render active sub-tab
+    const active = _warLiveActiveSubTab || 'ov';
+    if (active === 'ov') wlRenderOverview(data);
+    else if (active === 'players_us') wlRenderPlayersTable(data, 'us');
+    else if (active === 'players_them') wlRenderPlayersTable(data, 'them');
+    else if (active === 'preview') wlRenderPreview(data);
+    else if (active === 'plan') wlRenderPlan(data);
+    else wlRenderOverview(data);
+  } catch (e) {
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (badge) badge.textContent = '⚠️ Errore';
+    const el = document.getElementById('wl-ov-content');
+    if (el) el.innerHTML = '<p class="wl-empty">Impossibile caricare dati guerra.</p>';
+    if (contentEl) contentEl.style.display = '';
+  } finally {
+    if (refreshBtn) refreshBtn.disabled = false;
+  }
 }
 
