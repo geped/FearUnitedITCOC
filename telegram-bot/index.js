@@ -406,6 +406,7 @@ function isCommunityOpenGuestCallback(d) {
     d === 'comm_global_report' ||
     d === 'comm_global_mode' ||
     d === 'comm_global_quick' ||
+    d === 'comm_global_bot_owner' ||
     d === 'comm_recruit' ||
     d === 'comm_recruit_list' ||
     d === 'comm_recruit_send' ||
@@ -2521,7 +2522,8 @@ function setupBot(bot) {
       d === 'comm_global_status' ||
       d === 'comm_global_report' ||
       d === 'comm_global_mode' ||
-      d === 'comm_global_quick'
+      d === 'comm_global_quick' ||
+      d === 'comm_global_bot_owner'
     ) {
       return next();
     }
@@ -5011,11 +5013,11 @@ async function runCommunityMaintenance(bot) {
           await bot.telegram.sendMessage(
             row.submitter_telegram_user_id,
             '⏰ Il tuo <b>annuncio di reclutamento</b> è scaduto (24h concluse).\n\n' +
-              'Vuoi pubblicarne uno nuovo? Vai su <b>Community → Reclutamento → Invia annuncio</b>.',
+              'Puoi pubblicarne un altro da <b>Community → Reclutamento</b> (un annuncio attivo per utente e clan).',
             {
               parse_mode: 'HTML',
               reply_markup: Markup.inlineKeyboard([
-                [Markup.button.callback('🚀 Pubblica nuovo annuncio', 'comm_recruit_send')],
+                [Markup.button.callback('📣 Apri Reclutamento', 'comm_recruit')],
               ]).reply_markup,
             }
           );

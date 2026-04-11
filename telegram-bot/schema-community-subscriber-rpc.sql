@@ -26,6 +26,12 @@ ALTER TABLE public.telegram_global_chat_subscribers
   ADD COLUMN IF NOT EXISTS cached_th_level INTEGER,
   ADD COLUMN IF NOT EXISTS cached_exp_level INTEGER;
 
+ALTER TABLE public.telegram_global_chat_subscribers
+  ADD COLUMN IF NOT EXISTS bot_owner_persona BOOLEAN NOT NULL DEFAULT false;
+
+COMMENT ON COLUMN public.telegram_global_chat_subscribers.bot_owner_persona IS
+  'Solo creatore bot (lato app): ingresso con nome CoCBoard Admin in broadcast.';
+
 COMMENT ON COLUMN public.telegram_global_chat_subscribers.display_verified IS
   'true = nome da account CoCBoard; false = ospite con riga nomeInGioco#TAG (nessuna verifica API CoC).';
 
@@ -61,6 +67,10 @@ DROP FUNCTION IF EXISTS public.cocboard_upsert_global_chat_subscriber(
   bigint, text, text, bigint, timestamptz, boolean, timestamptz, bigint, bigint, boolean
 );
 
+DROP FUNCTION IF EXISTS public.cocboard_upsert_global_chat_subscriber(
+  bigint, text, text, bigint, timestamptz, boolean, timestamptz, bigint, bigint, boolean, boolean, integer, integer
+);
+
 CREATE OR REPLACE FUNCTION public.cocboard_upsert_global_chat_subscriber(
   p_telegram_user_id bigint,
   p_display_name text,
@@ -74,7 +84,8 @@ CREATE OR REPLACE FUNCTION public.cocboard_upsert_global_chat_subscriber(
   p_display_verified boolean,
   p_share_verified_details boolean,
   p_cached_th_level integer,
-  p_cached_exp_level integer
+  p_cached_exp_level integer,
+  p_bot_owner_persona boolean
 ) RETURNS void
 LANGUAGE sql
 SECURITY DEFINER
@@ -83,11 +94,12 @@ AS $$
   INSERT INTO public.telegram_global_chat_subscribers AS s (
     telegram_user_id, display_name, display_tag, epoch_index, joined_at, active, updated_at,
     hub_message_id, hub_epoch_index, display_verified,
-    share_verified_details, cached_th_level, cached_exp_level
+    share_verified_details, cached_th_level, cached_exp_level, bot_owner_persona
   ) VALUES (
     p_telegram_user_id, p_display_name, p_display_tag, p_epoch_index, p_joined_at, p_active, p_updated_at,
     p_hub_message_id, p_hub_epoch_index, COALESCE(p_display_verified, false),
-    COALESCE(p_share_verified_details, true), p_cached_th_level, p_cached_exp_level
+    COALESCE(p_share_verified_details, true), p_cached_th_level, p_cached_exp_level,
+    COALESCE(p_bot_owner_persona, false)
   )
   ON CONFLICT (telegram_user_id) DO UPDATE SET
     display_name = EXCLUDED.display_name,
@@ -101,7 +113,8 @@ AS $$
     display_verified = EXCLUDED.display_verified,
     share_verified_details = EXCLUDED.share_verified_details,
     cached_th_level = EXCLUDED.cached_th_level,
-    cached_exp_level = EXCLUDED.cached_exp_level;
+    cached_exp_level = EXCLUDED.cached_exp_level,
+    bot_owner_persona = EXCLUDED.bot_owner_persona;
 $$;
 
 CREATE OR REPLACE FUNCTION public.cocboard_set_global_subscriber_hub(
@@ -154,13 +167,13 @@ AS $$
 $$;
 
 REVOKE ALL ON FUNCTION public.cocboard_get_global_chat_subscriber(bigint) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.cocboard_upsert_global_chat_subscriber(bigint, text, text, bigint, timestamptz, boolean, timestamptz, bigint, bigint, boolean, boolean, integer, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.cocboard_upsert_global_chat_subscriber(bigint, text, text, bigint, timestamptz, boolean, timestamptz, bigint, bigint, boolean, boolean, integer, integer, boolean) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.cocboard_set_global_subscriber_hub(bigint, bigint, bigint, timestamptz) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.cocboard_clear_global_subscriber_hub(bigint) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.cocboard_deactivate_global_subscriber(bigint) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION public.cocboard_get_global_chat_subscriber(bigint) TO service_role;
-GRANT EXECUTE ON FUNCTION public.cocboard_upsert_global_chat_subscriber(bigint, text, text, bigint, timestamptz, boolean, timestamptz, bigint, bigint, boolean, boolean, integer, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.cocboard_upsert_global_chat_subscriber(bigint, text, text, bigint, timestamptz, boolean, timestamptz, bigint, bigint, boolean, boolean, integer, integer, boolean) TO service_role;
 GRANT EXECUTE ON FUNCTION public.cocboard_set_global_subscriber_hub(bigint, bigint, bigint, timestamptz) TO service_role;
 GRANT EXECUTE ON FUNCTION public.cocboard_clear_global_subscriber_hub(bigint) TO service_role;
 GRANT EXECUTE ON FUNCTION public.cocboard_deactivate_global_subscriber(bigint) TO service_role;

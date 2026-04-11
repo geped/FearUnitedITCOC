@@ -10,6 +10,9 @@ const tgh = require('./telegram-html');
 const privateUi = require('./private-ui-cleanup');
 const cocboardApi = require('./cocboard-api');
 
+/** Nome mostrato in chat globale per il creatore del bot (modalità «Entra come admin»). */
+const GLOBAL_BOT_OWNER_DISPLAY = 'CoCBoard Admin👾';
+
 function displayFromUser(user) {
   const meta = user?.user_metadata || {};
   const tag = meta.coc_tag ? String(meta.coc_tag).trim() : '';
@@ -28,6 +31,10 @@ function guestTelegramLabel(from) {
  * Intestazione + messaggio: una sola riga per nome, ✅, tag (link se verificato+condivisione), TH e XP; poi a capo il testo.
  */
 function formatGlobalLine(displayName, displayTag, body, displayVerified, meta = {}) {
+  if (meta.botOwnerPersona === true) {
+    const namePart = `<b><u>${escapeHtml(GLOBAL_BOT_OWNER_DISPLAY)}</u></b>`;
+    return `${namePart}\n${escapeHtml(body)}`;
+  }
   const shareDetails = meta.shareVerifiedDetails === true;
   const th = meta.thLevel;
   const exp = meta.expLevel;
@@ -206,6 +213,9 @@ async function renderGlobalAccessModeMenu(ctx, tauth, opts = {}) {
   const lastVerified = sub?.display_verified === true || sub?.display_verified === 'true';
   const rows = [];
   if (hasLast) rows.push([Markup.button.callback('⚡ Entra con ultima modalità', 'comm_global_quick')]);
+  if (uid != null && cv.isBotOwnerTelegramUser(uid)) {
+    rows.push([Markup.button.callback('👾 Entra come admin', 'comm_global_bot_owner')]);
+  }
   rows.push([
     sess
       ? Markup.button.callback('👤 Nome da profilo CoCBoard', 'comm_gprof')
@@ -237,18 +247,25 @@ async function buildGlobalHubBodyHtml(subscriberRow) {
   const epoch = cv.currentEpochIndex();
   const n = await sbc.countActiveGlobalSubscribers(epoch);
   const sub = subscriberRow;
-  const tagPart = sub.display_tag ? ` <code>${escapeHtml(sub.display_tag)}</code>` : '';
+  const ownerPersona = sub.bot_owner_persona === true || sub.bot_owner_persona === 'true';
+  const tagPart =
+    ownerPersona || !sub.display_tag ? '' : ` <code>${escapeHtml(sub.display_tag)}</code>`;
   const verified = sub.display_verified === true || sub.display_verified === 'true';
   const share = verified && sub.share_verified_details !== false && sub.share_verified_details !== 'false';
-  const verifiedLine = verified
-    ? share
-      ? '\n✅ <i>Profilo CoCBoard — in chat: stessa riga con tag (link profilo), TH ed XP se disponibili.</i>'
-      : '\n✅ <i>Profilo CoCBoard — in chat solo nome e spunta (dettagli nascosti).</i>'
-    : '\n<i>Ospite: in chat nome e tag su una riga (non verificato; non usare ✅ nel nome).</i>';
+  const nameShown = ownerPersona
+    ? `<b><u>${escapeHtml(GLOBAL_BOT_OWNER_DISPLAY)}</u></b>`
+    : `<b>${escapeHtml(sub.display_name)}</b>`;
+  const verifiedLine = ownerPersona
+    ? '\n<i>Modalità <b>amministratore</b>: agli altri compare il nome sopra (grassetto + sottolineato).</i>'
+    : verified
+      ? share
+        ? '\n✅ <i>Profilo CoCBoard — in chat: stessa riga con tag (link profilo), TH ed XP se disponibili.</i>'
+        : '\n✅ <i>Profilo CoCBoard — in chat solo nome e spunta (dettagli nascosti).</i>'
+      : '\n<i>Ospite: in chat nome e tag su una riga (non verificato; non usare ✅ nel nome).</i>';
   return (
     `🌍 <b>Chat globale</b>\n\n` +
     `🟢 <b>Modalità attiva:</b> <i>Chat globale</i>\n\n` +
-    `Nome mostrato: <b>${escapeHtml(sub.display_name)}</b>${tagPart}${verifiedLine}\n\n` +
+    `Nome mostrato: ${nameShown}${tagPart}${verifiedLine}\n\n` +
     `👥 <b>${n}</b> in stanza\n\n` +
     `<i>Solo chi è in stanza riceve i messaggi. La sessione si aggiorna in automatico. Invia solo testo. Usa <b>Aggiorna</b> per aggiornare il contatore.</i>`
   );
@@ -479,6 +496,7 @@ async function finalizeJoinGlobalVerified(ctx, tauth, shareGameDetails) {
     shareVerifiedDetails: shareGameDetails,
     cachedThLevel: th,
     cachedExpLevel: exp,
+    botOwnerPersona: false,
   });
   let subFresh = await sbc.getGlobalSubscriber(uid).catch(() => null);
   if (!subFresh?.active) {
@@ -556,19 +574,14 @@ async function submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFil
   return true;
 }
 
+/** Hub reclutamento: un solo annuncio attivo per utente/clan — niente sotto-menu «Invia annuncio». */
 function recruitHubKb() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('📋 Annunci attivi', 'comm_recruit_list'), Markup.button.callback('✉️ Invia annuncio', 'comm_recruit_send')],
+    [Markup.button.callback('📋 Annunci attivi', 'comm_recruit_list')],
     [Markup.button.callback('« Community', 'comm_hub')],
-  ]);
-}
-
-function recruitSendKb() {
-  return Markup.inlineKeyboard([
     [Markup.button.callback('🚀 Pubblica adesso', 'comm_recruit_instant')],
     [Markup.button.callback('⚡ Invia subito (un messaggio)', 'comm_recruit_quick')],
     [Markup.button.callback('📝 Invia annuncio guidato', 'comm_recruit_guided')],
-    [Markup.button.callback('« Indietro', 'comm_recruit')],
   ]);
 }
 
@@ -826,7 +839,10 @@ async function tryHandleEarlyMessage(
       }
       try {
         await sbc.tickGlobalEpochIfNeeded().catch(() => {});
-        await sbc.upsertGlobalSubscriber(uid, parsed.displayName, parsed.displayTag, { displayVerified: false });
+        await sbc.upsertGlobalSubscriber(uid, parsed.displayName, parsed.displayTag, {
+          displayVerified: false,
+          botOwnerPersona: false,
+        });
       } catch (e) {
         pendingCommunity.set(uid, { kind: 'global_manual_tag' });
         await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
@@ -1102,7 +1118,12 @@ async function tryHandleEarlyMessage(
         await ctx.reply(`${warn}\n\n❌ ${rate.reason}`, { parse_mode: 'HTML' });
         return true;
       }
-      const label = sub.display_tag ? `${sub.display_name} ${sub.display_tag}` : sub.display_name;
+      const ownerPersona = sub.bot_owner_persona === true || sub.bot_owner_persona === 'true';
+      const label = ownerPersona
+        ? GLOBAL_BOT_OWNER_DISPLAY
+        : sub.display_tag
+          ? `${sub.display_name} ${sub.display_tag}`
+          : sub.display_name;
       let inserted;
       try {
         inserted = await sbc.insertGlobalMessage(uid, label, body);
@@ -1130,6 +1151,7 @@ async function tryHandleEarlyMessage(
         thLevel: th,
         expLevel: exp,
         staffModerator: staffMod,
+        botOwnerPersona: ownerPersona,
       });
       const targets = await sbc.listGlobalBroadcastTargets(inserted.epoch_index, uid, inserted.created_at);
       for (const t of targets) {
@@ -1191,6 +1213,31 @@ function registerCommunityHandlers(bot, deps) {
   const { pendingCommunity, isLinkedChatContext, tauth, sendMainMenu, sendGuestMenu, backMenuKb } = deps;
   refreshPrivateReplyKeyboardRef =
     typeof deps.refreshPrivateReplyKeyboard === 'function' ? deps.refreshPrivateReplyKeyboard : async () => {};
+
+  /** Testo + tastiera Reclutamento (middleware in index.js fa già wipe UI prima dei callback). */
+  async function showRecruitmentHub(ctx) {
+    if (isLinkedChatContext(ctx)) return;
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    const sess = await tauth.getValidSession(uid);
+    if (sess) ctx.cocboardUser = sess.user;
+    await sbc.ensureRecruitmentSubscriber(uid);
+    pendingCommunity.delete(uid);
+    const text =
+      `📣 <b>Reclutamento</b>\n\n` +
+      `Scegli un’azione:\n` +
+      `• <b>Annunci attivi</b> — cosa è in circolazione ora.\n` +
+      `• <b>Pubblica adesso</b> — annuncio immediato (dopo verifica CoC API), 24h in elenco.\n` +
+      `• <b>Invio rapido o guidato</b> — bozza in revisione al proprietario del bot.\n\n` +
+      `<i>Un solo annuncio attivo per utente e per clan; puoi ritirare il tuo da Annunci attivi.</i>`;
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'HTML', ...recruitHubKb() });
+    } catch (_) {
+      await ctx.reply(text, { parse_mode: 'HTML', ...recruitHubKb() });
+    }
+    await refreshPrivateReplyKeyboardRef(ctx);
+  }
 
   bot.action('comm_hub', async (ctx) => {
     if (isLinkedChatContext(ctx)) return;
@@ -1295,7 +1342,48 @@ function registerCommunityHandlers(bot, deps) {
       return;
     }
     await sbc.tickGlobalEpochIfNeeded().catch(() => {});
-    await sbc.upsertGlobalSubscriber(uid, sub.display_name, sub.display_tag || null, { displayVerified: false });
+    const keepOwnerPersona = sub.bot_owner_persona === true || sub.bot_owner_persona === 'true';
+    await sbc.upsertGlobalSubscriber(uid, sub.display_name, sub.display_tag || null, {
+      displayVerified: false,
+      botOwnerPersona: keepOwnerPersona,
+    });
+    let subFresh = await sbc.getGlobalSubscriber(uid).catch(() => null);
+    if (!subFresh?.active) {
+      await sleep(80);
+      subFresh = await sbc.getGlobalSubscriber(uid).catch(() => null);
+    }
+    await sendGlobalEnteredMessage(ctx, { subscriberOverride: subFresh || undefined });
+  });
+
+  /** Solo BOT_OWNER_TELEGRAM_IDS: nome fisso grassetto+sottolineato in broadcast. */
+  bot.action('comm_global_bot_owner', async (ctx) => {
+    if (isLinkedChatContext(ctx)) return;
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    if (!cv.isBotOwnerTelegramUser(uid)) {
+      await ctx.answerCbQuery('Non disponibile.').catch(() => {});
+      return;
+    }
+    const mod = await sbc.getGlobalModerationRow(uid).catch(() => null);
+    const bl = sbc.globalModerationBlocked(mod);
+    if (bl.blocked && bl.kind === 'banned') {
+      await ctx
+        .reply(
+          '🚫 Non puoi entrare in <b>chat globale</b>: questo account è stato bannato per violazioni ripetute.',
+          { parse_mode: 'HTML' }
+        )
+        .catch(() => {});
+      return;
+    }
+    await sbc.tickGlobalEpochIfNeeded().catch(() => {});
+    await sbc.upsertGlobalSubscriber(uid, GLOBAL_BOT_OWNER_DISPLAY, null, {
+      displayVerified: false,
+      shareVerifiedDetails: false,
+      cachedThLevel: null,
+      cachedExpLevel: null,
+      botOwnerPersona: true,
+    });
     let subFresh = await sbc.getGlobalSubscriber(uid).catch(() => null);
     if (!subFresh?.active) {
       await sleep(80);
@@ -1406,27 +1494,9 @@ function registerCommunityHandlers(bot, deps) {
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
-  bot.action('comm_recruit', async (ctx) => {
-    if (isLinkedChatContext(ctx)) return;
-    safeCb(ctx);
-    const uid = ctx.from?.id;
-    if (uid == null) return;
-    const sess = await tauth.getValidSession(uid);
-    if (sess) ctx.cocboardUser = sess.user;
-    await sbc.ensureRecruitmentSubscriber(uid);
-    pendingCommunity.delete(uid);
-    const text =
-      `📣 <b>Reclutamento</b>\n\n` +
-      `Scegli una sezione:\n` +
-      `• <b>Annunci attivi</b> — cosa è in circolazione ora (dal database).\n` +
-      `• <b>Invia annuncio</b> — bozza da far approvare al proprietario del bot.`;
-    try {
-      await ctx.editMessageText(text, { parse_mode: 'HTML', ...recruitHubKb() });
-    } catch (_) {
-      await ctx.reply(text, { parse_mode: 'HTML', ...recruitHubKb() });
-    }
-    await refreshPrivateReplyKeyboardRef(ctx);
-  });
+  bot.action('comm_recruit', showRecruitmentHub);
+  /** Retrocompat tastiere vecchie che puntavano a «Invia annuncio». */
+  bot.action('comm_recruit_send', showRecruitmentHub);
 
   bot.action('comm_recruit_list', async (ctx) => {
     if (isLinkedChatContext(ctx)) return;
@@ -1497,9 +1567,11 @@ function registerCommunityHandlers(bot, deps) {
     pendingCommunity.delete(uid);
     const text =
       `📣 <b>Reclutamento</b>\n\n` +
-      `Scegli una sezione:\n` +
-      `• <b>Annunci attivi</b> — cosa è in circolazione ora (dal database).\n` +
-      `• <b>Invia annuncio</b> — bozza da far approvare al proprietario del bot.`;
+      `Scegli un’azione:\n` +
+      `• <b>Annunci attivi</b> — cosa è in circolazione ora.\n` +
+      `• <b>Pubblica adesso</b> — annuncio immediato (dopo verifica CoC API), 24h in elenco.\n` +
+      `• <b>Invio rapido o guidato</b> — bozza in revisione al proprietario del bot.\n\n` +
+      `<i>Un solo annuncio attivo per utente e per clan; puoi ritirare il tuo da Annunci attivi.</i>`;
     await ctx.reply(text, { parse_mode: 'HTML', ...recruitHubKb() }).catch(() => {});
     await refreshPrivateReplyKeyboardRef(ctx);
   });
@@ -1607,26 +1679,6 @@ function registerCommunityHandlers(bot, deps) {
     }
   });
 
-  bot.action('comm_recruit_send', async (ctx) => {
-    if (isLinkedChatContext(ctx)) return;
-    safeCb(ctx);
-    const uid = ctx.from?.id;
-    if (uid == null) return;
-    const sess = await tauth.getValidSession(uid);
-    if (sess) ctx.cocboardUser = sess.user;
-    pendingCommunity.delete(uid);
-    const text =
-      `✉️ <b>Invia annuncio</b>\n\n` +
-      `• <b>Subito</b> — un solo messaggio (testo + link ufficiale clan; foto opzionale).\n` +
-      `• <b>Guidato</b> — passaggi: tag → link (opz.) → presentazione → media (opz.) → anteprima → conferma.`;
-    try {
-      await ctx.editMessageText(text, { parse_mode: 'HTML', ...recruitSendKb() });
-    } catch (_) {
-      await ctx.reply(text, { parse_mode: 'HTML', ...recruitSendKb() });
-    }
-    await refreshPrivateReplyKeyboardRef(ctx);
-  });
-
   bot.action('comm_recruit_quick', async (ctx) => {
     if (isLinkedChatContext(ctx)) return;
     safeCb(ctx);
@@ -1644,12 +1696,12 @@ function registerCommunityHandlers(bot, deps) {
     try {
       await ctx.editMessageText(help, {
         parse_mode: 'HTML',
-        ...Markup.inlineKeyboard([[Markup.button.callback('« Indietro', 'comm_recruit_send')]]),
+        ...Markup.inlineKeyboard([[Markup.button.callback('« Indietro', 'comm_recruit')]]),
       });
     } catch (_) {
       await ctx.reply(help, {
         parse_mode: 'HTML',
-        ...Markup.inlineKeyboard([[Markup.button.callback('« Indietro', 'comm_recruit_send')]]),
+        ...Markup.inlineKeyboard([[Markup.button.callback('« Indietro', 'comm_recruit')]]),
       });
     }
     await refreshPrivateReplyKeyboardRef(ctx);
@@ -1665,7 +1717,7 @@ function registerCommunityHandlers(bot, deps) {
       .editMessageText(
         `📝 <b>Annuncio guidato</b> — passo 1/4\n\n` +
           `Invia il <b>tag del clan</b> da promuovere (es. <code>#2J2VLPP9R</code>).`,
-        { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('« Indietro', 'comm_recruit_send')]]) }
+        { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('« Indietro', 'comm_recruit')]]) }
       )
       .catch(() => {});
     await refreshPrivateReplyKeyboardRef(ctx);
@@ -1733,7 +1785,7 @@ function registerCommunityHandlers(bot, deps) {
     const uid = ctx.from?.id;
     if (uid != null) pendingCommunity.delete(uid);
     await ctx.answerCbQuery('Annullato').catch(() => {});
-    await ctx.reply('Bozza guidata annullata.', { parse_mode: 'HTML', ...recruitSendKb() });
+    await ctx.reply('Bozza guidata annullata.', { parse_mode: 'HTML', ...recruitHubKb() });
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
@@ -2060,7 +2112,7 @@ function registerCommunityHandlers(bot, deps) {
     const uid = ctx.from?.id;
     if (uid != null) pendingCommunity.delete(uid);
     await ctx.answerCbQuery('Annullato').catch(() => {});
-    await ctx.reply('Wizard annullato.', { parse_mode: 'HTML', ...recruitSendKb() });
+    await ctx.reply('Wizard annullato.', { parse_mode: 'HTML', ...recruitHubKb() });
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
@@ -2090,10 +2142,10 @@ function registerCommunityHandlers(bot, deps) {
       await sbc.deleteRecruitmentPostRow(postId);
       await ctx.answerCbQuery('Annuncio ritirato').catch(() => {});
       try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch (_) {}
-      await ctx.telegram
-        .sendMessage(uid, '✅ Il tuo annuncio è stato <b>ritirato</b> con successo.', {
+      await ctx
+        .reply('✅ Il tuo annuncio è stato <b>ritirato</b> con successo.', {
           parse_mode: 'HTML',
-          reply_markup: recruitHubKb().reply_markup,
+          ...recruitHubKb(),
         })
         .catch(() => {});
     } catch (e) {

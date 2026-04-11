@@ -41,6 +41,7 @@ async function upsertGlobalSubscriber(telegramUserId, displayName, displayTag, o
     opts.cachedExpLevel != null && Number.isFinite(Number(opts.cachedExpLevel))
       ? Number(opts.cachedExpLevel)
       : null;
+  const botOwnerPersona = opts.botOwnerPersona === true;
   const { error } = await c.rpc('cocboard_upsert_global_chat_subscriber', {
     p_telegram_user_id: Number(telegramUserId),
     p_display_name: String(displayName || '').slice(0, 120),
@@ -55,6 +56,7 @@ async function upsertGlobalSubscriber(telegramUserId, displayName, displayTag, o
     p_share_verified_details: shareVerifiedDetails,
     p_cached_th_level: th,
     p_cached_exp_level: exp,
+    p_bot_owner_persona: botOwnerPersona,
   });
   if (error) throw new Error(error.message);
 }
