@@ -63,7 +63,8 @@ async function _deleteTrackedMenuMsg(telegram, chatId) {
   _lastMenuMsgByChat.delete(Number(chatId));
   await telegram.deleteMessage(Number(chatId), mid).catch(() => {});
 }
-const WELCOME_IMAGE_PATH = path.join(__dirname, 'assets', 'benvenuto.png');
+const WELCOME_IMAGE_PATH   = path.join(__dirname, 'assets', 'benvenuto.png');
+const WAR_HEADER_IMAGE_PATH = path.join(__dirname, 'assets', 'cocboardbot_sfondo.png');
 
 /** URL della guida interna (guida.html sul sito). Null se env non configurato. */
 function guideUrl() {
@@ -4437,6 +4438,13 @@ function setupBot(bot) {
       await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
       return;
     }
+    if (ctx.chat?.type === 'private' && ctx.from?.id != null && fs.existsSync(WAR_HEADER_IMAGE_PATH)) {
+      const hdr = await ctx.replyWithPhoto(
+        { source: fs.createReadStream(WAR_HEADER_IMAGE_PATH) },
+        { parse_mode: 'HTML' }
+      ).catch(() => null);
+      if (hdr?.message_id) privateUi.notePrivateUiMessage(ctx.from.id, hdr.message_id);
+    }
     const { text, kb } = await loadAndShowCwl(ctx, clanTag, { view: 'ov', pPage: 0, rIdx: 0 });
     await editOrReplyCwl(ctx, text, kb);
   });
@@ -4864,6 +4872,13 @@ function setupBot(bot) {
     await answerCbLoading(ctx);
     const clanTag = await resolveEffectiveClanTag(ctx);
     if (!clanTag) { await ctx.answerCbQuery('Nessun clan collegato').catch(() => {}); return; }
+    if (ctx.chat?.type === 'private' && ctx.from?.id != null && fs.existsSync(WAR_HEADER_IMAGE_PATH)) {
+      const hdr = await ctx.replyWithPhoto(
+        { source: fs.createReadStream(WAR_HEADER_IMAGE_PATH) },
+        { parse_mode: 'HTML' }
+      ).catch(() => null);
+      if (hdr?.message_id) privateUi.notePrivateUiMessage(ctx.from.id, hdr.message_id);
+    }
     const { text, kb } = await loadAndShowWarLive(ctx, clanTag, { view: 'ov', pPage: 0, side: 'us' });
     try { await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb }); }
     catch (_) { await ctx.reply(text, { parse_mode: 'HTML', ...kb }); }

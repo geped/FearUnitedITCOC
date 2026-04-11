@@ -577,11 +577,9 @@ async function submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFil
 /** Hub reclutamento: un solo annuncio attivo per utente/clan — niente sotto-menu «Invia annuncio». */
 function recruitHubKb() {
   return Markup.inlineKeyboard([
-    [Markup.button.callback('📋 Annunci attivi', 'comm_recruit_list')],
+    [Markup.button.callback('🚀 Pubblica adesso', 'comm_recruit_instant'), Markup.button.callback('📋 Annunci attivi', 'comm_recruit_list')],
+    [Markup.button.callback('✏️ Messaggio rapido', 'comm_recruit_quick'), Markup.button.callback('📝 Annuncio guidato', 'comm_recruit_guided')],
     [Markup.button.callback('« Community', 'comm_hub')],
-    [Markup.button.callback('🚀 Pubblica adesso', 'comm_recruit_instant')],
-    [Markup.button.callback('⚡ Invia subito (un messaggio)', 'comm_recruit_quick')],
-    [Markup.button.callback('📝 Invia annuncio guidato', 'comm_recruit_guided')],
   ]);
 }
 

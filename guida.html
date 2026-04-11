@@ -7,72 +7,90 @@
 <title>CoCBoard · Guida</title>
 <style>
 :root {
-  --bg:      #0D0B08;
-  --bg-1:    #110E09;
-  --bg-2:    #1A150E;
-  --bg-3:    #221A0F;
-  --border:  #2A2010;
-  --gold:    #C9A962;
-  --gold-dim:rgba(201,169,98,0.13);
-  --text:    #EEEAE0;
-  --text-2:  #C8BCA8;
-  --text-3:  #7A6A50;
-  --green:   #27AE60;
-  --red:     #C0392B;
-  --radius:  6px;
+  --bg:       #0D0B08;
+  --bg-1:     #110E09;
+  --bg-2:     #1A150E;
+  --bg-3:     #221A0F;
+  --border:   #2A2010;
+  --gold:     #C9A962;
+  --gold-dim: rgba(201,169,98,0.13);
+  --text:     #EEEAE0;
+  --text-2:   #C8BCA8;
+  --text-3:   #7A6A50;
+  --green:    #27AE60;
+  --radius:   6px;
 }
-
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
 html { scroll-behavior: smooth; background: var(--bg); }
-
 body {
   font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
   background: var(--bg);
   color: var(--text);
   font-size: 15px;
   line-height: 1.65;
-  padding: 0 0 env(safe-area-inset-bottom, 20px);
+  padding-bottom: max(env(safe-area-inset-bottom), 24px);
 }
 
-/* ── Header ── */
-.header {
-  background: var(--bg-1);
-  border-bottom: 1px solid var(--border);
-  padding: 16px 20px 14px;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-.header-inner {
-  max-width: 640px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.logo {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--gold-dim);
-  border: 1px solid var(--gold);
+/* ── Hero ── */
+.hero {
+  position: relative;
+  width: 100%;
+  max-height: 220px;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+}
+.hero img {
+  width: 100%;
+  object-fit: cover;
+  object-position: center 30%;
+  display: block;
+  max-height: 220px;
+}
+.hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(13,11,8,0) 40%, rgba(13,11,8,1) 100%);
+}
+.hero-badge {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+.hero-logo {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--gold);
   flex-shrink: 0;
 }
-.header h1 {
-  font-size: 16px;
-  font-weight: 700;
+.hero-title {
+  font-size: 20px;
+  font-weight: 800;
   color: var(--gold);
   letter-spacing: .01em;
+  text-shadow: 0 1px 6px rgba(0,0,0,.9);
 }
-.header p {
+
+/* ── Sticky sub-header ── */
+.subheader {
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 16px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  text-align: center;
   font-size: 12px;
   color: var(--text-3);
-  margin-top: 1px;
+  letter-spacing: .04em;
 }
 
 /* ── TOC ── */
@@ -80,8 +98,8 @@ body {
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px 16px;
-  margin: 20px auto;
+  padding: 12px 14px;
+  margin: 18px auto;
   max-width: 640px;
 }
 .toc-title {
@@ -90,32 +108,34 @@ body {
   letter-spacing: .08em;
   color: var(--text-3);
   margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .toc a {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: var(--gold);
   text-decoration: none;
   font-size: 13px;
-  padding: 3px 0;
-  border-left: 2px solid transparent;
-  padding-left: 8px;
-  transition: border-color .15s, color .15s;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: background .12s;
 }
-.toc a:hover { border-color: var(--gold); color: var(--text); }
+.toc a:hover { background: var(--gold-dim); }
+.toc-icon { width: 14px; height: 14px; flex-shrink: 0; opacity: .7; }
 
-/* ── Main content ── */
+/* ── Content ── */
 .content {
   max-width: 640px;
   margin: 0 auto;
   padding: 0 16px 40px;
 }
-
-.section {
-  margin-top: 36px;
-}
+.section { margin-top: 36px; }
 
 h2 {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--gold);
   padding-bottom: 8px;
@@ -123,24 +143,20 @@ h2 {
   margin-bottom: 14px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
 }
+.h2-icon { width: 20px; height: 20px; flex-shrink: 0; }
+
 h3 {
   font-size: 14px;
   font-weight: 600;
   color: var(--text);
   margin: 18px 0 8px;
 }
-
 p { color: var(--text-2); margin-bottom: 10px; }
-p + p { margin-top: 0; }
 p b, li b { color: var(--text); }
 
-ul, ol {
-  padding-left: 18px;
-  color: var(--text-2);
-  margin-bottom: 10px;
-}
+ul, ol { padding-left: 18px; color: var(--text-2); margin-bottom: 10px; }
 li { margin: 4px 0; }
 
 code {
@@ -153,7 +169,7 @@ code {
   color: var(--gold);
 }
 
-/* ── Callout / Note ── */
+/* ── Note ── */
 .note {
   background: var(--gold-dim);
   border-left: 3px solid var(--gold);
@@ -162,45 +178,22 @@ code {
   margin: 14px 0;
   color: var(--text-2);
   font-size: 14px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
 }
+.note-icon { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; }
 .note b { color: var(--gold); }
 
-/* ── Pill badge ── */
-.badge {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 7px;
-  border-radius: 20px;
-  letter-spacing: .04em;
-}
-.badge-guest { background: rgba(42,32,16,.8); color: var(--text-3); border: 1px solid var(--border); }
-.badge-auth  { background: rgba(39,174,96,.15); color: var(--green); border: 1px solid rgba(39,174,96,.3); }
-
-/* ── Command table ── */
-.cmd-table {
+/* ── Section image ── */
+.section-img {
   width: 100%;
-  border-collapse: collapse;
-  margin: 10px 0 14px;
+  max-width: 420px;
+  border-radius: var(--radius);
+  margin: 10px 0 16px;
+  border: 1px solid var(--border);
+  display: block;
 }
-.cmd-table th {
-  text-align: left;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: .06em;
-  color: var(--text-3);
-  padding: 5px 8px;
-  border-bottom: 1px solid var(--border);
-}
-.cmd-table td {
-  padding: 7px 8px;
-  font-size: 13px;
-  color: var(--text-2);
-  border-bottom: 1px solid var(--border);
-  vertical-align: top;
-}
-.cmd-table td:first-child { width: 48%; }
-.cmd-table tr:last-child td { border-bottom: none; }
 
 /* ── Steps ── */
 .steps { counter-reset: step; list-style: none; padding: 0; }
@@ -214,90 +207,137 @@ code {
 .steps li::before {
   content: counter(step);
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
+  width: 22px; height: 22px;
   border-radius: 50%;
   background: var(--gold-dim);
   border: 1px solid var(--gold);
   color: var(--gold);
-  font-size: 12px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
   margin-top: 1px;
 }
 .steps li span { color: var(--text-2); }
 
-/* ── Footer ── */
-.footer {
-  text-align: center;
-  color: var(--text-3);
-  font-size: 12px;
-  padding: 30px 16px 20px;
+/* ── Command table ── */
+.cmd-table { width: 100%; border-collapse: collapse; margin: 10px 0 14px; }
+.cmd-table th {
+  text-align: left;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--text-3); padding: 5px 8px; border-bottom: 1px solid var(--border);
 }
+.cmd-table td { padding: 7px 8px; font-size: 13px; color: var(--text-2); border-bottom: 1px solid var(--border); vertical-align: top; }
+.cmd-table td:first-child { width: 46%; }
+.cmd-table tr:last-child td { border-bottom: none; }
+
+/* ── Footer ── */
+.footer { text-align: center; color: var(--text-3); font-size: 12px; padding: 30px 16px 20px; }
 </style>
 </head>
 <body>
 
-<div class="header">
-  <div class="header-inner">
-    <div class="logo">⚔️</div>
-    <div>
-      <h1>CoCBoard · Guida</h1>
-      <p>Tutto quello che devi sapere sul bot</p>
-    </div>
+<!-- ── Hero ── -->
+<div class="hero">
+  <img src="assets/cocboardbot_sfondo.png" alt="CoCBoard">
+  <div class="hero-overlay"></div>
+  <div class="hero-badge">
+    <img class="hero-logo" src="assets/cocboardbot.png" alt="logo">
+    <span class="hero-title">CoCBoard · Guida</span>
   </div>
 </div>
 
+<div class="subheader">Tutto quello che devi sapere sul bot</div>
+
+<!-- ── TOC ── -->
 <div class="toc">
-  <div class="toc-title">Indice</div>
-  <a href="#senza-account">Cosa puoi fare subito</a>
-  <a href="#accesso">Registrarsi o accedere</a>
-  <a href="#gruppo">Usare il bot nel gruppo</a>
-  <a href="#community">Community</a>
-  <a href="#bonus">Bonus CWL</a>
-  <a href="#miniapp">Mini App</a>
-  <a href="#notifiche">Notifiche guerra</a>
-  <a href="#supporto">Supporto</a>
-  <a href="#comandi">Comandi disponibili</a>
+  <div class="toc-title">
+    <svg class="toc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+    Indice
+  </div>
+  <a href="#senza-account">
+    <svg class="toc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+    Cosa puoi fare subito
+  </a>
+  <a href="#accesso">
+    <svg class="toc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    Registrarsi o accedere
+  </a>
+  <a href="#gruppo">
+    <svg class="toc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    Usare il bot nel gruppo
+  </a>
+  <a href="#community">
+    <svg class="toc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    Community
+  </a>
+  <a href="#bonus">
+    <svg class="toc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    Bonus CWL
+  </a>
+  <a href="#miniapp">
+    <svg class="toc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+    Mini App
+  </a>
+  <a href="#notifiche">
+    <svg class="toc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+    Notifiche guerra
+  </a>
+  <a href="#supporto">
+    <svg class="toc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92V19a2 2 0 0 1-2.18 2A19.79 19.79 0 0 1 3 5.18 2 2 0 0 1 5 3h2.09a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 10.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 17v-.08z"/></svg>
+    Supporto
+  </a>
+  <a href="#comandi">
+    <svg class="toc-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+    Comandi
+  </a>
 </div>
 
 <div class="content">
 
   <!-- ── Senza account ── -->
   <div class="section" id="senza-account">
-    <h2>📌 Cosa puoi fare subito <span class="badge badge-guest">ospite</span></h2>
+    <h2>
+      <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      Cosa puoi fare subito
+    </h2>
     <p>Anche senza registrarti hai accesso a:</p>
     <ul>
-      <li>🌍 <b>Community</b> — chat globale inter-clan e annunci di reclutamento</li>
-      <li>🔍 <b>Cerca</b> — qualsiasi villaggio per #tag o clan per nome</li>
-      <li>📊 <b>Classifica</b> — top trofei Italia e mondo in tempo reale</li>
+      <li><b>Community</b> — chat globale inter-clan e annunci di reclutamento</li>
+      <li><b>Cerca</b> — qualsiasi villaggio per #tag o clan per nome</li>
+      <li><b>Classifica</b> — top trofei Italia e mondo in tempo reale</li>
     </ul>
   </div>
 
   <!-- ── Accesso ── -->
   <div class="section" id="accesso">
-    <h2>🔐 Registrarsi o accedere <span class="badge badge-auth">account</span></h2>
+    <h2>
+      <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Registrarsi o accedere
+    </h2>
     <p>Apri il bot in <b>chat privata</b> e tocca <b>Registrati</b> o <b>Accedi</b>.</p>
     <ul>
       <li><b>Registrati</b> — inserisci la tua chiave API di Clash of Clans (trovata in-game: <em>Impostazioni → Altro → Accesso API</em>) per collegare l'account CoC al profilo CoCBoard.</li>
       <li><b>Accedi</b> — usa il tuo username CoCBoard, il tuo #tag villaggio o la tua email CoCBoard.</li>
     </ul>
-    <div class="note">🔐 <b>Non scrivere mai password o chiavi API nel gruppo</b> — solo in chat privata con il bot!</div>
+    <div class="note">
+      <svg class="note-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span><b>Non scrivere mai password o chiavi API nel gruppo</b> — solo in chat privata con il bot!</span>
+    </div>
     <p>Una volta loggato sblocchi:</p>
     <ul>
-      <li>🏰 <b>Il tuo clan</b> — roster, info clan, il tuo profilo</li>
-      <li>🏅 <b>CWL live</b> — andamento della Clan War League in corso</li>
-      <li>⚔️ <b>Guerre</b> — registro guerre classiche</li>
-      <li>🎁 <b>Bonus</b> — classifica e storico assegnazioni bonus CWL</li>
-      <li>🌐 <b>Mini App</b> — dashboard web direttamente da Telegram (senza reinserire la password!)</li>
+      <li><b>Il tuo clan</b> — roster, info clan, il tuo profilo</li>
+      <li><b>CWL live</b> — andamento della Clan War League in corso</li>
+      <li><b>Guerre</b> — registro guerre classiche</li>
+      <li><b>Bonus</b> — classifica e storico assegnazioni bonus CWL</li>
+      <li><b>Mini App</b> — dashboard web direttamente da Telegram (senza reinserire la password!)</li>
     </ul>
   </div>
 
   <!-- ── Gruppo ── -->
   <div class="section" id="gruppo">
-    <h2>👥 Usare il bot nel gruppo del clan</h2>
+    <h2>
+      <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Usare il bot nel gruppo del clan
+    </h2>
     <p>Nel gruppo usa sempre <code>/cocboard</code> per aprire il menù — evita conflitti con altri bot che usano <code>/start</code>.</p>
     <p><b>Da ospite nel gruppo</b> puoi già cercare giocatori e vedere la classifica.<br>
     <b>Dopo il login in chat privata</b>, tornando nel gruppo vedrai anche i dati del clan collegato.</p>
@@ -316,12 +356,15 @@ code {
 
   <!-- ── Community ── -->
   <div class="section" id="community">
-    <h2>🌍 Community</h2>
+    <h2>
+      <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Community
+    </h2>
 
     <h3>Chat globale inter-clan</h3>
     <p>Una stanza di testo condivisa tra clan diversi, organizzata in <b>finestre temporali</b> da 5 minuti.</p>
     <ul>
-      <li>Per entrare serve un profilo CoCBoard (verificato ✅) oppure nome e #tag manuale</li>
+      <li>Per entrare serve un profilo CoCBoard (verificato) oppure nome e #tag manuale</li>
       <li>Regole: niente link, niente tag in-game nel corpo, nessuna emoji nel formato manuale</li>
       <li>Rate limit: massimo 12 messaggi al minuto</li>
       <li>Per uscire: tocca <b>Esci</b> o usa <code>/esci_chat_global</code></li>
@@ -330,7 +373,7 @@ code {
     <h3>Reclutamento</h3>
     <p>Pubblicizza il tuo clan o cerca un clan dove entrare!</p>
     <ul>
-      <li>Invia una <b>bozza</b> (annuncio rapido o guidato passo-passo)</li>
+      <li>Invia una bozza — <b>annuncio rapido</b> (messaggio diretto) o <b>guidato</b> (passo-passo)</li>
       <li>Gli annunci approvati restano visibili in <b>Annunci attivi</b></li>
       <li>Scadono automaticamente dopo <b>24 ore</b></li>
       <li>Puoi ritirare il tuo annuncio in anticipo da "Annunci attivi"</li>
@@ -339,11 +382,14 @@ code {
 
   <!-- ── Bonus CWL ── -->
   <div class="section" id="bonus">
-    <h2>🎁 Bonus CWL</h2>
+    <h2>
+      <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      Bonus CWL
+    </h2>
     <p>I Capi e Co-Capi possono assegnare i bonus stagionali direttamente dal bot.</p>
     <ul>
-      <li>🏆 <b>Classifica storica</b> — chi ha ricevuto più bonus nel tempo</li>
-      <li>📅 <b>Storico per stagione</b> — scorri le stagioni passate</li>
+      <li><b>Classifica storica</b> — chi ha ricevuto più bonus nel tempo</li>
+      <li><b>Storico per stagione</b> — scorri le stagioni passate</li>
     </ul>
     <h3>Assegnazione</h3>
     <ul>
@@ -355,7 +401,13 @@ code {
 
   <!-- ── Mini App ── -->
   <div class="section" id="miniapp">
-    <h2>🌐 Mini App (dashboard web)</h2>
+    <h2>
+      <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+      Mini App (dashboard web)
+    </h2>
+
+    <img class="section-img" src="assets/tutorial.png" alt="CoCBoard Tutorial">
+
     <p>Tocca il pulsante <b>(web)</b> o <b>Mini App</b> per aprire la dashboard web CoCBoard direttamente da Telegram.</p>
     <ul>
       <li>In <b>chat privata</b>: si apre come Mini App nativa Telegram</li>
@@ -366,19 +418,25 @@ code {
 
   <!-- ── Notifiche ── -->
   <div class="section" id="notifiche">
-    <h2>🔔 Notifiche guerra</h2>
+    <h2>
+      <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      Notifiche guerra
+    </h2>
     <p>Nei gruppi collegati puoi attivare gli avvisi automatici:</p>
     <ul>
-      <li>⚔️ Countdown guerra e attacchi mancanti</li>
-      <li>🏅 Avvisi CWL</li>
-      <li>🔔 Raid Capitale e Giochi del Clan</li>
+      <li>Countdown guerra e attacchi mancanti</li>
+      <li>Avvisi CWL</li>
+      <li>Raid Capitale e Giochi del Clan</li>
     </ul>
     <p>Gestisci tutto da <b>Gestione avvisi</b> nel menù del gruppo.</p>
   </div>
 
   <!-- ── Supporto ── -->
   <div class="section" id="supporto">
-    <h2>📩 Supporto</h2>
+    <h2>
+      <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><path d="M22 16.92V19a2 2 0 0 1-2.18 2A19.79 19.79 0 0 1 3 5.18 2 2 0 0 1 5 3h2.09a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 10.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 17v-.08z"/></svg>
+      Supporto
+    </h2>
     <p>Hai un problema o una domanda?</p>
     <ul>
       <li>Usa <code>/assistenza</code> per aprire un ticket — scrivi direttamente con il team in chat privata</li>
@@ -388,7 +446,10 @@ code {
 
   <!-- ── Comandi ── -->
   <div class="section" id="comandi">
-    <h2>⌨️ Comandi disponibili</h2>
+    <h2>
+      <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+      Comandi disponibili
+    </h2>
 
     <h3>Chat privata</h3>
     <table class="cmd-table">
