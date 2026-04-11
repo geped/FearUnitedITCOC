@@ -148,12 +148,8 @@
                 Classifiche
             </button>
             <button class="tab-btn admin-only" data-tab="admin" style="display:none" onclick="closeNav()">
-                <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 13.17 10.33 12 8 12zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C23 13.17 18.33 12 16 12z"/></svg>
-                Gestione Utenti
-            </button>
-            <button class="tab-btn admin-only" data-tab="botadmin" style="display:none" onclick="closeNav()">
-                <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 2a2 2 0 0 1 2 2v1.07a7 7 0 0 1 3.93 3.93H19a2 2 0 1 1 0 4h-1.07a7 7 0 0 1-3.93 3.93V20a2 2 0 1 1-4 0v-1.07a7 7 0 0 1-3.93-3.93H5a2 2 0 1 1 0-4h1.07A7 7 0 0 1 10 5.07V4a2 2 0 0 1 2-2zm0 6a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
-                CoCBoardBot
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+                Pannello Admin
             </button>
         </nav>
 
@@ -410,143 +406,150 @@
                 </div>
             </section>
 
-            <!-- ── TAB: GESTIONE UTENTI ──────────────────────────────── -->
+            <!-- ── TAB: PANNELLO ADMIN (Gestione Utenti + CoCBoardBot) ── -->
             <section id="tab-admin" class="tab-content" style="display:none">
                 <div class="page-header">
                     <div>
-                        <h2>👥 Gestione Utenti</h2>
-                        <p class="page-sub">Crea utenti e gestisci i ruoli</p>
-                    </div>
-                    <button id="refresh-users" class="btn-secondary btn-sm">🔄 Aggiorna</button>
-                </div>
-                <div id="admin-msg" class="admin-msg-box" style="display:none"></div>
-
-                <div class="card" style="margin-bottom:1.25rem">
-                    <h3 class="card-title">➕ Crea nuovo utente</h3>
-                    <div class="admin-form-grid">
-                        <div class="admin-field">
-                            <label>Nome utente <span class="req">*</span></label>
-                            <input type="text" id="new-username" placeholder="es. Geped" autocomplete="off">
-                        </div>
-                        <div class="admin-field">
-                            <label>Email <span class="opt">(facoltativa)</span></label>
-                            <input type="email" id="new-email" placeholder="email@example.com" autocomplete="off">
-                        </div>
-                        <div class="admin-field">
-                            <label>Password <span class="req">*</span></label>
-                            <input type="password" id="new-password" placeholder="min 6 caratteri" autocomplete="new-password">
-                        </div>
-                        <div class="admin-field">
-                            <label>Ruolo</label>
-                            <select id="new-role" class="admin-select">
-                                <option value="utente">Utente</option>
-                                <option value="membro">Membro</option>
-                                <option value="anziano">Anziano</option>
-                                <option value="co-capo">Co-Capo</option>
-                                <option value="admin">Admin</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="admin-form-footer">
-                        <span id="create-user-msg" class="admin-inline-msg"></span>
-                        <button class="btn-primary" onclick="createUser()">➕ Crea Utente</button>
+                        <h2>🛡 Pannello Admin</h2>
+                        <p class="page-sub">Gestione utenti, moderazione e supporto</p>
                     </div>
                 </div>
-
-                <div class="card">
-                    <h3 class="card-title">👥 Utenti registrati</h3>
-                    <div class="table-wrap">
-                        <table id="users-table">
-                            <thead>
-                                <tr>
-                                    <th>Nome</th>
-                                    <th class="hide-sm">Tag CoC / Login</th>
-                                    <th class="hide-md">Email</th>
-                                    <th>Ruolo</th>
-                                    <th class="hide-xs">Dal</th>
-                                    <th>Azioni</th>
-                                </tr>
-                            </thead>
-                            <tbody></tbody>
-                        </table>
-                    </div>
-                </div>
-            </section>
-
-            <!-- ── TAB: ADMIN BOT ──────────────────────────────── -->
-            <section id="tab-botadmin" class="tab-content" style="display:none">
-                <div class="page-header">
-                    <div>
-                        <h2>🤖 CoCBoardBot</h2>
-                        <p class="page-sub">Controllo completo moderazione e supporto bot</p>
-                    </div>
-                    <button id="refresh-botadmin" class="btn-secondary btn-sm">🔄 Aggiorna</button>
-                </div>
-                <div id="botadmin-msg" class="admin-msg-box" style="display:none"></div>
 
                 <div class="subtab-bar">
-                    <button type="button" class="subtab-btn active" data-botadmin-tab="dashboard" data-botadmin-admin-only onclick="switchBotAdminTab('dashboard', this)">📊 Dashboard</button>
-                    <button type="button" class="subtab-btn" data-botadmin-tab="tickets" onclick="switchBotAdminTab('tickets', this)">🎫 Ticket supporto</button>
-                    <button type="button" class="subtab-btn" data-botadmin-tab="reports" onclick="switchBotAdminTab('reports', this)">🚩 Segnalazioni globali</button>
-                    <button type="button" class="subtab-btn" data-botadmin-tab="banned" data-botadmin-admin-only onclick="switchBotAdminTab('banned', this)">🚫 Utenti bannati</button>
-                    <button type="button" class="subtab-btn" data-botadmin-tab="moderators" data-botadmin-admin-only onclick="switchBotAdminTab('moderators', this)">🛡 Moderatori</button>
+                    <button class="subtab-btn active" onclick="switchAdminPanel('users', this)">👥 Gestione Utenti</button>
+                    <button class="subtab-btn" onclick="switchAdminPanel('bot', this)">🤖 CoCBoardBot</button>
                 </div>
 
-                <div id="botadmin-tab-dashboard">
-                    <div id="botadmin-dashboard" class="card">
-                        <p class="wl-loading">Caricamento dashboard bot…</p>
+                <!-- ── Panel: Gestione Utenti ── -->
+                <div id="admin-panel-users">
+                    <div style="display:flex;justify-content:flex-end;margin-bottom:0.75rem">
+                        <button id="refresh-users" class="btn-secondary btn-sm">🔄 Aggiorna</button>
                     </div>
-                </div>
+                    <div id="admin-msg" class="admin-msg-box" style="display:none"></div>
 
-                <div id="botadmin-tab-tickets" style="display:none">
-                    <div class="card" style="margin-bottom:1rem">
-                        <div class="toolbar">
-                            <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-                                <button class="btn-secondary btn-sm" onclick="loadBotTickets('open')">📬 Attivi</button>
-                                <button class="btn-secondary btn-sm" onclick="loadBotTickets('mine')">👤 Assegnati a me</button>
-                                <button type="button" class="btn-secondary btn-sm" id="botadmin-tickets-closed-btn" data-botadmin-admin-only onclick="loadBotTickets('closed')">🗂 Chiusi</button>
+                    <div class="card" style="margin-bottom:1.25rem">
+                        <h3 class="card-title">➕ Crea nuovo utente</h3>
+                        <div class="admin-form-grid">
+                            <div class="admin-field">
+                                <label>Nome utente <span class="req">*</span></label>
+                                <input type="text" id="new-username" placeholder="es. Geped" autocomplete="off">
                             </div>
-                            <span id="botadmin-ticket-filter" class="toolbar-label">Filtro: attivi</span>
-                        </div>
-                    </div>
-                    <div id="botadmin-tickets" class="card"><p class="wl-loading">Caricamento ticket…</p></div>
-                    <div id="botadmin-ticket-detail" class="card" style="margin-top:1rem;display:none"></div>
-                </div>
-
-                <div id="botadmin-tab-reports" style="display:none">
-                    <div class="card" style="margin-bottom:1rem">
-                        <div class="toolbar">
-                            <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-                                <button class="btn-secondary btn-sm" onclick="loadBotGlobalReports('open,in_review')">🟠 Aperte/In review</button>
-                                <button class="btn-secondary btn-sm" onclick="loadBotGlobalReports('resolved,archived')">✅ Risolte/Archiviate</button>
-                                <button class="btn-secondary btn-sm" onclick="loadBotGlobalReports('open,in_review,resolved,archived')">📚 Tutte</button>
+                            <div class="admin-field">
+                                <label>Email <span class="opt">(facoltativa)</span></label>
+                                <input type="email" id="new-email" placeholder="email@example.com" autocomplete="off">
                             </div>
-                            <span id="botadmin-report-filter" class="toolbar-label">Filtro: aperte/in review</span>
-                        </div>
-                    </div>
-                    <div id="botadmin-reports" class="card"><p class="wl-loading">Caricamento segnalazioni…</p></div>
-                    <div id="botadmin-report-detail" class="card" style="margin-top:1rem;display:none"></div>
-                </div>
-
-                <div id="botadmin-tab-banned" style="display:none">
-                    <div id="botadmin-banned" class="card"><p class="wl-loading">Caricamento utenti bannati…</p></div>
-                </div>
-
-                <div id="botadmin-tab-moderators" class="botadmin-admin-only-block" style="display:none">
-                    <div class="card" style="margin-bottom:1rem">
-                        <h3 class="card-title">🛡 Moderatori Telegram</h3>
-                        <p class="page-sub" style="margin-bottom:0.75rem">Gli utenti devono aver collegato Telegram al bot. Ruolo CoC invariato (membro, anziano, ecc.).</p>
-                        <div class="admin-form-grid" style="align-items:flex-end">
-                            <div class="admin-field" style="grid-column:1/-1">
-                                <label for="botadmin-moderator-user-select">Aggiungi da gestione utenti</label>
-                                <select id="botadmin-moderator-user-select" class="form-input-sm"></select>
+                            <div class="admin-field">
+                                <label>Password <span class="req">*</span></label>
+                                <input type="password" id="new-password" placeholder="min 6 caratteri" autocomplete="new-password">
                             </div>
-                            <div class="admin-form-footer" style="grid-column:1/-1;padding-top:0">
-                                <button type="button" class="btn-primary btn-sm" onclick="addSelectedBotModerator()">➕ Assegna moderatore</button>
+                            <div class="admin-field">
+                                <label>Ruolo</label>
+                                <select id="new-role" class="admin-select">
+                                    <option value="utente">Utente</option>
+                                    <option value="membro">Membro</option>
+                                    <option value="anziano">Anziano</option>
+                                    <option value="co-capo">Co-Capo</option>
+                                    <option value="admin">Admin</option>
+                                </select>
                             </div>
                         </div>
+                        <div class="admin-form-footer">
+                            <span id="create-user-msg" class="admin-inline-msg"></span>
+                            <button class="btn-primary" onclick="createUser()">➕ Crea Utente</button>
+                        </div>
                     </div>
-                    <div id="botadmin-moderators" class="card"><p class="wl-loading">Caricamento moderatori…</p></div>
+
+                    <div class="card">
+                        <h3 class="card-title">👥 Utenti registrati</h3>
+                        <div class="table-wrap">
+                            <table id="users-table">
+                                <thead>
+                                    <tr>
+                                        <th>Nome</th>
+                                        <th class="hide-sm">Tag CoC / Login</th>
+                                        <th class="hide-md">Email</th>
+                                        <th>Ruolo</th>
+                                        <th class="hide-xs">Dal</th>
+                                        <th>Azioni</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Panel: CoCBoardBot ── -->
+                <div id="admin-panel-bot" style="display:none">
+                    <div style="display:flex;justify-content:flex-end;margin-bottom:0.75rem">
+                        <button id="refresh-botadmin" class="btn-secondary btn-sm">🔄 Aggiorna</button>
+                    </div>
+                    <div id="botadmin-msg" class="admin-msg-box" style="display:none"></div>
+
+                    <div class="subtab-bar">
+                        <button type="button" class="subtab-btn active" data-botadmin-tab="dashboard" data-botadmin-admin-only onclick="switchBotAdminTab('dashboard', this)">📊 Dashboard</button>
+                        <button type="button" class="subtab-btn" data-botadmin-tab="tickets" onclick="switchBotAdminTab('tickets', this)">🎫 Ticket</button>
+                        <button type="button" class="subtab-btn" data-botadmin-tab="reports" onclick="switchBotAdminTab('reports', this)">🚩 Segnalazioni</button>
+                        <button type="button" class="subtab-btn" data-botadmin-tab="banned" data-botadmin-admin-only onclick="switchBotAdminTab('banned', this)">🚫 Ban</button>
+                        <button type="button" class="subtab-btn" data-botadmin-tab="moderators" data-botadmin-admin-only onclick="switchBotAdminTab('moderators', this)">🛡 Mod</button>
+                    </div>
+
+                    <div id="botadmin-tab-dashboard">
+                        <div id="botadmin-dashboard" class="card">
+                            <p class="wl-loading">Caricamento dashboard bot…</p>
+                        </div>
+                    </div>
+
+                    <div id="botadmin-tab-tickets" style="display:none">
+                        <div class="card" style="margin-bottom:1rem">
+                            <div class="toolbar">
+                                <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                                    <button class="btn-secondary btn-sm" onclick="loadBotTickets('open')">📬 Attivi</button>
+                                    <button class="btn-secondary btn-sm" onclick="loadBotTickets('mine')">👤 Assegnati a me</button>
+                                    <button type="button" class="btn-secondary btn-sm" id="botadmin-tickets-closed-btn" data-botadmin-admin-only onclick="loadBotTickets('closed')">🗂 Chiusi</button>
+                                </div>
+                                <span id="botadmin-ticket-filter" class="toolbar-label">Filtro: attivi</span>
+                            </div>
+                        </div>
+                        <div id="botadmin-tickets" class="card"><p class="wl-loading">Caricamento ticket…</p></div>
+                        <div id="botadmin-ticket-detail" class="card" style="margin-top:1rem;display:none"></div>
+                    </div>
+
+                    <div id="botadmin-tab-reports" style="display:none">
+                        <div class="card" style="margin-bottom:1rem">
+                            <div class="toolbar">
+                                <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                                    <button class="btn-secondary btn-sm" onclick="loadBotGlobalReports('open,in_review')">🟠 Aperte/In review</button>
+                                    <button class="btn-secondary btn-sm" onclick="loadBotGlobalReports('resolved,archived')">✅ Risolte/Archiviate</button>
+                                    <button class="btn-secondary btn-sm" onclick="loadBotGlobalReports('open,in_review,resolved,archived')">📚 Tutte</button>
+                                </div>
+                                <span id="botadmin-report-filter" class="toolbar-label">Filtro: aperte/in review</span>
+                            </div>
+                        </div>
+                        <div id="botadmin-reports" class="card"><p class="wl-loading">Caricamento segnalazioni…</p></div>
+                        <div id="botadmin-report-detail" class="card" style="margin-top:1rem;display:none"></div>
+                    </div>
+
+                    <div id="botadmin-tab-banned" style="display:none">
+                        <div id="botadmin-banned" class="card"><p class="wl-loading">Caricamento utenti bannati…</p></div>
+                    </div>
+
+                    <div id="botadmin-tab-moderators" class="botadmin-admin-only-block" style="display:none">
+                        <div class="card" style="margin-bottom:1rem">
+                            <h3 class="card-title">🛡 Moderatori Telegram</h3>
+                            <p class="page-sub" style="margin-bottom:0.75rem">Gli utenti devono aver collegato Telegram al bot. Ruolo CoC invariato (membro, anziano, ecc.).</p>
+                            <div class="admin-form-grid" style="align-items:flex-end">
+                                <div class="admin-field" style="grid-column:1/-1">
+                                    <label for="botadmin-moderator-user-select">Aggiungi da gestione utenti</label>
+                                    <select id="botadmin-moderator-user-select" class="form-input-sm"></select>
+                                </div>
+                                <div class="admin-form-footer" style="grid-column:1/-1;padding-top:0">
+                                    <button type="button" class="btn-primary btn-sm" onclick="addSelectedBotModerator()">➕ Assegna moderatore</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="botadmin-moderators" class="card"><p class="wl-loading">Caricamento moderatori…</p></div>
+                    </div>
                 </div>
             </section>
 
@@ -757,12 +760,8 @@
             <span class="bnav-label">Classifiche</span>
         </button>
         <button class="bnav-btn admin-only" data-tab="admin" style="display:none">
-            <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 13.17 10.33 12 8 12zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C23 13.17 18.33 12 16 12z"/></svg>
-            <span class="bnav-label">Utenti</span>
-        </button>
-        <button class="bnav-btn admin-only" data-tab="botadmin" style="display:none">
-            <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 2a2 2 0 0 1 2 2v1.07a7 7 0 0 1 3.93 3.93H19a2 2 0 1 1 0 4h-1.07a7 7 0 0 1-3.93 3.93V20a2 2 0 1 1-4 0v-1.07a7 7 0 0 1-3.93-3.93H5a2 2 0 1 1 0-4h1.07A7 7 0 0 1 10 5.07V4a2 2 0 0 1 2-2zm0 6a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>
-            <span class="bnav-label">Bot</span>
+            <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+            <span class="bnav-label">Admin</span>
         </button>
     </nav>
 

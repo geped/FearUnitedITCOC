@@ -1997,6 +1997,7 @@ tbody tr:last-child td { border-bottom: none; }
   font-size: 0.68rem; color: var(--text-3);
   min-width: 66px; flex-shrink: 0;
 }
+.wdm-atk-def-th { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }
 .wdm-atk-target {
   flex: 1; color: var(--text); font-weight: 500;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

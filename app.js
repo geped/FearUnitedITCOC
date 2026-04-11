@@ -1063,37 +1063,53 @@ const TAB_TITLES = {
   cwl:       'Bonus CWL',
   profilo:   'Il mio Profilo',
   cerca:     'Cerca',
-  admin:     'Gestione Utenti',
-  botadmin:  'CoCBoardBot',
+  admin:     'Pannello Admin',
 };
 
 function activateTab(tabId) {
-  // Aggiorna TUTTI i tab-btn (sidebar + bottom-nav)
+  // botadmin deep-links redirect to unified admin tab (bot panel)
+  if (tabId === 'botadmin') { tabId = 'admin'; window._adminOpenPanel = 'bot'; }
+
   document.querySelectorAll('.tab-btn, .bnav-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === tabId);
   });
   document.querySelectorAll('.tab-content').forEach(s => (s.style.display = 'none'));
   const sec = document.getElementById('tab-' + tabId);
   if (sec) sec.style.display = 'block';
-  // Aggiorna titolo topbar
   const titleEl = document.getElementById('topbar-title');
   if (titleEl) titleEl.textContent = TAB_TITLES[tabId] || tabId;
-  if (tabId === 'admin') loadUsers();
-  if (tabId === 'botadmin') {
-    applyBotAdminStaffUi();
-    if (window._userBotAdminFull) {
-      const d = document.querySelector('#tab-botadmin [data-botadmin-tab="dashboard"]');
-      switchBotAdminTab('dashboard', d);
-    } else {
-      const t = document.querySelector('#tab-botadmin [data-botadmin-tab="tickets"]');
-      switchBotAdminTab('tickets', t);
-    }
+  if (tabId === 'admin') {
+    const panel = window._adminOpenPanel || 'users';
+    delete window._adminOpenPanel;
+    const btn = document.querySelector(`.subtab-btn[onclick*="switchAdminPanel('${panel}'"]`);
+    switchAdminPanel(panel, btn);
   }
   if (tabId === 'warlog') setTimeout(loadWarLog, 80);
   if (tabId === 'cwl') setTimeout(loadAssignBonus, 80);
   if (tabId === 'profilo') setTimeout(loadProfile, 80);
   if (tabId === 'rankings') { setTimeout(loadRankings, 80); setTimeout(renderFavoriti, 80); _detectUserCountry(); }
   if (tabId === 'cerca') setTimeout(renderFavoriti, 80);
+}
+
+function switchAdminPanel(panel, btn) {
+  document.getElementById('admin-panel-users').style.display = panel === 'users' ? 'block' : 'none';
+  document.getElementById('admin-panel-bot').style.display = panel === 'bot' ? 'block' : 'none';
+
+  const bar = document.querySelector('#tab-admin > .subtab-bar');
+  if (bar) bar.querySelectorAll('.subtab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  if (panel === 'users') loadUsers();
+  if (panel === 'bot') {
+    applyBotAdminStaffUi();
+    if (window._userBotAdminFull) {
+      const d = document.querySelector('#admin-panel-bot [data-botadmin-tab="dashboard"]');
+      switchBotAdminTab('dashboard', d);
+    } else {
+      const t = document.querySelector('#admin-panel-bot [data-botadmin-tab="tickets"]');
+      switchBotAdminTab('tickets', t);
+    }
+  }
 }
 
 document.querySelectorAll('.tab-btn, .bnav-btn').forEach(btn => {
@@ -6902,59 +6918,81 @@ function _wlMissingAttacksAlert(data) {
   </div>`;
 }
 
-/** Build player list table (us or them) for modal panels.
- *  Hero levels are fetched asynchronously and injected after render. */
+/** Build player cards (us or them) for modal Panoramica.
+ *  During preparation: roster only (TH + name).
+ *  During inWar/warEnded: full attack detail cards like openClassicWarDetail. */
 function _wlBuildPlayersHtml(data, side) {
   const sideData = side === 'us' ? data.clan : data.opponent;
   if (!sideData?.members?.length) return '<p class="wl-empty">Nessun dato.</p>';
   const members = [...sideData.members].sort((a, b) => a.mapPosition - b.mapPosition);
   const maxAtk = data.attacksPerMember || 2;
-  const rows = members.map(m => {
-    const thN = String(m.townhallLevel || 1).padStart(2, '0');
-    const thImg = `<img src="th/webp/level_${thN}.webp" alt="TH${m.townhallLevel}" class="wl-th-icon" loading="lazy">`;
-    const used = m.attacks ? m.attacks.length : 0;
-    const atkBubbles = Array.from({length: maxAtk}, (_, i) => {
-      if (i < used) {
-        const atk = m.attacks[i];
-        return `<span class="wl-atk-dot wl-atk-used" title="${atk.stars}&#11088; ${atk.destructionPercentage}%">${atk.stars}&#11088;</span>`;
-      }
-      return '<span class="wl-atk-dot wl-atk-empty">—</span>';
-    }).join('');
-    const safeTag = (m.tag || '').replace(/[^a-zA-Z0-9#]/g, '').replace('#', '_');
-    return `<tr>
-      <td class="wl-pos">${m.mapPosition}</td>
-      <td class="wl-th-cell">${thImg}</td>
-      <td class="wl-name">${escH(m.name)}</td>
-      <td class="wl-atk-cell">${atkBubbles}</td>
-      <td class="wl-hero-cell" id="wlm-hero-${side}-${safeTag}"><span class="wl-hero-loading">…</span></td>
-    </tr>`;
-  }).join('');
-  return `<div class="table-wrap"><table class="wl-players-table">
-    <thead><tr><th>#</th><th>TH</th><th>Nome</th><th>Attacchi</th><th>BK/AQ/GW/RC</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table></div>`;
-}
+  const isPrep = data.state === 'preparation';
 
-/** Async: fetch hero levels for all members on a side and inject into DOM */
-async function _wlLoadPlayerHeroes(data, side) {
-  const sideData = side === 'us' ? data.clan : data.opponent;
-  if (!sideData?.members?.length) return;
-  const members = [...sideData.members].sort((a, b) => a.mapPosition - b.mapPosition);
-  for (const m of members) {
-    const safeTag = (m.tag || '').replace(/[^a-zA-Z0-9#]/g, '').replace('#', '_');
-    const cell = document.getElementById(`wlm-hero-${side}-${safeTag}`);
-    if (!cell) continue;
-    try {
-      const r = await fetch(`/api/lookup?type=player&playerTag=${encodeURIComponent(m.tag)}`);
-      const p = await r.json();
-      if (!r.ok || !p.heroes) { cell.textContent = '—'; continue; }
-      const bk = p.heroes.find(x => x.name === 'Barbarian King');
-      const aq = p.heroes.find(x => x.name === 'Archer Queen');
-      const gw = p.heroes.find(x => x.name === 'Grand Warden');
-      const rc = p.heroes.find(x => x.name === 'Royal Champion');
-      cell.textContent = `${bk?.level ?? '—'}/${aq?.level ?? '—'}/${gw?.level ?? '—'}/${rc?.level ?? '—'}`;
-    } catch (_) { cell.textContent = '—'; }
-  }
+  // Build tag→{name, pos, thLevel} lookup from both sides for defender resolution
+  const defMap = {};
+  [...(data.clan?.members || []), ...(data.opponent?.members || [])].forEach(m => {
+    defMap[m.tag] = { name: m.name, pos: m.mapPosition, thLevel: m.townhallLevel };
+  });
+
+  function starsRow(stars, max) { return '★'.repeat(stars) + '☆'.repeat(Math.max(0, max - stars)); }
+
+  const cards = members.map(m => {
+    const thN = String(m.townhallLevel || 1).padStart(2, '0');
+    const thImg = `<img src="th/webp/level_${thN}.webp" class="wdm-th-img" alt="TH${m.townhallLevel}" loading="lazy">`;
+
+    if (isPrep) {
+      return `<div class="wdm-member-card">
+        <div class="wdm-member-header">
+          <span class="wdm-pos">${m.mapPosition ?? '—'}.</span>
+          ${thImg}
+          <span class="wdm-name">${escH(m.name)}</span>
+        </div>
+      </div>`;
+    }
+
+    const attacks = [...(m.attacks || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const totalStars = attacks.reduce((s, a) => s + (a.stars ?? 0), 0);
+
+    const atkRows = Array.from({ length: maxAtk }, (_, i) => {
+      const a = attacks[i];
+      if (!a) {
+        return `<div class="wdm-atk-row">
+          <span class="wdm-atk-label">Attacco ${i + 1}</span>
+          <span class="wdm-atk-unused">Non utilizzato</span>
+        </div>`;
+      }
+      const def = defMap[a.defenderTag];
+      const defThN = def?.thLevel ? String(def.thLevel).padStart(2, '0') : null;
+      const defThImg = defThN
+        ? `<img src="th/webp/level_${defThN}.webp" class="wdm-atk-def-th" alt="TH${def.thLevel}" loading="lazy">`
+        : '';
+      const defLabel = def ? `${def.pos}. ${escH(def.name)}` : (a.defenderTag ?? '?');
+      const destr = (a.destructionPercentage ?? 0).toFixed(0);
+      const stars = a.stars ?? 0;
+      const starsHtml = `<span class="wdm-star-row wdm-star-row--${stars > 0 ? 'hit' : 'miss'}">${starsRow(stars, 3)}</span>`;
+      return `<div class="wdm-atk-row">
+        <span class="wdm-atk-label">Attacco ${i + 1}</span>
+        ${defThImg}
+        <span class="wdm-atk-target">${defLabel}</span>
+        <span class="wdm-atk-pct">${destr}%</span>
+        ${starsHtml}
+      </div>`;
+    }).join('');
+
+    const totalStarsHtml = `<span class="wdm-total-stars wdm-total-stars--${totalStars >= 5 ? 'great' : totalStars >= 3 ? 'good' : 'low'}">${totalStars}★</span>`;
+
+    return `<div class="wdm-member-card">
+      <div class="wdm-member-header">
+        <span class="wdm-pos">${m.mapPosition ?? '—'}.</span>
+        ${thImg}
+        <span class="wdm-name">${escH(m.name)}</span>
+        ${totalStarsHtml}
+      </div>
+      <div class="wdm-atk-list">${atkRows}</div>
+    </div>`;
+  }).join('');
+
+  return cards;
 }
 
 /** Open war live detail modal — modeled after CWL detail modal */
