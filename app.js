@@ -38,7 +38,7 @@ const db = window.sb;
   try {
     const p = new URLSearchParams(window.location.search);
     const ot = p.get('open_tab');
-    const allowed = new Set(['members', 'cerca', 'cwl', 'cwl_warlog', 'login', 'warlog', 'war_live', 'profilo', 'rankings', 'bonus', 'botadmin']);
+    const allowed = new Set(['members', 'cerca', 'cwl', 'cwl_warlog', 'login', 'warlog', 'profilo', 'rankings', 'bonus', 'botadmin']);
     if (allowed.has(ot)) {
       window.__cocboardOpenTab = ot;
     } else {
@@ -376,7 +376,7 @@ void (async function cocboardTelegramHandoffBootstrap() {
     // Telegram Mini App con tab pubblico + clan tag noto: modalità ospite senza login
     // Nessuna config Supabase richiesta — usa utente guest fittizio (sola lettura)
     const isTgMiniApp = !!(window.Telegram?.WebApp?.initData);
-    const guestTabs = new Set(['cwl_warlog', 'cwl', 'warlog', 'war_live', 'bonus', 'members', 'cerca', 'rankings']);
+    const guestTabs = new Set(['cwl_warlog', 'cwl', 'warlog', 'bonus', 'members', 'cerca', 'rankings']);
     if (isTgMiniApp && guestTabs.has(window.__cocboardOpenTab) && window.__cocboardGuestClanTag) {
       const guestUser = { id: null, is_anonymous: true, user_metadata: {}, app_metadata: {} };
       await showApp(guestUser);
@@ -993,7 +993,7 @@ async function applyCocboardTelegramWebDeepLinks() {
     }
     if (ot === 'war_live' && window._userClanTag) {
       delete window.__cocboardOpenTab;
-      activateTab('war_live');
+      activateTab('warlog');
       return;
     }
     if (ot === 'profilo') {
@@ -1060,7 +1060,6 @@ async function applyCocboardTelegramWebDeepLinkWarlogRounds(initialRound) {
 const TAB_TITLES = {
   members:   'Clan',
   warlog:    'Registri Guerre',
-  war_live:  'Guerra Live',
   cwl:       'Bonus CWL',
   profilo:   'Il mio Profilo',
   cerca:     'Cerca',
@@ -1091,7 +1090,6 @@ function activateTab(tabId) {
     }
   }
   if (tabId === 'warlog') setTimeout(loadWarLog, 80);
-  if (tabId === 'war_live') setTimeout(loadWarLive, 80);
   if (tabId === 'cwl') setTimeout(loadAssignBonus, 80);
   if (tabId === 'profilo') setTimeout(loadProfile, 80);
   if (tabId === 'rankings') { setTimeout(loadRankings, 80); setTimeout(renderFavoriti, 80); _detectUserCountry(); }
@@ -3647,6 +3645,7 @@ async function loadWarLog() {
           <tbody>${rows}</tbody>
         </table>
       </div>`;
+    _checkWarLiveBanner();
   } catch(e) {
     const msg = e.name === 'AbortError'
       ? '⏳ Il proxy è in avvio (cold start Render). Attendi ~30s e riprova.'
@@ -6756,12 +6755,11 @@ function _renderRankClans(el, items) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   GUERRA CLASSICA LIVE
+   GUERRA CLASSICA LIVE  (banner + modale dentro Registri Guerre)
    ═══════════════════════════════════════════════════════════════ */
 
 let _warLiveData = null;
 let _warLiveCountdownTimer = null;
-let _warLiveActiveSubTab = 'ov';
 
 function parseCocTimeWeb(t) {
   if (!t) return null;
@@ -6770,16 +6768,87 @@ function parseCocTimeWeb(t) {
   return new Date(Date.UTC(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]));
 }
 
-function wlStateLabel(state) {
-  if (state === 'preparation') return '🛡 Preparazione';
-  if (state === 'inWar') return '⚔️ In guerra';
+function _wlStateLabel(state) {
+  if (state === 'preparation') return '🛡 Giorno di preparazione';
+  if (state === 'inWar') return '⚔️ Giorno della battaglia';
   if (state === 'warEnded') return '🏁 Guerra terminata';
-  return '— Nessuna guerra';
+  return '';
 }
 
-function wlStartCountdown(data) {
+function _wlStateLabelShort(state) {
+  if (state === 'preparation') return 'Preparazione';
+  if (state === 'inWar') return 'In guerra';
+  if (state === 'warEnded') return 'Terminata';
+  return '';
+}
+
+function escH(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function heroLevel(member, heroName) {
+  if (!member || !member.heroes) return '—';
+  const h = member.heroes.find(x => x.name === heroName);
+  return h ? h.level : '—';
+}
+
+function _wlHeroSum(member) {
+  if (!member?.heroes) return null;
+  return member.heroes.filter(h => h.village === 'home').reduce((s, h) => s + (h.level || 0), 0);
+}
+
+/** Fetches current war and populates the banner in wl-classic */
+async function _checkWarLiveBanner() {
+  const banner = document.getElementById('war-live-banner');
+  if (!banner) return;
+  try {
+    const clanTag = window._userClanTag || '';
+    const r = await fetch('/api/war-log?type=current' + (clanTag ? '&clanTag=' + encodeURIComponent(clanTag) : ''));
+    const raw = await r.json();
+    const data = raw.state ? raw : (raw.data || raw);
+    if (!data || data.state === 'notInWar' || !data.state) {
+      banner.style.display = 'none';
+      _warLiveData = null;
+      return;
+    }
+    _warLiveData = data;
+    const us = data.clan || {}, them = data.opponent || {};
+    const usBadge = us.badgeUrls?.small
+      ? `<img src="${us.badgeUrls.small}" class="wlb-badge" alt="">`
+      : '<span class="wlb-badge-ph">🛡️</span>';
+    const themBadge = them.badgeUrls?.small
+      ? `<img src="${them.badgeUrls.small}" class="wlb-badge" alt="">`
+      : '<span class="wlb-badge-ph">🛡️</span>';
+
+    const stateClass = data.state === 'preparation' ? 'wlb--prep' : data.state === 'inWar' ? 'wlb--battle' : 'wlb--ended';
+
+    banner.className = `war-live-banner ${stateClass}`;
+    banner.style.display = '';
+    banner.innerHTML = `
+      <div class="wlb-top">
+        <span class="wlb-live-dot"></span>
+        <strong>⚔️ War classica in corso</strong>
+        <span class="wlb-state">${_wlStateLabel(data.state)}</span>
+      </div>
+      <div class="wlb-matchup">
+        <div class="wlb-clan">
+          ${usBadge}
+          <span class="wlb-clan-name">${escH(us.name || '—')}</span>
+        </div>
+        <div class="wlb-vs">VS</div>
+        <div class="wlb-clan">
+          ${themBadge}
+          <span class="wlb-clan-name">${escH(them.name || '—')}</span>
+        </div>
+      </div>
+      <button class="btn-primary btn-sm wlb-detail-btn" onclick="openWarLiveModal()">Vedi dettagli war live</button>`;
+  } catch (_) {
+    banner.style.display = 'none';
+  }
+}
+
+function _wlModalCountdown(data, el) {
   if (_warLiveCountdownTimer) clearInterval(_warLiveCountdownTimer);
-  const el = document.getElementById('wl-live-countdown');
   if (!el || !data) return;
   function update() {
     const now = Date.now();
@@ -6806,7 +6875,7 @@ function wlStartCountdown(data) {
   _warLiveCountdownTimer = setInterval(update, 1000);
 }
 
-function wlWinProbability(data) {
+function _wlWinProbability(data) {
   if (!data || data.state === 'preparation') return null;
   const us = data.clan, them = data.opponent;
   if (!us || !them) return null;
@@ -6822,17 +6891,7 @@ function wlWinProbability(data) {
   return { pct, cls, label };
 }
 
-function escH(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function heroLevel(member, heroName) {
-  if (!member || !member.heroes) return '—';
-  const h = member.heroes.find(x => x.name === heroName);
-  return h ? h.level : '—';
-}
-
-function wlMissingAttacksAlert(data) {
+function _wlMissingAttacksAlert(data) {
   if (!data || data.state !== 'inWar') return '';
   const endTime = parseCocTimeWeb(data.endTime);
   if (!endTime) return '';
@@ -6840,10 +6899,7 @@ function wlMissingAttacksAlert(data) {
   if (hoursLeft > 6) return '';
   const members = (data.clan && data.clan.members) || [];
   const maxAtk = data.attacksPerMember || 2;
-  const missing = members.filter(m => {
-    const used = m.attacks ? m.attacks.length : 0;
-    return used < maxAtk;
-  });
+  const missing = members.filter(m => (m.attacks ? m.attacks.length : 0) < maxAtk);
   if (!missing.length) return '';
   const urgency = hoursLeft < 2 ? 'wl-alert-urgent' : 'wl-alert-warn';
   return `<div class="wl-alert ${urgency}">
@@ -6851,64 +6907,10 @@ function wlMissingAttacksAlert(data) {
   </div>`;
 }
 
-function wlRenderOverview(data) {
-  const el = document.getElementById('wl-ov-content');
-  if (!el) return;
-  if (!data || data.state === 'notInWar') {
-    el.innerHTML = '<p class="wl-empty">Nessuna guerra in corso.</p>';
-    return;
-  }
-  const us = data.clan || {}, them = data.opponent || {};
-  const wp = wlWinProbability(data);
-  const alertHtml = wlMissingAttacksAlert(data);
-
-  let wpHtml = '';
-  if (wp) {
-    wpHtml = `<div class="wl-wp-bar-wrap">
-      <div class="wl-wp-label ${wp.cls}">${wp.label} (${wp.pct}%)</div>
-      <div class="wl-wp-bar"><div class="wl-wp-fill ${wp.cls}" style="width:${wp.pct}%"></div></div>
-    </div>`;
-  }
-
-  const maxAtk = data.attacksPerMember || 2;
-  const usAttUsed = (us.attacks || 0);
-  const usTotal = (data.teamSize || 0) * maxAtk;
-  const themAttUsed = (them.attacks || 0);
-
-  el.innerHTML = `
-    ${alertHtml}
-    <div class="wl-vs-header">
-      <div class="wl-vs-side">
-        <div class="wl-vs-name">${escH(us.name || '—')}</div>
-        <div class="wl-vs-stars">⭐ ${us.stars || 0}</div>
-        <div class="wl-vs-dest">${us.destructionPercentage != null ? (us.destructionPercentage).toFixed(2) + '%' : '—'}</div>
-      </div>
-      <div class="wl-vs-center">
-        <div class="wl-vs-size">${data.teamSize || '?'}v${data.teamSize || '?'}</div>
-        <div class="wl-vs-vs">VS</div>
-      </div>
-      <div class="wl-vs-side wl-vs-right">
-        <div class="wl-vs-name">${escH(them.name || '—')}</div>
-        <div class="wl-vs-stars">⭐ ${them.stars || 0}</div>
-        <div class="wl-vs-dest">${them.destructionPercentage != null ? (them.destructionPercentage).toFixed(2) + '%' : '—'}</div>
-      </div>
-    </div>
-    ${wpHtml}
-    <div class="wl-stats-grid">
-      <div class="wl-stat-card"><div class="wl-stat-label">Attacchi usati</div><div class="wl-stat-val">${usAttUsed} / ${usTotal}</div></div>
-      <div class="wl-stat-card"><div class="wl-stat-label">Avversario attacchi</div><div class="wl-stat-val">${themAttUsed} / ${usTotal}</div></div>
-    </div>`;
-}
-
-function wlRenderPlayersTable(data, side) {
-  const elId = side === 'us' ? 'wl-players-us-content' : 'wl-players-them-content';
-  const el = document.getElementById(elId);
-  if (!el || !data) return;
+/** Build player list table (us or them) for modal panels */
+function _wlBuildPlayersHtml(data, side) {
   const sideData = side === 'us' ? data.clan : data.opponent;
-  if (!sideData || !sideData.members) {
-    el.innerHTML = '<p class="wl-empty">Nessun dato.</p>';
-    return;
-  }
+  if (!sideData?.members?.length) return '<p class="wl-empty">Nessun dato.</p>';
   const members = [...sideData.members].sort((a, b) => a.mapPosition - b.mapPosition);
   const maxAtk = data.attacksPerMember || 2;
   const rows = members.map(m => {
@@ -6934,180 +6936,282 @@ function wlRenderPlayersTable(data, side) {
       <td class="wl-hero-cell">${bk}/${aq}/${gw}/${rc}</td>
     </tr>`;
   }).join('');
-  el.innerHTML = `<div class="table-wrap"><table class="wl-players-table">
+  return `<div class="table-wrap"><table class="wl-players-table">
     <thead><tr><th>#</th><th>TH</th><th>Nome</th><th>Attacchi</th><th>BK/AQ/GW/RC</th></tr></thead>
     <tbody>${rows}</tbody>
   </table></div>`;
 }
 
-function wlRenderPreview(data) {
-  const el = document.getElementById('wl-preview-content');
-  if (!el || !data) return;
+/** Open war live detail modal — modeled after CWL detail modal */
+async function openWarLiveModal() {
+  document.getElementById('war-live-modal')?.remove();
+  if (_warLiveCountdownTimer) { clearInterval(_warLiveCountdownTimer); _warLiveCountdownTimer = null; }
+
+  let data = _warLiveData;
+  if (!data) {
+    try {
+      const clanTag = window._userClanTag || '';
+      const r = await fetch('/api/war-log?type=current' + (clanTag ? '&clanTag=' + encodeURIComponent(clanTag) : ''));
+      const raw = await r.json();
+      data = raw.state ? raw : (raw.data || raw);
+      _warLiveData = data;
+    } catch (_) { return; }
+  }
+  if (!data || data.state === 'notInWar' || !data.state) return;
+
   const us = data.clan || {}, them = data.opponent || {};
+  const usBadge = us.badgeUrls?.small
+    ? `<img src="${us.badgeUrls.small}" class="cdm-war-badge" alt="" loading="lazy">`
+    : '<span class="cdm-war-badge-ph">🛡️</span>';
+  const themBadge = them.badgeUrls?.small
+    ? `<img src="${them.badgeUrls.small}" class="cdm-war-badge" alt="" loading="lazy">`
+    : '<span class="cdm-war-badge-ph">🛡️</span>';
+
+  // ── Panoramica panel ──
+  const wp = _wlWinProbability(data);
+  const alertHtml = _wlMissingAttacksAlert(data);
+  let wpHtml = '';
+  if (wp) {
+    wpHtml = `<div class="wl-wp-bar-wrap">
+      <div class="wl-wp-label ${wp.cls}">${wp.label} (${wp.pct}%)</div>
+      <div class="wl-wp-bar"><div class="wl-wp-fill ${wp.cls}" style="width:${wp.pct}%"></div></div>
+    </div>`;
+  }
+  const maxAtk = data.attacksPerMember || 2;
+  const usTotal = (data.teamSize || 0) * maxAtk;
+
+  const overviewHtml = `
+    ${alertHtml}
+    <div class="wl-vs-header">
+      <div class="wl-vs-side">
+        ${usBadge}
+        <div class="wl-vs-name">${escH(us.name || '—')}</div>
+        <div class="wl-vs-stars">⭐ ${us.stars || 0}</div>
+        <div class="wl-vs-dest">${us.destructionPercentage != null ? us.destructionPercentage.toFixed(2) + '%' : '—'}</div>
+        <div class="cdm-war-attacks">⚔ ${us.attacks || 0}/${usTotal}</div>
+      </div>
+      <div class="wl-vs-center">
+        <div class="wl-vs-size">${data.teamSize || '?'}v${data.teamSize || '?'}</div>
+        <div class="wl-vs-vs">VS</div>
+      </div>
+      <div class="wl-vs-side wl-vs-right">
+        ${themBadge}
+        <div class="wl-vs-name">${escH(them.name || '—')}</div>
+        <div class="wl-vs-stars">⭐ ${them.stars || 0}</div>
+        <div class="wl-vs-dest">${them.destructionPercentage != null ? them.destructionPercentage.toFixed(2) + '%' : '—'}</div>
+        <div class="cdm-war-attacks">⚔ ${them.attacks || 0}/${usTotal}</div>
+      </div>
+    </div>
+    ${wpHtml}`;
+
+  const usPlayersHtml = _wlBuildPlayersHtml(data, 'us');
+  const themPlayersHtml = _wlBuildPlayersHtml(data, 'them');
+
+  // ── TH panel ──
   const usMembers = us.members || [], themMembers = them.members || [];
   const usCounts = {}, themCounts = {};
   usMembers.forEach(m => { const t = m.townhallLevel || 1; usCounts[t] = (usCounts[t] || 0) + 1; });
   themMembers.forEach(m => { const t = m.townhallLevel || 1; themCounts[t] = (themCounts[t] || 0) + 1; });
-  const levels = [];
-  for (let i = 18; i >= 1; i--) {
-    if (usCounts[i] || themCounts[i]) levels.push(i);
+  const thLevels = [];
+  for (let i = 18; i >= 1; i--) { if (usCounts[i] || themCounts[i]) thLevels.push(i); }
+  let thHtml;
+  if (!thLevels.length) {
+    thHtml = '<p class="wl-empty">Nessun dato TH.</p>';
+  } else {
+    const maxCount = Math.max(...thLevels.map(l => Math.max(usCounts[l]||0, themCounts[l]||0)), 1);
+    const thRows = thLevels.map(l => {
+      const u = usCounts[l] || 0, t = themCounts[l] || 0;
+      const thN = String(l).padStart(2, '0');
+      const thImg = `<img src="th/webp/level_${thN}.webp" alt="TH${l}" class="wl-th-icon" loading="lazy">`;
+      const uBar = u > 0 ? `<div class="wl-bar wl-bar-us" style="width:${Math.round(u/maxCount*100)}%">${u}</div>` : '<div class="wl-bar-zero">0</div>';
+      const tBar = t > 0 ? `<div class="wl-bar wl-bar-them" style="width:${Math.round(t/maxCount*100)}%">${t}</div>` : '<div class="wl-bar-zero">0</div>';
+      return `<tr class="wl-prev-row">
+        <td class="wl-prev-us">${uBar}</td>
+        <td class="wl-prev-th">${thImg}</td>
+        <td class="wl-prev-them">${tBar}</td>
+      </tr>`;
+    }).join('');
+    thHtml = `<div class="wl-prev-legend">
+      <span class="wl-leg-us">${escH(us.name || 'Noi')}</span>
+      <span class="wl-leg-them">${escH(them.name || 'Avversario')}</span>
+    </div>
+    <div class="table-wrap"><table class="wl-prev-table"><tbody>${thRows}</tbody></table></div>`;
   }
-  if (!levels.length) { el.innerHTML = '<p class="wl-empty">Nessun dato TH.</p>'; return; }
-  const maxCount = Math.max(...levels.map(l => Math.max(usCounts[l]||0, themCounts[l]||0)), 1);
-  const rows = levels.map(l => {
-    const u = usCounts[l] || 0, t = themCounts[l] || 0;
-    const thN = String(l).padStart(2, '0');
-    const thImg = `<img src="th/webp/level_${thN}.webp" alt="TH${l}" class="wl-th-icon" loading="lazy">`;
-    const uBar = u > 0 ? `<div class="wl-bar wl-bar-us" style="width:${Math.round(u/maxCount*100)}%">${u}</div>` : '<div class="wl-bar-zero">0</div>';
-    const tBar = t > 0 ? `<div class="wl-bar wl-bar-them" style="width:${Math.round(t/maxCount*100)}%">${t}</div>` : '<div class="wl-bar-zero">0</div>';
-    return `<tr class="wl-prev-row">
-      <td class="wl-prev-us">${uBar}</td>
-      <td class="wl-prev-th">${thImg}</td>
-      <td class="wl-prev-them">${tBar}</td>
-    </tr>`;
-  }).join('');
-  el.innerHTML = `<div class="wl-prev-legend">
-    <span class="wl-leg-us">${escH(us.name || 'Noi')}</span>
-    <span class="wl-leg-them">${escH(them.name || 'Avversario')}</span>
-  </div>
-  <div class="table-wrap"><table class="wl-prev-table"><tbody>${rows}</tbody></table></div>`;
-}
 
-function wlRenderPlan(data) {
-  const el = document.getElementById('wl-plan-content');
-  if (!el || !data) return;
+  // ── Confronto panel (planner + hero comparison) ──
+  const sortM = arr => [...(arr || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const sortedUs = sortM(us.members);
+  const sortedThem = sortM(them.members);
+  const n = Math.max(sortedUs.length, sortedThem.length);
+  const heroRows = [];
+  for (let i = 0; i < n; i++) {
+    const a = sortedUs[i], b = sortedThem[i];
+    const hA = a ? _wlHeroSum(a) : null;
+    const hB = b ? _wlHeroSum(b) : null;
+    const thNA = a ? String(a.townhallLevel || 1).padStart(2,'0') : null;
+    const thNB = b ? String(b.townhallLevel || 1).padStart(2,'0') : null;
+    const thImgA = thNA ? `<img src="th/webp/level_${thNA}.webp" alt="TH${a.townhallLevel}" class="wl-th-icon" loading="lazy">` : '—';
+    const thImgB = thNB ? `<img src="th/webp/level_${thNB}.webp" alt="TH${b.townhallLevel}" class="wl-th-icon" loading="lazy">` : '—';
+    heroRows.push(`<tr>
+      <td class="cdm-cf-pos">#${i + 1}</td>
+      <td class="cdm-cf-th">${thImgA}</td>
+      <td class="cdm-cf-name">${a ? escH(a.name) : '—'}</td>
+      <td class="cdm-cf-hero">${hA != null ? hA : '—'}</td>
+      <td class="cdm-cf-vs">vs</td>
+      <td class="cdm-cf-pos">#${i + 1}</td>
+      <td class="cdm-cf-th">${thImgB}</td>
+      <td class="cdm-cf-name">${b ? escH(b.name) : '—'}</td>
+      <td class="cdm-cf-hero">${hB != null ? hB : '—'}</td>
+    </tr>`);
+  }
+
+  // Planner (reuses classic war planner logic)
+  let plannerHtml;
   if (data.state === 'preparation') {
-    el.innerHTML = '<p class="wl-empty">Il planner è disponibile durante la guerra.</p>';
-    return;
-  }
-  const us = data.clan || {}, them = data.opponent || {};
-  const usMembers = us.members || [], themMembers = them.members || [];
-  const maxAtk = data.attacksPerMember || 2;
-
-  // Build defense status map: opponentMapPosition → bestStars from our attacks
-  const defStatus = {};
-  usMembers.forEach(m => {
-    if (!m.attacks) return;
-    m.attacks.forEach(atk => {
-      const pos = atk.defenderMapPosition;
-      if (!defStatus[pos] || atk.stars > defStatus[pos].stars) {
-        defStatus[pos] = { stars: atk.stars, pct: atk.destructionPercentage };
-      }
+    plannerHtml = '<p class="wl-empty">Il planner è disponibile durante la guerra.</p>';
+  } else {
+    const defStatus = {};
+    usMembers.forEach(m => {
+      if (!m.attacks) return;
+      m.attacks.forEach(atk => {
+        const pos = atk.defenderMapPosition;
+        if (!defStatus[pos] || atk.stars > defStatus[pos].stars)
+          defStatus[pos] = { stars: atk.stars, pct: atk.destructionPercentage };
+      });
     });
-  });
-
-  // Members with remaining attacks
-  const needAtk = usMembers.filter(m => {
-    const used = m.attacks ? m.attacks.length : 0;
-    return used < maxAtk;
-  }).sort((a, b) => a.mapPosition - b.mapPosition);
-
-  if (!needAtk.length) {
-    el.innerHTML = '<p class="wl-empty">✅ Tutti gli attacchi sono stati usati.</p>';
-    return;
-  }
-
-  // Open bases (not 3-starred yet)
-  const openBases = themMembers
-    .filter(m => !defStatus[m.mapPosition] || defStatus[m.mapPosition].stars < 3)
-    .sort((a, b) => a.mapPosition - b.mapPosition);
-
-  const cards = needAtk.map(m => {
-    const thN = String(m.townhallLevel || 1).padStart(2, '0');
-    const thImg = `<img src="th/webp/level_${thN}.webp" alt="TH${m.townhallLevel}" class="wl-th-icon" loading="lazy">`;
-    const used = m.attacks ? m.attacks.length : 0;
-    const remaining = maxAtk - used;
-
-    const suggestions = openBases
-      .filter(b => b.townhallLevel <= m.townhallLevel)
-      .slice(0, remaining)
-      .map(b => {
-        const bThN = String(b.townhallLevel || 1).padStart(2, '0');
-        const bThImg = `<img src="th/webp/level_${bThN}.webp" alt="TH${b.townhallLevel}" class="wl-th-icon" loading="lazy">`;
-        const ds = defStatus[b.mapPosition];
-        const dsLabel = ds ? `${ds.stars}&#11088; ${ds.pct}%` : 'Intatto';
-        return `<div class="wl-plan-suggestion">
-          ${bThImg} <strong>#${b.mapPosition}</strong> ${escH(b.name)} — <span class="wl-ds-label">${dsLabel}</span>
+    const needAtk = usMembers.filter(m => (m.attacks ? m.attacks.length : 0) < maxAtk)
+      .sort((a, b) => a.mapPosition - b.mapPosition);
+    if (!needAtk.length) {
+      plannerHtml = '<p class="wl-empty">✅ Tutti gli attacchi sono stati usati.</p>';
+    } else {
+      const openBases = themMembers
+        .filter(m => !defStatus[m.mapPosition] || defStatus[m.mapPosition].stars < 3)
+        .sort((a, b) => a.mapPosition - b.mapPosition);
+      const planCards = needAtk.map(m => {
+        const thN = String(m.townhallLevel || 1).padStart(2, '0');
+        const thImg = `<img src="th/webp/level_${thN}.webp" alt="TH${m.townhallLevel}" class="wl-th-icon" loading="lazy">`;
+        const used = m.attacks ? m.attacks.length : 0;
+        const remaining = maxAtk - used;
+        const suggestions = openBases
+          .filter(b => b.townhallLevel <= m.townhallLevel)
+          .slice(0, remaining)
+          .map(b => {
+            const bThN = String(b.townhallLevel || 1).padStart(2, '0');
+            const bThImg = `<img src="th/webp/level_${bThN}.webp" alt="TH${b.townhallLevel}" class="wl-th-icon" loading="lazy">`;
+            const ds = defStatus[b.mapPosition];
+            const dsLabel = ds ? `${ds.stars}&#11088; ${ds.pct}%` : 'Intatto';
+            return `<div class="wl-plan-suggestion">
+              ${bThImg} <strong>#${b.mapPosition}</strong> ${escH(b.name)} — <span class="wl-ds-label">${dsLabel}</span>
+            </div>`;
+          }).join('') || '<div class="wl-plan-no-sugg">Nessun bersaglio disponibile</div>';
+        return `<div class="wl-plan-card">
+          <div class="wl-plan-attacker">
+            ${thImg} <strong>#${m.mapPosition}</strong> ${escH(m.name)}
+            <span class="wl-plan-atk-left">${remaining} attacch${remaining===1?'o':'i'} rimast${remaining===1?'o':'i'}</span>
+          </div>
+          <div class="wl-plan-suggestions">${suggestions}</div>
         </div>`;
-      }).join('') || '<div class="wl-plan-no-sugg">Nessun bersaglio disponibile</div>';
-
-    return `<div class="wl-plan-card">
-      <div class="wl-plan-attacker">
-        ${thImg} <strong>#${m.mapPosition}</strong> ${escH(m.name)}
-        <span class="wl-plan-atk-left">${remaining} attacch${remaining===1?'o':'i'} rimast${remaining===1?'o':'i'}</span>
-      </div>
-      <div class="wl-plan-suggestions">${suggestions}</div>
-    </div>`;
-  }).join('');
-
-  el.innerHTML = `<div class="wl-plan-wrap">${cards}</div>`;
-}
-
-function wlSwitchTab(tabId, btn) {
-  _warLiveActiveSubTab = tabId;
-  const wlSection = document.getElementById('tab-war_live');
-  if (wlSection) {
-    wlSection.querySelectorAll('.subtab-btn').forEach(b => b.classList.toggle('active', b === btn));
-    wlSection.querySelectorAll('.wl-live-section').forEach(s => {
-      s.style.display = s.id === 'wl-tab-' + tabId ? '' : 'none';
-    });
-  }
-  if (!_warLiveData) return;
-  if (tabId === 'ov') wlRenderOverview(_warLiveData);
-  else if (tabId === 'players_us') wlRenderPlayersTable(_warLiveData, 'us');
-  else if (tabId === 'players_them') wlRenderPlayersTable(_warLiveData, 'them');
-  else if (tabId === 'preview') wlRenderPreview(_warLiveData);
-  else if (tabId === 'plan') wlRenderPlan(_warLiveData);
-}
-
-async function loadWarLive() {
-  const badge = document.getElementById('wl-live-state-badge');
-  const refreshBtn = document.querySelector('#tab-war_live .wl-live-refresh-btn');
-  const loadingEl = document.getElementById('wl-live-loading');
-  const nowarEl = document.getElementById('wl-live-nowar');
-  const contentEl = document.getElementById('wl-live-content');
-
-  if (badge) badge.textContent = 'Caricamento…';
-  if (refreshBtn) refreshBtn.disabled = true;
-  if (loadingEl) loadingEl.style.display = '';
-  if (nowarEl) nowarEl.style.display = 'none';
-  if (contentEl) contentEl.style.display = 'none';
-
-  try {
-    const clanTag = window._userClanTag || '';
-    const r = await fetch('/api/war-log?type=current' + (clanTag ? '&clanTag=' + encodeURIComponent(clanTag) : ''));
-    const raw = await r.json();
-    const data = raw.state ? raw : (raw.data || raw);
-    _warLiveData = data;
-
-    if (loadingEl) loadingEl.style.display = 'none';
-
-    if (!data || data.state === 'notInWar' || !data.state) {
-      if (badge) badge.textContent = '— Nessuna guerra';
-      if (nowarEl) nowarEl.style.display = '';
-      return;
+      }).join('');
+      plannerHtml = `<div class="wl-plan-wrap">${planCards}</div>`;
     }
-
-    if (badge) badge.textContent = wlStateLabel(data.state);
-    if (contentEl) contentEl.style.display = '';
-    wlStartCountdown(data);
-
-    // Render active sub-tab
-    const active = _warLiveActiveSubTab || 'ov';
-    if (active === 'ov') wlRenderOverview(data);
-    else if (active === 'players_us') wlRenderPlayersTable(data, 'us');
-    else if (active === 'players_them') wlRenderPlayersTable(data, 'them');
-    else if (active === 'preview') wlRenderPreview(data);
-    else if (active === 'plan') wlRenderPlan(data);
-    else wlRenderOverview(data);
-  } catch (e) {
-    if (loadingEl) loadingEl.style.display = 'none';
-    if (badge) badge.textContent = '⚠️ Errore';
-    const el = document.getElementById('wl-ov-content');
-    if (el) el.innerHTML = '<p class="wl-empty">Impossibile caricare dati guerra.</p>';
-    if (contentEl) contentEl.style.display = '';
-  } finally {
-    if (refreshBtn) refreshBtn.disabled = false;
   }
+
+  const confrontoHtml = `
+    <div class="cdm-attacks-scroll"><table class="cdm-confronto-table">
+      <thead><tr>
+        <th>#</th><th>TH</th><th>Player</th><th>Σ eroi</th>
+        <th class="cdm-cf-vs-th">vs</th>
+        <th>#</th><th>TH</th><th>Player</th><th>Σ eroi</th>
+      </tr></thead><tbody>${heroRows.join('')}</tbody>
+    </table></div>
+    <h4 style="margin:1rem 0 0.5rem;font-size:0.9rem;color:var(--text-1)">📋 Planner attacchi</h4>
+    ${plannerHtml}`;
+
+  // ── Build modal ──
+  const CDM_ICO_SYNC = '<svg class="cdm-ico" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4V1L7 6l5 5V7c2.76 0 5 2.24 5 5 0 1.13-.4 2.16-1.03 3l1.46 1.46A7.93 7.93 0 0 0 20 12c0-2.21-.9-4.22-2.35-5.65zM12 19c-2.76 0-5-2.24-5-5 0-1.13.4-2.16 1.03-3L6.57 9.54A7.93 7.93 0 0 0 4 12c0 3.31 2.69 6 6 6v3l5-5-5-5v3z"/></svg>';
+
+  const defaultTab = data.state === 'inWar' ? 'panoramica' : 'panoramica';
+
+  const modal = document.createElement('div');
+  modal.id = 'war-live-modal';
+  modal.className = 'cdm-overlay';
+  modal.innerHTML = `
+    <div class="cdm-box wdm-box" onclick="event.stopPropagation()">
+      <div class="cdm-header">
+        <div class="cdm-header-left">
+          <div>
+            <div class="cdm-header-season">⚔️ War Classica Live</div>
+            <div class="cdm-header-league" style="color:var(--text-3)">${_wlStateLabel(data.state)} — ${data.teamSize || '?'}v${data.teamSize || '?'}</div>
+          </div>
+        </div>
+        <span id="wlm-countdown" class="wl-live-countdown" style="margin-left:auto;margin-right:0.5rem"></span>
+        <button class="cdm-close" onclick="closeWarLiveModal()">✕</button>
+      </div>
+      <div class="cdm-modal-toolbar">
+        <button type="button" class="btn-secondary btn-sm" onclick="refreshWarLiveModal()">${CDM_ICO_SYNC} Aggiorna stato</button>
+      </div>
+      <div class="cdm-mtabs">
+        <button type="button" class="cdm-mtab cdm-mtab--active" id="wlm-mtab-panoramica" onclick="_wlmSwitchTab('panoramica')">📊 Panoramica</button>
+        <button type="button" class="cdm-mtab" id="wlm-mtab-th" onclick="_wlmSwitchTab('th')">🔭 TH</button>
+        <button type="button" class="cdm-mtab" id="wlm-mtab-confronto" onclick="_wlmSwitchTab('confronto')">⚖ Confronto</button>
+      </div>
+
+      <div id="wlm-panel-panoramica">
+        ${overviewHtml}
+        <div class="cdm-atk-switcher" style="margin-top:0.75rem">
+          <button type="button" class="cdm-atk-sw-btn cdm-atk-sw-btn--active" id="wlm-players-btn-us" onclick="_wlmPlayerSwitch('us')">${escH(us.name || 'Noi')}</button>
+          <button type="button" class="cdm-atk-sw-btn" id="wlm-players-btn-them" onclick="_wlmPlayerSwitch('them')">${escH(them.name || 'Avversario')}</button>
+        </div>
+        <div id="wlm-players-us">${usPlayersHtml}</div>
+        <div id="wlm-players-them" style="display:none">${themPlayersHtml}</div>
+      </div>
+
+      <div id="wlm-panel-th" style="display:none">
+        ${thHtml}
+      </div>
+
+      <div id="wlm-panel-confronto" style="display:none">
+        ${confrontoHtml}
+      </div>
+    </div>`;
+
+  modal.addEventListener('click', closeWarLiveModal);
+  document.body.appendChild(modal);
+  requestAnimationFrame(() => {
+    modal.classList.add('cdm-overlay--visible');
+    const cdEl = document.getElementById('wlm-countdown');
+    if (cdEl) _wlModalCountdown(data, cdEl);
+  });
+}
+
+function _wlmSwitchTab(tab) {
+  const panels = ['panoramica', 'th', 'confronto'];
+  panels.forEach(p => {
+    const el = document.getElementById(`wlm-panel-${p}`);
+    if (el) el.style.display = p === tab ? 'block' : 'none';
+    const btn = document.getElementById(`wlm-mtab-${p}`);
+    if (btn) btn.classList.toggle('cdm-mtab--active', p === tab);
+  });
+}
+
+function _wlmPlayerSwitch(side) {
+  document.getElementById('wlm-players-us').style.display = side === 'us' ? 'block' : 'none';
+  document.getElementById('wlm-players-them').style.display = side === 'them' ? 'block' : 'none';
+  document.getElementById('wlm-players-btn-us').classList.toggle('cdm-atk-sw-btn--active', side === 'us');
+  document.getElementById('wlm-players-btn-them').classList.toggle('cdm-atk-sw-btn--active', side === 'them');
+}
+
+function closeWarLiveModal() {
+  if (_warLiveCountdownTimer) { clearInterval(_warLiveCountdownTimer); _warLiveCountdownTimer = null; }
+  const modal = document.getElementById('war-live-modal');
+  if (!modal) return;
+  modal.classList.remove('cdm-overlay--visible');
+  modal.addEventListener('transitionend', () => modal.remove(), { once: true });
+}
+
+async function refreshWarLiveModal() {
+  _warLiveData = null;
+  await openWarLiveModal();
+  await _checkWarLiveBanner();
 }
 

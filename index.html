@@ -147,10 +147,6 @@
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M7 21h2v-2H7v2zm0-4h2v-2H7v2zm0-4h2v-2H7v2zm4 8h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2V7h-2v2zm4 12h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2V7h-2v2zm0-4h2V3h-2v2z"/></svg>
                 Classifiche
             </button>
-            <button class="tab-btn" data-tab="war_live" onclick="closeNav()">
-                <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M6.92 5H5L3 21h18l-2-16h-1.92A2.99 2.99 0 0 0 15 3H9c-1.3 0-2.4.84-2.82 2H6l-.08.01zM9 5h6v2H9V5zm1 9h4v2h-4v-2zm-3-4h10v2H7v-2z"/></svg>
-                Guerra Live
-            </button>
             <button class="tab-btn admin-only" data-tab="admin" style="display:none" onclick="closeNav()">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 13.17 10.33 12 8 12zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C23 13.17 18.33 12 16 12z"/></svg>
                 Gestione Utenti
@@ -305,6 +301,8 @@
 
                 <!-- WAR CLASSICHE -->
                 <div id="wl-classic">
+                    <!-- Banner war in corso (popolato da JS) -->
+                    <div id="war-live-banner" class="war-live-banner" style="display:none"></div>
                     <div class="toolbar">
                         <span class="toolbar-label">Ultime war classiche del clan</span>
                         <div style="display:flex;gap:0.5rem;align-items:center">
@@ -726,48 +724,6 @@
                 </div>
             </section>
 
-            <!-- ── TAB: GUERRA LIVE ────────────────────────────────────── -->
-            <section id="tab-war_live" class="tab-content" style="display:none">
-                <div class="wl-live-header">
-                    <span id="wl-live-state-badge" class="wl-live-state-badge"></span>
-                    <span id="wl-live-countdown" class="wl-live-countdown"></span>
-                    <button class="btn-secondary wl-live-refresh-btn" onclick="loadWarLive()">↻ Aggiorna</button>
-                </div>
-                <div id="wl-live-loading" class="wl-loading" style="display:none">Caricamento…</div>
-                <div id="wl-live-nowar" style="display:none">
-                    <p class="wl-err">⚔️ Nessuna guerra in corso al momento.</p>
-                </div>
-                <div id="wl-live-content" style="display:none">
-                    <!-- Sub-tabs -->
-                    <div class="subtab-bar">
-                        <button class="subtab-btn active" onclick="wlSwitchTab('ov',this)">📊 Panoramica</button>
-                        <button class="subtab-btn" onclick="wlSwitchTab('players_us',this)">👥 Noi</button>
-                        <button class="subtab-btn" onclick="wlSwitchTab('players_them',this)">⚔️ Avv.</button>
-                        <button class="subtab-btn" onclick="wlSwitchTab('preview',this)">🔭 TH</button>
-                        <button class="subtab-btn" id="wl-plan-btn" onclick="wlSwitchTab('plan',this)">📋 Planner</button>
-                    </div>
-                    <!-- Panoramica -->
-                    <div id="wl-tab-ov" class="wl-live-section">
-                        <div id="wl-ov-content"></div>
-                    </div>
-                    <!-- Players Noi -->
-                    <div id="wl-tab-players_us" class="wl-live-section" style="display:none">
-                        <div id="wl-players-us-content"></div>
-                    </div>
-                    <!-- Players Avversario -->
-                    <div id="wl-tab-players_them" class="wl-live-section" style="display:none">
-                        <div id="wl-players-them-content"></div>
-                    </div>
-                    <!-- Preview TH -->
-                    <div id="wl-tab-preview" class="wl-live-section" style="display:none">
-                        <div id="wl-preview-content"></div>
-                    </div>
-                    <!-- Planner -->
-                    <div id="wl-tab-plan" class="wl-live-section" style="display:none">
-                        <div id="wl-plan-content"></div>
-                    </div>
-                </div>
-            </section>
 
         </main>
 
@@ -799,10 +755,6 @@
         <button class="bnav-btn" data-tab="rankings">
             <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M7 21h2v-2H7v2zm0-4h2v-2H7v2zm0-4h2v-2H7v2zm4 8h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2V7h-2v2zm4 12h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2V7h-2v2zm0-4h2V3h-2v2z"/></svg>
             <span class="bnav-label">Classifiche</span>
-        </button>
-        <button class="bnav-btn" data-tab="war_live">
-            <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M6.92 5H5L3 21h18l-2-16h-1.92A2.99 2.99 0 0 0 15 3H9c-1.3 0-2.4.84-2.82 2H6l-.08.01zM9 5h6v2H9V5zm1 9h4v2h-4v-2zm-3-4h10v2H7v-2z"/></svg>
-            <span class="bnav-label">War Live</span>
         </button>
         <button class="bnav-btn admin-only" data-tab="admin" style="display:none">
             <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 13.17 10.33 12 8 12zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5C23 13.17 18.33 12 16 12z"/></svg>

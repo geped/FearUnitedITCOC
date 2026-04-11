@@ -108,8 +108,8 @@ function webLaunchButton(ctx, label, url, tab, clanTag) {
   return Markup.button.webApp(label, url);
 }
 
-const MINI_APP_WEB_TABS = new Set(['cwl_warlog', 'warlog', 'war_live', 'bonus', 'members', 'profilo', 'cerca', 'rankings']);
-const MINI_APP_GUEST_ALLOWED_TABS = new Set(['cwl_warlog', 'warlog', 'war_live', 'bonus', 'members', 'cerca', 'rankings']);
+const MINI_APP_WEB_TABS = new Set(['cwl_warlog', 'warlog', 'bonus', 'members', 'profilo', 'cerca', 'rankings']);
+const MINI_APP_GUEST_ALLOWED_TABS = new Set(['cwl_warlog', 'warlog', 'bonus', 'members', 'cerca', 'rankings']);
 
 function parseRequestedMiniAppTabFromCommand(ctx) {
   const txt = String(ctx.message?.text || '').trim();
@@ -1647,7 +1647,7 @@ async function renderClanWebAppsMenu(ctx) {
     `Apri le sezioni web del clan direttamente da Telegram.`;
   const rows = [];
   const webPairsBase = [
-    ['🏆 CWL live (web)', 'cwl_warlog', '⚔️ Guerra live (web)', 'war_live'],
+    ['🏆 CWL live (web)', 'cwl_warlog', '⚔️ Registri guerre (web)', 'warlog'],
     ['📜 Registro guerre (web)', 'warlog', '🎁 Bonus (web)', 'bonus'],
     ['🏰 Info / Membri (web)', 'members', '🔍 Cerca (web)', 'cerca'],
     ['📊 Classifica (web)', 'rankings', null, null],
@@ -1930,7 +1930,7 @@ function buildWarLiveNavKb(data, spec, webAppUrl) {
   }
 
   if (webAppUrl) {
-    rows.push([Markup.button.webApp('🌐 Apri Guerra live (web)', webAppUrl)]);
+    rows.push([Markup.button.webApp('🌐 Apri Registri guerre (web)', webAppUrl)]);
   }
 
   if (view !== 'ov') rows.push([Markup.button.callback('« Guerra live', 'wl_v:ov')]);
@@ -1943,7 +1943,7 @@ async function loadAndShowWarLive(ctx, clanTag, viewSpec) {
   let webAppUrl = null;
   if (data?.state && data.state !== 'notInWar' && !isLinkedChatContext(ctx) && ctx.cocboardUser) {
     try {
-      webAppUrl = await buildWebAppHandoffUrl(ctx, { open_tab: 'war_live' });
+      webAppUrl = await buildWebAppHandoffUrl(ctx, { open_tab: 'warlog' });
       if (webAppUrl && !String(webAppUrl).startsWith('https://')) webAppUrl = null;
     } catch (_) {}
   }
