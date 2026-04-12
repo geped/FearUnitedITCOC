@@ -199,8 +199,17 @@ module.exports = async (req, res) => {
                 .eq('id', Number(rawId))
                 .gt('expires_at', nowIso)
                 .maybeSingle();
-            if (rowErr || !row || !row.photo_file_id) {
-                return res.status(404).end();
+            if (rowErr) {
+                res.setHeader('X-Error-Reason', 'db-error');
+                return res.status(500).json({ error: 'Errore DB: ' + rowErr.message });
+            }
+            if (!row) {
+                res.setHeader('X-Error-Reason', 'post-not-found');
+                return res.status(404).json({ error: 'Annuncio non trovato o scaduto.' });
+            }
+            if (!row.photo_file_id) {
+                res.setHeader('X-Error-Reason', 'no-photo');
+                return res.status(404).json({ error: 'Questo annuncio non ha foto.' });
             }
             const fid = String(row.photo_file_id).trim();
             const botTok = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
@@ -214,16 +223,21 @@ module.exports = async (req, res) => {
             if (fid.startsWith('https://')) {
                 try {
                     const upstream = await fetch(fid, { redirect: 'follow', signal: AbortSignal.timeout(20000) });
-                    if (!upstream.ok) return res.status(502).end();
+                    if (!upstream.ok) {
+                        res.setHeader('X-Error-Reason', 'upstream-http-' + upstream.status);
+                        return res.status(502).json({ error: 'Upstream HTTP ' + upstream.status });
+                    }
                     const ct = upstream.headers.get('content-type') || 'image/jpeg';
                     const buf = Buffer.from(await upstream.arrayBuffer());
                     return sendBytes(buf, ct, 3600);
-                } catch (_) {
-                    return res.status(502).end();
+                } catch (e) {
+                    res.setHeader('X-Error-Reason', 'upstream-fetch-error');
+                    return res.status(502).json({ error: 'Errore fetch immagine: ' + (e.message || 'timeout') });
                 }
             }
             if (!botTok) {
-                return res.status(404).end();
+                res.setHeader('X-Error-Reason', 'no-bot-token');
+                return res.status(503).json({ error: 'TELEGRAM_BOT_TOKEN non configurato su Vercel.' });
             }
             let filePath;
             try {
@@ -233,11 +247,14 @@ module.exports = async (req, res) => {
                 );
                 const tgData = await tgRes.json().catch(() => ({}));
                 if (!tgRes.ok || !tgData.ok || !tgData.result || !tgData.result.file_path) {
-                    return res.status(404).end();
+                    const tgErr = tgData.description || ('HTTP ' + tgRes.status);
+                    res.setHeader('X-Error-Reason', 'getfile-failed');
+                    return res.status(404).json({ error: 'Telegram getFile fallito: ' + tgErr });
                 }
                 filePath = tgData.result.file_path;
-            } catch (_) {
-                return res.status(502).end();
+            } catch (e) {
+                res.setHeader('X-Error-Reason', 'getfile-timeout');
+                return res.status(502).json({ error: 'Timeout getFile Telegram: ' + (e.message || 'timeout') });
             }
             const fileUrl =
                 'https://api.telegram.org/file/bot' +
@@ -246,12 +263,16 @@ module.exports = async (req, res) => {
                 String(filePath).split('/').map(encodeURIComponent).join('/');
             try {
                 const imgRes = await fetch(fileUrl, { signal: AbortSignal.timeout(25000) });
-                if (!imgRes.ok) return res.status(502).end();
+                if (!imgRes.ok) {
+                    res.setHeader('X-Error-Reason', 'imgdownload-http-' + imgRes.status);
+                    return res.status(502).json({ error: 'Download immagine Telegram HTTP ' + imgRes.status });
+                }
                 const ct = imgRes.headers.get('content-type') || 'image/jpeg';
                 const buf = Buffer.from(await imgRes.arrayBuffer());
                 return sendBytes(buf, ct, 1800);
-            } catch (_) {
-                return res.status(502).end();
+            } catch (e) {
+                res.setHeader('X-Error-Reason', 'imgdownload-error');
+                return res.status(502).json({ error: 'Errore download immagine: ' + (e.message || 'timeout') });
             }
         } else if (type === 'ping') {
             // Keep-alive esterno verso Render: il self-ping su localhost non evita spin-down / cambio IP.

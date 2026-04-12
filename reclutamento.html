@@ -106,12 +106,13 @@ body {
   background: var(--bg-3);
 }
 .photo-loader {
-  padding: 18px 0;
+  padding: 18px 12px;
   font-size: 12px;
   color: var(--text-3);
   display: flex;
   align-items: center;
   gap: 7px;
+  text-align: center;
 }
 .photo-loader::before {
   content: '';
@@ -123,6 +124,13 @@ body {
   flex-shrink: 0;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+.photo-loader.photo-error {
+  flex-direction: column;
+  color: #E07070;
+  gap: 4px;
+}
+.photo-loader.photo-error::before { display: none; }
+.photo-loader.photo-error small { font-size: 10px; color: var(--text-3); word-break: break-all; line-height: 1.4; }
 
 /* Testo post */
 .card-body {
@@ -284,10 +292,12 @@ function renderCards(posts) {
     html += '<div class="card">';
     // Foto
     if (p.photo_url) {
+      var isProxy = p.photo_url.indexOf('/api/lookup?type=rphoto') === 0;
       html += '<div class="card-photo-wrap" id="pw' + i + '">' +
-        '<div class="photo-loader" id="pl' + i + '">Foto in caricamento</div>' +
-        '<img class="card-photo" src="' + escapeAttr(p.photo_url) + '" alt="Foto annuncio" loading="lazy" referrerpolicy="no-referrer"' +
-        ' onload="showPhoto(' + i + ')" onerror="hidePhoto(' + i + ')" style="display:none"></div>';
+        '<div class="photo-loader" id="pl' + i + '">Foto in caricamento\u2026</div>' +
+        '<img class="card-photo" src="' + escapeAttr(p.photo_url) + '" alt="Foto annuncio"' +
+        ' data-idx="' + i + '" data-pid="' + escapeAttr(String(p.id)) + '" data-proxy="' + (isProxy ? '1' : '0') + '"' +
+        ' onload="showPhoto(' + i + ')" onerror="onPhotoError(' + i + ', this)" style="display:none"></div>';
     }
     // Testo
     var txt = sanitize(p.post_text);
@@ -308,9 +318,70 @@ function showPhoto(i) {
   if (pw) { var img = pw.querySelector('img'); if (img) img.style.display = 'block'; }
   if (pl) pl.style.display = 'none';
 }
-function hidePhoto(i) {
-  var pw = document.getElementById('pw' + i);
-  if (pw) pw.style.display = 'none';
+
+function showPhotoError(i, statusCode, reason) {
+  var pl = document.getElementById('pl' + i);
+  if (!pl) return;
+  pl.classList.add('photo-error');
+  var status = statusCode ? 'HTTP ' + statusCode : 'Timeout / nessuna risposta';
+  var detail = reason ? reason.slice(0, 120) : '';
+  pl.innerHTML = '&#9888; Foto non disponibile<br><small>' + status + (detail ? ' &mdash; ' + detail : '') + '</small>';
+}
+
+async function diagnoseFetch(i, pid) {
+  var url = '/api/lookup?type=rphoto&pid=' + encodeURIComponent(String(pid));
+  try {
+    var controller = new AbortController();
+    var tid = setTimeout(function() { controller.abort(); }, 15000);
+    var r = await fetch(url, { cache: 'no-store', signal: controller.signal });
+    clearTimeout(tid);
+    var reason = '';
+    try {
+      var ct = r.headers.get('content-type') || '';
+      if (ct.indexOf('json') >= 0) {
+        var j = await r.json();
+        reason = j.error || j.message || '';
+      } else {
+        var txt = await r.text();
+        reason = txt.trim().slice(0, 120);
+      }
+    } catch (_) {}
+    if (!reason) reason = r.headers.get('x-error-reason') || '';
+    showPhotoError(i, r.status, reason);
+  } catch (e) {
+    showPhotoError(i, 0, e.name === 'AbortError' ? 'Timeout connessione' : e.message);
+  }
+}
+
+function onPhotoError(i, img) {
+  var isProxy = img && img.getAttribute('data-proxy') === '1';
+  var pid = img && img.getAttribute('data-pid');
+  if (isProxy && pid) {
+    diagnoseFetch(i, pid);
+  } else {
+    showPhotoError(i, 0, 'Immagine non raggiungibile');
+  }
+}
+
+// Avvia timeout per immagini che non rispondono entro 25s
+function startPhotoTimeouts(posts) {
+  for (var i = 0; i < posts.length; i++) {
+    (function(idx, p) {
+      if (!p.photo_url) return;
+      var isProxy = p.photo_url.indexOf('/api/lookup?type=rphoto') === 0;
+      var pid = p.id;
+      setTimeout(function() {
+        var pl = document.getElementById('pl' + idx);
+        if (!pl || pl.style.display === 'none' || pl.classList.contains('photo-error')) return;
+        // Loader ancora visibile dopo 25s: diagnostica
+        if (isProxy) {
+          diagnoseFetch(idx, pid);
+        } else {
+          showPhotoError(idx, 0, 'Timeout caricamento immagine');
+        }
+      }, 25000);
+    })(i, posts[i]);
+  }
 }
 
 var timer = null, nextAt = null;
@@ -339,6 +410,7 @@ async function load(manual) {
     dot.className = 'dot live';
     st.textContent = n ? n + (n === 1 ? ' annuncio attivo' : ' annunci attivi') : 'Nessun annuncio attivo';
     ct.innerHTML = renderCards(posts);
+    startPhotoTimeouts(posts);
     schedule();
   } catch (err) {
     dot.className = 'dot';
