@@ -908,6 +908,24 @@ app.get('/locations', authMiddleware, async (req, res) => {
     }
 });
 
+// Risolve un Telegram file_id in URL CDN pubblico usando il BOT_TOKEN
+// Chiamato da api/lookup.js type=tg-photo (token resta server-side)
+app.get('/tg-file', authMiddleware, async (req, res) => {
+    const fileId = (req.query.file_id || '').trim();
+    if (!fileId) return res.status(400).json({ error: 'file_id obbligatorio' });
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    if (!token) return res.status(500).json({ error: 'TELEGRAM_BOT_TOKEN non configurato' });
+    try {
+        const r = await fetch(`https://api.telegram.org/bot${token}/getFile?file_id=${encodeURIComponent(fileId)}`);
+        const data = await r.json();
+        if (!data.ok || !data.result?.file_path) return res.status(404).json({ error: 'File non trovato' });
+        const url = `https://api.telegram.org/file/bot${token}/${data.result.file_path}`;
+        return res.json({ url });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Proxy listening on port ${PORT}`);

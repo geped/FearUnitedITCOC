@@ -582,7 +582,7 @@ function recruitHubKb(webUrl) {
     [Markup.button.callback('✏️ Messaggio rapido', 'comm_recruit_quick'), Markup.button.callback('📝 Annuncio guidato', 'comm_recruit_guided')],
   ];
   if (webUrl) {
-    rows.push([Markup.button.url('🌐 Annunci attivi (web)', webUrl)]);
+    rows.push([Markup.button.webApp('🌐 Annunci attivi (web)', webUrl)]);
   }
   rows.push([Markup.button.callback('« Community', 'comm_hub')]);
   return Markup.inlineKeyboard(rows);

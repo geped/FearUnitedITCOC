@@ -125,11 +125,23 @@ module.exports = async (req, res) => {
             const posts = (data || []).map((r) => ({
                 id: r.id,
                 post_text: r.post_text || '',
-                has_photo: !!r.photo_file_id,
+                photo_file_id: r.photo_file_id || null,
                 approved_at: r.approved_at,
                 expires_at: r.expires_at,
             }));
             return res.status(200).json({ posts });
+        } else if (type === 'tg-photo') {
+            // Proxy immagine Telegram: risolve file_id → CDN URL via render-proxy (token non esposto al client)
+            const fileId = (req.query.file_id || '').trim();
+            if (!fileId) return res.status(400).end();
+            const syncKey = process.env.SYNC_SECRET || '';
+            const tgRes = await fetch(`${proxyUrl}/tg-file?file_id=${encodeURIComponent(fileId)}`, {
+                headers: { 'x-sync-key': syncKey },
+            });
+            if (!tgRes.ok) return res.status(404).end();
+            const tgData = await tgRes.json().catch(() => ({}));
+            if (!tgData.url) return res.status(404).end();
+            return res.redirect(302, tgData.url);
         } else if (type === 'ping') {
             // Keep-alive esterno verso Render: il self-ping su localhost non evita spin-down / cambio IP.
             const authHeader = req.headers['authorization'] || '';
