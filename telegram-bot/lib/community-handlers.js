@@ -576,8 +576,8 @@ async function submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFil
 
 /** Hub reclutamento: un solo annuncio attivo per utente/clan — niente sotto-menu «Invia annuncio».
  * @param {string|null} webUrl - URL di reclutamento.html (aggiunge pulsante web se presente) */
-function recruitHubKb(webUrl = null) {
-  const rows = [
+function recruitHubKb(webUrl) {
+  var rows = [
     [Markup.button.callback('🚀 Pubblica adesso', 'comm_recruit_instant'), Markup.button.callback('📋 Annunci attivi', 'comm_recruit_list')],
     [Markup.button.callback('✏️ Messaggio rapido', 'comm_recruit_quick'), Markup.button.callback('📝 Annuncio guidato', 'comm_recruit_guided')],
   ];
@@ -1227,8 +1227,8 @@ function registerCommunityHandlers(bot, deps) {
     if (sess) ctx.cocboardUser = sess.user;
     await sbc.ensureRecruitmentSubscriber(uid);
     pendingCommunity.delete(uid);
-    const siteBase = (process.env.COCBOARD_SITE_HOME_URL || ‘’).trim().replace(/\/$/, ‘’);
-    const webUrl = siteBase ? `${siteBase}/reclutamento.html` : null;
+    const siteBase = (process.env.COCBOARD_SITE_HOME_URL || '').trim().replace(/\/$/, '');
+    const webUrl = siteBase ? siteBase + '/reclutamento.html' : null;
     const text =
       `📣 <b>Reclutamento</b>\n\n` +
       `Scegli un’azione:\n` +
@@ -1237,9 +1237,9 @@ function registerCommunityHandlers(bot, deps) {
       `• <b>Invio rapido o guidato</b> — bozza in revisione al proprietario del bot.\n\n` +
       `<i>Un solo annuncio attivo per utente e per clan; puoi ritirare il tuo da Annunci attivi.</i>`;
     try {
-      await ctx.editMessageText(text, { parse_mode: ‘HTML’, ...recruitHubKb(webUrl) });
+      await ctx.editMessageText(text, { parse_mode: 'HTML', ...recruitHubKb(webUrl) });
     } catch (_) {
-      await ctx.reply(text, { parse_mode: ‘HTML’, ...recruitHubKb(webUrl) });
+      await ctx.reply(text, { parse_mode: 'HTML', ...recruitHubKb(webUrl) });
     }
     await refreshPrivateReplyKeyboardRef(ctx);
   }
