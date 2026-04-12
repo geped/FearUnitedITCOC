@@ -184,6 +184,33 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
   const leftMs  = endDate ? endDate.getTime() - now : Infinity;
   const noisy   = prevMem.state !== 'unknown'; // true = bot era già in esecuzione, non primo ciclo
 
+  // ── Primo ciclo dopo restart: pre-segna notifiche già avvenute (pattern identico ai raid) ──
+  // Evita di reinviare avvisi che erano già stati mandati prima del deploy.
+  if (!noisy && war?.endTime) {
+    const endDate0 = parseCocTime(war.endTime);
+    if (state === 'preparation') {
+      sent.add('prep:' + war.endTime);
+    }
+    if (state === 'inWar') {
+      sent.add('start:' + war.endTime);
+      if (endDate0) {
+        const mins0 = Math.ceil((endDate0.getTime() - Date.now()) / 60000);
+        if (mins0 <= 240) sent.add('4h:' + war.endTime);
+        if (mins0 <= 60)  sent.add('1h:' + war.endTime);
+        if (mins0 <= 15)  sent.add('15m:' + war.endTime);
+      }
+      // Guerra perfetta già raggiunta: non riaprire
+      const ts0 = war.teamSize || 0;
+      if (ts0 > 0 && (war?.clan?.stars || 0) >= ts0 * 3) {
+        sent.add('3star:' + war.endTime);
+      }
+    }
+    if (state === 'warEnded') {
+      sent.add('final:' + war.endTime);
+    }
+    return; // primo ciclo: solo inizializzazione stato, niente notifiche
+  }
+
   const send = (text) => sendToChat(telegram, chatId, text, () => sb.deleteTelegramChatLink(chatId));
 
   // ── Transizione: preparazione ────────────────────────────────────────────

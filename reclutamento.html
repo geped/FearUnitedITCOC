@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
-<title>CoCBoard · Reclutamento</title>
+<title>CoCBoard &middot; Reclutamento</title>
 <style>
 :root {
   --bg:       #0D0B08;
@@ -13,7 +13,6 @@
   --bg-3:     #221A0F;
   --border:   #2A2010;
   --gold:     #C9A962;
-  --gold-dim: rgba(201,169,98,0.13);
   --text:     #EEEAE0;
   --text-2:   #C8BCA8;
   --text-3:   #7A6A50;
@@ -31,58 +30,36 @@ body {
   padding-bottom: max(env(safe-area-inset-bottom), 32px);
 }
 
-/* ── Hero ── */
+/* Hero */
 .hero {
   background: var(--bg-2);
   border-bottom: 1px solid var(--border);
-  padding: 18px 16px 14px;
+  padding: 16px 14px 13px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 11px;
 }
-.hero-logo {
-  width: 40px; height: 40px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-.hero-title {
-  font-size: 19px;
-  font-weight: 800;
-  color: var(--gold);
-  letter-spacing: .01em;
-  line-height: 1.2;
-}
-.hero-sub {
-  font-size: 11px;
-  color: var(--text-3);
-  margin-top: 2px;
-  letter-spacing: .03em;
-}
+.hero img { width: 38px; height: 38px; object-fit: contain; flex-shrink: 0; }
+.hero-title { font-size: 18px; font-weight: 800; color: var(--gold); line-height: 1.2; }
+.hero-sub   { font-size: 11px; color: var(--text-3); margin-top: 1px; letter-spacing: .03em; }
 
-/* ── Status bar ── */
+/* Status bar */
 .status-bar {
   background: var(--bg-1);
   border-bottom: 1px solid var(--border);
-  padding: 7px 14px;
+  padding: 6px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   font-size: 11px;
   color: var(--text-3);
-  letter-spacing: .03em;
   position: sticky;
   top: 0;
   z-index: 10;
 }
 .status-left { display: flex; align-items: center; gap: 6px; }
-.status-dot {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: var(--text-3);
-  flex-shrink: 0;
-  transition: background .3s;
-}
-.status-dot.live { background: var(--green); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); transition: background .3s; }
+.dot.live { background: var(--green); }
 .refresh-btn {
   background: none;
   border: 1px solid var(--border);
@@ -92,28 +69,18 @@ body {
   font-size: 11px;
   cursor: pointer;
   font-family: inherit;
-  letter-spacing: .03em;
-  transition: opacity .15s;
 }
 .refresh-btn:active { opacity: .6; }
 
-/* ── Content ── */
-.content {
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 14px 10px;
-}
+/* Content */
+.content { max-width: 600px; margin: 0 auto; padding: 14px 10px; }
 
-/* ── States ── */
-.state-msg {
-  text-align: center;
-  padding: 52px 16px;
-  color: var(--text-3);
-}
-.state-msg .icon { font-size: 38px; margin-bottom: 12px; }
+/* Empty / error */
+.state-msg { text-align: center; padding: 52px 16px; color: var(--text-3); }
+.state-msg .icon { font-size: 38px; margin-bottom: 10px; }
 .state-msg p { font-size: 14px; line-height: 1.6; }
 
-/* ── Cards ── */
+/* Cards */
 .cards { display: flex; flex-direction: column; gap: 16px; }
 
 .card {
@@ -123,12 +90,10 @@ body {
   overflow: hidden;
 }
 
-/* Foto in cima alla card */
+/* Foto */
 .card-photo-wrap {
-  width: 100%;
   background: var(--bg-3);
-  position: relative;
-  min-height: 120px;
+  min-height: 60px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -140,19 +105,17 @@ body {
   display: block;
   background: var(--bg-3);
 }
-.card-photo-loading {
-  position: absolute;
-  inset: 0;
+.photo-loader {
+  padding: 18px 0;
+  font-size: 12px;
+  color: var(--text-3);
   display: flex;
   align-items: center;
-  justify-content: center;
-  color: var(--text-3);
-  font-size: 13px;
-  gap: 6px;
+  gap: 7px;
 }
-.card-photo-loading::before {
+.photo-loader::before {
   content: '';
-  width: 16px; height: 16px;
+  width: 14px; height: 14px;
   border: 2px solid var(--border);
   border-top-color: var(--gold);
   border-radius: 50%;
@@ -163,15 +126,12 @@ body {
 
 /* Testo post */
 .card-body {
-  padding: 14px 14px 10px;
+  padding: 13px 13px 9px;
   font-size: 14px;
   line-height: 1.65;
-  color: var(--text);
   word-break: break-word;
   overflow-wrap: break-word;
 }
-
-/* Telegram HTML subset */
 .card-body b, .card-body strong { font-weight: 700; }
 .card-body i, .card-body em { font-style: italic; }
 .card-body u, .card-body ins { text-decoration: underline; }
@@ -192,14 +152,10 @@ body {
   overflow-x: auto;
   font-size: 12px;
   font-family: 'Courier New', monospace;
-  margin: 8px 0;
+  margin: 6px 0;
   white-space: pre-wrap;
 }
-.card-body a {
-  color: var(--gold);
-  text-decoration: none;
-  word-break: break-all;
-}
+.card-body a { color: var(--gold); text-decoration: none; word-break: break-all; }
 .card-body a:hover { text-decoration: underline; }
 tg-spoiler {
   background: var(--text-3);
@@ -210,11 +166,11 @@ tg-spoiler {
   padding: 0 3px;
   transition: all .2s;
 }
-tg-spoiler.revealed { background: transparent; color: inherit; }
+tg-spoiler.on { background: transparent; color: inherit; }
 
-/* Footer card */
+/* Footer */
 .card-footer {
-  padding: 8px 14px;
+  padding: 7px 13px;
   border-top: 1px solid var(--border);
   background: var(--bg-1);
   display: flex;
@@ -225,31 +181,23 @@ tg-spoiler.revealed { background: transparent; color: inherit; }
   color: var(--text-3);
 }
 .badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
   background: var(--bg-3);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 2px 8px;
   white-space: nowrap;
 }
-.badge.expires { color: var(--gold); border-color: rgba(201,169,98,.3); }
-.badge.date    { color: var(--text-3); margin-left: auto; }
+.badge.exp { color: var(--gold); border-color: rgba(201,169,98,.3); }
+.badge.dt  { margin-left: auto; }
 
-/* Countdown hint */
-.refresh-hint {
-  text-align: center;
-  padding: 12px 0 0;
-  font-size: 11px;
-  color: var(--text-3);
-}
+/* Countdown */
+.refresh-hint { text-align: center; padding: 12px 0 0; font-size: 11px; color: var(--text-3); }
 </style>
 </head>
 <body>
 
 <div class="hero">
-  <img class="hero-logo" src="assets/cocboardbot-no-bg.png" alt="CoCBoard">
+  <img src="assets/cocboardbot-no-bg.png" alt="CoCBoard">
   <div>
     <div class="hero-title">Reclutamento</div>
     <div class="hero-sub">Annunci attivi &middot; CoCBoard Community</div>
@@ -258,178 +206,145 @@ tg-spoiler.revealed { background: transparent; color: inherit; }
 
 <div class="status-bar">
   <div class="status-left">
-    <span class="status-dot" id="statusDot"></span>
+    <span class="dot" id="dot"></span>
     <span id="statusText">Caricamento&hellip;</span>
   </div>
-  <button class="refresh-btn" onclick="loadPosts(true)">&circlearrowleft; Aggiorna</button>
+  <button class="refresh-btn" onclick="load(true)">&#8635; Aggiorna</button>
 </div>
 
 <div class="content" id="content">
-  <div class="state-msg">
-    <div class="icon">&#9203;</div>
-    <p>Caricamento annunci&hellip;</p>
-  </div>
+  <div class="state-msg"><div class="icon">&#9203;</div><p>Caricamento annunci&hellip;</p></div>
 </div>
 
 <script>
-/* ── Spoiler click ── */
+// Spoiler
 document.addEventListener('click', function(e) {
-  if (e.target.tagName === 'TG-SPOILER') e.target.classList.toggle('revealed');
+  if (e.target.tagName === 'TG-SPOILER') e.target.classList.toggle('on');
 });
 
-/* ── Formattazioni ── */
-function formatRemaining(expiresAt) {
-  var ms = new Date(expiresAt).getTime() - Date.now();
+function remaining(iso) {
+  var ms = new Date(iso).getTime() - Date.now();
   if (ms <= 0) return 'scaduto';
-  var h = Math.floor(ms / 3600000);
-  var m = Math.floor((ms % 3600000) / 60000);
-  if (h > 0) return h + 'h ' + m + 'm';
-  return m + 'm';
+  var h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? h + 'h ' + m + 'm' : m + 'm';
 }
 
-function formatDate(iso) {
+function fmtDate(iso) {
   if (!iso) return '';
   var d = new Date(iso);
   return d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) +
     ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 }
 
-/* ── Sanitizzazione HTML Telegram ── */
 function sanitize(html) {
   var tmp = document.createElement('div');
   tmp.innerHTML = html;
-  var ALLOWED = new Set(['B','STRONG','I','EM','U','INS','S','STRIKE','DEL',
+  var OK = new Set(['B','STRONG','I','EM','U','INS','S','STRIKE','DEL',
     'CODE','PRE','A','TG-SPOILER','TG-EMOJI','BR','SPAN']);
-  function walk(node) {
-    var children = Array.from(node.childNodes);
-    for (var i = 0; i < children.length; i++) {
-      var n = children[i];
-      if (n.nodeType === 3) continue; // testo
-      if (n.nodeType !== 1) { n.parentNode && n.parentNode.removeChild(n); continue; }
-      if (!ALLOWED.has(n.tagName)) {
-        while (n.firstChild) n.parentNode.insertBefore(n.firstChild, n);
-        n.parentNode.removeChild(n);
+  function walk(n) {
+    var ch = Array.from(n.childNodes);
+    for (var i = 0; i < ch.length; i++) {
+      var c = ch[i];
+      if (c.nodeType === 3) continue;
+      if (c.nodeType !== 1) { c.parentNode && c.parentNode.removeChild(c); continue; }
+      if (!OK.has(c.tagName)) {
+        while (c.firstChild) c.parentNode.insertBefore(c.firstChild, c);
+        c.parentNode.removeChild(c);
         continue;
       }
-      var attrs = Array.from(n.attributes);
-      for (var j = 0; j < attrs.length; j++) {
-        var a = attrs[j];
-        if (n.tagName === 'A' && a.name === 'href') continue;
-        n.removeAttribute(a.name);
+      Array.from(c.attributes).forEach(function(a) {
+        if (c.tagName === 'A' && a.name === 'href') return;
+        c.removeAttribute(a.name);
+      });
+      if (c.tagName === 'A') {
+        c.setAttribute('target', '_blank');
+        c.setAttribute('rel', 'noopener noreferrer');
+        var h = c.getAttribute('href') || '';
+        if (/^javascript:/i.test(h.trim())) c.removeAttribute('href');
       }
-      if (n.tagName === 'A') {
-        n.setAttribute('target', '_blank');
-        n.setAttribute('rel', 'noopener noreferrer');
-        var href = n.getAttribute('href') || '';
-        if (/^javascript:/i.test(href.trim())) n.removeAttribute('href');
-      }
-      walk(n);
+      walk(c);
     }
   }
   walk(tmp);
   return tmp.innerHTML;
 }
 
-/* ── Render cards ── */
 function renderCards(posts) {
   if (!posts.length) {
-    return '<div class="state-msg">' +
-      '<div class="icon">&#128235;</div>' +
-      '<p>Nessun annuncio attivo al momento.<br>Torna pi&ugrave; tardi o pubblica il tuo!</p>' +
-      '</div>';
+    return '<div class="state-msg"><div class="icon">&#128235;</div>' +
+      '<p>Nessun annuncio attivo al momento.<br>Torna pi&ugrave; tardi o pubblica il tuo!</p></div>';
   }
   var html = '<div class="cards">';
   for (var i = 0; i < posts.length; i++) {
     var p = posts[i];
-    var remaining = formatRemaining(p.expires_at);
-    var dateStr = formatDate(p.approved_at);
-    var safeText = sanitize(p.post_text);
     html += '<div class="card">';
-    // Foto (se presente)
-    if (p.photo_file_id) {
-      var photoSrc = '/api/lookup?type=tg-photo&file_id=' + encodeURIComponent(p.photo_file_id);
-      html += '<div class="card-photo-wrap" id="pw' + p.id + '">' +
-        '<div class="card-photo-loading" id="pl' + p.id + '">Foto in caricamento</div>' +
-        '<img class="card-photo" src="' + photoSrc + '"' +
-        ' alt="Foto annuncio"' +
-        ' loading="lazy"' +
-        ' onload="onPhotoLoad(' + p.id + ')"' +
-        ' onerror="onPhotoError(' + p.id + ')"' +
-        ' style="display:none">' +
-        '</div>';
+    // Foto
+    if (p.photo_url) {
+      html += '<div class="card-photo-wrap" id="pw' + i + '">' +
+        '<div class="photo-loader" id="pl' + i + '">Foto in caricamento</div>' +
+        '<img class="card-photo" src="' + p.photo_url + '" alt="Foto annuncio" loading="lazy"' +
+        ' onload="showPhoto(' + i + ')" onerror="hidePhoto(' + i + ')" style="display:none"></div>';
     }
     // Testo
-    if (safeText) {
-      html += '<div class="card-body">' + safeText + '</div>';
-    }
+    var txt = sanitize(p.post_text);
+    if (txt) html += '<div class="card-body">' + txt + '</div>';
     // Footer
     html += '<div class="card-footer">' +
-      '<span class="badge expires">&#9203; Scade tra ' + remaining + '</span>' +
-      (dateStr ? '<span class="badge date">' + dateStr + '</span>' : '') +
-      '</div>';
-    html += '</div>';
+      '<span class="badge exp">&#9203; Scade tra ' + remaining(p.expires_at) + '</span>' +
+      (fmtDate(p.approved_at) ? '<span class="badge dt">' + fmtDate(p.approved_at) + '</span>' : '') +
+      '</div></div>';
   }
-  html += '<div class="refresh-hint" id="refreshHint"></div></div>';
+  html += '<div class="refresh-hint" id="hint"></div></div>';
   return html;
 }
 
-function onPhotoLoad(id) {
-  var wrap = document.getElementById('pw' + id);
-  var loader = document.getElementById('pl' + id);
-  if (wrap) {
-    var img = wrap.querySelector('img');
-    if (img) img.style.display = 'block';
-  }
-  if (loader) loader.style.display = 'none';
+function showPhoto(i) {
+  var pw = document.getElementById('pw' + i);
+  var pl = document.getElementById('pl' + i);
+  if (pw) { var img = pw.querySelector('img'); if (img) img.style.display = 'block'; }
+  if (pl) pl.style.display = 'none';
+}
+function hidePhoto(i) {
+  var pw = document.getElementById('pw' + i);
+  if (pw) pw.style.display = 'none';
 }
 
-function onPhotoError(id) {
-  var wrap = document.getElementById('pw' + id);
-  if (wrap) wrap.style.display = 'none';
-}
-
-/* ── Auto-refresh ── */
-var refreshTimer = null;
-var nextRefreshAt = null;
-
-function scheduleRefresh() {
-  clearInterval(refreshTimer);
-  nextRefreshAt = Date.now() + 60000;
-  refreshTimer = setInterval(function() {
-    var left = Math.max(0, Math.ceil((nextRefreshAt - Date.now()) / 1000));
-    var hint = document.getElementById('refreshHint');
+var timer = null, nextAt = null;
+function schedule() {
+  clearInterval(timer);
+  nextAt = Date.now() + 60000;
+  timer = setInterval(function() {
+    var left = Math.max(0, Math.ceil((nextAt - Date.now()) / 1000));
+    var hint = document.getElementById('hint');
     if (hint) hint.textContent = left > 0 ? 'Aggiornamento automatico tra ' + left + 's' : '';
-    if (left === 0) loadPosts(false);
+    if (left === 0) load(false);
   }, 1000);
 }
 
-/* ── Fetch principale ── */
-async function loadPosts(manual) {
-  var dot = document.getElementById('statusDot');
-  var statusText = document.getElementById('statusText');
-  var content = document.getElementById('content');
-  if (manual) { dot.className = 'status-dot'; statusText.textContent = 'Aggiornamento\u2026'; }
+async function load(manual) {
+  var dot = document.getElementById('dot');
+  var st  = document.getElementById('statusText');
+  var ct  = document.getElementById('content');
+  if (manual) { dot.className = 'dot'; st.textContent = 'Aggiornamento\u2026'; }
   try {
     var res = await fetch('/api/lookup?type=recruit-list', { cache: 'no-store' });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var json = await res.json();
     var posts = json.posts || [];
-    var count = posts.length;
-    dot.className = 'status-dot live';
-    statusText.textContent = count
-      ? count + (count === 1 ? ' annuncio attivo' : ' annunci attivi')
-      : 'Nessun annuncio attivo';
-    content.innerHTML = renderCards(posts);
-    scheduleRefresh();
+    var n = posts.length;
+    dot.className = 'dot live';
+    st.textContent = n ? n + (n === 1 ? ' annuncio attivo' : ' annunci attivi') : 'Nessun annuncio attivo';
+    ct.innerHTML = renderCards(posts);
+    schedule();
   } catch (err) {
-    dot.className = 'status-dot';
-    statusText.textContent = 'Errore di rete';
-    content.innerHTML = '<div class="state-msg"><div class="icon">&#9888;&#65039;</div>' +
+    dot.className = 'dot';
+    st.textContent = 'Errore di rete';
+    ct.innerHTML = '<div class="state-msg"><div class="icon">&#9888;&#65039;</div>' +
       '<p>Impossibile caricare gli annunci.<br><small>' + err.message + '</small></p></div>';
   }
 }
 
-loadPosts(true);
+load(true);
 </script>
 </body>
 </html>

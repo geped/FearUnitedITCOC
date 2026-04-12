@@ -104,7 +104,9 @@ module.exports = async (req, res) => {
                 .eq('telegram_user_id', row.telegram_user_id);
             return res.status(200).json({ access_token, refresh_token });
         } else if (type === 'recruit-list') {
-            // Lista pubblica annunci reclutamento attivi (read-only, nessuna auth richiesta)
+            // Lista pubblica annunci reclutamento attivi (read-only, nessuna auth richiesta).
+            // Le URL delle foto vengono risolte server-side via render-proxy in parallelo,
+            // cosi' il browser carica le immagini direttamente dal CDN Telegram senza hop aggiuntivi.
             const supabaseUrl = process.env.SUPABASE_URL;
             const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
             if (!supabaseUrl || !serviceKey) {
@@ -114,34 +116,39 @@ module.exports = async (req, res) => {
             const admin = createClient(supabaseUrl, serviceKey, {
                 auth: { autoRefreshToken: false, persistSession: false },
             });
-            const now = new Date().toISOString();
-            const { data, error } = await admin
+            const nowIso = new Date().toISOString();
+            const { data: rows, error: dbErr } = await admin
                 .from('telegram_recruitment_posts')
                 .select('id, post_text, photo_file_id, approved_at, expires_at')
-                .gt('expires_at', now)
+                .gt('expires_at', nowIso)
                 .order('approved_at', { ascending: false })
                 .limit(20);
-            if (error) return res.status(500).json({ error: error.message });
-            const posts = (data || []).map((r) => ({
-                id: r.id,
-                post_text: r.post_text || '',
-                photo_file_id: r.photo_file_id || null,
-                approved_at: r.approved_at,
-                expires_at: r.expires_at,
+            if (dbErr) return res.status(500).json({ error: dbErr.message });
+            const syncKey = process.env.SYNC_SECRET || '';
+            // Risolvi URL foto in parallelo (max 8s timeout per singola chiamata)
+            const posts = await Promise.all((rows || []).map(async (r) => {
+                let photo_url = null;
+                if (r.photo_file_id) {
+                    try {
+                        const tgRes = await fetch(
+                            proxyUrl + '/tg-file?file_id=' + encodeURIComponent(r.photo_file_id),
+                            { headers: { 'x-sync-key': syncKey }, signal: AbortSignal.timeout(8000) }
+                        );
+                        if (tgRes.ok) {
+                            const tgData = await tgRes.json().catch(() => ({}));
+                            if (tgData.url) photo_url = tgData.url;
+                        }
+                    } catch (_) { /* foto non disponibile, non blocca */ }
+                }
+                return {
+                    id: r.id,
+                    post_text: r.post_text || '',
+                    photo_url,
+                    approved_at: r.approved_at,
+                    expires_at: r.expires_at,
+                };
             }));
             return res.status(200).json({ posts });
-        } else if (type === 'tg-photo') {
-            // Proxy immagine Telegram: risolve file_id → CDN URL via render-proxy (token non esposto al client)
-            const fileId = (req.query.file_id || '').trim();
-            if (!fileId) return res.status(400).end();
-            const syncKey = process.env.SYNC_SECRET || '';
-            const tgRes = await fetch(`${proxyUrl}/tg-file?file_id=${encodeURIComponent(fileId)}`, {
-                headers: { 'x-sync-key': syncKey },
-            });
-            if (!tgRes.ok) return res.status(404).end();
-            const tgData = await tgRes.json().catch(() => ({}));
-            if (!tgData.url) return res.status(404).end();
-            return res.redirect(302, tgData.url);
         } else if (type === 'ping') {
             // Keep-alive esterno verso Render: il self-ping su localhost non evita spin-down / cambio IP.
             const authHeader = req.headers['authorization'] || '';
