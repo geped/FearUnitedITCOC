@@ -167,7 +167,7 @@ module.exports = async (req, res) => {
                     'approved_at',
                     'expires_at',
                     'submitter_telegram_user_id',
-                    'telegram_recruitment_submissions(body_html, body_text, clan_profile_url, submitter_display)',
+                    'telegram_recruitment_submissions(body_html, body_text, clan_profile_url, submitter_display, tg_contact_1, tg_contact_2)',
                 ].join(', '))
                 .gt('expires_at', nowIso)
                 .order('approved_at', { ascending: false })
@@ -246,6 +246,7 @@ module.exports = async (req, res) => {
                     if (tag) photo_url = await fetchClanBadge(tag);
                 }
 
+                const tg_contacts = [sub?.tg_contact_1, sub?.tg_contact_2].filter(Boolean);
                 return {
                     id: r.id,
                     body_html,
@@ -254,6 +255,7 @@ module.exports = async (req, res) => {
                     submitter_tg_id: r.submitter_telegram_user_id || null,
                     is_verified_clan,
                     photo_url,
+                    tg_contacts,
                     approved_at: r.approved_at,
                     expires_at: r.expires_at,
                 };

@@ -219,7 +219,7 @@ async function listRecruitmentFeedUserIds() {
   return (data || []).map((r) => Number(r.telegram_user_id));
 }
 
-async function insertRecruitmentSubmission(submitterId, display, bodyText, clanUrl, photoFileId, bodyHtml, clanTag, status = 'pending') {
+async function insertRecruitmentSubmission(submitterId, display, bodyText, clanUrl, photoFileId, bodyHtml, clanTag, status = 'pending', tgContact1 = null, tgContact2 = null) {
   const c = client();
   if (!c) throw new Error('Supabase non configurato.');
   const html =
@@ -234,6 +234,8 @@ async function insertRecruitmentSubmission(submitterId, display, bodyText, clanU
     photo_file_id: photoFileId ? String(photoFileId).slice(0, 2048) : null,
     status,
     clan_tag: clanTag ? String(clanTag).toUpperCase().replace(/^#/, '').slice(0, 20) : null,
+    tg_contact_1: tgContact1 ? String(tgContact1).replace(/^@/, '').slice(0, 64) : null,
+    tg_contact_2: tgContact2 ? String(tgContact2).replace(/^@/, '').slice(0, 64) : null,
   };
   const { data, error } = await c.from('telegram_recruitment_submissions').insert(row).select('id').single();
   if (error) throw new Error(error.message);

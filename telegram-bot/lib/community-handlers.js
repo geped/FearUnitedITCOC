@@ -510,14 +510,22 @@ async function joinGlobalAsCocboardProfile(ctx, tauth) {
   await promptGlobalProfileShareChoice(ctx, tauth);
 }
 
-async function submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFileId, uid, subLabel, clanTag }) {
-  const v = cv.recruitmentTextValid(bodyText);
-  if (!v.ok) {
-    await ctx.reply(`❌ ${v.reason}`, { parse_mode: 'HTML' });
-    return false;
+async function submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFileId, uid, subLabel, clanTag, clanUrl, tgContact1, tgContact2 }) {
+  let link;
+  if (clanUrl) {
+    // Flusso nuovo (rapido/guidato separato): il link è già validato a monte.
+    link = clanUrl;
+  } else {
+    // Flusso legacy (bodyText contiene il link).
+    const v = cv.recruitmentTextValid(bodyText);
+    if (!v.ok) {
+      await ctx.reply(`❌ ${v.reason}`, { parse_mode: 'HTML' });
+      return false;
+    }
+    link = v.link;
   }
   // Determina clan_tag: dal parametro esplicito o estratto dal link
-  const resolvedClanTag = clanTag || cv.extractClanTagFromUrl(v.link);
+  const resolvedClanTag = clanTag || cv.extractClanTagFromUrl(link);
 
   // Blocco duplicati per clan
   if (resolvedClanTag) {
@@ -554,7 +562,7 @@ async function submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFil
     bodyHtml && String(bodyHtml).trim() ? bodyHtml : tgh.messageEntitiesToHtml(bodyText, []);
   let sid;
   try {
-    sid = await sbc.insertRecruitmentSubmission(uid, subLabel, bodyText, v.link, photoFileId, htmlStore, resolvedClanTag);
+    sid = await sbc.insertRecruitmentSubmission(uid, subLabel, bodyText, link, photoFileId, htmlStore, resolvedClanTag, 'pending', tgContact1 || null, tgContact2 || null);
   } catch (e) {
     await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
     return false;
@@ -607,21 +615,13 @@ function guidedPreviewKb() {
 }
 
 function buildGuidedDraftPlain(st) {
-  const raw = String(st.clan_tag_raw || '').replace(/^#/, '').toUpperCase();
-  const tagHash = `#${raw}`;
-  const link = st.clan_link || cv.buildOfficialClanLinkFromTag(raw);
-  return `${st.presentation.trim()}\n\n🏷 Tag clan: ${tagHash}\n🔗 ${link}`;
+  // Solo corpo presentazione — il link clan è salvato separatamente in clan_profile_url.
+  return (st.presentation || '').trim();
 }
 
 function buildGuidedDraftHtml(st) {
-  const raw = String(st.clan_tag_raw || '').replace(/^#/, '').toUpperCase();
-  const tagHash = `#${raw}`;
-  const link = st.clan_link || cv.buildOfficialClanLinkFromTag(raw);
-  const pres = st.presentation_html || escapeHtml(st.presentation);
-  return (
-    `${pres}\n\n🏷 Tag clan: <code>${escapeHtml(tagHash)}</code>\n` +
-    `🔗 <a href="${escapeHtml(link)}">Apri link clan (CoC)</a>`
-  );
+  // Solo HTML presentazione — il link clan viene mostrato nella sezione card-link.
+  return st.presentation_html || escapeHtml(st.presentation || '');
 }
 
 function formatGuidedPreviewHtml(st) {
@@ -629,11 +629,16 @@ function formatGuidedPreviewHtml(st) {
   const tagHash = `#${raw}`;
   const link = st.clan_link || cv.buildOfficialClanLinkFromTag(raw);
   const pres = st.presentation_html || escapeHtml(st.presentation);
+  const contacts = [st.tg_contact_1, st.tg_contact_2].filter(Boolean);
+  const contactsLine = contacts.length
+    ? '\n' + contacts.map(u => `📱 <a href="https://t.me/${escapeHtml(u)}">@${escapeHtml(u)}</a>`).join('  ')
+    : '';
   return (
     `📎 <b>Anteprima bozza</b>\n\n` +
     `${pres}\n\n` +
     `🏷 <code>${escapeHtml(tagHash)}</code>\n` +
     `🔗 <a href="${escapeHtml(link)}">Apri link clan (CoC)</a>` +
+    contactsLine +
     `${st.photo_file_id ? '\n\n📷 <i>Con immagine allegata</i>' : ''}`
   );
 }
@@ -952,6 +957,10 @@ async function tryHandleEarlyMessage(
           await ctx.reply('Testo troppo corto.');
           return true;
         }
+        if (cv.containsExternalUrl(txt)) {
+          await ctx.reply('❌ Il testo non deve contenere link. Inserisci solo la presentazione testuale del clan.', { parse_mode: 'HTML' });
+          return true;
+        }
         st.presentation = txt.slice(0, 3000);
         st.presentation_html = tgh.messageEntitiesToHtml(txt, ctx.message.entities || []);
         st.step = 'media';
@@ -969,9 +978,30 @@ async function tryHandleEarlyMessage(
           await ctx.reply('Invia una foto o premi «Salta — nessuna immagine».');
           return true;
         }
-        st.step = 'preview';
+        st.step = 'tg_contact_1';
         pendingCommunity.set(uid, st);
-        await ctx.reply(formatGuidedPreviewHtml(st), { parse_mode: 'HTML', ...guidedPreviewKb() });
+        await showContactStep(ctx, uid, pendingCommunity);
+        return true;
+      }
+      // step 'tg_contact_manual': accetta username digitato
+      if (st.step === 'tg_contact_manual') {
+        if (!ctx.message?.text || txt.startsWith('/')) return true;
+        const clean = cv.isValidTelegramUsername(txt);
+        if (!clean) {
+          await ctx.reply('❌ Username non valido. Deve essere nel formato <code>@username</code> (5-32 caratteri, solo lettere, numeri e _).', { parse_mode: 'HTML' });
+          return true;
+        }
+        if (!st.tg_contact_1) {
+          st.tg_contact_1 = clean;
+          st.step = 'tg_contact_2';
+          pendingCommunity.set(uid, st);
+          await showContactStep(ctx, uid, pendingCommunity);
+        } else {
+          st.tg_contact_2 = clean;
+          st.step = 'preview';
+          pendingCommunity.set(uid, st);
+          await ctx.reply(formatGuidedPreviewHtml(st), { parse_mode: 'HTML', disable_web_page_preview: true, ...guidedPreviewKb() });
+        }
         return true;
       }
       return true;
@@ -1031,38 +1061,105 @@ async function tryHandleEarlyMessage(
     }
 
     if (st.kind === 'recruit_body') {
-      let bodyText = '';
-      let photoFileId = null;
-      if (ctx.message?.photo?.length) {
-        photoFileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
-        bodyText = (ctx.message.caption || '').trim();
-      } else if (ctx.message?.text) {
-        bodyText = txt;
-      } else {
-        await ctx.reply('Invia testo (e opzionalmente una foto con didascalia) oppure /annulla_reclutamento.');
+      // step 'body': accetta testo + foto opzionale, NO link
+      if (!st.step || st.step === 'body') {
+        let bodyText = '';
+        let photoFileId = null;
+        if (ctx.message?.photo?.length) {
+          photoFileId = ctx.message.photo[ctx.message.photo.length - 1].file_id;
+          bodyText = (ctx.message.caption || '').trim();
+        } else if (ctx.message?.text) {
+          bodyText = txt;
+        } else {
+          await ctx.reply('Invia testo (e opzionalmente una foto con didascalia) oppure /annulla_reclutamento.');
+          return true;
+        }
+        const v = cv.recruitBodyTextValid(bodyText);
+        if (!v.ok) {
+          await ctx.reply(`❌ ${v.reason}\n\nRiprova o /annulla_reclutamento`);
+          return true;
+        }
+        st.body_text = bodyText;
+        st.body_html = ctx.message?.photo
+          ? tgh.messageEntitiesToHtml(bodyText, ctx.message.caption_entities || [])
+          : tgh.messageToHtml(ctx.message);
+        st.photo_file_id = photoFileId || null;
+        st.step = 'tag_or_link';
+        pendingCommunity.set(uid, st);
+        const exLink = cv.buildOfficialClanLinkFromTag('XXXXXXXX'); // placeholder per spiegazione
+        await ctx.reply(
+          `🔗 <b>Link clan</b>\n\n` +
+          `Invia il <b>tag del clan</b> (es. <code>#2J2VLPP9R</code>) oppure il link ufficiale CoC.\n\n` +
+          `<i>Il bot genererà il link automaticamente dal tag, oppure usa il tuo link se preferisci.\n` +
+          `Solo link <code>link.clashofclans.com</code> con <code>OpenClanProfile</code> sono accettati.</i>`,
+          { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('❌ Annulla', 'rcb_cancel')]]) }
+        );
         return true;
       }
-      const v = cv.recruitmentTextValid(bodyText);
-      if (!v.ok) {
-        await ctx.reply(`❌ ${v.reason}\n\nRiprova o /annulla_reclutamento`);
+
+      // step 'tag_or_link': accetta tag #XXX o link CoC ufficiale
+      if (st.step === 'tag_or_link') {
+        if (!ctx.message?.text || txt.startsWith('/')) return true;
+        let resolvedLink = null;
+        let resolvedTag = null;
+        const maybeTag = cv.normClanTagForUrl(txt);
+        if (maybeTag) {
+          resolvedLink = cv.buildOfficialClanLinkFromTag(maybeTag);
+          resolvedTag = maybeTag;
+        } else {
+          const maybeLink = cv.extractOfficialClanLink(txt) || (cv.isOfficialClanProfileLink(txt.trim()) ? txt.trim() : null);
+          if (maybeLink && cv.isOfficialClanProfileLink(maybeLink)) {
+            resolvedLink = maybeLink;
+            resolvedTag = cv.extractClanTagFromUrl(maybeLink);
+          }
+        }
+        if (!resolvedLink) {
+          await ctx.reply(
+            '❌ Non riconosco questo input.\n\nInvia il <b>tag del clan</b> (es. <code>#2J2VLPP9R</code>) oppure il link ufficiale CoC.',
+            { parse_mode: 'HTML' }
+          );
+          return true;
+        }
+        st.clan_link = resolvedLink;
+        st.clan_tag_raw = resolvedTag || '';
+        st.step = 'link_confirm';
+        pendingCommunity.set(uid, st);
+        await ctx.reply(
+          `🔗 <b>Usa questo link?</b>\n\n<code>${escapeHtml(resolvedLink)}</code>`,
+          {
+            parse_mode: 'HTML',
+            ...Markup.inlineKeyboard([
+              [Markup.button.callback('✅ Sì, usa questo link', 'rcb_link_use')],
+              [Markup.button.callback('✏️ Inserisci diverso', 'rcb_link_change'), Markup.button.callback('❌ Annulla', 'rcb_cancel')],
+            ]),
+          }
+        );
         return true;
       }
-      pendingCommunity.delete(uid);
-      const sess = await tauth.getValidSession(uid);
-      const disp = sess?.user ? displayFromUser(sess.user) : null;
-      const subLabel = disp
-        ? disp.tag
-          ? `${disp.name} (${disp.tag})`
-          : disp.name
-        : guestTelegramLabel(ctx.from);
-      let bodyHtml;
-      if (ctx.message.photo) {
-        bodyHtml = tgh.messageEntitiesToHtml(bodyText, ctx.message.caption_entities || []);
-      } else {
-        bodyHtml = tgh.messageToHtml(ctx.message);
+
+      // step 'tg_contact_manual': accetta username digitato
+      if (st.step === 'tg_contact_manual') {
+        if (!ctx.message?.text || txt.startsWith('/')) return true;
+        const clean = cv.isValidTelegramUsername(txt);
+        if (!clean) {
+          await ctx.reply('❌ Username non valido. Deve essere nel formato <code>@username</code> (5-32 caratteri, solo lettere, numeri e _).', { parse_mode: 'HTML' });
+          return true;
+        }
+        if (!st.tg_contact_1) {
+          st.tg_contact_1 = clean;
+          st.step = 'tg_contact_2';
+          pendingCommunity.set(uid, st);
+          await showContactStep(ctx, uid, pendingCommunity);
+        } else {
+          st.tg_contact_2 = clean;
+          st.step = 'preview';
+          pendingCommunity.set(uid, st);
+          await showRapidoPreview(ctx, uid, pendingCommunity);
+        }
+        return true;
       }
-      await submitRecruitmentToModerators(ctx, { bodyText, bodyHtml, photoFileId, uid, subLabel });
-      await rk(ctx);
+
+      // Tutti gli altri step (link_confirm, tg_contact_1, tg_contact_2, preview) sono gestiti da callback.
       return true;
     }
   }
@@ -1217,6 +1314,49 @@ async function sendCommunityMenu(ctx) {
     await ctx.reply(text, { parse_mode: 'HTML', ...kb });
   }
   await refreshPrivateReplyKeyboardRef(ctx);
+}
+
+// ─── Helper condivisi contatti TG e anteprima rapido ────────────────────────
+
+/** Mostra step contatto TG (1° o 2°). Funziona per recruit_body e recruit_guided. */
+async function showContactStep(ctx, uid, pendingMap) {
+  const st = pendingMap.get(uid);
+  if (!st) return;
+  const isFirst = !st.tg_contact_1;
+  const fromUsername = ctx.from?.username ? ctx.from.username : null;
+  const title = isFirst
+    ? `📱 <b>Contatto Telegram</b> (opzionale)\n\nAggiungi fino a 2 username Telegram all'annuncio. Verranno mostrati come link <code>t.me/username</code> nella pagina reclutamento.`
+    : `📱 <b>Secondo contatto</b> (opzionale)\n\nVuoi aggiungere un secondo username Telegram?`;
+  const kbRows = [];
+  if (isFirst && fromUsername) {
+    kbRows.push([Markup.button.callback(`✅ Usa @${fromUsername}`, 'rcb_cnt_own')]);
+  }
+  kbRows.push([Markup.button.callback('✏️ Inserisci username', 'rcb_cnt_manual')]);
+  kbRows.push([Markup.button.callback('⏭ Salta', 'rcb_cnt_skip')]);
+  await ctx.reply(title, { parse_mode: 'HTML', ...Markup.inlineKeyboard(kbRows) });
+}
+
+/** Anteprima + pulsante pubblica per il flusso "Messaggio rapido". */
+async function showRapidoPreview(ctx, uid, pendingMap) {
+  const st = pendingMap.get(uid);
+  if (!st) return;
+  const bodyHtml = st.body_html || escapeHtml(st.body_text || '');
+  const link = st.clan_link || cv.buildOfficialClanLinkFromTag(st.clan_tag_raw || '');
+  const tagHash = st.clan_tag_raw ? `#${String(st.clan_tag_raw).toUpperCase()}` : '';
+  const contacts = [st.tg_contact_1, st.tg_contact_2].filter(Boolean);
+
+  let previewText = `📋 <b>Anteprima annuncio</b>\n\n${bodyHtml}`;
+  if (tagHash) previewText += `\n\n🏷 <code>${escapeHtml(tagHash)}</code>`;
+  previewText += `\n🔗 <a href="${escapeHtml(link)}">Apri profilo clan (CoC)</a>`;
+  if (contacts.length) {
+    previewText += '\n' + contacts.map(u => `📱 <a href="https://t.me/${escapeHtml(u)}">@${escapeHtml(u)}</a>`).join('  ');
+  }
+  if (st.photo_file_id) previewText += '\n\n📷 <i>Con immagine allegata</i>';
+  const kb = Markup.inlineKeyboard([
+    [Markup.button.callback('🚀 Pubblica (in attesa di approvazione)', 'rcb_publish')],
+    [Markup.button.callback('❌ Annulla', 'rcb_cancel')],
+  ]);
+  await ctx.reply(previewText, { parse_mode: 'HTML', disable_web_page_preview: true, ...kb });
 }
 
 function registerCommunityHandlers(bot, deps) {
@@ -1696,15 +1836,13 @@ function registerCommunityHandlers(bot, deps) {
     safeCb(ctx);
     const uid = ctx.from?.id;
     if (uid == null) return;
-    pendingCommunity.set(uid, { kind: 'recruit_body' });
+    pendingCommunity.set(uid, { kind: 'recruit_body', step: 'body' });
     const help =
-      `⚡ <b>Invio rapido</b>\n\n` +
-      `Invia <b>un messaggio</b> con:\n` +
-      `• testo di presentazione\n` +
-      `• link ufficiale:\n` +
-      `  <code>https://link.clashofclans.com/xx?action=OpenClanProfile&amp;tag=...</code>\n\n` +
-      `Opzionale: <b>foto</b> con didascalia che contenga il link.\n\n` +
-      `<code>/annulla_reclutamento</code> · «Community» dal menù.`;
+      `✏️ <b>Messaggio rapido</b>\n\n` +
+      `Invia la <b>presentazione</b> del tuo clan (testo + foto opzionale).\n\n` +
+      `⚠️ <b>Non inserire link nel testo</b> — il link del clan viene aggiunto in automatico nel passo successivo.\n\n` +
+      `Puoi usare grassetto, corsivo, sottolineato come nella chat Telegram.\n\n` +
+      `<code>/annulla_reclutamento</code> per uscire.`;
     try {
       await ctx.editMessageText(help, {
         parse_mode: 'HTML',
@@ -1715,6 +1853,130 @@ function registerCommunityHandlers(bot, deps) {
         parse_mode: 'HTML',
         ...Markup.inlineKeyboard([[Markup.button.callback('« Indietro', 'comm_recruit')]]),
       });
+    }
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  // ─── Callback "Messaggio rapido" ────────────────────────────────────────────
+
+  bot.action('rcb_link_use', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    const st = uid != null ? pendingCommunity.get(uid) : null;
+    if (!st || st.kind !== 'recruit_body' || st.step !== 'link_confirm') {
+      await ctx.answerCbQuery().catch(() => {});
+      return;
+    }
+    st.step = 'tg_contact_1';
+    pendingCommunity.set(uid, st);
+    await ctx.answerCbQuery('Link confermato').catch(() => {});
+    await showContactStep(ctx, uid, pendingCommunity);
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action('rcb_link_change', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    const st = uid != null ? pendingCommunity.get(uid) : null;
+    if (!st || st.kind !== 'recruit_body') {
+      await ctx.answerCbQuery().catch(() => {});
+      return;
+    }
+    st.step = 'tag_or_link';
+    delete st.clan_link;
+    delete st.clan_tag_raw;
+    pendingCommunity.set(uid, st);
+    await ctx.answerCbQuery().catch(() => {});
+    await ctx.reply(
+      `🔗 Invia il <b>tag</b> del clan (es. <code>#2J2VLPP9R</code>) oppure il link ufficiale CoC.`,
+      { parse_mode: 'HTML', ...Markup.inlineKeyboard([[Markup.button.callback('❌ Annulla', 'rcb_cancel')]]) }
+    );
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action('rcb_publish', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    const st = uid != null ? pendingCommunity.get(uid) : null;
+    if (!st || st.kind !== 'recruit_body' || st.step !== 'preview') {
+      await ctx.answerCbQuery('Niente da pubblicare.').catch(() => {});
+      return;
+    }
+    pendingCommunity.delete(uid);
+    await ctx.answerCbQuery().catch(() => {});
+    const sess = await tauth.getValidSession(uid);
+    const disp = sess?.user ? displayFromUser(sess.user) : null;
+    const subLabel = disp ? (disp.tag ? `${disp.name} (${disp.tag})` : disp.name) : guestTelegramLabel(ctx.from);
+    await submitRecruitmentToModerators(ctx, {
+      bodyText: st.body_text || '',
+      bodyHtml: st.body_html || '',
+      photoFileId: st.photo_file_id || null,
+      uid,
+      subLabel,
+      clanTag: st.clan_tag_raw || null,
+      clanUrl: st.clan_link || null,
+      tgContact1: st.tg_contact_1 || null,
+      tgContact2: st.tg_contact_2 || null,
+    });
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action('rcb_cancel', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    if (uid != null) pendingCommunity.delete(uid);
+    await ctx.answerCbQuery('Annullato').catch(() => {});
+    await ctx.reply('Wizard annullato.', { parse_mode: 'HTML', ...recruitHubKb(recruitWebUrl()) });
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  // ─── Callback contatti TG (condivisi tra rapido e guidato) ──────────────────
+
+  bot.action('rcb_cnt_own', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    const st = uid != null ? pendingCommunity.get(uid) : null;
+    if (!st || !['recruit_body', 'recruit_guided'].includes(st.kind)) return;
+    const username = ctx.from?.username;
+    if (!username) {
+      await ctx.answerCbQuery('Nessun username Telegram sul tuo account.').catch(() => {});
+      return;
+    }
+    await ctx.answerCbQuery(`@${username}`).catch(() => {});
+    st.tg_contact_1 = username;
+    st.step = 'tg_contact_2';
+    pendingCommunity.set(uid, st);
+    await showContactStep(ctx, uid, pendingCommunity);
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action('rcb_cnt_manual', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    const st = uid != null ? pendingCommunity.get(uid) : null;
+    if (!st || !['recruit_body', 'recruit_guided'].includes(st.kind)) return;
+    await ctx.answerCbQuery().catch(() => {});
+    st.step = 'tg_contact_manual';
+    pendingCommunity.set(uid, st);
+    await ctx.reply('Invia l\'username Telegram (es. <code>@mioUsername</code>).', { parse_mode: 'HTML' });
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action('rcb_cnt_skip', async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    const st = uid != null ? pendingCommunity.get(uid) : null;
+    if (!st || !['recruit_body', 'recruit_guided'].includes(st.kind)) return;
+    await ctx.answerCbQuery('Saltato').catch(() => {});
+    if (st.kind === 'recruit_body') {
+      st.step = 'preview';
+      pendingCommunity.set(uid, st);
+      await showRapidoPreview(ctx, uid, pendingCommunity);
+    } else {
+      // recruit_guided: vai all'anteprima guidata
+      st.step = 'preview';
+      pendingCommunity.set(uid, st);
+      await ctx.reply(formatGuidedPreviewHtml(st), { parse_mode: 'HTML', ...guidedPreviewKb() });
     }
     await refreshPrivateReplyKeyboardRef(ctx);
   });
@@ -1760,10 +2022,10 @@ function registerCommunityHandlers(bot, deps) {
       return;
     }
     st.photo_file_id = null;
-    st.step = 'preview';
+    st.step = 'tg_contact_1';
     pendingCommunity.set(uid, st);
     await ctx.answerCbQuery('OK').catch(() => {});
-    await ctx.reply(formatGuidedPreviewHtml(st), { parse_mode: 'HTML', ...guidedPreviewKb() });
+    await showContactStep(ctx, uid, pendingCommunity);
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
@@ -1777,6 +2039,7 @@ function registerCommunityHandlers(bot, deps) {
     }
     const bodyText = buildGuidedDraftPlain(st);
     const bodyHtml = buildGuidedDraftHtml(st);
+    const clanUrl = st.clan_link || cv.buildOfficialClanLinkFromTag(st.clan_tag_raw || '');
     pendingCommunity.delete(uid);
     const sess = await tauth.getValidSession(uid);
     const disp = sess?.user ? displayFromUser(sess.user) : null;
@@ -1788,6 +2051,9 @@ function registerCommunityHandlers(bot, deps) {
       uid,
       subLabel,
       clanTag: st.clan_tag_raw || null,
+      clanUrl,
+      tgContact1: st.tg_contact_1 || null,
+      tgContact2: st.tg_contact_2 || null,
     });
     await refreshPrivateReplyKeyboardRef(ctx);
   });

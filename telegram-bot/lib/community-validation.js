@@ -42,6 +42,34 @@ function recruitmentTextValid(text) {
   return { ok: true, link };
 }
 
+/**
+ * Valida il corpo di un annuncio che NON deve contenere link.
+ * Usato dal nuovo flusso "Messaggio rapido" dove il link è raccolto in un passo separato.
+ */
+function recruitBodyTextValid(text) {
+  const t = String(text || '').trim();
+  if (t.length < 8) return { ok: false, reason: 'Testo troppo corto (min 8 caratteri).' };
+  if (t.length > 3200) return { ok: false, reason: 'Testo troppo lungo (max 3200 caratteri).' };
+  if (containsExternalUrl(t)) {
+    return { ok: false, reason: 'Il testo non deve contenere link. Il link del clan viene aggiunto nel passo successivo.' };
+  }
+  return { ok: true };
+}
+
+/** Controlla se il testo contiene un URL o riferimento web esterno. */
+function containsExternalUrl(text) {
+  return /https?:\/\/|www\.|t\.me\/|telegram\.me\//i.test(String(text || ''));
+}
+
+/**
+ * Valida e normalizza un username Telegram (con o senza @).
+ * @returns {string|null} username pulito (senza @) o null se non valido
+ */
+function isValidTelegramUsername(raw) {
+  const clean = String(raw || '').trim().replace(/^@/, '');
+  return /^[a-zA-Z][a-zA-Z0-9_]{4,31}$/.test(clean) ? clean : null;
+}
+
 function parseOwnerTelegramIds() {
   const raw = (process.env.BOT_OWNER_TELEGRAM_IDS || process.env.BOT_OWNER_TELEGRAM_ID || '').trim();
   if (!raw) return [];
@@ -211,6 +239,9 @@ module.exports = {
   extractOfficialClanLink,
   isOfficialClanProfileLink,
   recruitmentTextValid,
+  recruitBodyTextValid,
+  containsExternalUrl,
+  isValidTelegramUsername,
   isBotOwnerTelegramUser,
   parseOwnerTelegramIds,
   normClanTagForUrl,

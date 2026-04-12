@@ -103,8 +103,10 @@ body {
 .card-photo {
   width: 100%;
   height: 160px;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
+  background: #1A150E;
+  filter: drop-shadow(0 1px 6px rgba(0,0,0,.5));
 }
 .photo-loader {
   padding: 14px 12px;
@@ -261,6 +263,26 @@ tg-spoiler.on { background: transparent; color: inherit; }
   gap: 4px;
 }
 .card-link a:hover { text-decoration: underline; }
+.card-contacts {
+  padding: 4px 12px 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.contact-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--gold);
+  font-size: 11px;
+  padding: 3px 9px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.contact-btn:hover { text-decoration: underline; }
 
 /* Countdown */
 .refresh-hint { text-align: center; padding: 12px 0 0; font-size: 11px; color: var(--text-3); }
@@ -420,6 +442,17 @@ function renderCards(posts) {
       html += '<div class="card-link">' +
         '<a href="' + escapeAttr(p.clan_url) + '" target="_blank" rel="noopener noreferrer">' +
         '&#128279; Apri profilo clan (CoC)</a></div>';
+    }
+
+    // Contatti Telegram opzionali
+    if (p.tg_contacts && p.tg_contacts.length) {
+      html += '<div class="card-contacts">';
+      for (var j = 0; j < p.tg_contacts.length; j++) {
+        var u = p.tg_contacts[j];
+        html += '<a class="contact-btn" href="https://t.me/' + escapeAttr(u) +
+          '" target="_blank" rel="noopener noreferrer">&#128241; @' + escapeHtml(u) + '</a>';
+      }
+      html += '</div>';
     }
 
     html += '</div>';
