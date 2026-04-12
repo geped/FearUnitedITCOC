@@ -63,13 +63,14 @@ body {
   gap: 10px;
   white-space: nowrap;
 }
-.hero-logo {
+.hero .hero-badge .hero-logo {
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid var(--gold);
+  object-fit: contain;
+  border: none;
   flex-shrink: 0;
+  max-height: none;
 }
 .hero-title {
   font-size: 20px;
@@ -249,7 +250,7 @@ code {
   <img src="assets/benvenuto.png" alt="CoCBoard Benvenuto">
   <div class="hero-overlay"></div>
   <div class="hero-badge">
-    <img class="hero-logo" src="assets/cocboardbot.png" alt="logo">
+    <img class="hero-logo" src="assets/cocboardbot-no-bg.png" alt="logo">
     <span class="hero-title">CoCBoard · Guida</span>
   </div>
 </div>
