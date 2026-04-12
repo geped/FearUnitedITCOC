@@ -124,7 +124,7 @@ module.exports = async (req, res) => {
                 .order('approved_at', { ascending: false })
                 .limit(20);
             if (dbErr) return res.status(500).json({ error: dbErr.message });
-            const botToken = process.env.TELEGRAM_BOT_TOKEN || '';
+            const botToken = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
             const recruitSyncKey = process.env.SYNC_SECRET || '';
 
             // Estrae #CLANTAG dal link clashofclans.com nel post_text
@@ -156,19 +156,8 @@ module.exports = async (req, res) => {
                         // URL diretto (es. stemma CoC API gia' risolto al momento della pubblicazione)
                         photo_url = fid;
                     } else if (botToken) {
-                        // Telegram file_id: risolvi via Bot API
-                        try {
-                            const tgRes = await fetch(
-                                'https://api.telegram.org/bot' + botToken + '/getFile?file_id=' + encodeURIComponent(fid),
-                                { signal: AbortSignal.timeout(6000) }
-                            );
-                            if (tgRes.ok) {
-                                const tgData = await tgRes.json().catch(() => ({}));
-                                if (tgData.ok && tgData.result && tgData.result.file_path) {
-                                    photo_url = 'https://api.telegram.org/file/bot' + botToken + '/' + tgData.result.file_path;
-                                }
-                            }
-                        } catch (_) { /* non blocca */ }
+                        // Telegram file_id: URL same-origin verso type=rphoto (getFile + download solo al load dell'img)
+                        photo_url = '/api/lookup?type=rphoto&pid=' + encodeURIComponent(String(r.id));
                     }
                 }
                 // Nessuna foto utente: mostra stemma clan se ricavabile dal post_text
@@ -185,6 +174,85 @@ module.exports = async (req, res) => {
                 };
             }));
             return res.status(200).json({ posts });
+        } else if (type === 'rphoto') {
+            // Proxy immagine annuncio reclutamento (Telegram file_id → bytes). Evita URL con token in <img> e problemi 403/referrer sul CDN Telegram.
+            if (req.method !== 'GET') {
+                return res.status(405).json({ error: 'Metodo non consentito.' });
+            }
+            const rawId = String(req.query.pid || req.query.id || '').trim();
+            if (!rawId || !/^\d+$/.test(rawId)) {
+                return res.status(400).json({ error: 'pid obbligatorio.' });
+            }
+            const supabaseUrl = process.env.SUPABASE_URL;
+            const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+            if (!supabaseUrl || !serviceKey) {
+                return res.status(500).json({ error: 'Supabase non configurato.' });
+            }
+            const { createClient } = require('@supabase/supabase-js');
+            const admin = createClient(supabaseUrl, serviceKey, {
+                auth: { autoRefreshToken: false, persistSession: false },
+            });
+            const nowIso = new Date().toISOString();
+            const { data: row, error: rowErr } = await admin
+                .from('telegram_recruitment_posts')
+                .select('photo_file_id')
+                .eq('id', Number(rawId))
+                .gt('expires_at', nowIso)
+                .maybeSingle();
+            if (rowErr || !row || !row.photo_file_id) {
+                return res.status(404).end();
+            }
+            const fid = String(row.photo_file_id).trim();
+            const botTok = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
+
+            async function sendBytes(buf, contentType, cacheSec) {
+                res.setHeader('Content-Type', contentType || 'application/octet-stream');
+                res.setHeader('Cache-Control', 'public, max-age=' + cacheSec + ', s-maxage=' + cacheSec);
+                return res.status(200).send(buf);
+            }
+
+            if (fid.startsWith('https://')) {
+                try {
+                    const upstream = await fetch(fid, { redirect: 'follow', signal: AbortSignal.timeout(20000) });
+                    if (!upstream.ok) return res.status(502).end();
+                    const ct = upstream.headers.get('content-type') || 'image/jpeg';
+                    const buf = Buffer.from(await upstream.arrayBuffer());
+                    return sendBytes(buf, ct, 3600);
+                } catch (_) {
+                    return res.status(502).end();
+                }
+            }
+            if (!botTok) {
+                return res.status(404).end();
+            }
+            let filePath;
+            try {
+                const tgRes = await fetch(
+                    'https://api.telegram.org/bot' + botTok + '/getFile?file_id=' + encodeURIComponent(fid),
+                    { signal: AbortSignal.timeout(12000) }
+                );
+                const tgData = await tgRes.json().catch(() => ({}));
+                if (!tgRes.ok || !tgData.ok || !tgData.result || !tgData.result.file_path) {
+                    return res.status(404).end();
+                }
+                filePath = tgData.result.file_path;
+            } catch (_) {
+                return res.status(502).end();
+            }
+            const fileUrl =
+                'https://api.telegram.org/file/bot' +
+                botTok +
+                '/' +
+                String(filePath).split('/').map(encodeURIComponent).join('/');
+            try {
+                const imgRes = await fetch(fileUrl, { signal: AbortSignal.timeout(25000) });
+                if (!imgRes.ok) return res.status(502).end();
+                const ct = imgRes.headers.get('content-type') || 'image/jpeg';
+                const buf = Buffer.from(await imgRes.arrayBuffer());
+                return sendBytes(buf, ct, 1800);
+            } catch (_) {
+                return res.status(502).end();
+            }
         } else if (type === 'ping') {
             // Keep-alive esterno verso Render: il self-ping su localhost non evita spin-down / cambio IP.
             const authHeader = req.headers['authorization'] || '';
@@ -307,7 +375,7 @@ module.exports = async (req, res) => {
         } else {
             return res.status(400).json({
                 error:
-                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list',
+                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto',
             });
         }
         const r = await fetch(`${proxyUrl}${proxyPath}`, {

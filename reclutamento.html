@@ -236,6 +236,10 @@ function fmtDate(iso) {
     ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 }
 
+function escapeAttr(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+
 function sanitize(html) {
   var tmp = document.createElement('div');
   tmp.innerHTML = html;
@@ -282,7 +286,7 @@ function renderCards(posts) {
     if (p.photo_url) {
       html += '<div class="card-photo-wrap" id="pw' + i + '">' +
         '<div class="photo-loader" id="pl' + i + '">Foto in caricamento</div>' +
-        '<img class="card-photo" src="' + p.photo_url + '" alt="Foto annuncio" loading="lazy"' +
+        '<img class="card-photo" src="' + escapeAttr(p.photo_url) + '" alt="Foto annuncio" loading="lazy" referrerpolicy="no-referrer"' +
         ' onload="showPhoto(' + i + ')" onerror="hidePhoto(' + i + ')" style="display:none"></div>';
     }
     // Testo
