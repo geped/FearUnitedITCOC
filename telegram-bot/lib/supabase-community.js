@@ -234,9 +234,11 @@ async function insertRecruitmentSubmission(submitterId, display, bodyText, clanU
     photo_file_id: photoFileId ? String(photoFileId).slice(0, 2048) : null,
     status,
     clan_tag: clanTag ? String(clanTag).toUpperCase().replace(/^#/, '').slice(0, 20) : null,
-    tg_contact_1: tgContact1 ? String(tgContact1).replace(/^@/, '').slice(0, 64) : null,
-    tg_contact_2: tgContact2 ? String(tgContact2).replace(/^@/, '').slice(0, 64) : null,
   };
+  const c1 = tgContact1 ? String(tgContact1).replace(/^@/, '').slice(0, 64) : null;
+  const c2 = tgContact2 ? String(tgContact2).replace(/^@/, '').slice(0, 64) : null;
+  if (c1) row.tg_contact_1 = c1;
+  if (c2) row.tg_contact_2 = c2;
   const { data, error } = await c.from('telegram_recruitment_submissions').insert(row).select('id').single();
   if (error) throw new Error(error.message);
   return data.id;

@@ -638,9 +638,28 @@ function formatGuidedPreviewHtml(st) {
     `${pres}\n\n` +
     `🏷 <code>${escapeHtml(tagHash)}</code>\n` +
     `🔗 <a href="${escapeHtml(link)}">Apri link clan (CoC)</a>` +
-    contactsLine +
-    `${st.photo_file_id ? '\n\n📷 <i>Con immagine allegata</i>' : ''}`
+    contactsLine
   );
+}
+
+/** Anteprima guidata: foto reale (se presente) + testo + pulsanti. */
+async function showGuidedPreview(ctx, st) {
+  const html = formatGuidedPreviewHtml(st);
+  const kb = guidedPreviewKb();
+  if (st.photo_file_id) {
+    const cap = '📎 <b>Anteprima immagine</b>\n<i>Allegata all’annuncio come nel feed.</i>';
+    try {
+      await ctx.replyWithPhoto(st.photo_file_id, { caption: cap, parse_mode: 'HTML' });
+    } catch (e) {
+      await ctx
+        .reply(
+          `⚠️ Anteprima foto non disponibile; l’immagine sarà comunque inclusa nell’invio.\n<code>${escapeHtml(String(e.message || 'errore').slice(0, 200))}</code>`,
+          { parse_mode: 'HTML' }
+        )
+        .catch(() => {});
+    }
+  }
+  await ctx.reply(html, { parse_mode: 'HTML', disable_web_page_preview: true, ...kb });
 }
 
 /** Costruisce l'HTML del post "pubblica adesso" da salvare nel DB e inviare ai subscriber. */
@@ -827,9 +846,36 @@ async function tryHandleEarlyMessage(
     return true;
   }
 
+  const recruitDraftKinds = new Set(['recruit_body', 'recruit_guided', 'recruit_instant']);
+  if (ctx.message?.text && txt.startsWith('/') && pendingCommunity.has(uid)) {
+    const cmd0 = txt.split(/\s+/)[0].toLowerCase().split('@')[0];
+    const stSlash = pendingCommunity.get(uid);
+    if (recruitDraftKinds.has(stSlash?.kind) && cmd0 !== '/annulla_reclutamento' && cmd0 !== '/esci_chat_global') {
+      pendingCommunity.delete(uid);
+      await privateUi.wipePrivateConversationUi(ctx.telegram, uid).catch(() => {});
+      try {
+        if (ctx.message?.message_id != null) {
+          await ctx.telegram.deleteMessage(uid, ctx.message.message_id);
+        }
+      } catch (_) {}
+      return false;
+    }
+  }
+
   if (low === '/annulla_reclutamento' || low.startsWith('/annulla_reclutamento@')) {
+    const hadRecruitDraft = pendingCommunity.has(uid) && recruitDraftKinds.has(pendingCommunity.get(uid)?.kind);
     pendingCommunity.delete(uid);
-    await ctx.reply('Bozza reclutamento annullata.', { parse_mode: 'HTML', ...recruitHubKb(recruitWebUrl()) });
+    if (hadRecruitDraft) {
+      await privateUi.wipePrivateConversationUi(ctx.telegram, uid).catch(() => {});
+      try {
+        if (ctx.message?.message_id != null) {
+          await ctx.telegram.deleteMessage(uid, ctx.message.message_id);
+        }
+      } catch (_) {}
+      await ctx.reply('Bozza reclutamento annullata.', { parse_mode: 'HTML', ...recruitHubKb(recruitWebUrl()) });
+    } else {
+      await ctx.reply('ℹ️ Nessuna bozza reclutamento attiva.', { parse_mode: 'HTML', ...recruitHubKb(recruitWebUrl()) });
+    }
     await rk(ctx);
     return true;
   }
@@ -1000,7 +1046,7 @@ async function tryHandleEarlyMessage(
           st.tg_contact_2 = clean;
           st.step = 'preview';
           pendingCommunity.set(uid, st);
-          await ctx.reply(formatGuidedPreviewHtml(st), { parse_mode: 'HTML', disable_web_page_preview: true, ...guidedPreviewKb() });
+          await showGuidedPreview(ctx, st);
         }
         return true;
       }
@@ -1351,11 +1397,23 @@ async function showRapidoPreview(ctx, uid, pendingMap) {
   if (contacts.length) {
     previewText += '\n' + contacts.map(u => `📱 <a href="https://t.me/${escapeHtml(u)}">@${escapeHtml(u)}</a>`).join('  ');
   }
-  if (st.photo_file_id) previewText += '\n\n📷 <i>Con immagine allegata</i>';
   const kb = Markup.inlineKeyboard([
     [Markup.button.callback('🚀 Pubblica (in attesa di approvazione)', 'rcb_publish')],
     [Markup.button.callback('❌ Annulla', 'rcb_cancel')],
   ]);
+  if (st.photo_file_id) {
+    const cap = '📎 <b>Anteprima immagine</b>\n<i>Allegata all’annuncio come nel feed.</i>';
+    try {
+      await ctx.replyWithPhoto(st.photo_file_id, { caption: cap, parse_mode: 'HTML' });
+    } catch (e) {
+      await ctx
+        .reply(
+          `⚠️ Anteprima foto non disponibile; l’immagine sarà comunque inclusa nell’invio.\n<code>${escapeHtml(String(e.message || 'errore').slice(0, 200))}</code>`,
+          { parse_mode: 'HTML' }
+        )
+        .catch(() => {});
+    }
+  }
   await ctx.reply(previewText, { parse_mode: 'HTML', disable_web_page_preview: true, ...kb });
 }
 
@@ -1976,7 +2034,7 @@ function registerCommunityHandlers(bot, deps) {
       // recruit_guided: vai all'anteprima guidata
       st.step = 'preview';
       pendingCommunity.set(uid, st);
-      await ctx.reply(formatGuidedPreviewHtml(st), { parse_mode: 'HTML', ...guidedPreviewKb() });
+      await showGuidedPreview(ctx, st);
     }
     await refreshPrivateReplyKeyboardRef(ctx);
   });
@@ -2063,7 +2121,7 @@ function registerCommunityHandlers(bot, deps) {
     const uid = ctx.from?.id;
     if (uid != null) pendingCommunity.delete(uid);
     await ctx.answerCbQuery('Annullato').catch(() => {});
-    await ctx.reply('Bozza guidata annullata.', { parse_mode: 'HTML', ...recruitHubKb() });
+    await ctx.reply('Bozza guidata annullata.', { parse_mode: 'HTML', ...recruitHubKb(recruitWebUrl()) });
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
@@ -2365,7 +2423,7 @@ function registerCommunityHandlers(bot, deps) {
         `Visibile in <b>Reclutamento → Annunci attivi</b> per 24h.\n` +
         `⏳ Scade il <b>${escapeHtml(exp.toLocaleString('it-IT', { timeZone: 'UTC' }))}</b> UTC.\n\n` +
         `<i>Potrai ritirarlo in anticipo da "Annunci attivi".</i>`,
-      { parse_mode: 'HTML', ...recruitHubKb() }
+      { parse_mode: 'HTML', ...recruitHubKb(recruitWebUrl()) }
     );
     await refreshPrivateReplyKeyboardRef(ctx);
   });
@@ -2390,7 +2448,7 @@ function registerCommunityHandlers(bot, deps) {
     const uid = ctx.from?.id;
     if (uid != null) pendingCommunity.delete(uid);
     await ctx.answerCbQuery('Annullato').catch(() => {});
-    await ctx.reply('Wizard annullato.', { parse_mode: 'HTML', ...recruitHubKb() });
+    await ctx.reply('Wizard annullato.', { parse_mode: 'HTML', ...recruitHubKb(recruitWebUrl()) });
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
@@ -2423,7 +2481,7 @@ function registerCommunityHandlers(bot, deps) {
       await ctx
         .reply('✅ Il tuo annuncio è stato <b>ritirato</b> con successo.', {
           parse_mode: 'HTML',
-          ...recruitHubKb(),
+          ...recruitHubKb(recruitWebUrl()),
         })
         .catch(() => {});
     } catch (e) {
@@ -2463,7 +2521,12 @@ function registerCommunityHandlers(bot, deps) {
       }
       await sbc.deleteRecruitmentPostRow(postId);
       await ctx.answerCbQuery('Rimosso').catch(() => {});
-      try { await ctx.editMessageText(`&#10004; Annuncio <code>#${postId}</code> rimosso con successo.`, { parse_mode: 'HTML' }); } catch (_) {}
+      try {
+        await ctx.editMessageText(`&#10004; Annuncio <code>#${postId}</code> rimosso con successo.`, {
+          parse_mode: 'HTML',
+          ...recruitHubKb(recruitWebUrl()),
+        });
+      } catch (_) {}
     } catch (e) {
       await ctx.telegram.sendMessage(uid, `&#10060; ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' }).catch(() => {});
     }
@@ -2500,12 +2563,13 @@ function registerCommunityHandlers(bot, deps) {
     try {
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
     } catch (_) {}
-    await ctx.reply(`✅ Bozza #${sid} approvata e pubblicata (24h in Annunci attivi).`, { parse_mode: 'HTML' }).catch(() => {});
+    const hubKb = recruitHubKb(recruitWebUrl());
+    await ctx.reply(`✅ Bozza #${sid} approvata e pubblicata (24h in Annunci attivi).`, { parse_mode: 'HTML', ...hubKb }).catch(() => {});
     await ctx.telegram
       .sendMessage(
         sub.submitter_telegram_user_id,
         '✅ Il tuo annuncio di reclutamento è stato <b>approvato</b> e pubblicato.\nVisibile in <b>Reclutamento → Annunci attivi</b> per 24h.',
-        { parse_mode: 'HTML' }
+        { parse_mode: 'HTML', ...hubKb }
       )
       .catch(() => {});
   });

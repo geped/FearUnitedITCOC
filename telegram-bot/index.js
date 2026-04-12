@@ -869,7 +869,7 @@ async function buildPrivateReplyKeyboardMarkup(uid) {
     rows.push([Markup.button.text(PRIVATE_RK_REPORT_GLOBAL), Markup.button.text(PRIVATE_RK_EXIT_GLOBAL)]);
   }
   const p = pendingCommunity.get(uid);
-  if (p?.kind === 'recruit_guided' || p?.kind === 'recruit_body') {
+  if (p?.kind === 'recruit_guided' || p?.kind === 'recruit_body' || p?.kind === 'recruit_instant') {
     rows.push([Markup.button.text(PRIVATE_RK_CANCEL_RECRUIT)]);
   }
   return Markup.keyboard(rows).resize().persistent(true);
@@ -3038,7 +3038,7 @@ function setupBot(bot) {
     }
     if (t === PRIVATE_RK_CANCEL_RECRUIT) {
       const p = pendingCommunity.get(ctx.from.id);
-      if (!p || (p.kind !== 'recruit_guided' && p.kind !== 'recruit_body')) {
+      if (!p || !['recruit_guided', 'recruit_body', 'recruit_instant'].includes(p.kind)) {
         await ctx.reply('ℹ️ Nessuna <b>bozza reclutamento</b> attiva da annullare.', { parse_mode: 'HTML' }).catch(() => {});
         await refreshPrivateReplyKeyboard(ctx);
         return true;
