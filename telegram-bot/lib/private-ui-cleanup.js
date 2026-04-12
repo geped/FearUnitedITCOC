@@ -38,6 +38,16 @@ function attachPrivateUiTracking(ctx) {
 
   ctx.reply = trackSent(ctx.reply.bind(ctx));
   ctx.sendMessage = trackSent(ctx.sendMessage.bind(ctx));
+  // Anteprime reclutamento (foto/stemma) e altri media: altrimenti restano in chat dopo wipe
+  if (typeof ctx.replyWithPhoto === 'function') {
+    ctx.replyWithPhoto = trackSent(ctx.replyWithPhoto.bind(ctx));
+  }
+  if (typeof ctx.replyWithVideo === 'function') {
+    ctx.replyWithVideo = trackSent(ctx.replyWithVideo.bind(ctx));
+  }
+  if (typeof ctx.replyWithDocument === 'function') {
+    ctx.replyWithDocument = trackSent(ctx.replyWithDocument.bind(ctx));
+  }
 
   const origEditText = ctx.editMessageText.bind(ctx);
   ctx.editMessageText = async (...args) => {

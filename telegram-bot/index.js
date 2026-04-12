@@ -2534,6 +2534,14 @@ function setupBot(bot) {
   /** Chat privata: traccia reply/sendMessage e edit* (menù aggiornati con callback senza nuove reply). */
   bot.use(async (ctx, next) => {
     privateUi.attachPrivateUiTracking(ctx);
+    // Bozza reclutamento: traccia anche i messaggi inviati dall’utente così il wipe (callback /) li elimina
+    const uid = ctx.from?.id;
+    if (ctx.chat?.type === 'private' && uid != null && ctx.message?.message_id && pendingCommunity.has(uid)) {
+      const p = pendingCommunity.get(uid);
+      if (p && ['recruit_body', 'recruit_guided', 'recruit_instant'].includes(p.kind)) {
+        privateUi.notePrivateUiMessage(uid, ctx.message.message_id);
+      }
+    }
     return next();
   });
 
