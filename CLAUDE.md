@@ -188,9 +188,10 @@ RENDER_PROXY_URL
 SYNC_SECRET
 CRON_SECRET
 RESEND_API_KEY               # Opzionale: email di benvenuto
+TELEGRAM_BOT_TOKEN           # Stesso token del bot Render — obbligatorio per `/api/lookup?type=recruit-list` (foto annunci reclutamento via `getFile`) e per endpoint admin che chiamano Telegram
 
 # Bot Telegram (Render — servizio separato)
-TELEGRAM_BOT_TOKEN           # Token BotFather
+TELEGRAM_BOT_TOKEN           # Token BotFather (stesso valore della variabile omonima su Vercel)
 COCBOARD_API_BASE            # URL sito Vercel (es. https://cocboard.vercel.app)
 SUPABASE_URL                 # Stessa del sito
 SUPABASE_ANON_KEY            # Chiave anon (obbligatoria per login)

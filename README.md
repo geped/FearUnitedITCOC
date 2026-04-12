@@ -81,6 +81,7 @@ RENDER_PROXY_URL
 SYNC_SECRET
 CRON_SECRET
 RESEND_API_KEY        # opzionale
+TELEGRAM_BOT_TOKEN    # stesso del bot Render — immagini annunci reclutamento (lookup recruit-list)
 ```
 
 **Render.com:**
