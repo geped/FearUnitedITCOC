@@ -103,6 +103,33 @@ module.exports = async (req, res) => {
                 .update({ webapp_handoff_code: null, webapp_handoff_expires_at: null })
                 .eq('telegram_user_id', row.telegram_user_id);
             return res.status(200).json({ access_token, refresh_token });
+        } else if (type === 'recruit-list') {
+            // Lista pubblica annunci reclutamento attivi (read-only, nessuna auth richiesta)
+            const supabaseUrl = process.env.SUPABASE_URL;
+            const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+            if (!supabaseUrl || !serviceKey) {
+                return res.status(500).json({ error: 'Supabase non configurato.' });
+            }
+            const { createClient } = require('@supabase/supabase-js');
+            const admin = createClient(supabaseUrl, serviceKey, {
+                auth: { autoRefreshToken: false, persistSession: false },
+            });
+            const now = new Date().toISOString();
+            const { data, error } = await admin
+                .from('telegram_recruitment_posts')
+                .select('id, post_text, photo_file_id, approved_at, expires_at')
+                .gt('expires_at', now)
+                .order('approved_at', { ascending: false })
+                .limit(20);
+            if (error) return res.status(500).json({ error: error.message });
+            const posts = (data || []).map((r) => ({
+                id: r.id,
+                post_text: r.post_text || '',
+                has_photo: !!r.photo_file_id,
+                approved_at: r.approved_at,
+                expires_at: r.expires_at,
+            }));
+            return res.status(200).json({ posts });
         } else if (type === 'ping') {
             // Keep-alive esterno verso Render: il self-ping su localhost non evita spin-down / cambio IP.
             const authHeader = req.headers['authorization'] || '';
@@ -225,7 +252,7 @@ module.exports = async (req, res) => {
         } else {
             return res.status(400).json({
                 error:
-                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan',
+                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list',
             });
         }
         const r = await fetch(`${proxyUrl}${proxyPath}`, {

@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>CoCBoard · Reclutamento</title>
+<style>
+:root {
+  --bg:       #0D0B08;
+  --bg-1:     #110E09;
+  --bg-2:     #1A150E;
+  --bg-3:     #221A0F;
+  --border:   #2A2010;
+  --gold:     #C9A962;
+  --gold-dim: rgba(201,169,98,0.13);
+  --text:     #EEEAE0;
+  --text-2:   #C8BCA8;
+  --text-3:   #7A6A50;
+  --green:    #27AE60;
+  --red:      #E74C3C;
+  --radius:   8px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: var(--bg); }
+body {
+  font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.65;
+  padding-bottom: max(env(safe-area-inset-bottom), 24px);
+}
+
+/* ── Hero ── */
+.hero {
+  position: relative;
+  width: 100%;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  padding: 20px 16px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.hero-logo {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+.hero-text { display: flex; flex-direction: column; }
+.hero-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--gold);
+  letter-spacing: .01em;
+  line-height: 1.2;
+}
+.hero-sub {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
+  letter-spacing: .03em;
+}
+
+/* ── Status bar ── */
+.status-bar {
+  background: var(--bg-1);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-3);
+  letter-spacing: .03em;
+}
+.status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+  display: inline-block;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+.status-dot.live { background: var(--green); }
+.status-left { display: flex; align-items: center; gap: 6px; }
+.refresh-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--gold);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: .03em;
+}
+.refresh-btn:active { opacity: .7; }
+
+/* ── Content area ── */
+.content {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 16px 12px;
+}
+
+/* ── Loading / Empty ── */
+.state-msg {
+  text-align: center;
+  padding: 48px 16px;
+  color: var(--text-3);
+  font-size: 14px;
+}
+.state-msg .icon { font-size: 36px; margin-bottom: 10px; }
+.state-msg p { line-height: 1.5; }
+
+/* ── Cards ── */
+.cards { display: flex; flex-direction: column; gap: 14px; }
+
+.card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.card-body {
+  padding: 14px 14px 10px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Telegram HTML subset rendering */
+.card-body b, .card-body strong { font-weight: 700; color: var(--text); }
+.card-body i, .card-body em { font-style: italic; }
+.card-body u, .card-body ins { text-decoration: underline; }
+.card-body s, .card-body strike, .card-body del { text-decoration: line-through; color: var(--text-3); }
+.card-body code {
+  font-family: 'Courier New', monospace;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 4px;
+  font-size: 13px;
+}
+.card-body pre {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px;
+  overflow-x: auto;
+  font-size: 12px;
+  font-family: 'Courier New', monospace;
+  margin: 6px 0;
+  white-space: pre-wrap;
+}
+.card-body a {
+  color: var(--gold);
+  text-decoration: none;
+  word-break: break-all;
+}
+.card-body a:hover { text-decoration: underline; }
+tg-spoiler {
+  background: var(--text-3);
+  color: transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  user-select: none;
+  transition: all .2s;
+  padding: 0 2px;
+}
+tg-spoiler.revealed {
+  background: transparent;
+  color: inherit;
+}
+
+.card-footer {
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-1);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+.card-badge.expires { color: var(--gold); border-color: rgba(201,169,98,.3); }
+.card-badge.photo   { color: var(--text-2); }
+.card-badge.date    { color: var(--text-3); margin-left: auto; }
+
+/* ── Countdown refresh ── */
+.refresh-hint {
+  text-align: center;
+  padding: 14px 0 0;
+  font-size: 11px;
+  color: var(--text-3);
+  letter-spacing: .03em;
+}
+</style>
+</head>
+<body>
+
+<!-- ── Hero ── -->
+<div class="hero">
+  <img class="hero-logo" src="assets/cocboardbot-no-bg.png" alt="CoCBoard">
+  <div class="hero-text">
+    <span class="hero-title">Reclutamento</span>
+    <span class="hero-sub">Annunci attivi · CoCBoard Community</span>
+  </div>
+</div>
+
+<!-- ── Status bar ── -->
+<div class="status-bar">
+  <div class="status-left">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Caricamento…</span>
+  </div>
+  <button class="refresh-btn" onclick="loadPosts(true)">↺ Aggiorna</button>
+</div>
+
+<!-- ── Main content ── -->
+<div class="content" id="content">
+  <div class="state-msg" id="loadingState">
+    <div class="icon">⏳</div>
+    <p>Caricamento annunci…</p>
+  </div>
+</div>
+
+<script>
+// Spoiler click
+document.addEventListener('click', (e) => {
+  if (e.target.tagName === 'TG-SPOILER') e.target.classList.toggle('revealed');
+});
+
+// Formatta tempo rimanente
+function formatRemaining(expiresAt) {
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (ms <= 0) return 'scaduto';
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+// Formatta data approvazione
+function formatDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+// Sicurezza: stripping tag non permessi mantenendo il sottoinsieme Telegram HTML
+function sanitizePostText(html) {
+  // Permettiamo solo tag Telegram HTML: b, strong, i, em, u, ins, s, strike, del, code, pre, a, tg-spoiler, tg-emoji, br
+  // Rimuoviamo attributi da tutti i tag tranne href da <a>
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  const allowed = new Set(['B','STRONG','I','EM','U','INS','S','STRIKE','DEL','CODE','PRE','A','TG-SPOILER','TG-EMOJI','BR','SPAN']);
+  function clean(node) {
+    if (node.nodeType === Node.TEXT_NODE) return;
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      if (!allowed.has(node.tagName)) {
+        // Sostituisce il nodo con i suoi figli
+        while (node.firstChild) node.parentNode.insertBefore(node.firstChild, node);
+        node.parentNode.removeChild(node);
+        return;
+      }
+      // Rimuove attributi non sicuri
+      const attrs = Array.from(node.attributes);
+      for (const attr of attrs) {
+        if (node.tagName === 'A' && attr.name === 'href') continue;
+        node.removeAttribute(attr.name);
+      }
+      // Forza link apertura esterna sicura
+      if (node.tagName === 'A') {
+        node.setAttribute('target', '_blank');
+        node.setAttribute('rel', 'noopener noreferrer');
+        // Blocca javascript: URLs
+        const href = node.getAttribute('href') || '';
+        if (/^javascript:/i.test(href.trim())) node.removeAttribute('href');
+      }
+      Array.from(node.childNodes).forEach(clean);
+    }
+  }
+  Array.from(tmp.childNodes).forEach(clean);
+  return tmp.innerHTML;
+}
+
+function renderCards(posts) {
+  if (!posts.length) {
+    return `<div class="state-msg">
+      <div class="icon">📭</div>
+      <p>Nessun annuncio attivo al momento.<br>Torna più tardi o pubblica il tuo!</p>
+    </div>`;
+  }
+  return `<div class="cards">${posts.map(p => {
+    const remaining = formatRemaining(p.expires_at);
+    const dateStr = formatDate(p.approved_at);
+    const safeHtml = sanitizePostText(p.post_text);
+    return `<div class="card">
+      <div class="card-body">${safeHtml}</div>
+      <div class="card-footer">
+        <span class="card-badge expires">⏳ Scade tra ${remaining}</span>
+        ${p.has_photo ? '<span class="card-badge photo">📷 Foto allegata</span>' : ''}
+        ${dateStr ? `<span class="card-badge date">${dateStr}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('')}
+  <div class="refresh-hint" id="refreshHint"></div>
+  </div>`;
+}
+
+let refreshTimer = null;
+let nextRefreshAt = null;
+
+function scheduleRefresh() {
+  clearInterval(refreshTimer);
+  nextRefreshAt = Date.now() + 60000;
+  refreshTimer = setInterval(() => {
+    const left = Math.max(0, Math.ceil((nextRefreshAt - Date.now()) / 1000));
+    const hint = document.getElementById('refreshHint');
+    if (hint) hint.textContent = left > 0 ? `Aggiornamento automatico tra ${left}s` : '';
+    if (left === 0) loadPosts(false);
+  }, 1000);
+}
+
+async function loadPosts(manual = false) {
+  const dot = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  const content = document.getElementById('content');
+
+  if (manual) {
+    statusText.textContent = 'Aggiornamento…';
+    dot.className = 'status-dot';
+  }
+
+  try {
+    const res = await fetch('/api/lookup?type=recruit-list', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const posts = json.posts || [];
+
+    const count = posts.length;
+    dot.className = 'status-dot live';
+    statusText.textContent = count
+      ? `${count} annuncio${count !== 1 ? ' attivi' : ' attivo'}`
+      : 'Nessun annuncio attivo';
+
+    content.innerHTML = renderCards(posts);
+    scheduleRefresh();
+  } catch (err) {
+    dot.className = 'status-dot';
+    statusText.textContent = 'Errore di rete';
+    content.innerHTML = `<div class="state-msg">
+      <div class="icon">⚠️</div>
+      <p>Impossibile caricare gli annunci.<br><small>${err.message}</small></p>
+    </div>`;
+  }
+}
+
+loadPosts(true);
+</script>
+</body>
+</html>
