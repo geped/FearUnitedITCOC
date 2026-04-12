@@ -2494,16 +2494,23 @@ function registerCommunityHandlers(bot, deps) {
 
   // Conferma rimozione annuncio da deep link browser (/start withdraw_ID)
   bot.action(/^withdraw_confirm:(\d+)$/, async (ctx) => {
-    safeCb(ctx);
     const uid = ctx.from?.id;
     if (uid == null) return;
     const postId = Number(ctx.match[1]);
     const isOwner = cv.isBotOwnerTelegramUser(uid);
+    const hubKb = recruitHubKb(recruitWebUrl());
+    const okText =
+      '✅ <b>Annuncio rimosso</b>\n\n' + 'Non è più visibile in <b>Annunci attivi</b> (web e bot).';
     try {
       const row = await sbc.getRecruitmentPostById(postId);
       if (!row) {
         await ctx.answerCbQuery('Annuncio non trovato.').catch(() => {});
-        try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch (_) {}
+        try {
+          await ctx.editMessageText('⚠️ Annuncio non trovato o già rimosso.', { parse_mode: 'HTML', ...hubKb });
+        } catch (_) {
+          await ctx.reply('⚠️ Annuncio non trovato o già rimosso.', { parse_mode: 'HTML', ...hubKb }).catch(() => {});
+        }
+        await refreshPrivateReplyKeyboardRef(ctx);
         return;
       }
       const isSubmitter = row.submitter_telegram_user_id === uid;
@@ -2515,28 +2522,31 @@ function registerCommunityHandlers(bot, deps) {
       const ids = Array.isArray(row.delivered_message_ids) ? row.delivered_message_ids : [];
       for (const entry of ids) {
         if (entry?.chat_id != null && entry?.message_id != null) {
-          try { await ctx.telegram.deleteMessage(entry.chat_id, entry.message_id); } catch (_) {}
+          try {
+            await ctx.telegram.deleteMessage(entry.chat_id, entry.message_id);
+          } catch (_) {}
           await sleep(30);
         }
       }
       await sbc.deleteRecruitmentPostRow(postId);
-      await ctx.answerCbQuery('Rimosso').catch(() => {});
       try {
-        await ctx.editMessageText(`&#10004; Annuncio <code>#${postId}</code> rimosso con successo.`, {
-          parse_mode: 'HTML',
-          ...recruitHubKb(recruitWebUrl()),
-        });
-      } catch (_) {}
+        await ctx.editMessageText(okText, { parse_mode: 'HTML', ...hubKb });
+      } catch (_) {
+        await ctx.reply(okText, { parse_mode: 'HTML', ...hubKb }).catch(() => {});
+      }
+      await ctx.answerCbQuery('Rimosso').catch(() => {});
     } catch (e) {
-      await ctx.telegram.sendMessage(uid, `&#10060; ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' }).catch(() => {});
+      await ctx.answerCbQuery().catch(() => {});
+      await ctx.telegram.sendMessage(uid, `❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' }).catch(() => {});
     }
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
   bot.action(/^withdraw_cancel:(\d+)$/, async (ctx) => {
-    safeCb(ctx);
     await ctx.answerCbQuery('Annullato').catch(() => {});
-    try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch (_) {}
+    try {
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    } catch (_) {}
   });
 
   bot.action(/^rva:(\d+)$/, async (ctx) => {
@@ -2564,14 +2574,20 @@ function registerCommunityHandlers(bot, deps) {
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
     } catch (_) {}
     const hubKb = recruitHubKb(recruitWebUrl());
+    const submitterId = sub.submitter_telegram_user_id;
+    if (submitterId != null) {
+      await privateUi.wipePrivateConversationUi(ctx.telegram, submitterId).catch(() => {});
+    }
     await ctx.reply(`✅ Bozza #${sid} approvata e pubblicata (24h in Annunci attivi).`, { parse_mode: 'HTML', ...hubKb }).catch(() => {});
-    await ctx.telegram
-      .sendMessage(
-        sub.submitter_telegram_user_id,
-        '✅ Il tuo annuncio di reclutamento è stato <b>approvato</b> e pubblicato.\nVisibile in <b>Reclutamento → Annunci attivi</b> per 24h.',
-        { parse_mode: 'HTML', ...hubKb }
-      )
-      .catch(() => {});
+    if (submitterId != null) {
+      await ctx.telegram
+        .sendMessage(
+          submitterId,
+          '✅ Il tuo annuncio di reclutamento è stato <b>approvato</b> e pubblicato.\nVisibile in <b>Reclutamento → Annunci attivi</b> per 24h.',
+          { parse_mode: 'HTML', ...hubKb }
+        )
+        .catch(() => {});
+    }
   });
 
   bot.action(/^rvr:(\d+)$/, async (ctx) => {

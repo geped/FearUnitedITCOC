@@ -2869,24 +2869,18 @@ function setupBot(bot) {
           const isOwner = cv.isBotOwnerTelegramUser(uid);
           const postRow = await sbcCommunity.getRecruitmentPostById(postId).catch(() => null);
           if (!postRow) {
-            await ctx.reply('&#9888; Annuncio #' + postId + ' non trovato o gi&agrave; scaduto.', { parse_mode: 'HTML' });
+            await ctx.reply('⚠️ Annuncio non trovato o già scaduto.', { parse_mode: 'HTML' });
             return;
           }
           const isSubmitter = postRow.submitter_telegram_user_id === uid;
           if (!isOwner && !isSubmitter) {
-            await ctx.reply('&#128683; Non sei il proprietario di questo annuncio.', { parse_mode: 'HTML' });
+            await ctx.reply('🚫 Non sei il proprietario di questo annuncio.', { parse_mode: 'HTML' });
             return;
           }
           const kb = Markup.inlineKeyboard([
-            [
-              Markup.button.callback('&#128465; S&igrave;, rimuovi', 'withdraw_confirm:' + postId),
-              Markup.button.callback('Annulla', 'withdraw_cancel:' + postId),
-            ],
+            [Markup.button.callback('Sì, rimuovi', 'withdraw_confirm:' + postId), Markup.button.callback('Annulla', 'withdraw_cancel:' + postId)],
           ]);
-          await ctx.reply(
-            '&#128465; Vuoi rimuovere l\'annuncio <code>#' + postId + '</code>?',
-            { parse_mode: 'HTML', ...kb }
-          );
+          await ctx.reply('🗑 Vuoi <b>rimuovere questo annuncio</b>?', { parse_mode: 'HTML', ...kb });
           return;
         }
       }

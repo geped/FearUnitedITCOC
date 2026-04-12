@@ -184,6 +184,15 @@ module.exports = async (req, res) => {
                 return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
             }
 
+            /** A capo nel testo Telegram → <br> per la pagina web (senza rompere <pre>). */
+            function bodyHtmlForWebDisplay(html) {
+                if (html == null) return '';
+                const s = String(html);
+                if (!s.trim()) return s;
+                if (/<\s*pre\b/i.test(s)) return s;
+                return s.replace(/\r\n/g, '\n').replace(/\n/g, '<br>');
+            }
+
             // Estrae #CLANTAG dal link clashofclans.com nel post_text (fallback badge)
             function extractTagFromPost(html) {
                 const m = (html || '').match(/[?&]tag=([0-9A-Za-z]+)/);
@@ -222,6 +231,8 @@ module.exports = async (req, res) => {
                     if (linkIdx >= 0) txt = txt.slice(0, linkIdx);
                     body_html = txt.trim();
                 }
+
+                body_html = bodyHtmlForWebDisplay(body_html);
 
                 const clan_url = sub?.clan_profile_url || null;
                 const submitter_display = sub?.submitter_display || null;
