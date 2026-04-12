@@ -1,3 +1,44 @@
+// Cache bot username per l'intera vita dell'istanza serverless.
+let _cachedBotUsername = null;
+async function fetchBotUsername(botToken) {
+    if (_cachedBotUsername) return _cachedBotUsername;
+    try {
+        const r = await fetch(`https://api.telegram.org/bot${botToken}/getMe`, {
+            signal: AbortSignal.timeout(4000),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (d.ok && d.result?.username) _cachedBotUsername = d.result.username;
+    } catch (_) {}
+    return _cachedBotUsername;
+}
+
+/**
+ * Valida Telegram Mini App initData (HMAC-SHA256).
+ * @returns {number|null} Telegram user id del chiamante, o null se non valido.
+ */
+function parseTelegramInitData(initData, botToken) {
+    const crypto = require('crypto');
+    try {
+        const params = new URLSearchParams(initData);
+        const hash = params.get('hash');
+        if (!hash) return null;
+        params.delete('hash');
+        const checkString = [...params.entries()]
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([k, v]) => `${k}=${v}`)
+            .join('\n');
+        const secretKey = crypto.createHmac('sha256', 'WebAppData').update(botToken).digest();
+        const expected = crypto.createHmac('sha256', secretKey).update(checkString).digest('hex');
+        if (hash !== expected) return null;
+        const authDate = Number(params.get('auth_date') || 0);
+        if (Date.now() / 1000 - authDate > 86400) return null; // scaduto dopo 24h
+        const userData = JSON.parse(params.get('user') || '{}');
+        return Number(userData.id || 0) || null;
+    } catch (_) {
+        return null;
+    }
+}
+
 module.exports = async (req, res) => {
     try {
         const proxyUrl = process.env.RENDER_PROXY_URL;
@@ -104,9 +145,9 @@ module.exports = async (req, res) => {
                 .eq('telegram_user_id', row.telegram_user_id);
             return res.status(200).json({ access_token, refresh_token });
         } else if (type === 'recruit-list') {
-            // Lista pubblica annunci reclutamento attivi (read-only, nessuna auth richiesta).
-            // Le URL delle foto vengono risolte server-side via render-proxy in parallelo,
-            // cosi' il browser carica le immagini direttamente dal CDN Telegram senza hop aggiuntivi.
+            // Lista pubblica annunci reclutamento attivi.
+            // Fa JOIN con telegram_recruitment_submissions per ottenere body_html pulito,
+            // clan_profile_url e submitter_display separatamente dal post_text.
             const supabaseUrl = process.env.SUPABASE_URL;
             const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
             if (!supabaseUrl || !serviceKey) {
@@ -119,21 +160,37 @@ module.exports = async (req, res) => {
             const nowIso = new Date().toISOString();
             const { data: rows, error: dbErr } = await admin
                 .from('telegram_recruitment_posts')
-                .select('id, post_text, photo_file_id, approved_at, expires_at')
+                .select([
+                    'id',
+                    'post_text',
+                    'photo_file_id',
+                    'approved_at',
+                    'expires_at',
+                    'submitter_telegram_user_id',
+                    'telegram_recruitment_submissions(body_html, body_text, clan_profile_url, submitter_display)',
+                ].join(', '))
                 .gt('expires_at', nowIso)
                 .order('approved_at', { ascending: false })
                 .limit(20);
             if (dbErr) return res.status(500).json({ error: dbErr.message });
             const botToken = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
             const recruitSyncKey = process.env.SYNC_SECRET || '';
+            const ownerIdsRaw = (process.env.BOT_OWNER_TELEGRAM_IDS || '').split(',').map(s => Number(s.trim())).filter(Boolean);
 
-            // Estrae #CLANTAG dal link clashofclans.com nel post_text
+            // Recupera username bot (per deep link "Rimuovi" da browser).
+            const botUsername = botToken ? await fetchBotUsername(botToken) : null;
+
+            function escHtml(s) {
+                return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            }
+
+            // Estrae #CLANTAG dal link clashofclans.com nel post_text (fallback badge)
             function extractTagFromPost(html) {
                 const m = (html || '').match(/[?&]tag=([0-9A-Za-z]+)/);
                 return m ? '#' + m[1].toUpperCase() : null;
             }
 
-            // Cache badge per clan (evita chiamate duplicate nello stesso ciclo)
+            // Cache badge per clan (fallback se manca clan_profile_url)
             const badgeCache = new Map();
             async function fetchClanBadge(tag) {
                 if (badgeCache.has(tag)) return badgeCache.get(tag);
@@ -149,31 +206,59 @@ module.exports = async (req, res) => {
             }
 
             const posts = await Promise.all((rows || []).map(async (r) => {
+                const sub = r.telegram_recruitment_submissions;
+                // Corpo pulito: body_html dalla submission (già HTML Telegram), o body_text escaped.
+                let body_html = '';
+                if (sub?.body_html && String(sub.body_html).trim()) {
+                    body_html = sub.body_html;
+                } else if (sub?.body_text) {
+                    body_html = escHtml(sub.body_text);
+                } else {
+                    // Fallback: strappa header e link dal post_text legacy
+                    let txt = r.post_text || '';
+                    const bodyStart = txt.indexOf('\n\n');
+                    if (bodyStart >= 0) txt = txt.slice(bodyStart + 2);
+                    const linkIdx = txt.lastIndexOf('\n\n🔗');
+                    if (linkIdx >= 0) txt = txt.slice(0, linkIdx);
+                    body_html = txt.trim();
+                }
+
+                const clan_url = sub?.clan_profile_url || null;
+                const submitter_display = sub?.submitter_display || null;
+                const is_verified_clan = Boolean(r.post_text && r.post_text.includes('Clan CoCBoard'));
+
                 let photo_url = null;
                 const fid = r.photo_file_id || '';
                 if (fid) {
                     if (fid.startsWith('https://')) {
-                        // URL diretto (es. stemma CoC API gia' risolto al momento della pubblicazione)
                         photo_url = fid;
                     } else if (botToken) {
-                        // Telegram file_id: URL same-origin verso type=rphoto (getFile + download solo al load dell'img)
                         photo_url = '/api/lookup?type=rphoto&pid=' + encodeURIComponent(String(r.id));
                     }
                 }
-                // Nessuna foto utente: mostra stemma clan se ricavabile dal post_text
-                if (!photo_url) {
+                // Nessuna foto utente: mostra stemma clan se ricavabile
+                if (!photo_url && clan_url) {
+                    const tag = extractTagFromPost(clan_url);
+                    if (tag) photo_url = await fetchClanBadge(tag);
+                }
+                if (!photo_url && !clan_url) {
                     const tag = extractTagFromPost(r.post_text);
                     if (tag) photo_url = await fetchClanBadge(tag);
                 }
+
                 return {
                     id: r.id,
-                    post_text: r.post_text || '',
+                    body_html,
+                    clan_url,
+                    submitter_display,
+                    submitter_tg_id: r.submitter_telegram_user_id || null,
+                    is_verified_clan,
                     photo_url,
                     approved_at: r.approved_at,
                     expires_at: r.expires_at,
                 };
             }));
-            return res.status(200).json({ posts });
+            return res.status(200).json({ posts, bot_username: botUsername, owner_ids: ownerIdsRaw });
         } else if (type === 'rphoto') {
             // Proxy immagine annuncio reclutamento (Telegram file_id → bytes). Evita URL con token in <img> e problemi 403/referrer sul CDN Telegram.
             if (req.method !== 'GET') {
@@ -274,6 +359,59 @@ module.exports = async (req, res) => {
                 res.setHeader('X-Error-Reason', 'imgdownload-error');
                 return res.status(502).json({ error: 'Errore download immagine: ' + (e.message || 'timeout') });
             }
+        } else if (type === 'recruit-remove') {
+            // Rimozione annuncio da Mini App (initData) o da bot deep-link (non serve auth qui).
+            // Solo POST/DELETE.
+            if (req.method !== 'POST' && req.method !== 'DELETE') {
+                return res.status(405).json({ error: 'Metodo non consentito.' });
+            }
+            const rawId = String(req.query.pid || '').trim();
+            if (!rawId || !/^\d+$/.test(rawId)) {
+                return res.status(400).json({ error: 'pid obbligatorio.' });
+            }
+            const botTokRem = (process.env.TELEGRAM_BOT_TOKEN || '').trim();
+            if (!botTokRem) {
+                return res.status(503).json({ error: 'Bot non configurato.' });
+            }
+            const ownerIdsEnv = (process.env.BOT_OWNER_TELEGRAM_IDS || '').split(',').map(s => Number(s.trim())).filter(Boolean);
+            const authHdr = req.headers['authorization'] || '';
+            const initDataRaw = authHdr.startsWith('tma ') ? authHdr.slice(4).trim() : null;
+            if (!initDataRaw) {
+                return res.status(401).json({ error: 'initData Telegram richiesto.' });
+            }
+            const callerTgId = parseTelegramInitData(initDataRaw, botTokRem);
+            if (!callerTgId) {
+                return res.status(401).json({ error: 'initData non valido o scaduto.' });
+            }
+            const supabaseUrlR = process.env.SUPABASE_URL;
+            const serviceKeyR = process.env.SUPABASE_SERVICE_ROLE_KEY;
+            if (!supabaseUrlR || !serviceKeyR) {
+                return res.status(500).json({ error: 'Supabase non configurato.' });
+            }
+            const { createClient: createClientR } = require('@supabase/supabase-js');
+            const adminR = createClientR(supabaseUrlR, serviceKeyR, {
+                auth: { autoRefreshToken: false, persistSession: false },
+            });
+            const nowIsoR = new Date().toISOString();
+            const { data: postRow, error: postErr } = await adminR
+                .from('telegram_recruitment_posts')
+                .select('id, submitter_telegram_user_id')
+                .eq('id', Number(rawId))
+                .gt('expires_at', nowIsoR)
+                .maybeSingle();
+            if (postErr) return res.status(500).json({ error: 'Errore DB: ' + postErr.message });
+            if (!postRow) return res.status(404).json({ error: 'Annuncio non trovato o già scaduto.' });
+            const isOwner = ownerIdsEnv.includes(callerTgId);
+            const isSubmitter = postRow.submitter_telegram_user_id === callerTgId;
+            if (!isOwner && !isSubmitter) {
+                return res.status(403).json({ error: 'Non sei il proprietario di questo annuncio.' });
+            }
+            const { error: delErr } = await adminR
+                .from('telegram_recruitment_posts')
+                .delete()
+                .eq('id', Number(rawId));
+            if (delErr) return res.status(500).json({ error: 'Errore rimozione: ' + delErr.message });
+            return res.status(200).json({ ok: true });
         } else if (type === 'ping') {
             // Keep-alive esterno verso Render: il self-ping su localhost non evita spin-down / cambio IP.
             const authHeader = req.headers['authorization'] || '';

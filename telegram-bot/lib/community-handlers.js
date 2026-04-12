@@ -2168,6 +2168,48 @@ function registerCommunityHandlers(bot, deps) {
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 
+  // Conferma rimozione annuncio da deep link browser (/start withdraw_ID)
+  bot.action(/^withdraw_confirm:(\d+)$/, async (ctx) => {
+    safeCb(ctx);
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    const postId = Number(ctx.match[1]);
+    const isOwner = cv.isBotOwnerTelegramUser(uid);
+    try {
+      const row = await sbc.getRecruitmentPostById(postId);
+      if (!row) {
+        await ctx.answerCbQuery('Annuncio non trovato.').catch(() => {});
+        try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch (_) {}
+        return;
+      }
+      const isSubmitter = row.submitter_telegram_user_id === uid;
+      if (!isOwner && !isSubmitter) {
+        await ctx.answerCbQuery('Non autorizzato.').catch(() => {});
+        return;
+      }
+      // Cancella messaggi broadcast (best-effort)
+      const ids = Array.isArray(row.delivered_message_ids) ? row.delivered_message_ids : [];
+      for (const entry of ids) {
+        if (entry?.chat_id != null && entry?.message_id != null) {
+          try { await ctx.telegram.deleteMessage(entry.chat_id, entry.message_id); } catch (_) {}
+          await sleep(30);
+        }
+      }
+      await sbc.deleteRecruitmentPostRow(postId);
+      await ctx.answerCbQuery('Rimosso').catch(() => {});
+      try { await ctx.editMessageText(`&#10004; Annuncio <code>#${postId}</code> rimosso con successo.`, { parse_mode: 'HTML' }); } catch (_) {}
+    } catch (e) {
+      await ctx.telegram.sendMessage(uid, `&#10060; ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' }).catch(() => {});
+    }
+    await refreshPrivateReplyKeyboardRef(ctx);
+  });
+
+  bot.action(/^withdraw_cancel:(\d+)$/, async (ctx) => {
+    safeCb(ctx);
+    await ctx.answerCbQuery('Annullato').catch(() => {});
+    try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch (_) {}
+  });
+
   bot.action(/^rva:(\d+)$/, async (ctx) => {
     safeCb(ctx);
     if (!cv.isBotOwnerTelegramUser(ctx.from?.id)) {

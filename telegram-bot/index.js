@@ -2790,6 +2790,8 @@ function setupBot(bot) {
       /^rvr:\d+$/.test(cbDataEarly) ||
       cbDataEarly === 'comm_owner_queue' ||
       /^rad:\d+$/.test(cbDataEarly) ||
+      /^withdraw_confirm:\d+$/.test(cbDataEarly) ||
+      /^withdraw_cancel:\d+$/.test(cbDataEarly) ||
       cbDataEarly === 'support_admin_home' ||
       cbDataEarly === 'support_admin_stats' ||
       cbDataEarly === 'support_admin_open' ||
@@ -2857,6 +2859,38 @@ function setupBot(bot) {
     if (!ctx.from?.id) return;
     try {
       await ensureTgBotUsername(ctx.telegram);
+
+      // Deep link: /start withdraw_POSTID — rimozione annuncio reclutamento via browser
+      const startArg = String(ctx.message?.text || '').trim().split(/\s+/)[1] || '';
+      if (startArg.startsWith('withdraw_') && ctx.chat?.type === 'private') {
+        const postId = Number(startArg.slice('withdraw_'.length));
+        if (Number.isFinite(postId) && postId > 0) {
+          const uid = ctx.from.id;
+          const isOwner = cv.isBotOwnerTelegramUser(uid);
+          const postRow = await sbcCommunity.getRecruitmentPostById(postId).catch(() => null);
+          if (!postRow) {
+            await ctx.reply('&#9888; Annuncio #' + postId + ' non trovato o gi&agrave; scaduto.', { parse_mode: 'HTML' });
+            return;
+          }
+          const isSubmitter = postRow.submitter_telegram_user_id === uid;
+          if (!isOwner && !isSubmitter) {
+            await ctx.reply('&#128683; Non sei il proprietario di questo annuncio.', { parse_mode: 'HTML' });
+            return;
+          }
+          const kb = Markup.inlineKeyboard([
+            [
+              Markup.button.callback('&#128465; S&igrave;, rimuovi', 'withdraw_confirm:' + postId),
+              Markup.button.callback('Annulla', 'withdraw_cancel:' + postId),
+            ],
+          ]);
+          await ctx.reply(
+            '&#128465; Vuoi rimuovere l\'annuncio <code>#' + postId + '</code>?',
+            { parse_mode: 'HTML', ...kb }
+          );
+          return;
+        }
+      }
+
       const requestedTab = parseRequestedMiniAppTabFromCommand(ctx);
       // Cancella il menù precedente se il comando arriva fresco (non da callback).
       if (!ctx.callbackQuery && ctx.chat?.id) {

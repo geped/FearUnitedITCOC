@@ -17,6 +17,7 @@
   --text-2:   #C8BCA8;
   --text-3:   #7A6A50;
   --green:    #27AE60;
+  --red:      #C0392B;
   --radius:   10px;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -81,7 +82,7 @@ body {
 .state-msg p { font-size: 14px; line-height: 1.6; }
 
 /* Cards */
-.cards { display: flex; flex-direction: column; gap: 16px; }
+.cards { display: flex; flex-direction: column; gap: 14px; }
 
 .card {
   background: var(--bg-2);
@@ -90,23 +91,23 @@ body {
   overflow: hidden;
 }
 
-/* Foto */
+/* Foto compatta */
 .card-photo-wrap {
   background: var(--bg-3);
-  min-height: 60px;
+  height: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 .card-photo {
   width: 100%;
-  max-height: 340px;
-  object-fit: contain;
+  height: 160px;
+  object-fit: cover;
   display: block;
-  background: var(--bg-3);
 }
 .photo-loader {
-  padding: 18px 12px;
+  padding: 14px 12px;
   font-size: 12px;
   color: var(--text-3);
   display: flex;
@@ -116,7 +117,7 @@ body {
 }
 .photo-loader::before {
   content: '';
-  width: 14px; height: 14px;
+  width: 13px; height: 13px;
   border: 2px solid var(--border);
   border-top-color: var(--gold);
   border-radius: 50%;
@@ -124,47 +125,53 @@ body {
   flex-shrink: 0;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-.photo-loader.photo-error {
-  flex-direction: column;
-  color: #E07070;
-  gap: 4px;
-}
+.photo-loader.photo-error { flex-direction: column; color: #E07070; gap: 4px; }
 .photo-loader.photo-error::before { display: none; }
 .photo-loader.photo-error small { font-size: 10px; color: var(--text-3); word-break: break-all; line-height: 1.4; }
 
 /* Testo post */
 .card-body {
-  padding: 13px 13px 9px;
-  font-size: 14px;
+  padding: 10px 12px 0;
+}
+
+/* Wrapper testo troncabile */
+.card-text-wrap {
+  font-size: 12px;
   line-height: 1.65;
   word-break: break-word;
   overflow-wrap: break-word;
+  max-height: calc(12px * 1.65 * 6 + 4px);
+  overflow: hidden;
+  transition: max-height 0.35s ease;
 }
-.card-body b, .card-body strong { font-weight: 700; }
-.card-body i, .card-body em { font-style: italic; }
-.card-body u, .card-body ins { text-decoration: underline; }
-.card-body s, .card-body strike, .card-body del { text-decoration: line-through; color: var(--text-3); }
-.card-body code {
+.card-text-wrap.expanded {
+  max-height: 4000px;
+}
+.card-text-wrap b, .card-text-wrap strong { font-weight: 700; }
+.card-text-wrap i, .card-text-wrap em { font-style: italic; }
+.card-text-wrap u, .card-text-wrap ins { text-decoration: underline; }
+.card-text-wrap s, .card-text-wrap strike, .card-text-wrap del { text-decoration: line-through; color: var(--text-3); }
+.card-text-wrap code {
   font-family: 'Courier New', monospace;
   background: var(--bg-3);
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 1px 5px;
-  font-size: 12px;
+  font-size: 11px;
 }
-.card-body pre {
+.card-text-wrap pre {
   background: var(--bg-3);
   border: 1px solid var(--border);
   border-radius: 5px;
-  padding: 10px;
+  padding: 8px;
   overflow-x: auto;
-  font-size: 12px;
+  font-size: 11px;
   font-family: 'Courier New', monospace;
-  margin: 6px 0;
+  margin: 4px 0;
   white-space: pre-wrap;
 }
-.card-body a { color: var(--gold); text-decoration: none; word-break: break-all; }
-.card-body a:hover { text-decoration: underline; }
+.card-text-wrap a { color: var(--gold); text-decoration: none; word-break: break-all; }
+.card-text-wrap a:hover { text-decoration: underline; }
 tg-spoiler {
   background: var(--text-3);
   color: transparent;
@@ -176,14 +183,43 @@ tg-spoiler {
 }
 tg-spoiler.on { background: transparent; color: inherit; }
 
-/* Footer */
+/* Pulsante espandi */
+.expand-btn {
+  margin-top: 4px;
+  padding: 2px 0 6px;
+  font-size: 11px;
+  color: var(--gold);
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-family: inherit;
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+.expand-btn:active { opacity: .6; }
+
+/* Meta clan (riga info sotto il testo) */
+.card-meta {
+  padding: 6px 12px 4px;
+  font-size: 11px;
+  color: var(--text-3);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.meta-clan { color: var(--gold); font-weight: 600; }
+.meta-user { color: var(--text-3); }
+
+/* Footer: scadenza + rimuovi */
 .card-footer {
-  padding: 7px 13px;
+  padding: 6px 12px;
   border-top: 1px solid var(--border);
   background: var(--bg-1);
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  justify-content: space-between;
   gap: 6px;
   font-size: 11px;
   color: var(--text-3);
@@ -196,7 +232,35 @@ tg-spoiler.on { background: transparent; color: inherit; }
   white-space: nowrap;
 }
 .badge.exp { color: var(--gold); border-color: rgba(201,169,98,.3); }
-.badge.dt  { margin-left: auto; }
+.remove-btn {
+  background: none;
+  border: 1px solid rgba(192,57,43,.4);
+  border-radius: 4px;
+  color: #E07070;
+  font-size: 11px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.remove-btn:active { opacity: .6; }
+.remove-btn.removing { opacity: .5; pointer-events: none; }
+
+/* Link clan (riga separata in fondo) */
+.card-link {
+  padding: 6px 12px 8px;
+  font-size: 11px;
+  border-top: 1px solid var(--border);
+}
+.card-link a {
+  color: var(--gold);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.card-link a:hover { text-decoration: underline; }
 
 /* Countdown */
 .refresh-hint { text-align: center; padding: 12px 0 0; font-size: 11px; color: var(--text-3); }
@@ -230,6 +294,19 @@ document.addEventListener('click', function(e) {
   if (e.target.tagName === 'TG-SPOILER') e.target.classList.toggle('on');
 });
 
+// Dati globali (bot_username, owner_ids per rimozione)
+var _recruitMeta = { bot_username: null, owner_ids: [], tg_user_id: null };
+
+// Rileva se siamo in Telegram Mini App
+var _tgApp = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData
+  ? window.Telegram.WebApp : null;
+if (_tgApp) {
+  try {
+    var _u = _tgApp.initDataUnsafe && _tgApp.initDataUnsafe.user;
+    if (_u && _u.id) _recruitMeta.tg_user_id = Number(_u.id);
+  } catch (_) {}
+}
+
 function remaining(iso) {
   var ms = new Date(iso).getTime() - Date.now();
   if (ms <= 0) return 'scaduto';
@@ -246,6 +323,9 @@ function fmtDate(iso) {
 
 function escapeAttr(s) {
   return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
+function escapeHtml(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function sanitize(html) {
@@ -281,6 +361,14 @@ function sanitize(html) {
   return tmp.innerHTML;
 }
 
+// Formatta submitter_display "Geped3 (#GPL82GJCQ)" → "Geped3 • #GPL82GJCQ"
+function formatSubmitter(display) {
+  if (!display) return '';
+  var m = display.match(/^(.+?)\s*\(#([0-9A-Z]+)\)\s*$/i);
+  if (m) return escapeHtml(m[1].trim()) + ' &bull; #' + escapeHtml(m[2].toUpperCase());
+  return escapeHtml(display);
+}
+
 function renderCards(posts) {
   if (!posts.length) {
     return '<div class="state-msg"><div class="icon">&#128235;</div>' +
@@ -289,36 +377,64 @@ function renderCards(posts) {
   var html = '<div class="cards">';
   for (var i = 0; i < posts.length; i++) {
     var p = posts[i];
-    html += '<div class="card">';
-    // Foto
+    html += '<div class="card" id="card' + i + '">';
+
+    // Foto compatta
     if (p.photo_url) {
       var isProxy = p.photo_url.indexOf('/api/lookup?type=rphoto') === 0;
       html += '<div class="card-photo-wrap" id="pw' + i + '">' +
-        '<div class="photo-loader" id="pl' + i + '">Foto in caricamento\u2026</div>' +
+        '<div class="photo-loader" id="pl' + i + '">Foto in caricamento&hellip;</div>' +
         '<img class="card-photo" src="' + escapeAttr(p.photo_url) + '" alt="Foto annuncio"' +
         ' data-idx="' + i + '" data-pid="' + escapeAttr(String(p.id)) + '" data-proxy="' + (isProxy ? '1' : '0') + '"' +
         ' onload="showPhoto(' + i + ')" onerror="onPhotoError(' + i + ', this)" style="display:none"></div>';
     }
-    // Testo
-    var txt = sanitize(p.post_text);
-    if (txt) html += '<div class="card-body">' + txt + '</div>';
-    // Footer
+
+    // Corpo testo (solo body pulito, senza header/link)
+    var bodyHtml = sanitize(p.body_html || '');
+    if (bodyHtml) {
+      html += '<div class="card-body">' +
+        '<div class="card-text-wrap" id="ctw' + i + '">' + bodyHtml + '</div>' +
+        '<button class="expand-btn" id="eb' + i + '" onclick="expandText(' + i + ')" style="display:none">' +
+        '&#9660; Visualizza tutto</button>' +
+        '</div>';
+    }
+
+    // Meta clan: ✅ Clan CoCBoard · 👤 Nome • #TAG
+    var metaHtml = '';
+    if (p.is_verified_clan) metaHtml += '<span class="meta-clan">&#9989; Clan CoCBoard</span>';
+    if (p.submitter_display) {
+      if (metaHtml) metaHtml += '<span class="meta-user">&nbsp;&middot;&nbsp;</span>';
+      metaHtml += '<span class="meta-user">&#128100; ' + formatSubmitter(p.submitter_display) + '</span>';
+    }
+    if (metaHtml) html += '<div class="card-meta">' + metaHtml + '</div>';
+
+    // Footer: scadenza + rimuovi
     html += '<div class="card-footer">' +
       '<span class="badge exp">&#9203; Scade tra ' + remaining(p.expires_at) + '</span>' +
-      (fmtDate(p.approved_at) ? '<span class="badge dt">' + fmtDate(p.approved_at) + '</span>' : '') +
-      '</div></div>';
+      '<button class="remove-btn" id="rb' + i + '" onclick="removePost(' + i + ', ' + p.id + ', ' +
+        (p.submitter_tg_id || 'null') + ')">&#128465; Rimuovi</button>' +
+      '</div>';
+
+    // Link clan (sempre in fondo, solo se presente)
+    if (p.clan_url) {
+      html += '<div class="card-link">' +
+        '<a href="' + escapeAttr(p.clan_url) + '" target="_blank" rel="noopener noreferrer">' +
+        '&#128279; Apri profilo clan (CoC)</a></div>';
+    }
+
+    html += '</div>';
   }
   html += '<div class="refresh-hint" id="hint"></div></div>';
   return html;
 }
 
+// --- Foto handlers ---
 function showPhoto(i) {
   var pw = document.getElementById('pw' + i);
   var pl = document.getElementById('pl' + i);
   if (pw) { var img = pw.querySelector('img'); if (img) img.style.display = 'block'; }
   if (pl) pl.style.display = 'none';
 }
-
 function showPhotoError(i, statusCode, reason) {
   var pl = document.getElementById('pl' + i);
   if (!pl) return;
@@ -327,7 +443,6 @@ function showPhotoError(i, statusCode, reason) {
   var detail = reason ? reason.slice(0, 120) : '';
   pl.innerHTML = '&#9888; Foto non disponibile<br><small>' + status + (detail ? ' &mdash; ' + detail : '') + '</small>';
 }
-
 async function diagnoseFetch(i, pid) {
   var url = '/api/lookup?type=rphoto&pid=' + encodeURIComponent(String(pid));
   try {
@@ -338,13 +453,8 @@ async function diagnoseFetch(i, pid) {
     var reason = '';
     try {
       var ct = r.headers.get('content-type') || '';
-      if (ct.indexOf('json') >= 0) {
-        var j = await r.json();
-        reason = j.error || j.message || '';
-      } else {
-        var txt = await r.text();
-        reason = txt.trim().slice(0, 120);
-      }
+      if (ct.indexOf('json') >= 0) { var j = await r.json(); reason = j.error || j.message || ''; }
+      else { var txt = await r.text(); reason = txt.trim().slice(0, 120); }
     } catch (_) {}
     if (!reason) reason = r.headers.get('x-error-reason') || '';
     showPhotoError(i, r.status, reason);
@@ -352,18 +462,12 @@ async function diagnoseFetch(i, pid) {
     showPhotoError(i, 0, e.name === 'AbortError' ? 'Timeout connessione' : e.message);
   }
 }
-
 function onPhotoError(i, img) {
   var isProxy = img && img.getAttribute('data-proxy') === '1';
   var pid = img && img.getAttribute('data-pid');
-  if (isProxy && pid) {
-    diagnoseFetch(i, pid);
-  } else {
-    showPhotoError(i, 0, 'Immagine non raggiungibile');
-  }
+  if (isProxy && pid) diagnoseFetch(i, pid);
+  else showPhotoError(i, 0, 'Immagine non raggiungibile');
 }
-
-// Avvia timeout per immagini che non rispondono entro 25s
 function startPhotoTimeouts(posts) {
   for (var i = 0; i < posts.length; i++) {
     (function(idx, p) {
@@ -373,14 +477,76 @@ function startPhotoTimeouts(posts) {
       setTimeout(function() {
         var pl = document.getElementById('pl' + idx);
         if (!pl || pl.style.display === 'none' || pl.classList.contains('photo-error')) return;
-        // Loader ancora visibile dopo 25s: diagnostica
-        if (isProxy) {
-          diagnoseFetch(idx, pid);
-        } else {
-          showPhotoError(idx, 0, 'Timeout caricamento immagine');
-        }
+        if (isProxy) diagnoseFetch(idx, pid);
+        else showPhotoError(idx, 0, 'Timeout caricamento immagine');
       }, 25000);
     })(i, posts[i]);
+  }
+}
+
+// --- Testo espandibile ---
+function initExpandButtons(posts) {
+  for (var i = 0; i < posts.length; i++) {
+    (function(idx) {
+      var wrap = document.getElementById('ctw' + idx);
+      var btn = document.getElementById('eb' + idx);
+      if (!wrap || !btn) return;
+      // Controlla se il contenuto supera l'altezza troncata
+      if (wrap.scrollHeight > wrap.clientHeight + 2) {
+        btn.style.display = 'block';
+      }
+    })(i);
+  }
+}
+function expandText(i) {
+  var wrap = document.getElementById('ctw' + i);
+  var btn = document.getElementById('eb' + i);
+  if (!wrap) return;
+  wrap.classList.add('expanded');
+  if (btn) btn.style.display = 'none';
+}
+
+// --- Rimozione annuncio ---
+async function removePost(idx, postId, submitterTgId) {
+  var btn = document.getElementById('rb' + idx);
+
+  if (_tgApp && _tgApp.initData) {
+    // Contesto Mini App: chiedi conferma via Telegram UI, poi chiama API
+    _tgApp.showConfirm('Rimuovere questo annuncio?', async function(confirmed) {
+      if (!confirmed) return;
+      if (btn) btn.classList.add('removing');
+      try {
+        var r = await fetch('/api/lookup?type=recruit-remove&pid=' + postId, {
+          method: 'POST',
+          headers: { 'Authorization': 'tma ' + _tgApp.initData },
+        });
+        var j = await r.json().catch(function() { return {}; });
+        if (r.ok) {
+          var card = document.getElementById('card' + idx);
+          if (card) {
+            card.style.transition = 'opacity .3s';
+            card.style.opacity = '0';
+            setTimeout(function() { if (card.parentNode) card.parentNode.removeChild(card); }, 300);
+          }
+        } else {
+          if (btn) btn.classList.remove('removing');
+          _tgApp.showAlert(j.error || 'Errore rimozione.');
+        }
+      } catch (e) {
+        if (btn) btn.classList.remove('removing');
+        _tgApp.showAlert('Errore: ' + e.message);
+      }
+    });
+  } else {
+    // Contesto browser: apri bot via deep link
+    var botUsername = _recruitMeta.bot_username;
+    if (botUsername) {
+      var confirmed = window.confirm('Per rimuovere l\'annuncio verrai reindirizzato al bot Telegram.\n\nProcedere?');
+      if (!confirmed) return;
+      window.open('https://t.me/' + botUsername + '?start=withdraw_' + postId, '_blank');
+    } else {
+      window.alert('Per rimuovere l\'annuncio, apri il bot Telegram \u2192 Community \u2192 Reclutamento \u2192 Annunci attivi.');
+    }
   }
 }
 
@@ -406,10 +572,16 @@ async function load(manual) {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     var json = await res.json();
     var posts = json.posts || [];
+    _recruitMeta.bot_username = json.bot_username || null;
+    _recruitMeta.owner_ids = json.owner_ids || [];
     var n = posts.length;
     dot.className = 'dot live';
     st.textContent = n ? n + (n === 1 ? ' annuncio attivo' : ' annunci attivi') : 'Nessun annuncio attivo';
     ct.innerHTML = renderCards(posts);
+    // Dopo il rendering controlla troncamento e timeout foto
+    requestAnimationFrame(function() {
+      initExpandButtons(posts);
+    });
     startPhotoTimeouts(posts);
     schedule();
   } catch (err) {
