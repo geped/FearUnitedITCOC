@@ -588,6 +588,13 @@ function recruitHubKb(webUrl) {
   return Markup.inlineKeyboard(rows);
 }
 
+/** URL della pagina reclutamento.html. Null se COCBOARD_SITE_HOME_URL non configurato. */
+function recruitWebUrl() {
+  var base = (process.env.COCBOARD_SITE_HOME_URL || '').trim();
+  if (base.length > 0 && base[base.length - 1] === '/') base = base.slice(0, -1);
+  return base ? base + '/reclutamento.html' : null;
+}
+
 function recruitBackKb() {
   return Markup.inlineKeyboard([[Markup.button.callback('« Community', 'comm_hub')]]);
 }
@@ -817,7 +824,7 @@ async function tryHandleEarlyMessage(
 
   if (low === '/annulla_reclutamento' || low.startsWith('/annulla_reclutamento@')) {
     pendingCommunity.delete(uid);
-    await ctx.reply('Bozza reclutamento annullata.', { parse_mode: 'HTML', ...recruitHubKb() });
+    await ctx.reply('Bozza reclutamento annullata.', { parse_mode: 'HTML', ...recruitHubKb(recruitWebUrl()) });
     await rk(ctx);
     return true;
   }
@@ -1554,7 +1561,7 @@ function registerCommunityHandlers(bot, deps) {
       } catch (_) {}
       await refreshPrivateReplyKeyboardRef(ctx);
     } catch (e) {
-      await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML', ...recruitHubKb() });
+      await ctx.reply(`❌ ${escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML', ...recruitHubKb(recruitWebUrl()) });
       await refreshPrivateReplyKeyboardRef(ctx);
     }
   });
@@ -1577,7 +1584,7 @@ function registerCommunityHandlers(bot, deps) {
       `• <b>Pubblica adesso</b> — annuncio immediato (dopo verifica CoC API), 24h in elenco.\n` +
       `• <b>Invio rapido o guidato</b> — bozza in revisione al proprietario del bot.\n\n` +
       `<i>Un solo annuncio attivo per utente e per clan; puoi ritirare il tuo da Annunci attivi.</i>`;
-    await ctx.reply(text, { parse_mode: 'HTML', ...recruitHubKb() }).catch(() => {});
+    await ctx.reply(text, { parse_mode: 'HTML', ...recruitHubKb(recruitWebUrl()) }).catch(() => {});
     await refreshPrivateReplyKeyboardRef(ctx);
   });
 

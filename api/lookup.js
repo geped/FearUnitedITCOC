@@ -124,21 +124,23 @@ module.exports = async (req, res) => {
                 .order('approved_at', { ascending: false })
                 .limit(20);
             if (dbErr) return res.status(500).json({ error: dbErr.message });
-            const syncKey = process.env.SYNC_SECRET || '';
-            // Risolvi URL foto in parallelo (max 8s timeout per singola chiamata)
+            // Risolvi URL foto in parallelo tramite Telegram Bot API (token server-side)
+            const botToken = process.env.TELEGRAM_BOT_TOKEN || '';
             const posts = await Promise.all((rows || []).map(async (r) => {
                 let photo_url = null;
-                if (r.photo_file_id) {
+                if (r.photo_file_id && botToken) {
                     try {
                         const tgRes = await fetch(
-                            proxyUrl + '/tg-file?file_id=' + encodeURIComponent(r.photo_file_id),
-                            { headers: { 'x-sync-key': syncKey }, signal: AbortSignal.timeout(8000) }
+                            'https://api.telegram.org/bot' + botToken + '/getFile?file_id=' + encodeURIComponent(r.photo_file_id),
+                            { signal: AbortSignal.timeout(6000) }
                         );
                         if (tgRes.ok) {
                             const tgData = await tgRes.json().catch(() => ({}));
-                            if (tgData.url) photo_url = tgData.url;
+                            if (tgData.ok && tgData.result && tgData.result.file_path) {
+                                photo_url = 'https://api.telegram.org/file/bot' + botToken + '/' + tgData.result.file_path;
+                            }
                         }
-                    } catch (_) { /* foto non disponibile, non blocca */ }
+                    } catch (_) { /* foto non disponibile, non blocca il resto */ }
                 }
                 return {
                     id: r.id,
