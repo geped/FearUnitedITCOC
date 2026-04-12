@@ -124,23 +124,57 @@ module.exports = async (req, res) => {
                 .order('approved_at', { ascending: false })
                 .limit(20);
             if (dbErr) return res.status(500).json({ error: dbErr.message });
-            // Risolvi URL foto in parallelo tramite Telegram Bot API (token server-side)
             const botToken = process.env.TELEGRAM_BOT_TOKEN || '';
+            const recruitSyncKey = process.env.SYNC_SECRET || '';
+
+            // Estrae #CLANTAG dal link clashofclans.com nel post_text
+            function extractTagFromPost(html) {
+                const m = (html || '').match(/[?&]tag=([0-9A-Za-z]+)/);
+                return m ? '#' + m[1].toUpperCase() : null;
+            }
+
+            // Cache badge per clan (evita chiamate duplicate nello stesso ciclo)
+            const badgeCache = new Map();
+            async function fetchClanBadge(tag) {
+                if (badgeCache.has(tag)) return badgeCache.get(tag);
+                try {
+                    const r = await fetch(proxyUrl + '/clan-info?clanTag=' + encodeURIComponent(tag),
+                        { headers: { 'x-sync-key': recruitSyncKey }, signal: AbortSignal.timeout(5000) });
+                    if (!r.ok) { badgeCache.set(tag, null); return null; }
+                    const d = await r.json().catch(() => ({}));
+                    const url = (d.badgeUrls && (d.badgeUrls.medium || d.badgeUrls.large || d.badgeUrls.small)) || null;
+                    badgeCache.set(tag, url);
+                    return url;
+                } catch (_) { badgeCache.set(tag, null); return null; }
+            }
+
             const posts = await Promise.all((rows || []).map(async (r) => {
                 let photo_url = null;
-                if (r.photo_file_id && botToken) {
-                    try {
-                        const tgRes = await fetch(
-                            'https://api.telegram.org/bot' + botToken + '/getFile?file_id=' + encodeURIComponent(r.photo_file_id),
-                            { signal: AbortSignal.timeout(6000) }
-                        );
-                        if (tgRes.ok) {
-                            const tgData = await tgRes.json().catch(() => ({}));
-                            if (tgData.ok && tgData.result && tgData.result.file_path) {
-                                photo_url = 'https://api.telegram.org/file/bot' + botToken + '/' + tgData.result.file_path;
+                const fid = r.photo_file_id || '';
+                if (fid) {
+                    if (fid.startsWith('https://')) {
+                        // URL diretto (es. stemma CoC API gia' risolto al momento della pubblicazione)
+                        photo_url = fid;
+                    } else if (botToken) {
+                        // Telegram file_id: risolvi via Bot API
+                        try {
+                            const tgRes = await fetch(
+                                'https://api.telegram.org/bot' + botToken + '/getFile?file_id=' + encodeURIComponent(fid),
+                                { signal: AbortSignal.timeout(6000) }
+                            );
+                            if (tgRes.ok) {
+                                const tgData = await tgRes.json().catch(() => ({}));
+                                if (tgData.ok && tgData.result && tgData.result.file_path) {
+                                    photo_url = 'https://api.telegram.org/file/bot' + botToken + '/' + tgData.result.file_path;
+                                }
                             }
-                        }
-                    } catch (_) { /* foto non disponibile, non blocca il resto */ }
+                        } catch (_) { /* non blocca */ }
+                    }
+                }
+                // Nessuna foto utente: mostra stemma clan se ricavabile dal post_text
+                if (!photo_url) {
+                    const tag = extractTagFromPost(r.post_text);
+                    if (tag) photo_url = await fetchClanBadge(tag);
                 }
                 return {
                     id: r.id,
