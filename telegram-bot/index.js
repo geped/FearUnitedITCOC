@@ -5721,7 +5721,82 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
+
+/**
+ * Monta il bot Telegram su un Express app esterno (modalità unified service).
+ * Chiamato da render-proxy/index.js per condividere lo stesso processo/porta.
+ * In questo modo proxy CoC API e bot girano su un solo servizio Render.
+ */
+async function mountOnApp(externalApp) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) { console.error('[cocboard-bot] TELEGRAM_BOT_TOKEN mancante'); return; }
+  warnSupabaseEnv();
+
+  const bot = new Telegraf(token);
+  setupBot(bot);
+
+  runCommunityMaintenance(bot).catch(() => {});
+  notifExt.runExtendedWarAlerts(bot, sb).catch(() => {});
+  notifExt.runExtendedRaidAlerts(bot, sb).catch(() => {});
+  notifExt.runClanActivityAlerts(bot, sb).catch(() => {});
+  setInterval(() => {
+    runCommunityMaintenance(bot).catch(() => {});
+    notifExt.runExtendedWarAlerts(bot, sb).catch(() => {});
+    notifExt.runExtendedRaidAlerts(bot, sb).catch(() => {});
+    notifExt.runClanActivityAlerts(bot, sb).catch(() => {});
+  }, 60_000);
+
+  const webhookSecretPath = pickWebhookPath();
+  const hookUrl = webhookPublicUrl();
+
+  if (webhookSecretPath && hookUrl) {
+    const wbPath = webhookSecretPath.startsWith('/') ? webhookSecretPath : `/${webhookSecretPath}`;
+    const secretToken = process.env.TELEGRAM_WEBHOOK_SECRET_TOKEN || '';
+    const hookMw = bot.webhookCallback(wbPath, { secretToken: secretToken || undefined });
+    const logMw = logIncomingWebhook(Boolean(secretToken && String(secretToken).trim()));
+    const normMw = normalizeTelegrafWebhookPath(wbPath);
+    externalApp.post(wbPath, normMw, logMw, hookMw);
+    externalApp.post(`${wbPath}/`, normMw, logMw, hookMw);
+
+    if (!secretToken && (process.env.RENDER_EXTERNAL_URL || '').trim()) {
+      console.warn('[cocboard-bot] Imposta TELEGRAM_WEBHOOK_SECRET_TOKEN in produzione.');
+    }
+    // setWebhook dopo 8s per dare tempo al DNS di Render di inizializzarsi
+    setTimeout(async () => {
+      try {
+        await bot.telegram.setWebhook(hookUrl, {
+          secret_token: secretToken || undefined,
+          allowed_updates: ['message', 'callback_query', 'my_chat_member'],
+          drop_pending_updates: true,
+        });
+        try {
+          const me = await bot.telegram.getMe();
+          if (me.username) cachedTgBotUsername = me.username.replace(/^@/, '');
+        } catch (_) {}
+        await registerBotCommands(bot.telegram);
+        console.log('[bot] Webhook set:', hookUrl);
+      } catch (err) {
+        console.error('[bot] setWebhook failed, restarting:', err.message);
+        process.exit(1);
+      }
+    }, 8000);
+  } else {
+    // Fallback long polling (sviluppo locale senza RENDER_EXTERNAL_URL)
+    await bot.launch();
+    try {
+      const me = await bot.telegram.getMe();
+      if (me.username) cachedTgBotUsername = me.username.replace(/^@/, '');
+    } catch (_) {}
+    await registerBotCommands(bot.telegram);
+    process.once('SIGINT', () => bot.stop('SIGINT'));
+    process.once('SIGTERM', () => bot.stop('SIGTERM'));
+  }
+}
+
+module.exports = { mountOnApp };

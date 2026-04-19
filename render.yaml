@@ -1,23 +1,31 @@
-# Blueprint Render — solo bot Telegram (cartella telegram-bot/).
-# Dashboard: New → Blueprint → connetti repo → importa questo file.
-# Poi imposta le variabili "secret" nella UI (TELEGRAM_BOT_TOKEN, Supabase, ecc.).
+# Blueprint Render — servizio unificato cocboard
+# Proxy CoC API + bot Telegram sullo stesso processo/porta.
+# rootDir: render-proxy — buildCommand installa anche le dipendenze del bot.
+# Dashboard: Settings → Blueprint → connetti repo → importa questo file.
+# Poi imposta le variabili "secret" nella UI (token, chiavi Supabase, ecc.).
 
 services:
   - type: web
-    name: cocboard-telegram-bot
+    name: cocboard
     runtime: node
     region: frankfurt
     plan: free
-    rootDir: telegram-bot
-    buildCommand: npm install
+    rootDir: render-proxy
+    buildCommand: npm install && cd ../telegram-bot && npm install
     startCommand: npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
         value: "20"
+      - key: COC_API_TOKEN
+        sync: false
+      - key: SYNC_SECRET
+        sync: false
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: COCBOARD_API_BASE
+        sync: false
+      - key: COCBOARD_SITE_HOME_URL
         sync: false
       - key: SUPABASE_URL
         sync: false
@@ -26,8 +34,6 @@ services:
       - key: SUPABASE_ANON_KEY
         sync: false
       - key: TELEGRAM_WEBHOOK_SECRET_TOKEN
-        sync: false
-      - key: COCBOARD_SITE_HOME_URL
         sync: false
       - key: BOT_OWNER_TELEGRAM_IDS
         sync: false

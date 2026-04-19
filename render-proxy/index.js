@@ -928,15 +928,21 @@ app.get('/tg-file', authMiddleware, async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Proxy listening on port ${PORT}`);
+    console.log(`[cocboard] Unified service listening on port ${PORT}`);
 
-    // Self-ping ogni 14 minuti per evitare lo spin-down di Render free tier.
-    // Senza questo, dopo 15 min di inattività Render dorme e al risveglio
-    // può cambiare IP, invalidando la whitelist della CoC API key.
-    const KEEP_ALIVE_MS = 14 * 60 * 1000;
+    // Self-ping ogni 13 minuti. URL esterno (RENDER_EXTERNAL_URL) evita spin-down
+    // anche senza richieste reali — più affidabile del solo localhost.
+    // Fallback a localhost in sviluppo locale.
+    const selfUrl = (process.env.RENDER_EXTERNAL_URL || '').trim().replace(/\/$/, '');
+    const pingUrl = selfUrl ? `${selfUrl}/health` : `http://localhost:${PORT}/health`;
+    const KEEP_ALIVE_MS = 13 * 60 * 1000;
     setInterval(() => {
-        fetch(`http://localhost:${PORT}/health`)
+        fetch(pingUrl, { signal: AbortSignal.timeout(10000) })
             .then(() => console.log('[keep-alive] ping ok', new Date().toISOString()))
             .catch(err => console.warn('[keep-alive] ping failed:', err.message));
     }, KEEP_ALIVE_MS);
+
+    // Monta bot Telegram sullo stesso Express server (unified service)
+    const { mountOnApp } = require('../telegram-bot/index');
+    mountOnApp(app).catch(e => console.error('[bot] startup error:', e.message));
 });
