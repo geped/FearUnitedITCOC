@@ -25,19 +25,25 @@ Segui nell'ordine. Il bot **non** modifica il sito: usa solo API già online + S
 
 ---
 
-## 3) Render (host del bot)
+## 3) Render (servizio unificato `cocboard`)
+
+Il bot gira sullo **stesso servizio** del proxy CoC API (`render-proxy/index.js`). Non serve un servizio separato.
 
 | Cosa | Azione |
 |------|--------|
-| **Nuovo servizio** | **New → Blueprint** (o Web Service) → repo Git → usa [`render.yaml`](../render.yaml) nella root del repo. |
+| **Servizio esistente** | Usa il servizio `cocboard` già attivo su `https://fearuniteditcoc.onrender.com`. |
+| **Build Command** | Deve essere `npm install && npm install --prefix ../telegram-bot` (installa deps di entrambi). Verifica in Settings → Build & Deploy. |
+| **Root Directory** | `render-proxy` |
 | **Variabili** | Nella scheda **Environment** compila tutte (vedi tabella sotto). Dopo ogni modifica: **Save** e **Manual Deploy**. |
-| **URL** | Dopo il primo deploy, Render imposta `RENDER_EXTERNAL_URL`: il bot la usa per il webhook automaticamente (`/tg/cocboard-webhook`). |
-| **Health** | `GET /health` sulla URL del servizio deve rispondere JSON `ok`. |
+| **URL webhook** | `https://fearuniteditcoc.onrender.com/tg/cocboard-webhook` — impostato automaticamente da `RENDER_EXTERNAL_URL`. |
+| **Health** | `GET /health` deve rispondere `{ ok: true }`. |
 
-### Variabili d'ambiente obbligatorie su Render
+### Variabili d'ambiente su Render (servizio `cocboard`)
 
 | Variabile | Esempio / Note |
 |-----------|----------------|
+| `COC_API_TOKEN` | Token CoC API (per il proxy) |
+| `SYNC_SECRET` | Auth header proxy (per Vercel) |
 | `TELEGRAM_BOT_TOKEN` | Token da BotFather |
 | `COCBOARD_API_BASE` | `https://cocboard.vercel.app` |
 | `SUPABASE_URL` | `https://xxx.supabase.co` |
@@ -65,7 +71,7 @@ Non serve configurare il webhook a mano: lo imposta il processo Node all'avvio.
 
 ## 5) Verifica finale
 
-1. Log Render: riga **`Webhook set: https://…onrender.com/tg/cocboard-webhook`**.
+1. Log Render: riga **`[bot] Webhook set: https://fearuniteditcoc.onrender.com/tg/cocboard-webhook`**.
 2. Apri il bot in Telegram → **`/start`** → devi vedere **Accedi** / **Registrati** / Community / Cerca / Classifica.
 3. Accedi con le stesse credenziali del sito oppure registrati con tag + chiave API.
 4. Dopo il login: menù con clan da profilo o `/setclan #TAG` se serve.

@@ -22,7 +22,7 @@ Guida passo-passo su tutti i servizi: **[`DEPLOY-COCBOARD-BOT.md`](./DEPLOY-COCB
 | `TELEGRAM_ALLOWED_IDS` | no | Limita chi può aprire il bot (lista ID separati da virgola) |
 | `PORT` | no | Default `3001` |
 
-Webhook: su Render vengono usati `RENDER_EXTERNAL_URL` e path `/tg/cocboard-webhook` salvo override. Vedi [`render.yaml`](../render.yaml).
+Webhook: il bot gira nel **servizio Render unificato `cocboard`** insieme al proxy CoC API (`render-proxy/index.js`). L'URL webhook è `https://fearuniteditcoc.onrender.com/tg/cocboard-webhook`, impostato automaticamente da `RENDER_EXTERNAL_URL`. Il file `index.js` esporta anche `mountOnApp(app)` per montarsi su un Express esterno. Vedi [`render.yaml`](../render.yaml).
 
 ---
 
@@ -206,10 +206,12 @@ Non committare mai token né chiavi Supabase.
 
 ## Vincoli critici — NON MODIFICARE
 
-1. **`index.js` è monolitico** (~5100 righe). Non spezzarlo.
+1. **`index.js` è monolitico** (~5800 righe). Non spezzarlo.
 2. **Ordine middleware** è critico per sicurezza e UX. Non riordinare.
 3. **`isGroupClanReadCallback`** è la whitelist ospiti in gruppo. Modifiche richiedono verifica sicurezza.
 4. **Auth flow** (`telegram_links` + handoff `tg_h`) è condiviso con il sito. Cambiare il contratto URL rompe Mini App.
 5. **Formula bonus** deve restare allineata tra `api/generate-bonuses.js`, `bonus-assistant.js` e test.
 6. **`webApp` button** funziona solo in chat privata (limitazione API Telegram).
 7. **Community handlers** (`comm_*`, `recg_*`) sono in `lib/community-handlers.js` ma registrati alla fine di `setupBot` in `index.js`.
+8. **`mountOnApp(app)`** è l'export per il servizio unificato. Non rimuoverlo e non aggiungere logica Express standalone fuori da `main()` — in modalità unificata `main()` non viene chiamato.
+9. **Dipendenze bot** installate in `telegram-bot/node_modules/` (non in `render-proxy/`). Build command Render deve includere `npm install --prefix ../telegram-bot`.

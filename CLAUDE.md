@@ -15,8 +15,7 @@ UI in italiano, single-page application vanilla JS.
 | Frontend | HTML5 / CSS3 / Vanilla JavaScript (no framework) |
 | Database | Supabase (PostgreSQL) |
 | Serverless API | Vercel (Node.js), Hobby plan — limite 12 functions |
-| Proxy backend | Render.com (Express) — piano gratuito, cold start ~30s |
-| Bot Telegram | Render.com (Express + Telegraf) — servizio separato, deploy automatico da push |
+| Backend unificato | Render.com (Express) — **servizio unico** `cocboard`: proxy CoC API + bot Telegram sullo stesso processo. Piano gratuito, cold start ~30s, deploy automatico da push. |
 | Auth | Supabase Auth con metadati custom (role, username, coc_tag, coc_clan_tag) |
 | API esterna | Clash of Clans API v1 |
 | Test | Node.js built-in `node:test` (zero dipendenze) |
@@ -174,34 +173,30 @@ Proxy Express verso CoC API. Richiede `COC_API_TOKEN`. Route principali:
 Configurate su Vercel e Render — non committare mai valori reali:
 
 ```
-# Vercel + Render proxy
+# Vercel
 SUPABASE_URL
 SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY
-
-# Solo Render proxy
-COC_API_TOKEN
-PORT
-
-# Solo Vercel
-RENDER_PROXY_URL
+RENDER_PROXY_URL             # URL servizio Render unificato (es. https://fearuniteditcoc.onrender.com)
 SYNC_SECRET
 CRON_SECRET
 RESEND_API_KEY               # Opzionale: email di benvenuto
-TELEGRAM_BOT_TOKEN           # Stesso token del bot Render — obbligatorio per `/api/lookup?type=recruit-list` (foto annunci reclutamento via `getFile`) e per endpoint admin che chiamano Telegram
+TELEGRAM_BOT_TOKEN           # Obbligatorio per /api/lookup?type=recruit-list (foto via getFile)
 
-# Bot Telegram (Render — servizio separato)
-TELEGRAM_BOT_TOKEN           # Token BotFather (stesso valore della variabile omonima su Vercel)
-COCBOARD_API_BASE            # URL sito Vercel (es. https://cocboard.vercel.app)
-SUPABASE_URL                 # Stessa del sito
-SUPABASE_ANON_KEY            # Chiave anon (obbligatoria per login)
+# Render — servizio unificato cocboard (proxy CoC API + bot Telegram)
+SUPABASE_URL
+SUPABASE_ANON_KEY            # Chiave anon (obbligatoria per login bot)
 SUPABASE_SERVICE_ROLE_KEY    # Chiave service_role (scritture DB)
-TELEGRAM_WEBHOOK_SECRET_TOKEN # Segreto webhook (consigliato)
+COC_API_TOKEN                # Token CoC API per il proxy
+SYNC_SECRET                  # Auth header x-sync-key per route proxy protette
+TELEGRAM_BOT_TOKEN           # Token BotFather (stesso del Vercel)
+COCBOARD_API_BASE            # URL sito Vercel (es. https://cocboard.vercel.app)
 COCBOARD_SITE_HOME_URL       # URL sito per Mini App e pulsante "Apri sito"
+TELEGRAM_WEBHOOK_SECRET_TOKEN # Segreto webhook (consigliato in prod)
 BOT_OWNER_TELEGRAM_IDS       # ID Telegram proprietari bot (virgola-separati)
-TELEGRAPH_TUTORIAL_URL       # URL tutorial Telegraph (default hardcoded)
+TELEGRAPH_TUTORIAL_URL       # Opzionale: URL tutorial Telegraph (default hardcoded)
 TELEGRAM_ALLOWED_IDS         # Opzionale: limita accesso per ID
-PORT                         # Default 3001
+PORT                         # Default 3000
 ```
 
 ---
@@ -339,17 +334,16 @@ Coprono: formula bonus, logica purge, emoji detection, war planner, war alerts, 
 # Deploy sito su Vercel (produzione)
 vercel --prod --yes
 
-# Deploy Render proxy (solo se modifichi render-proxy/index.js)
-# → push su git triggera deploy automatico, oppure deploy manuale da dashboard
-
-# Bot Telegram (cartella telegram-bot/) — servizio Render collegato al repo
-# → commit mirato dei file del bot + git push origin master (deploy automatico)
+# Deploy Render (servizio unificato cocboard — proxy + bot)
+# → qualsiasi modifica a render-proxy/ o telegram-bot/ + git push origin master
+# → Render triggera build automatico (npm install && npm install --prefix ../telegram-bot)
+# → oppure Manual Deploy dalla dashboard
 
 # Test
 npm test
 ```
 
-**Convenzione (agente):** dopo modifiche al bot, eseguire **commit e push** senza attendere conferma, salvo implementazioni **complesse** (es. migrazioni SQL delicate, refactor ampi, breaking changes) dove serve un checkpoint con il maintainer.
+**Convenzione (agente):** dopo modifiche al bot o al proxy, eseguire **commit e push** senza attendere conferma, salvo implementazioni **complesse** (es. migrazioni SQL delicate, refactor ampi, breaking changes) dove serve un checkpoint con il maintainer.
 
 ---
 
@@ -359,7 +353,7 @@ npm test
 2. **Limite 12 functions Vercel Hobby** — ogni nuovo file in `api/` conta come function. Prima di aggiungerne uno nuovo, valuta se può essere fuso in `lookup.js` o in un endpoint esistente. `api/_utils/` non conta (sono moduli importati).
 3. **`app.js` è monolitico** — tutta la logica UI/stato è qui. Non spezzarlo senza motivo.
 4. **`telegram-bot/index.js` è monolitico** — ~5100 righe, tutto il bot è qui + `lib/`. Non spezzare `index.js`.
-5. **`render-proxy/index.js`** gira su Render.com separatamente — modifiche richiedono deploy separato.
+5. **Servizio Render unificato** — `render-proxy/index.js` avvia Express, monta il proxy CoC API, poi chiama `mountOnApp(app)` da `telegram-bot/index.js` sullo stesso processo/porta. Build command: `npm install && npm install --prefix ../telegram-bot` (installa deps proxy + bot separatamente nelle rispettive `node_modules/`). Webhook bot: `https://fearuniteditcoc.onrender.com/tg/cocboard-webhook`.
 6. **CoC API solo via render-proxy** — CORS + token segreto impediscono chiamate dirette dal browser.
 7. **Auth bot ↔ sito** condivide lo stesso account Supabase Auth. Il flusso `telegram_links` + handoff (`tg_h` + `telegram-handoff`) è critico: modificare URL contract o tabella rompe Mini App e login.
 8. **`webApp` button Telegram** funziona solo in chat privata (limitazione API Telegram). In gruppi si usa `url` button.
