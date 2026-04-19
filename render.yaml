@@ -11,7 +11,7 @@ services:
     region: frankfurt
     plan: free
     rootDir: render-proxy
-    buildCommand: npm install && cd ../telegram-bot && npm install
+    buildCommand: npm install && npm install --prefix ../telegram-bot
     startCommand: npm start
     healthCheckPath: /health
     envVars:
