@@ -34,9 +34,10 @@ const HERO_EQUIPMENT_MAP = {
   'Dark Orb':'Minion Prince','Henchmen Puppet':'Minion Prince',
   'Metal Pants':'Minion Prince','Dark Crown':'Minion Prince',
   'Meteor Staff':'Minion Prince','Noble Iron':'Minion Prince',
-  // Duca Drago (4 items)
+  // Duca Drago (5 items)
   'Fire Heart':'Dragon Duke','Flame Blower':'Dragon Duke',
   'Stun Blaster':'Dragon Duke','Electro Fangs':'Dragon Duke',
+  'Rocket Backpack':'Dragon Duke',
 };
 
 const HERO_ORDER_EQUIP = ['Barbarian King','Archer Queen','Grand Warden','Royal Champion','Minion Prince','Dragon Duke'];
@@ -90,6 +91,7 @@ const UNIT_COC_SLUG = {
   'Flame Blower':       {c:'equipment', s:'flame-blower'},
   'Stun Blaster':       {c:'equipment', s:'stun-blaster'},
   'Electro Fangs':      {c:'equipment', s:'electro-fangs'},
+  'Rocket Backpack':    {c:'equipment', s:'rocket-backpack'},
 };
 
 // ── Logica di assegnazione gruppi copiata da _renderEquipmentGrouped (app.js ~3821-3828) ──
