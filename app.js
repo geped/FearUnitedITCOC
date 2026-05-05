@@ -5347,6 +5347,7 @@ const UNIT_COC_SLUG = {
   'Log Launcher':       {c:'troop', s:'siege-log-launcher'},
   'Flame Flinger':      {c:'troop', s:'flame-flinger'},
   'Battle Drill':       {c:'troop', s:'battle-drill'},
+  'Sky Wagon':          {c:'troop', s:'sky-wagon'},
   // ── Equipaggiamento eroi ──────────────────────────────────────────────────
   // Re dei Barbari
   'Barbarian Puppet':   {c:'equipment', s:'barbarian-puppet'},
@@ -5397,6 +5398,7 @@ const UNIT_COC_SLUG = {
   'Fire Heart':         {c:'equipment', s:'fire-heart'},
   'Flame Blower':       {c:'equipment', s:'flame-blower'},
   'Stun Blaster':       {c:'equipment', s:'stun-blaster'},
+  'Electro Fangs':      {c:'equipment', s:'electro-fangs'},
   // ── Truppe / incantesimi recenti (slug coc.guide; mirror GH sotto) ───────────
   'Furnace':            {c:'troop', s:'furnace'},
   'Meteor Golem':       {c:'troop', s:'meteor-golem'},
@@ -5494,12 +5496,14 @@ const UNIT_NAME_IT = {
   'Stone Slammer':'Frantumatore di Pietre','Siege Barracks':'Caserma d\'Assedio',
   'Log Launcher':'Lancia-Tronchi','Flame Flinger':'Sganciapietre',
   'Battle Drill':'Trivella da Battaglia',
+  'Sky Wagon':'Vagone del Cielo',
   // Equipaggiamento — nuovi items
   'Snake Bracelet':'Bracciale Serpente','Action Figure':'Action Figure',
   'Heroic Torch':'Torcia Eroica','Frost Flake':'Fiocco di Gelo',
   'Dark Crown':'Corona Oscura','Meteor Staff':'Bastone Meteora',
   'Noble Iron':'Ferro Nobile','Fire Heart':'Cuore di Fuoco',
   'Flame Blower':'Soffiatore di Fiamme','Stun Blaster':'Blaster Stordente',
+  'Electro Fangs':'Zanne Elettro',
   // Famigli
   'L.A.S.S.I':'L.A.S.S.I','Electro Owl':'Gufo Elettro','Mighty Yak':'Yak Possente',
   'Unicorn':'Unicorno','Frosty':'Gelido','Diggy':'Scavino',
@@ -5547,7 +5551,7 @@ function _unitFallbackColor(name) {
 }
 
 const PETS_SET = new Set(['L.A.S.S.I','Electro Owl','Mighty Yak','Unicorn','Frosty','Diggy','Poison Lizard','Phoenix','Spirit Fox','Angry Jelly','Sneezy','Greedy Raven']);
-const SIEGE_SET = new Set(['Wall Wrecker','Battle Blimp','Stone Slammer','Siege Barracks','Log Launcher','Flame Flinger','Battle Drill']);
+const SIEGE_SET = new Set(['Wall Wrecker','Battle Blimp','Stone Slammer','Siege Barracks','Log Launcher','Flame Flinger','Battle Drill','Sky Wagon']);
 
 // ── MAPPA EQUIPAGGIAMENTO → EROE PROPRIETARIO ─────────────────────────────────
 // Fonte: wiki ufficiale Supercell (marzo 2026)
@@ -5577,9 +5581,9 @@ const HERO_EQUIPMENT_MAP = {
   'Dark Orb':'Minion Prince','Henchmen Puppet':'Minion Prince',
   'Metal Pants':'Minion Prince','Dark Crown':'Minion Prince',
   'Meteor Staff':'Minion Prince','Noble Iron':'Minion Prince',
-  // Duca Drago (3 items, aggiunto feb 2026)
+  // Duca Drago (4 items)
   'Fire Heart':'Dragon Duke','Flame Blower':'Dragon Duke',
-  'Stun Blaster':'Dragon Duke',
+  'Stun Blaster':'Dragon Duke','Electro Fangs':'Dragon Duke',
 };
 const HERO_ORDER_EQUIP = ['Barbarian King','Archer Queen','Grand Warden','Royal Champion','Minion Prince','Dragon Duke'];
 

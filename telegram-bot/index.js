@@ -5737,19 +5737,22 @@ async function mountOnApp(externalApp) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) { console.error('[cocboard-bot] TELEGRAM_BOT_TOKEN mancante'); return; }
   warnSupabaseEnv();
+  if (!(process.env.COCBOARD_API_BASE || '').trim()) {
+    console.error('[cocboard-bot] COCBOARD_API_BASE non configurata: le notifiche guerra/raid non funzioneranno.');
+  }
 
   const bot = new Telegraf(token);
   setupBot(bot);
 
-  runCommunityMaintenance(bot).catch(() => {});
-  notifExt.runExtendedWarAlerts(bot, sb).catch(() => {});
-  notifExt.runExtendedRaidAlerts(bot, sb).catch(() => {});
-  notifExt.runClanActivityAlerts(bot, sb).catch(() => {});
+  runCommunityMaintenance(bot).catch((e) => console.warn('[notif] community init:', e.message));
+  notifExt.runExtendedWarAlerts(bot, sb).catch((e) => console.warn('[notif] war init:', e.message));
+  notifExt.runExtendedRaidAlerts(bot, sb).catch((e) => console.warn('[notif] raid init:', e.message));
+  notifExt.runClanActivityAlerts(bot, sb).catch((e) => console.warn('[notif] activity init:', e.message));
   setInterval(() => {
-    runCommunityMaintenance(bot).catch(() => {});
-    notifExt.runExtendedWarAlerts(bot, sb).catch(() => {});
-    notifExt.runExtendedRaidAlerts(bot, sb).catch(() => {});
-    notifExt.runClanActivityAlerts(bot, sb).catch(() => {});
+    runCommunityMaintenance(bot).catch((e) => console.warn('[notif] community:', e.message));
+    notifExt.runExtendedWarAlerts(bot, sb).catch((e) => console.warn('[notif] war:', e.message));
+    notifExt.runExtendedRaidAlerts(bot, sb).catch((e) => console.warn('[notif] raid:', e.message));
+    notifExt.runClanActivityAlerts(bot, sb).catch((e) => console.warn('[notif] activity:', e.message));
   }, 60_000);
 
   const webhookSecretPath = pickWebhookPath();
@@ -5767,25 +5770,34 @@ async function mountOnApp(externalApp) {
     if (!secretToken && (process.env.RENDER_EXTERNAL_URL || '').trim()) {
       console.warn('[cocboard-bot] Imposta TELEGRAM_WEBHOOK_SECRET_TOKEN in produzione.');
     }
-    // setWebhook dopo 8s per dare tempo al DNS di Render di inizializzarsi
-    setTimeout(async () => {
-      try {
-        await bot.telegram.setWebhook(hookUrl, {
-          secret_token: secretToken || undefined,
-          allowed_updates: ['message', 'callback_query', 'my_chat_member'],
-          drop_pending_updates: true,
-        });
+    // setWebhook dopo 8s per dare tempo al DNS di Render di inizializzarsi.
+    // Ritenta con backoff (8s → 20s → 40s) invece di crashare il processo unificato:
+    // process.exit() ucciderebbe anche i loop notifiche del render-proxy.
+    (async () => {
+      const delays = [8000, 20000, 40000];
+      for (let i = 0; i < delays.length; i++) {
+        await new Promise(r => setTimeout(r, delays[i]));
         try {
-          const me = await bot.telegram.getMe();
-          if (me.username) cachedTgBotUsername = me.username.replace(/^@/, '');
-        } catch (_) {}
-        await registerBotCommands(bot.telegram);
-        console.log('[bot] Webhook set:', hookUrl);
-      } catch (err) {
-        console.error('[bot] setWebhook failed, restarting:', err.message);
-        process.exit(1);
+          await bot.telegram.setWebhook(hookUrl, {
+            secret_token: secretToken || undefined,
+            allowed_updates: ['message', 'callback_query', 'my_chat_member'],
+            drop_pending_updates: true,
+          });
+          try {
+            const me = await bot.telegram.getMe();
+            if (me.username) cachedTgBotUsername = me.username.replace(/^@/, '');
+          } catch (_) {}
+          await registerBotCommands(bot.telegram);
+          console.log('[bot] Webhook set:', hookUrl);
+          return;
+        } catch (err) {
+          console.error(`[bot] setWebhook attempt ${i + 1} failed: ${err.message}`);
+          if (i === delays.length - 1) {
+            console.error('[bot] setWebhook tutti i tentativi falliti — bot non riceverà messaggi ma notifiche continuano.');
+          }
+        }
       }
-    }, 8000);
+    })();
   } else {
     // Fallback long polling (sviluppo locale senza RENDER_EXTERNAL_URL)
     await bot.launch();
