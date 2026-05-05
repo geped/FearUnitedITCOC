@@ -106,7 +106,7 @@ function rankLeagueBadgeHtml(league, opts) {
   const imgClass = (opts && opts.imgClass) || 'league-badge-sm';
   const titleEsc = nameEn.replace(/"/g, '&quot;').replace(/</g, '');
   const apiUrl = league.iconUrls && (league.iconUrls.large || league.iconUrls.medium || league.iconUrls.small);
-  const localFile = LEAGUE_BADGE_MAP[nameEn];
+  const localFile = LEAGUE_BADGE_MAP[nameEn] || LEAGUE_BADGE_MAP[nameEn.replace(/\s+\d+$/, '')];
   const localPath = localFile ? `leagues/${localFile}.png` : '';
   const fbAttr = localPath ? ` data-league-fb="${localPath.replace(/"/g, '&quot;')}"` : '';
 
@@ -631,18 +631,19 @@ const LEAGUE_BADGE_MAP = {
   'Champion League III':'CampioneIII','Champion League II':'CampioneII','Champion League I':'CampioneI',
   'Titan League III':  'TitanoIII',  'Titan League II':  'TitanoII',  'Titan League I':  'TitanoI',
   'Legend League':     'LeggendaV2',
-  // Leghe Ranked Battles (nomi API inglese → asset locale aggiornato più vicino al tier)
-  'Skeleton League III': 'BronzoI', 'Skeleton League II': 'ArgentoIII', 'Skeleton League I': 'OroI',
-  'Barbarian League III': 'OroIII', 'Barbarian League II': 'CristalloIII', 'Barbarian League I': 'MaestroI',
-  'Archer League III': 'CristalloIII', 'Archer League II': 'MaestroII', 'Archer League I': 'CampioneI',
-  'Wizard League III': 'MaestroIII', 'Wizard League II': 'CampioneII', 'Wizard League I': 'TitanoI',
-  'Valkyrie League III': 'CampioneIII', 'Valkyrie League II': 'TitanoII', 'Valkyrie League I': 'Leggenda',
-  'Witch League III': 'TitanoIII', 'Witch League II': 'Leggenda', 'Witch League I': 'Leggenda',
-  'Golem League III': 'MaestroI', 'Golem League II': 'CampioneIII', 'Golem League I': 'TitanoIII',
-  'P.E.K.K.A League III': 'CampioneI', 'P.E.K.K.A League II': 'TitanoI', 'P.E.K.K.A League I': 'LeggendaV2',
-  'Electro Titan League III': 'TitanoII', 'Electro Titan League II': 'Leggenda', 'Electro Titan League I': 'LeggendaV2',
-  'Dragon League III': 'CampioneII', 'Dragon League II': 'TitanoII', 'Dragon League I': 'LeggendaV2',
-  'Electro Dragon League III': 'TitanoIII', 'Electro Dragon League II': 'LeggendaV2', 'Electro Dragon League I': 'LeggendaV2',
+  // Leghe Ranked Battles — badge dedicati + prefisso base per nomi numerici (es. "Dragon League 5")
+  'Unranked': 'Unranked',
+  'Skeleton League III': 'Skeleton', 'Skeleton League II': 'Skeleton', 'Skeleton League I': 'Skeleton', 'Skeleton League': 'Skeleton',
+  'Barbarian League III': 'Barbarian', 'Barbarian League II': 'Barbarian', 'Barbarian League I': 'Barbarian', 'Barbarian League': 'Barbarian',
+  'Archer League III': 'Archer', 'Archer League II': 'Archer', 'Archer League I': 'Archer', 'Archer League': 'Archer',
+  'Wizard League III': 'Wizard', 'Wizard League II': 'Wizard', 'Wizard League I': 'Wizard', 'Wizard League': 'Wizard',
+  'Valkyrie League III': 'Valkyrie', 'Valkyrie League II': 'Valkyrie', 'Valkyrie League I': 'Valkyrie', 'Valkyrie League': 'Valkyrie',
+  'Witch League III': 'Witch', 'Witch League II': 'Witch', 'Witch League I': 'Witch', 'Witch League': 'Witch',
+  'Golem League III': 'Golem', 'Golem League II': 'Golem', 'Golem League I': 'Golem', 'Golem League': 'Golem',
+  'P.E.K.K.A League III': 'PEKKA', 'P.E.K.K.A League II': 'PEKKA', 'P.E.K.K.A League I': 'PEKKA', 'P.E.K.K.A League': 'PEKKA',
+  'Electro Titan League III': 'ElettroTitano', 'Electro Titan League II': 'ElettroTitano', 'Electro Titan League I': 'ElettroTitano', 'Electro Titan League': 'ElettroTitano',
+  'Dragon League III': 'Drago', 'Dragon League II': 'Drago', 'Dragon League I': 'Drago', 'Dragon League': 'Drago',
+  'Electro Dragon League III': 'ElectroDrago', 'Electro Dragon League II': 'ElectroDrago', 'Electro Dragon League I': 'ElectroDrago', 'Electro Dragon League': 'ElectroDrago',
 };
 
 // Converte leagueTier.name (es. "Electro League 31") in nome italiano (es. "Elettro #31")
@@ -5503,9 +5504,9 @@ const UNIT_NAME_IT = {
   'Heroic Torch':'Torcia Eroica','Frost Flake':'Fiocco di Gelo',
   'Dark Crown':'Corona Oscura','Meteor Staff':'Bastone Meteora',
   'Noble Iron':'Ferro Nobile','Fire Heart':'Cuore di Fuoco',
-  'Flame Blower':'Soffiatore di Fiamme','Stun Blaster':'Blaster Stordente',
-  'Electro Fangs':'Zanne Elettro',
-  'Rocket Backpack':'Zaino Razzo',
+  'Flame Blower':'Mantice Sputafuoco','Stun Blaster':'Rivoltella Sonica',
+  'Electro Fangs':'Zanne Elettriche',
+  'Rocket Backpack':'Zaino a Razzo',
   // Famigli
   'L.A.S.S.I':'L.A.S.S.I','Electro Owl':'Gufo Elettro','Mighty Yak':'Yak Possente',
   'Unicorn':'Unicorno','Frosty':'Gelido','Diggy':'Scavino',
