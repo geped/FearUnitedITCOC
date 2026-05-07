@@ -3573,12 +3573,14 @@ document.getElementById('refresh-botadmin')?.addEventListener('click', async () 
 // ─────────────────────────────────────────────────────────────────────────────
 
 function switchWarTab(tab, btn) {
-  document.querySelectorAll('.subtab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#tab-warlog .subtab-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   document.getElementById('wl-classic').style.display = tab === 'classic' ? 'block' : 'none';
   document.getElementById('wl-cwl').style.display     = tab === 'cwl'     ? 'block' : 'none';
+  document.getElementById('wl-capital').style.display = tab === 'capital' ? 'block' : 'none';
   if (tab === 'classic') loadWarLog();
   if (tab === 'cwl')     loadCwlSeasons();
+  if (tab === 'capital') loadCapitalRaids();
 }
 
 // ── War Log classiche (API CoC) ──────────────────────
@@ -3675,6 +3677,89 @@ async function loadWarLog() {
 document.querySelectorAll('.tab-btn[data-tab="warlog"]').forEach(btn => {
   btn.addEventListener('click', () => setTimeout(loadWarLog, 100));
 });
+
+function _formatApiTime(raw) {
+  if (!raw) return '—';
+  try {
+    return new Date(
+      String(raw).replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2}).*/, '$1-$2-$3T$4:$5:$6')
+    ).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: '2-digit' });
+  } catch (_) {
+    return '—';
+  }
+}
+
+async function loadCapitalRaids() {
+  const div = document.getElementById('wl-capital-results');
+  if (!div) return;
+  div.innerHTML = '<p class="wl-loading">Caricamento weekend raid…</p>';
+
+  try {
+    const tag = window._userClanTag || '';
+    let rows = [];
+
+    // Fonte primaria: storico DB
+    try {
+      const dbRes = await db
+        .from('capital_raids')
+        .select('*')
+        .eq('clan_tag', tag)
+        .order('weekend_start', { ascending: false })
+        .limit(12);
+      if (!dbRes.error && Array.isArray(dbRes.data)) rows = dbRes.data;
+    } catch (_) {}
+
+    // Fallback: API live (se tabella non presente o vuota)
+    if (!rows.length) {
+      const r = await fetch(`/api/lookup?type=capital-raids&clanTag=${encodeURIComponent(tag)}`);
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        div.innerHTML = `<p class="wl-err">⚠️ ${data.error || 'Servizio raid non disponibile.'}</p>`;
+        return;
+      }
+      rows = (Array.isArray(data.items) ? data.items : []).map((it) => {
+        const members = Array.isArray(it?.members) ? it.members : [];
+        const top = members
+          .slice()
+          .sort((a, b) => Number(b?.capitalResourcesLooted || 0) - Number(a?.capitalResourcesLooted || 0))[0] || null;
+        return {
+          weekend_start: it?.startTime || null,
+          weekend_end: it?.endTime || null,
+          capital_total_loot: Number(it?.capitalTotalLoot || 0),
+          total_attacks: Number(it?.totalAttacks || 0),
+          enemy_districts_destroyed: Number(it?.enemyDistrictsDestroyed || 0),
+          raids_completed: Number(it?.raidsCompleted || 0),
+          top_contributor_name: top?.name || null,
+          top_contributor_loot: Number(top?.capitalResourcesLooted || 0),
+        };
+      });
+    }
+
+    if (!rows.length) {
+      div.innerHTML = '<p class="wl-loading">Nessun weekend raid disponibile.</p>';
+      return;
+    }
+
+    const cards = rows.map((r) => `
+      <div class="raid-card">
+        <div class="raid-card-top">
+          <div><strong>${_formatApiTime(r.weekend_start)}</strong> <span style="color:var(--text-3)">→ ${_formatApiTime(r.weekend_end)}</span></div>
+          <div class="raid-loot">💰 ${Number(r.capital_total_loot || 0).toLocaleString('it-IT')}</div>
+        </div>
+        <div class="raid-metrics">
+          <span>⚔️ Attacchi: <b>${Number(r.total_attacks || 0)}</b></span>
+          <span>🏚️ Distretti: <b>${Number(r.enemy_districts_destroyed || 0)}</b></span>
+          <span>✅ Raid completati: <b>${Number(r.raids_completed || 0)}</b></span>
+        </div>
+        <div class="raid-top-player">🥇 Top contributore: <b>${r.top_contributor_name || '—'}</b> · ${Number(r.top_contributor_loot || 0).toLocaleString('it-IT')} loot</div>
+      </div>
+    `).join('');
+
+    div.innerHTML = `<div class="raid-list">${cards}</div>`;
+  } catch (_) {
+    div.innerHTML = '<p class="wl-err">⚠️ Impossibile caricare i weekend raid.</p>';
+  }
+}
 
 // ── DETTAGLIO WAR CLASSICA ────────────────────────────────────────────────────
 

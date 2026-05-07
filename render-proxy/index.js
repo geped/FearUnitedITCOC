@@ -158,6 +158,63 @@ async function saveEndedWar(clanTagRaw) {
     return { saved: true, endTime: war.endTime, result };
 }
 
+async function saveCapitalRaids(clanTagRaw) {
+    const clanTag = parseClanTag(clanTagRaw);
+    if (!clanTag) throw new Error('clan_tag obbligatorio.');
+
+    const r = await fetch(
+        `https://api.clashofclans.com/v1/clans/${encodeTag(clanTag)}/capitalraidseasons?limit=8`,
+        { headers: cocHeaders() }
+    );
+    if (!r.ok) return { saved: 0, skipped: true, reason: `CoC API ${r.status}` };
+    const payload = await r.json();
+    const items = Array.isArray(payload?.items) ? payload.items : [];
+    if (!items.length) return { saved: 0, skipped: true, reason: 'no-items' };
+
+    const rows = items
+        .map((it) => {
+            const weekendStart = it?.startTime || null;
+            if (!weekendStart) return null;
+            const members = Array.isArray(it?.members) ? it.members : [];
+            const top = members
+                .slice()
+                .sort((a, b) => {
+                    const aa = Number(a?.capitalResourcesLooted || 0);
+                    const bb = Number(b?.capitalResourcesLooted || 0);
+                    if (bb !== aa) return bb - aa;
+                    return String(a?.name || '').localeCompare(String(b?.name || ''));
+                })[0] || null;
+
+            return {
+                clan_tag: clanTag,
+                weekend_start: weekendStart,
+                weekend_end: it?.endTime || null,
+                state: it?.state || null,
+                capital_total_loot: Number(it?.capitalTotalLoot || 0),
+                raids_completed: Number(it?.raidsCompleted || 0),
+                total_attacks: Number(it?.totalAttacks || 0),
+                enemy_districts_destroyed: Number(it?.enemyDistrictsDestroyed || 0),
+                offensive_reward: Number(it?.offensiveReward || 0),
+                defensive_reward: Number(it?.defensiveReward || 0),
+                attack_log: Array.isArray(it?.attackLog) ? it.attackLog : [],
+                defense_log: Array.isArray(it?.defenseLog) ? it.defenseLog : [],
+                members,
+                top_contributor_name: top?.name || null,
+                top_contributor_tag: top?.tag || null,
+                top_contributor_loot: Number(top?.capitalResourcesLooted || 0),
+                saved_at: new Date().toISOString(),
+            };
+        })
+        .filter(Boolean);
+    if (!rows.length) return { saved: 0, skipped: true, reason: 'no-valid-weekends' };
+
+    const { error } = await supabase()
+        .from('capital_raids')
+        .upsert(rows, { onConflict: 'clan_tag,weekend_start' });
+    if (error) throw new Error(error.message);
+    return { saved: rows.length };
+}
+
 async function syncMembers(clanTagRaw) {
     const clanTag = parseClanTag(clanTagRaw);
     if (!clanTag) throw new Error('clan_tag obbligatorio per la sincronizzazione.');
@@ -622,6 +679,42 @@ app.post('/save-all-cwl', authMiddleware, async (req, res) => {
             const cwl = await getCwlStats(tag);
             return { state: cwl?.state, season: cwl?.season, rounds: cwl?.roundsData?.length || 0 };
         }));
+        const results = tags.map((tag, i) => ({
+            clan_tag: tag,
+            ...(settled[i].status === 'fulfilled'
+                ? settled[i].value
+                : { error: settled[i].reason?.message }),
+        }));
+
+        res.json({ ok: true, clans: tags.length, results });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/save-raids', authMiddleware, async (req, res) => {
+    try {
+        const clanTag = req.query.clanTag || req.body?.clanTag;
+        if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });
+        const result = await saveCapitalRaids(clanTag);
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/save-all-raids', authMiddleware, async (req, res) => {
+    try {
+        const { data, error } = await supabase()
+            .from('members')
+            .select('clan_tag')
+            .not('clan_tag', 'is', null);
+        if (error) return res.status(500).json({ error: error.message });
+
+        const tags = [...new Set((data || []).map((r) => r.clan_tag).filter(Boolean))];
+        if (!tags.length) return res.json({ ok: true, clans: 0, results: [] });
+
+        const settled = await Promise.allSettled(tags.map((tag) => saveCapitalRaids(tag)));
         const results = tags.map((tag, i) => ({
             clan_tag: tag,
             ...(settled[i].status === 'fulfilled'

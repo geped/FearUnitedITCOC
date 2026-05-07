@@ -33,13 +33,15 @@ module.exports = async (req, res) => {
             if (!r.ok) throw new Error(data.error || 'Errore proxy');
             return res.status(200).json(data);
         }
-        const [classicRes, cwlRes] = await Promise.allSettled([
+        const [classicRes, cwlRes, raidsRes] = await Promise.allSettled([
             fetch(`${proxyUrl}/save-all-wars`, { method: 'POST', headers: syncHeaders }).then(r => r.json()),
             fetch(`${proxyUrl}/save-all-cwl`,  { method: 'POST', headers: syncHeaders }).then(r => r.json()),
+            fetch(`${proxyUrl}/save-all-raids`, { method: 'POST', headers: syncHeaders }).then(r => r.json()),
         ]);
         res.status(200).json({
             classic: classicRes.status === 'fulfilled' ? classicRes.value : { error: classicRes.reason?.message },
             cwl:     cwlRes.status === 'fulfilled'     ? cwlRes.value     : { error: cwlRes.reason?.message },
+            raids:   raidsRes.status === 'fulfilled'   ? raidsRes.value   : { error: raidsRes.reason?.message },
         });
     } catch (err) {
         res.status(500).json({ error: err.message });

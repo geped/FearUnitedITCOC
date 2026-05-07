@@ -293,6 +293,7 @@
                 <div class="subtab-bar">
                     <button class="subtab-btn active" onclick="switchWarTab('classic', this)">🏹 War Classiche</button>
                     <button class="subtab-btn" onclick="switchWarTab('cwl', this)">🏆 Cronologia Leghe</button>
+                    <button class="subtab-btn" onclick="switchWarTab('capital', this)">🏰 Capital Raid</button>
                 </div>
 
                 <!-- WAR CLASSICHE -->
@@ -318,6 +319,17 @@
                     <div id="cwl-current-league-banner" style="display:none" class="cwl-current-banner"></div>
                     <div id="cwl-seasons-list">
                         <p class="wl-loading">Caricamento cronologia…</p>
+                    </div>
+                </div>
+
+                <!-- CAPITAL RAID -->
+                <div id="wl-capital" style="display:none">
+                    <div class="toolbar">
+                        <span class="toolbar-label">🏰 Weekend Raid — <span class="clan-name-dyn">—</span></span>
+                        <button class="btn-secondary btn-sm" onclick="loadCapitalRaids()">🔄 Aggiorna</button>
+                    </div>
+                    <div id="wl-capital-results">
+                        <p class="wl-loading">Caricamento raid capitale…</p>
                     </div>
                 </div>
 
