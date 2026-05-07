@@ -36,8 +36,11 @@ const raidStateMem = new Map();
  * La notifica viene comunque inviata per ogni singola chat che la richiede.
  */
 const clanStateMem = new Map();
+const cwlSeasonMem = new Map(); // key `${chatId}:${clanTag}` -> { season, state, leagueNameEn, sent:Set<string> }
+const cwlStatsCache = new Map(); // key clanTag -> { ts, data }
 
 let lastClanActivityRun = 0;
+const CWL_STATS_CACHE_MS = 45 * 1000;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Utilities
@@ -93,6 +96,48 @@ function roleLabel(role) {
 }
 function roleRank(role) {
   return ({ member: 1, admin: 2, coLeader: 3, leader: 4 })[role] || 0;
+}
+
+function leagueRank(leagueNameEn) {
+  const order = {
+    'Bronze League III': 1,
+    'Bronze League II': 2,
+    'Bronze League I': 3,
+    'Silver League III': 4,
+    'Silver League II': 5,
+    'Silver League I': 6,
+    'Gold League III': 7,
+    'Gold League II': 8,
+    'Gold League I': 9,
+    'Crystal League III': 10,
+    'Crystal League II': 11,
+    'Crystal League I': 12,
+    'Master League III': 13,
+    'Master League II': 14,
+    'Master League I': 15,
+    'Champion League III': 16,
+    'Champion League II': 17,
+    'Champion League I': 18,
+    'Titan League III': 19,
+    'Titan League II': 20,
+    'Titan League I': 21,
+    'Legend League': 22,
+  };
+  return order[String(leagueNameEn || '').trim()] || 0;
+}
+
+async function getCachedCwlStats(clanTag) {
+  const key = String(clanTag || '');
+  const now = Date.now();
+  const hit = cwlStatsCache.get(key);
+  if (hit && (now - hit.ts) < CWL_STATS_CACHE_MS) return hit.data;
+  const data = await api.cwlStats(clanTag);
+  cwlStatsCache.set(key, { ts: now, data });
+  if (cwlStatsCache.size > 200) {
+    const k = cwlStatsCache.keys().next();
+    if (!k.done) cwlStatsCache.delete(k.value);
+  }
+  return data;
 }
 
 /** Invia messaggio a chatId; cancella il link se la chat è stale/inaccessibile. */
@@ -178,6 +223,61 @@ async function runExtendedWarAlerts(bot, sb) {
 async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
   const notif = await sb.getChatNotificationSettings(chatId).catch(() => ({}));
   const custom = await sb.getChatCustomAlertSettings(chatId).catch(() => ({}));
+
+  // ── CWL stagione/lega (alert cwl_end + promo/retro) ─────────────────────
+  if (notif?.cwl_alerts_enabled === true) {
+    try {
+      const cwl = await getCachedCwlStats(clanTag);
+      const key = `${chatId}:${clanTag}`;
+      const prev = cwlSeasonMem.get(key) || { season: null, state: 'unknown', leagueNameEn: null, sent: new Set() };
+      const sent = prev.sent;
+      const curSeason = String(cwl?.season || '');
+      const curState = String(cwl?.state || '');
+      const curLeague = String(cwl?.leagueNameEn || '');
+      const send = (text) => sendToChat(telegram, chatId, text, () => sb.deleteTelegramChatLink(chatId));
+
+      // Fine stagione CWL
+      if (
+        notif.cwl_end === true &&
+        prev.state &&
+        prev.state !== 'unknown' &&
+        prev.state !== 'notInWar' &&
+        prev.state !== 'ended' &&
+        curState === 'ended'
+      ) {
+        const endKey = `cwl_end:${curSeason || prev.season || 'na'}`;
+        if (!sent.has(endKey)) {
+          sent.add(endKey);
+          await send(`🏁 <b>Stagione CWL terminata</b>\nStagione: <b>${fmt.escapeHtml(curSeason || '—')}</b>`);
+        }
+      }
+
+      // Cambio lega (promozione / retrocessione)
+      const prevRank = leagueRank(prev.leagueNameEn);
+      const curRank = leagueRank(curLeague);
+      if (prevRank > 0 && curRank > 0 && prevRank !== curRank) {
+        const lk = `cwl_league:${curSeason || 'na'}:${curLeague}`;
+        if (!sent.has(lk)) {
+          sent.add(lk);
+          if (curRank > prevRank && notif.cwl_league_promotion === true) {
+            await send(`📈 <b>Promozione CWL</b>\nNuova lega: <b>${fmt.escapeHtml(curLeague)}</b>`);
+          } else if (curRank < prevRank && notif.cwl_league_demotion === true) {
+            await send(`📉 <b>Retrocessione CWL</b>\nNuova lega: <b>${fmt.escapeHtml(curLeague)}</b>`);
+          }
+        }
+      }
+
+      cwlSeasonMem.set(key, {
+        season: curSeason || prev.season || null,
+        state: curState || prev.state || 'unknown',
+        leagueNameEn: curLeague || prev.leagueNameEn || null,
+        sent,
+      });
+    } catch (_) {
+      // Non bloccare il flusso principale notifiche guerra
+    }
+  }
+
   const war   = await api.currentWar(clanTag);
   const state = String(war?.state || '');
   const isCwl = String(war?.warType || '').toLowerCase() === 'cwl';
@@ -507,6 +607,39 @@ async function _raidAlertsForChat(telegram, chatId, clanTag, sb) {
     }
   }
 
+  // Loot milestone cumulativo weekend (50k, 100k, 150k, ...)
+  const totalLoot = (current.attackLog || []).reduce((acc, e) => acc + Number(e.capitalTotalLoot || 0), 0);
+  if (notif.raid_loot_milestone === true && totalLoot > 0) {
+    const step = 50_000;
+    const reached = Math.floor(totalLoot / step);
+    for (let i = 1; i <= reached; i++) {
+      const target = i * step;
+      const mk = `loot:${startTime}:${target}`;
+      if (!sent.has(mk)) {
+        sent.add(mk);
+        await send(`💰 <b>Raid Capitale</b>\nMilestone raggiunta: <b>${target.toLocaleString('it-IT')}</b> oro!`);
+      }
+    }
+  }
+
+  // Nostra capitale caduta (best effort): se un attacker nella defenseLog chiude tutti i distretti
+  if (notif.raid_capital_fallen === true) {
+    for (const defEntry of (current.defenseLog || [])) {
+      const et = defEntry.attacker?.tag || 'unknown';
+      const dKey = `capital_fallen:${startTime}:${et}`;
+      if (sent.has(dKey)) continue;
+      const districts = defEntry.districts || [];
+      if (!districts.length) continue;
+      const allDestroyed = districts.every((d) => Number(d.destructionPercent || 0) >= 100);
+      if (allDestroyed) {
+        sent.add(dKey);
+        await send(
+          `💥 <b>Raid Capitale</b>\nLa nostra capitale è stata completata al 100% da <b>${fmt.escapeHtml(defEntry.attacker?.name || 'Clan avversario')}</b>.`
+        );
+      }
+    }
+  }
+
   raidStateMem.set(memKey, { state: 'ongoing', startTime, destroyed, clearedEnemies, sent });
 }
 
@@ -563,6 +696,7 @@ async function runClanActivityAlerts(bot, sb) {
         members: new Map(members.map((m) => [m.tag, { name: m.name, role: m.role }])),
         level: info?.clanLevel ?? null,
         name:  info?.name     ?? null,
+        warWinStreak: info?.warWinStreak ?? null,
       });
       continue;
     }
@@ -614,11 +748,23 @@ async function runClanActivityAlerts(bot, sb) {
       await send(`✏️ <b>Nome clan cambiato</b>\n${fmt.escapeHtml(prev.name)} → <b>${fmt.escapeHtml(curName)}</b>`);
     }
 
+    // Streak vittorie guerra in aumento
+    const curStreak = info?.warWinStreak ?? null;
+    if (
+      curStreak !== null &&
+      prev.warWinStreak !== null &&
+      Number(curStreak) > Number(prev.warWinStreak) &&
+      notif.clan_war_streak === true
+    ) {
+      await send(`🔥 <b>Serie vittorie!</b>\nIl clan è ora a <b>${Number(curStreak)}</b> vittorie consecutive.`);
+    }
+
     // Aggiorna snapshot (condiviso: sovrascrivi con dati più recenti)
     clanStateMem.set(clanTag, {
       members: curMembers,
       level: curLevel,
       name:  curName,
+      warWinStreak: curStreak,
     });
   }
 
