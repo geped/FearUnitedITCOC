@@ -49,7 +49,55 @@ async function warLog(clanTag) {
 }
 
 async function currentWar(clanTag) {
-  return fetchJson('/api/lookup', { type: 'current-war', clanTag });
+  const war = await fetchJson('/api/lookup', { type: 'current-war', clanTag });
+  // In alcuni casi l'endpoint current-war non espone correttamente il round CWL:
+  // fallback su cwl-stats per continuare a notificare (1h, recap, ecc.).
+  const state = String(war?.state || '');
+  if (state && state !== 'notInWar') return war;
+
+  const cwl = await cwlStats(clanTag).catch(() => null);
+  const rounds = Array.isArray(cwl?.roundsData) ? cwl.roundsData : [];
+  if (!rounds.length) return war;
+
+  const active =
+    rounds.find((r) => r && (r.state === 'inWar' || r.state === 'preparation')) ||
+    rounds[rounds.length - 1];
+  if (!active || !active.state) return war;
+
+  const mapMembers = (members) =>
+    (Array.isArray(members) ? members : []).map((m) => ({
+      name: m?.name,
+      tag: m?.tag,
+      attacks: (Array.isArray(m?.attacks) ? m.attacks : []).map((a) => ({
+        stars: Number(a?.stars || 0),
+        destructionPercentage: Number(a?.destruction ?? 0),
+        defenderTag: a?.defenderTag || null,
+      })),
+    }));
+
+  return {
+    state: active.state,
+    warType: 'cwl',
+    teamSize: Number(active.teamSize || 0),
+    attacksPerMember: Number(active.attacksPerMember || 1),
+    endTime: active.endTime || null,
+    startTime: active.startTime || null,
+    preparationStartTime: active.preparationStartTime || null,
+    clan: {
+      name: active?.clan?.name || '',
+      tag: active?.clan?.tag || null,
+      stars: Number(active?.clan?.stars || 0),
+      destructionPercentage: Number(active?.clan?.destruction || 0),
+      members: mapMembers(active?.clan?.members),
+    },
+    opponent: {
+      name: active?.opponent?.name || '',
+      tag: active?.opponent?.tag || null,
+      stars: Number(active?.opponent?.stars || 0),
+      destructionPercentage: Number(active?.opponent?.destruction || 0),
+      members: mapMembers(active?.opponent?.members),
+    },
+  };
 }
 
 async function capitalRaids(clanTag) {

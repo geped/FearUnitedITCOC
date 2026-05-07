@@ -284,15 +284,20 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
         }
       }
 
-      // ── Guerra perfetta (3 stelle su tutti) ────────────────────────────
-      if (!isCwl && notif.war_3star === true) {
+      // ── Guerra/round perfetto (3 stelle su tutti) ──────────────────────
+      const perfectEnabled = isCwl ? notif.cwl_round_end === true : notif.war_3star === true;
+      if (perfectEnabled) {
         const ts = war.teamSize || 0;
         if (ts > 0 && (war?.clan?.stars || 0) >= ts * 3) {
           const key = `3star:${war.endTime}`;
           if (!sent.has(key)) {
             sent.add(key);
             const cn = fmt.escapeHtml(war?.clan?.name || 'Il nostro clan');
-            await send(`⭐⭐⭐ <b>Guerra Perfetta!</b>\n${cn} ha 3 stelle su tutti i villaggi! 🎉`);
+            if (isCwl) {
+              await send(`⭐⭐⭐ <b>Round CWL Perfetto!</b>\n${cn} ha 3 stelle su tutti i villaggi del round! 🎉`);
+            } else {
+              await send(`⭐⭐⭐ <b>Guerra Perfetta!</b>\n${cn} ha 3 stelle su tutti i villaggi! 🎉`);
+            }
           }
         }
       }
