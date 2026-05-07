@@ -63,6 +63,19 @@ async function _deleteTrackedMenuMsg(telegram, chatId) {
   _lastMenuMsgByChat.delete(Number(chatId));
   await telegram.deleteMessage(Number(chatId), mid).catch(() => {});
 }
+/** Traccia l'ultimo messaggio /cwl per chat: cancellato al prossimo /cwl. */
+const _lastCwlCmdMsgByChat = new Map();
+function _trackCwlCmdMsg(chatId, messageId) {
+  if (chatId != null && messageId != null) _lastCwlCmdMsgByChat.set(Number(chatId), Number(messageId));
+}
+async function _deletePrevCwlCmdMsg(telegram, chatId) {
+  if (chatId == null) return;
+  const mid = _lastCwlCmdMsgByChat.get(Number(chatId));
+  if (!mid) return;
+  _lastCwlCmdMsgByChat.delete(Number(chatId));
+  await telegram.deleteMessage(Number(chatId), mid).catch(() => {});
+}
+
 const WELCOME_IMAGE_PATH   = path.join(__dirname, 'assets', 'benvenuto.png');
 const CWL_HEADER_IMAGE_PATH = path.join(__dirname, 'assets', 'cwl_live.jpeg');
 const WAR_HEADER_IMAGE_PATH = path.join(__dirname, 'assets', 'war_live.jpeg');
@@ -1882,14 +1895,17 @@ async function performFullLogout(ctx, { viaCommand }) {
 }
 
 function parseCwlViewKey(raw) {
-  if (raw === 'ov' || raw === 'lg') return { view: 'lg', pPage: 0, rIdx: 0 };
-  if (raw === 'g') return { view: 'g', pPage: 0, rIdx: 0 };
+  if (raw === 'ov') return { view: 'ov', pPage: 0, rIdx: 0 };
+  if (raw === 'lg') return { view: 'lg', pPage: 0, rIdx: 0 };
+  if (raw === 'g') return { view: 'g', pPage: 0, rIdx: 0 }; // compat
   const pm = /^p:(\d+)$/.exec(raw);
   if (pm) return { view: 'p', pPage: Number(pm[1]), rIdx: 0 };
   const rm = /^r:(\d+)$/.exec(raw);
   if (rm) return { view: 'r', pPage: 0, rIdx: Number(rm[1]) };
   const am = /^ant:(\d+)$/.exec(raw);
   if (am) return { view: 'ant', pPage: 0, rIdx: Number(am[1]) };
+  const cfm = /^cf:(\d+)$/.exec(raw);
+  if (cfm) return { view: 'cf', pPage: 0, rIdx: Number(cfm[1]) };
   if (raw === 'cf') return { view: 'cf', pPage: 0, rIdx: 0 };
   return { view: 'lg', pPage: 0, rIdx: 0 };
 }
@@ -2020,20 +2036,22 @@ function buildCwlNavKb(data, spec, webAppUrl) {
   const pPages = fmt.getCwlPlayerPageCount(data);
   const rCount = fmt.getCwlRoundCount(data);
   const defaultRoundIdx = fmt.getDefaultCwlRoundIndex(data);
-  const turniIdx = (view === 'r' || view === 'ant') ? rIdx : defaultRoundIdx;
+  const roundIdx = (view === 'r' || view === 'ant' || view === 'cf') ? rIdx : defaultRoundIdx;
 
   const tab = (active, short, payload) =>
     Markup.button.callback(active ? `· ${short} ·` : short, payload);
 
+  // 6 tab su 2 righe da 3
   const rows = [
     [
-      tab(view === 'lg' || view === 'ov', '🏆 Lega', 'cwl_v:lg'),
+      tab(view === 'ov', '📊 Panor.', 'cwl_v:ov'),
+      tab(view === 'lg', '🏆 Lega', 'cwl_v:lg'),
       tab(view === 'p', '👥 Player', 'cwl_v:p:0'),
     ],
     [
-      tab(view === 'r', '⚔️ Turni', `cwl_v:r:${turniIdx}`),
-      tab(view === 'ant', '👁 Antep.', `cwl_v:ant:${turniIdx}`),
-      tab(view === 'cf', '⚖️ Confrto', 'cwl_v:cf'),
+      tab(view === 'r', '⚔️ Turni', `cwl_v:r:${roundIdx}`),
+      tab(view === 'ant', '👁 Antep.', `cwl_v:ant:${roundIdx}`),
+      tab(view === 'cf', '⚖️ Confrto', `cwl_v:cf:${roundIdx}`),
     ],
   ];
 
@@ -2047,10 +2065,10 @@ function buildCwlNavKb(data, spec, webAppUrl) {
     ]);
   }
 
-  if ((view === 'r' || view === 'ant') && rCount > 1) {
+  if ((view === 'r' || view === 'ant' || view === 'cf') && rCount > 1) {
     const prev = Math.max(0, rIdx - 1);
     const next = Math.min(rCount - 1, rIdx + 1);
-    const prefix = view === 'ant' ? 'cwl_v:ant' : 'cwl_v:r';
+    const prefix = view === 'ant' ? 'cwl_v:ant' : view === 'cf' ? 'cwl_v:cf' : 'cwl_v:r';
     rows.push([
       Markup.button.callback('◀ Turno', `${prefix}:${prev}`),
       Markup.button.callback(`· ${rIdx + 1}/${rCount} ·`, 'noop'),
@@ -2062,7 +2080,6 @@ function buildCwlNavKb(data, spec, webAppUrl) {
     rows.push([Markup.button.webApp('🌐 Visualizza versione web', webAppUrl)]);
   }
 
-  if (view !== 'lg' && view !== 'ov') rows.push([Markup.button.callback('« CWL Lega', 'cwl_v:lg')]);
   rows.push([Markup.button.callback('« Indietro', 'clan_home'), Markup.button.callback('« Menù', 'menu')]);
   return Markup.inlineKeyboard(rows);
 }
@@ -3344,8 +3361,15 @@ function setupBot(bot) {
 
   bot.command('cwl', async (ctx) => {
     await cmdNeedClan(ctx, async (clanTag) => {
-      const { text, kb } = await loadAndShowCwl(ctx, clanTag, { view: 'ov', pPage: 0, rIdx: 0 });
-      await sendCwlMessages(ctx, text, kb);
+      const chatId = ctx.chat?.id;
+      await _deletePrevCwlCmdMsg(ctx.telegram, chatId);
+      const { text, kb } = await loadAndShowCwl(ctx, clanTag, { view: 'lg', pPage: 0, rIdx: 0 });
+      const parts = fmt.chunkForTelegram(text);
+      for (let i = 0; i < parts.length; i++) {
+        const extra = i === parts.length - 1 ? kb : {};
+        const sent = await ctx.reply(parts[i], { parse_mode: 'HTML', ...extra }).catch(() => null);
+        if (i === 0 && sent?.message_id) _trackCwlCmdMsg(chatId, sent.message_id);
+      }
     });
   });
 
@@ -4536,7 +4560,7 @@ function setupBot(bot) {
       ).catch(() => null);
       if (hdr?.message_id) privateUi.notePrivateUiMessage(ctx.from.id, hdr.message_id);
     }
-    const { text, kb } = await loadAndShowCwl(ctx, clanTag, { view: 'ov', pPage: 0, rIdx: 0 });
+    const { text, kb } = await loadAndShowCwl(ctx, clanTag, { view: 'lg', pPage: 0, rIdx: 0 });
     await editOrReplyCwl(ctx, text, kb);
   });
 

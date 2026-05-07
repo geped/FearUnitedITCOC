@@ -513,38 +513,34 @@ function formatCwlRoundDetail(data, roundIdx) {
   return lines.join('\n');
 }
 
-/** 🏆 Lega: stagione + classifica gruppo unificati (come tab Lega sul sito). */
+/** 🏆 Lega: classifica gruppo (come tab Lega sul sito — solo standings). */
 function formatCwlLega(data) {
   if (!data || data.state === 'notInWar') return formatCwlEmpty();
-  const st = CWL_STATE_IT[data.state] || data.state || '—';
   const gs = data.groupStandings || [];
   const lines = [
     `${DIV}`,
-    `🏆 <b>CWL live</b> · ${escapeHtml(data.leagueNameIt || data.leagueNameEn || 'Lega')}`,
-    `📅 Stagione <code>${escapeHtml(data.season || '—')}</code> · <b>${escapeHtml(st)}</b>`,
+    `🏆 <b>Classifica Lega CWL</b>`,
+    `📅 <code>${escapeHtml(data.season || '—')}</code> · ${escapeHtml(data.leagueNameIt || data.leagueNameEn || 'Lega')}`,
     `${DIV}`,
     '',
   ];
   if (gs.length) {
     gs.forEach((c, i) => {
       const us = data.ourPosition === i + 1 ? ' ◀' : '';
+      const medal = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`;
       const nm = escapeHtml(c.name || c.tag || '—');
-      lines.push(`${i + 1}. ${nm}${us}\n   ${c.stars ?? 0}★ · ${cwlGroupAvgDest(c)}`);
+      lines.push(`${medal} ${nm}${us}\n   ${c.stars ?? 0}★ · ${cwlGroupAvgDest(c)} media`);
     });
     if (data.ourPosition != null) {
-      lines.push('', `🥇 Posizione: <b>${data.ourPosition}</b> / ${gs.length}`);
+      lines.push('', `📍 Nostra posizione: <b>${data.ourPosition}</b> / ${gs.length}`);
     }
   } else {
-    const rounds = data.roundsData || [];
-    lines.push('<i>Nessun dato classifica gruppo.</i>');
-    lines.push(`⚔️ Turni: <b>${rounds.length}</b> / 7`);
-    const nPl = (data.players || []).length;
-    if (nPl) lines.push(`👥 Roster: <b>${nPl}</b> giocatori`);
+    lines.push('<i>Classifica non ancora disponibile.</i>');
   }
   return lines.join('\n');
 }
 
-/** 👁 Anteprima: stato attacchi round corrente (chi ha attaccato, chi no). */
+/** 👁 Anteprima: composizione TH per round (come tab Anteprima sul sito). */
 function formatCwlAnteprima(data, rIdx) {
   if (!data || data.state === 'notInWar') return formatCwlEmpty();
   const rounds = data.roundsData || [];
@@ -556,81 +552,80 @@ function formatCwlAnteprima(data, rIdx) {
   const rn = rd.roundNumber ?? idx + 1;
   const c = rd.clan || {};
   const o = rd.opponent || {};
-  const atkPer = rd.attacksPerMember || 1;
-  const members = [...(c.members || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
-  const done = members.filter((m) => (m.attacks?.length || 0) >= atkPer);
-  const missing = members.filter((m) => (m.attacks?.length || 0) < atkPer);
 
+  function thComp(members) {
+    if (!members?.length) return '<i>Nessun dato roster</i>';
+    const counts = {};
+    members.forEach((m) => {
+      const lv = m.thLevel || m.townhallLevel || 0;
+      if (lv) counts[lv] = (counts[lv] || 0) + 1;
+    });
+    const entries = Object.entries(counts).sort((a, b) => +b[0] - +a[0]);
+    if (!entries.length) return '<i>Nessun dato TH</i>';
+    return entries.map(([lv, n]) => `TH${lv}×${n}`).join(' · ');
+  }
+
+  const stateLabel = formatWarStateIt(rd.state);
   const lines = [
     `${DIV}`,
-    `👁 <b>Anteprima · Turno ${rn}</b> / ${rounds.length} · ${formatWarStateIt(rd.state)}`,
+    `👁 <b>Anteprima · Turno ${rn}</b> / ${rounds.length} · ${stateLabel}`,
     `${DIV}`,
-    `🛡️ <b>${escapeHtml(c.name || 'Noi')}</b> ${c.stars ?? 0}★ ${Number(c.destruction ?? 0).toFixed(1)}%`,
-    `⚔️ <b>${escapeHtml(o.name || 'Avversario')}</b> ${o.stars ?? 0}★ ${Number(o.destruction ?? 0).toFixed(1)}%`,
     '',
+    `🛡️ <b>${escapeHtml(c.name || 'Noi')}</b>`,
+    `   ${thComp(c.members)}`,
+    `   ⭐ ${c.stars ?? 0} stelle · 💥 ${Number(c.destruction ?? 0).toFixed(1)}%`,
+    '',
+    `⚔️ <b>${escapeHtml(o.name || 'Avversario')}</b>`,
+    `   ${thComp(o.members)}`,
+    `   ⭐ ${o.stars ?? 0} stelle · 💥 ${Number(o.destruction ?? 0).toFixed(1)}%`,
   ];
-
-  if (missing.length > 0) {
-    lines.push(`⏳ <b>Da attaccare (${missing.length}):</b>`);
-    missing.slice(0, 15).forEach((m) => {
-      const used = m.attacks?.length || 0;
-      lines.push(`• ${escapeHtml(m.name)} — ${used}/${atkPer} att.`);
-    });
-    if (missing.length > 15) lines.push(`… e altri ${missing.length - 15}`);
-    lines.push('');
-  }
-
-  if (done.length > 0) {
-    lines.push(`✅ <b>Completato (${done.length}):</b>`);
-    done.slice(0, 15).forEach((m) => {
-      const stars = (m.attacks || []).reduce((s, a) => s + (a.stars || 0), 0);
-      lines.push(`• ${escapeHtml(m.name)} — ${stars}★`);
-    });
-    if (done.length > 15) lines.push(`… e altri ${done.length - 15}`);
-  }
-
-  if (!missing.length && !done.length) {
-    lines.push('<i>Nessun dato roster per questo turno.</i>');
-  }
-
   return lines.join('\n');
 }
 
-/** ⚖️ Confronto: risultati round per round vs avversari (intera stagione). */
-function formatCwlConfronto(data) {
+/** ⚖️ Confronto: matchup posizione-per-posizione per round (come tab Confronto sul sito). */
+function formatCwlConfronto(data, rIdx) {
   if (!data || data.state === 'notInWar') return formatCwlEmpty();
   const rounds = data.roundsData || [];
   if (!rounds.length) {
     return `${DIV}\n⚖️ <b>Confronto CWL</b>\n${DIV}\n\n<i>Nessun turno disponibile.</i>`;
   }
-  let totWins = 0, totLoss = 0, totDraw = 0, totStars = 0;
+  const idx = Math.min(Math.max(0, rIdx), rounds.length - 1);
+  const rd = rounds[idx];
+  const rn = rd.roundNumber ?? idx + 1;
+  const c = rd.clan || {};
+  const o = rd.opponent || {};
+  const sortM = (arr) => [...(arr || [])].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+  const us = sortM(c.members);
+  const them = sortM(o.members);
+  const n = Math.max(us.length, them.length);
+
+  if (!n) {
+    return `${DIV}\n⚖️ <b>Confronto · Turno ${rn}</b>\n${DIV}\n\n<i>Nessun dato roster per questo turno.</i>`;
+  }
+
+  const cName = escapeHtml((c.name || 'Noi').slice(0, 10));
+  const oName = escapeHtml((o.name || 'Avv.').slice(0, 10));
   const lines = [
     `${DIV}`,
-    `⚖️ <b>Confronto stagione CWL</b>`,
-    `📅 <code>${escapeHtml(data.season || '—')}</code> · ${escapeHtml(data.leagueNameIt || data.leagueNameEn || 'Lega')}`,
+    `⚖️ <b>Confronto · Turno ${rn}</b> / ${rounds.length} · ${formatWarStateIt(rd.state)}`,
     `${DIV}`,
+    `<b>🛡️ ${cName}</b> vs <b>⚔️ ${oName}</b>`,
     '',
   ];
-  rounds.forEach((rd, i) => {
-    const rn = rd.roundNumber ?? i + 1;
-    const c = rd.clan || {};
-    const o = rd.opponent || {};
-    const res = rd.result;
-    const resIcon = res === 'win' ? '✅' : res === 'lose' ? '❌' : res === 'draw' ? '🤝' : '⏳';
-    if (res === 'win') totWins++;
-    else if (res === 'lose') totLoss++;
-    else if (res === 'draw') totDraw++;
-    totStars += c.stars ?? 0;
-    lines.push(`<b>Turno ${rn}</b> ${resIcon} ${formatWarStateIt(rd.state)}`);
-    lines.push(`  🛡️ ${escapeHtml((c.name || 'Noi').slice(0, 15))}: ${c.stars ?? 0}★ ${Number(c.destruction ?? 0).toFixed(1)}%`);
-    lines.push(`  ⚔️ ${escapeHtml((o.name || '?').slice(0, 15))}: ${o.stars ?? 0}★ ${Number(o.destruction ?? 0).toFixed(1)}%`);
-    lines.push('');
-  });
-  const played = rounds.filter((r) => r.result).length;
-  if (played > 0) {
-    lines.push(`${DIV}`);
-    lines.push(`📊 <b>Totale:</b> ✅${totWins} ❌${totLoss} 🤝${totDraw} · ⭐${totStars} stelle`);
+
+  for (let i = 0; i < Math.min(n, 20); i++) {
+    const a = us[i];
+    const b = them[i];
+    const thA = a ? `TH${a.thLevel || '?'}` : '—';
+    const thB = b ? `TH${b.thLevel || '?'}` : '—';
+    const nA = a ? escapeHtml(a.name.slice(0, 14)) : '—';
+    const nB = b ? escapeHtml(b.name.slice(0, 14)) : '—';
+    const starsA = a ? (a.attacks || []).reduce((s, atk) => s + (atk.stars || 0), 0) : null;
+    const starStr = starsA != null && a?.attacks?.length ? ` ${starsA}★` : '';
+    lines.push(`#${String(i + 1).padStart(2)} <b>${nA}</b> (${thA})${starStr} vs <b>${nB}</b> (${thB})`);
   }
+  if (n > 20) lines.push(`<i>… e altri ${n - 20}</i>`);
+
   return lines.join('\n');
 }
 
@@ -753,7 +748,7 @@ function formatWarLogCwlHistory(data) {
 }
 
 /**
- * @param {'lg'|'ov'|'g'|'p'|'r'|'ant'|'cf'} view
+ * @param {'ov'|'lg'|'g'|'p'|'r'|'ant'|'cf'} view
  */
 function formatCwlScreen(data, view, pPage, rIdx) {
   if (!data || data.state === 'notInWar') {
@@ -765,10 +760,11 @@ function formatCwlScreen(data, view, pPage, rIdx) {
   const rClamped = rCount ? Math.min(Math.max(0, rIdx), rCount - 1) : 0;
   let text;
   switch (view) {
+    case 'ov':
+      text = formatCwlOverview(data);
+      break;
     case 'lg':
-    case 'ov': // backward compat
       text = formatCwlLega(data);
-      view = 'lg';
       break;
     case 'g': // backward compat
       text = formatCwlGroup(data);
@@ -783,7 +779,7 @@ function formatCwlScreen(data, view, pPage, rIdx) {
       text = formatCwlAnteprima(data, rClamped);
       break;
     case 'cf':
-      text = formatCwlConfronto(data);
+      text = formatCwlConfronto(data, rClamped);
       break;
     default:
       text = formatCwlLega(data);
