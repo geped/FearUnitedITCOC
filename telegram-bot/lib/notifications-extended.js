@@ -250,10 +250,10 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
 
   // ── Transizione: guerra iniziata ─────────────────────────────────────────
   if (state === 'inWar') {
-    // Niente isNew check: sent Set garantisce dedup. Così dopo restart il
-    // secondo ciclo (noisy=true, sent vuoto) invia l'avviso anche se la
-    // guerra era già iniziata al momento del riavvio.
-    if (noisy) {
+    // Avvisa "round/guerra iniziato" solo sulla transizione reale
+    // preparation -> inWar per evitare doppi invii su restart/ricampionamenti.
+    const justStarted = prevMem.state === 'preparation' && prevMem.endTime === war.endTime;
+    if (noisy && justStarted) {
       const key = `start:${war.endTime}`;
       if (!sent.has(key)) {
         sent.add(key);
