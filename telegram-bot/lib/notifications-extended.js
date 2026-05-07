@@ -113,10 +113,15 @@ function buildWarAlertMsg(war, missing, isCwl, timeLabel) {
   const label = isCwl ? '🏆 CWL' : '⚔️ Guerra';
   const cn    = fmt.escapeHtml(war?.clan?.name || '');
   const on    = fmt.escapeHtml(war?.opponent?.name || '');
+  const cs    = Number(war?.clan?.stars || 0);
+  const os    = Number(war?.opponent?.stars || 0);
+  const cd    = Number(war?.clan?.destructionPercentage || 0).toFixed(1);
+  const od    = Number(war?.opponent?.destructionPercentage || 0).toFixed(1);
   const hdr   = `${label} · <b>${cn}</b> vs <b>${on}</b>\n<b>${timeLabel}</b>`;
-  if (!missing.length) return `${hdr}\n✅ Tutti hanno completato gli attacchi!`;
+  const score = `📊 Stato attuale: <b>${cs}★</b> (${cd}%) vs <b>${os}★</b> (${od}%)`;
+  if (!missing.length) return `${hdr}\n${score}\n✅ Tutti hanno completato gli attacchi!`;
   const list  = missing.slice(0, 15).map((m) => `• ${fmt.escapeHtml(m.name)} (${m.missing} att.)`).join('\n');
-  return `${hdr}\n\n<b>Attacchi mancanti:</b>\n${list}`;
+  return `${hdr}\n${score}\n\n<b>Attacchi mancanti:</b>\n${list}`;
 }
 
 function buildWarFinalMsg(war, isCwl) {
@@ -311,9 +316,7 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
         const key = `custom:${cfg.lead}:${war.endTime}`;
         if (mins <= cfg.lead && !sent.has(key)) {
           sent.add(key);
-          if (miss.length > 0) {
-            await send(buildWarAlertMsg(war, miss, isCwl, `⏰ Avviso personalizzato (${leadLabel(cfg.lead)} prima)`));
-          }
+          await send(buildWarAlertMsg(war, miss, isCwl, `⏰ ${leadLabel(cfg.lead)} alla fine del round`));
         }
       }
 
