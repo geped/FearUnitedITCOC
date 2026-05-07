@@ -296,6 +296,8 @@ Ticket utente → admin/moderatore. Conversazione bidirezionale in chat privata.
 Avvisi automatici ogni 60s per chat con flag attivi (`war_alerts_enabled`, `cwl_alerts_enabled`, etc.):
 countdown guerra, attacchi mancanti, recap finale, mismatch TH.
 
+Regola UX chat pulita: i messaggi operativi/temporanei del bot (wizard, conferme setup, errori di input, prompt intermedi) devono auto-eliminarsi dopo breve timeout sia in chat privata sia in gruppi/canali collegati, lasciando persistenti solo menu principali e recap utili.
+
 ---
 
 ## Algoritmo Bonus CWL

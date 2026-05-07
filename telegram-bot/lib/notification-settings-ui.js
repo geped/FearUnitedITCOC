@@ -15,6 +15,7 @@ const OFF = '⚪';
 const tog = (v) => (v === true ? ON : OFF);
 const CUSTOM_MIN_PRESETS = [15, 30, 45, 60, 90, 120, 180, 240];
 const pendingCustomInput = new Map(); // key: chatId:userId -> 'war' | 'cwl'
+const AUTO_DELETE_MS = 20_000;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Definizione categorie e flag
@@ -232,6 +233,21 @@ async function ensureSessionUser(ctx) {
   const sess = await tauth.getValidSession(uid).catch(() => null);
   if (sess?.user) ctx.cocboardUser = sess.user;
   return ctx.cocboardUser || null;
+}
+
+async function deleteLater(telegram, chatId, messageId, delayMs = AUTO_DELETE_MS) {
+  if (!telegram || chatId == null || messageId == null) return;
+  setTimeout(() => {
+    telegram.deleteMessage(chatId, messageId).catch(() => {});
+  }, delayMs);
+}
+
+async function replyEphemeral(ctx, text, extra = {}) {
+  const sent = await ctx.reply(text, extra).catch(() => null);
+  if (sent?.message_id != null && ctx.chat?.id != null) {
+    await deleteLater(ctx.telegram, ctx.chat.id, sent.message_id);
+  }
+  return sent;
 }
 
 async function buildCategoryKb(sb, chatId, catId) {
@@ -460,11 +476,30 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
     const key = `${ctx.chat.id}:${ctx.from.id}`;
     pendingCustomInput.set(key, kind);
     await ctx.answerCbQuery('✍️ Inserisci il tempo nel prossimo messaggio').catch(() => {});
-    await ctx.reply(
+    await replyEphemeral(
+      ctx,
       `✍️ Inserisci il preavviso per ${kind === 'war' ? 'guerra' : 'CWL'}.\n` +
-      'Formati accettati: <code>90</code>, <code>90m</code>, <code>2h</code>, <code>2h 30m</code>, <code>1:45</code>.',
-      { parse_mode: 'HTML' },
+      'Formati: <code>90</code>, <code>90m</code>, <code>2h</code>, <code>2h 30m</code>, <code>1:45</code>.',
+      {
+        parse_mode: 'HTML',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('« Indietro', `notif_custom_edit:${kind}`)],
+          [Markup.button.callback('« Alert personalizzati', 'notif_custom_menu')],
+        ]),
+      },
     );
+  });
+
+  bot.action('notif_custom_cancel_input', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!isLinkedChatContext(ctx) || !ctx.chat?.id || !ctx.from?.id) return;
+    const key = `${ctx.chat.id}:${ctx.from.id}`;
+    pendingCustomInput.delete(key);
+    await ctx.answerCbQuery('Annullato').catch(() => {});
+    const c = await sb.getChatCustomAlertSettings(ctx.chat.id).catch(() => ({}));
+    const kb = await buildCustomMainKb(sb, ctx.chat.id);
+    const text = buildCustomMainText(c);
+    await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb }).catch(() => {});
   });
 
   // Consuma input manuale ore/minuti solo se l'utente è in stato "pending"
@@ -476,12 +511,13 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
     pendingCustomInput.delete(key);
     const actor = await ensureSessionUser(ctx);
     if (!actor || !isCapoOrCoCapo(actor)) {
-      await ctx.reply('✋ Solo Capo / Co-Capo / Admin CoCBoard possono configurare gli alert.');
+      await replyEphemeral(ctx, '✋ Solo Capo / Co-Capo / Admin CoCBoard possono configurare gli alert.');
       return;
     }
     const mins = parseLeadMinutesInput(ctx.message?.text || '');
     if (!mins) {
-      await ctx.reply(
+      await replyEphemeral(
+        ctx,
         'Formato non valido. Esempi: <code>90</code>, <code>90m</code>, <code>2h</code>, <code>2h 30m</code>, <code>1:45</code>.',
         { parse_mode: 'HTML' },
       );
@@ -491,10 +527,14 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
       ? { war_enabled: true, war_paused: false, war_lead_minutes: mins }
       : { cwl_enabled: true, cwl_paused: false, cwl_lead_minutes: mins };
     await sb.upsertChatCustomAlertSettings(ctx.chat.id, patch, ctx.from?.id).catch(() => {});
-    await ctx.reply(
+    await replyEphemeral(
+      ctx,
       `✅ Alert personalizzato ${kind === 'war' ? 'guerra' : 'CWL'} impostato: <b>${fmtLeadMinutes(mins)}</b> prima.`,
       { parse_mode: 'HTML' },
     );
+    if (ctx.message?.message_id != null) {
+      await deleteLater(ctx.telegram, ctx.chat.id, ctx.message.message_id);
+    }
   });
 
   // ── Compatibilità: vecchi callback (notif_war / cwl / raids / games) ───────
