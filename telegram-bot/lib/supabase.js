@@ -308,6 +308,65 @@ async function upsertChatNotificationSettings(chatId, patch, updatedBy) {
   if (error) throw new Error(error.message);
 }
 
+function _defaultCustomAlertSettings(chatId) {
+  return {
+    telegram_chat_id: Number(chatId),
+    war_enabled: false,
+    war_paused: false,
+    war_lead_minutes: null,
+    cwl_enabled: false,
+    cwl_paused: false,
+    cwl_lead_minutes: null,
+  };
+}
+
+async function getChatCustomAlertSettings(chatId) {
+  const client = sb();
+  const id = Number(chatId);
+  if (!client) return _defaultCustomAlertSettings(id);
+  const { data, error } = await client
+    .from('telegram_chat_custom_alerts')
+    .select('*')
+    .eq('telegram_chat_id', id)
+    .maybeSingle();
+  if (error) {
+    // Migrazione non ancora applicata: fallback silenzioso
+    if (String(error.message || '').includes('telegram_chat_custom_alerts')) {
+      return _defaultCustomAlertSettings(id);
+    }
+    throw new Error(error.message);
+  }
+  return data || _defaultCustomAlertSettings(id);
+}
+
+async function upsertChatCustomAlertSettings(chatId, patch, updatedBy) {
+  const client = sb();
+  if (!client) return;
+  const id = Number(chatId);
+  const prev = await getChatCustomAlertSettings(id);
+  const row = {
+    telegram_chat_id: id,
+    war_enabled: patch.war_enabled !== undefined ? patch.war_enabled === true : prev.war_enabled === true,
+    war_paused: patch.war_paused !== undefined ? patch.war_paused === true : prev.war_paused === true,
+    war_lead_minutes:
+      patch.war_lead_minutes !== undefined
+        ? (patch.war_lead_minutes == null ? null : Number(patch.war_lead_minutes))
+        : (prev.war_lead_minutes == null ? null : Number(prev.war_lead_minutes)),
+    cwl_enabled: patch.cwl_enabled !== undefined ? patch.cwl_enabled === true : prev.cwl_enabled === true,
+    cwl_paused: patch.cwl_paused !== undefined ? patch.cwl_paused === true : prev.cwl_paused === true,
+    cwl_lead_minutes:
+      patch.cwl_lead_minutes !== undefined
+        ? (patch.cwl_lead_minutes == null ? null : Number(patch.cwl_lead_minutes))
+        : (prev.cwl_lead_minutes == null ? null : Number(prev.cwl_lead_minutes)),
+    updated_by: updatedBy != null ? Number(updatedBy) : null,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await client
+    .from('telegram_chat_custom_alerts')
+    .upsert(row, { onConflict: 'telegram_chat_id' });
+  if (error) throw new Error(error.message);
+}
+
 async function insertUsageEvent(event) {
   const client = sb();
   if (!client) return;
@@ -1130,6 +1189,8 @@ module.exports = {
   listCwlSeasonsRows,
   getChatNotificationSettings,
   upsertChatNotificationSettings,
+  getChatCustomAlertSettings,
+  upsertChatCustomAlertSettings,
   insertUsageEvent,
   getAdminDashboardStats,
   getOpenTicketForUser,

@@ -61,6 +61,16 @@ function msLabel(ms) {
   return `${mins} min`;
 }
 
+function leadLabel(minutes) {
+  const n = Number(minutes || 0);
+  if (!Number.isFinite(n) || n <= 0) return '0 min';
+  const h = Math.floor(n / 60);
+  const r = n % 60;
+  if (h > 0 && r > 0) return `${h}h ${r} min`;
+  if (h > 0) return `${h}h`;
+  return `${r} min`;
+}
+
 function warOutcome(war) {
   const cs = war?.clan?.stars || 0;
   const os = war?.opponent?.stars || 0;
@@ -162,6 +172,7 @@ async function runExtendedWarAlerts(bot, sb) {
 
 async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
   const notif = await sb.getChatNotificationSettings(chatId).catch(() => ({}));
+  const custom = await sb.getChatCustomAlertSettings(chatId).catch(() => ({}));
   const war   = await api.currentWar(clanTag);
   const state = String(war?.state || '');
   const isCwl = String(war?.warType || '').toLowerCase() === 'cwl';
@@ -280,6 +291,28 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
           sent.add(key);
           if ((isCwl ? notif.cwl_missing_15m : notif.war_missing_15m) === true && miss.length > 0) {
             await send(buildWarAlertMsg(war, miss, isCwl, '⏰ 15 minuti rimanenti'));
+          }
+        }
+      }
+
+      // ── Alert personalizzato (ore/minuti configurabili) ──────────────────
+      const cfg = isCwl
+        ? {
+            enabled: custom?.cwl_enabled === true,
+            paused: custom?.cwl_paused === true,
+            lead: Number(custom?.cwl_lead_minutes || 0),
+          }
+        : {
+            enabled: custom?.war_enabled === true,
+            paused: custom?.war_paused === true,
+            lead: Number(custom?.war_lead_minutes || 0),
+          };
+      if (cfg.enabled && !cfg.paused && Number.isFinite(cfg.lead) && cfg.lead > 0) {
+        const key = `custom:${cfg.lead}:${war.endTime}`;
+        if (mins <= cfg.lead && !sent.has(key)) {
+          sent.add(key);
+          if (miss.length > 0) {
+            await send(buildWarAlertMsg(war, miss, isCwl, `⏰ Avviso personalizzato (${leadLabel(cfg.lead)} prima)`));
           }
         }
       }
