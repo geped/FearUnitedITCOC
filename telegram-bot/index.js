@@ -76,6 +76,17 @@ async function _deletePrevCwlCmdMsg(telegram, chatId) {
   await telegram.deleteMessage(Number(chatId), mid).catch(() => {});
 }
 
+const TEMP_MSG_DELETE_MS = 20_000;
+async function replyTransient(ctx, text, extra = {}, delayMs = TEMP_MSG_DELETE_MS) {
+  const sent = await ctx.reply(text, extra).catch(() => null);
+  if (sent?.message_id != null && ctx.chat?.id != null) {
+    setTimeout(() => {
+      ctx.telegram.deleteMessage(ctx.chat.id, sent.message_id).catch(() => {});
+    }, delayMs);
+  }
+  return sent;
+}
+
 const WELCOME_IMAGE_PATH   = path.join(__dirname, 'assets', 'benvenuto.png');
 const CWL_HEADER_IMAGE_PATH = path.join(__dirname, 'assets', 'cwl_live.jpeg');
 const WAR_HEADER_IMAGE_PATH = path.join(__dirname, 'assets', 'war_live.jpeg');
@@ -694,14 +705,14 @@ async function handlePendingMessage(ctx) {
   const uid = ctx.from?.id;
   if (uid == null) return;
   if (isLinkedChatContext(ctx)) {
-    await ctx.reply(fmt.formatPrivateOnlyWizard(), { parse_mode: 'HTML' });
+    await replyTransient(ctx, fmt.formatPrivateOnlyWizard(), { parse_mode: 'HTML' });
     return;
   }
   const textRaw = (ctx.message.text || '').trim();
   if (textRaw === '/cancel') {
     pendingAuth.delete(uid);
     pendingLinkWizard.delete(uid);
-    await ctx.reply('Operazione annullata.');
+    await replyTransient(ctx, 'Operazione annullata.');
     await sendGuestMenu(ctx);
     return;
   }
@@ -717,6 +728,11 @@ async function handlePendingMessage(ctx) {
         '🔒 Invia la <b>password</b>.\n<i>Elimina i messaggi con tutore sensibile se preferisci.</i>',
         { parse_mode: 'HTML' }
       );
+      if (ctx.message?.message_id != null) {
+        setTimeout(() => {
+          ctx.telegram.deleteMessage(ctx.chat.id, ctx.message.message_id).catch(() => {});
+        }, TEMP_MSG_DELETE_MS);
+      }
       return;
     }
     if (p.step === 2) {
@@ -731,7 +747,7 @@ async function handlePendingMessage(ctx) {
         if (loadingMsg?.message_id) {
           await ctx.telegram.deleteMessage(uid, loadingMsg.message_id).catch(() => {});
         }
-        await ctx.reply('✅ <b>Accesso effettuato.</b>', { parse_mode: 'HTML' });
+        await replyTransient(ctx, '✅ <b>Accesso effettuato.</b>', { parse_mode: 'HTML' });
         if (postAuthGlobalResume.get(uid) === 'global_profile') {
           postAuthGlobalResume.delete(uid);
           await sendPostAuthGlobalChoice(ctx);
@@ -743,7 +759,7 @@ async function handlePendingMessage(ctx) {
           await ctx.telegram.deleteMessage(uid, loadingMsg.message_id).catch(() => {});
         }
         postAuthGlobalResume.delete(uid);
-        await ctx.reply(`❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
+        await replyTransient(ctx, `❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
         await sendGuestMenu(ctx);
       }
     }
@@ -754,12 +770,13 @@ async function handlePendingMessage(ctx) {
     if (p.step === 1) {
       const tag = fmt.parseTagArg(textRaw);
       if (!tag) {
-        await ctx.reply('Tag non valido. Invia un tag tipo <code>#2ABC</code>', { parse_mode: 'HTML' });
+        await replyTransient(ctx, 'Tag non valido. Invia un tag tipo <code>#2ABC</code>', { parse_mode: 'HTML' });
         return;
       }
       p.tag = tag;
       p.step = 2;
-      await ctx.reply(
+      await replyTransient(
+        ctx,
         '🔑 Invia la <b>chiave API</b> dall’app CoC (Impostazioni → Altre impostazioni → Chiave API).',
         { parse_mode: 'HTML' }
       );
@@ -767,25 +784,26 @@ async function handlePendingMessage(ctx) {
     }
     if (p.step === 2) {
       if (textRaw.length < 8) {
-        await ctx.reply('Chiave API troppo corta. Riprova.');
+        await replyTransient(ctx, 'Chiave API troppo corta. Riprova.');
         return;
       }
       p.apiToken = textRaw;
       p.step = 3;
-      await ctx.reply('🔒 Scegli una <b>password</b> (minimo 6 caratteri) per l’account CoCBoard.', {
+      await replyTransient(ctx, '🔒 Scegli una <b>password</b> (minimo 6 caratteri) per l’account CoCBoard.', {
         parse_mode: 'HTML',
       });
       return;
     }
     if (p.step === 3) {
       if (textRaw.length < 6) {
-        await ctx.reply('Password troppo corta (min 6). Riprova.');
+        await replyTransient(ctx, 'Password troppo corta (min 6). Riprova.');
         return;
       }
       await ctx.deleteMessage().catch(() => {});
       p.password = textRaw;
       p.step = 4;
-      await ctx.reply(
+      await replyTransient(
+        ctx,
         '📧 Invia un’<b>email</b> per recupero password (opzionale).\nScrivi <code>-</code> per saltare.',
         { parse_mode: 'HTML' }
       );
@@ -794,7 +812,7 @@ async function handlePendingMessage(ctx) {
     if (p.step === 4) {
       const emailOpt = textRaw === '-' ? undefined : textRaw;
       if (emailOpt && !emailOpt.includes('@')) {
-        await ctx.reply('Email non valida. Riprova o <code>-</code>', { parse_mode: 'HTML' });
+        await replyTransient(ctx, 'Email non valida. Riprova o <code>-</code>', { parse_mode: 'HTML' });
         return;
       }
       pendingAuth.delete(uid);
@@ -812,7 +830,7 @@ async function handlePendingMessage(ctx) {
         if (loadingMsg?.message_id) {
           await ctx.telegram.deleteMessage(uid, loadingMsg.message_id).catch(() => {});
         }
-        await ctx.reply(`✅ Registrato come <b>${fmt.escapeHtml(reg.username)}</b>.`, { parse_mode: 'HTML' });
+        await replyTransient(ctx, `✅ Registrato come <b>${fmt.escapeHtml(reg.username)}</b>.`, { parse_mode: 'HTML' });
         if (postAuthGlobalResume.get(uid) === 'global_profile') {
           postAuthGlobalResume.delete(uid);
           await sendPostAuthGlobalChoice(ctx);
@@ -824,7 +842,7 @@ async function handlePendingMessage(ctx) {
           await ctx.telegram.deleteMessage(uid, loadingMsg.message_id).catch(() => {});
         }
         postAuthGlobalResume.delete(uid);
-        await ctx.reply(`❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
+        await replyTransient(ctx, `❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
         await sendGuestMenu(ctx);
       }
     }
@@ -3115,54 +3133,54 @@ function setupBot(bot) {
 
   bot.command('coc_status', async (ctx) => {
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id) {
-      await ctx.reply('Usa <code>/coc_status</code> in gruppo/supergruppo/canale.', { parse_mode: 'HTML' }).catch(() => {});
+      await replyTransient(ctx, 'Usa <code>/coc_status</code> in gruppo/supergruppo/canale.', { parse_mode: 'HTML' }).catch(() => {});
       return;
     }
     const st = await sb.getTelegramChatControl(ctx.chat.id).catch(() => ({ bot_enabled: true }));
     const on = st?.bot_enabled !== false;
-    await ctx
-      .reply(on ? '✅ Bot attivo in questa chat.' : '🤫 Bot in pausa in questa chat. Usa <code>/coc_on</code>.', {
+    await replyTransient(
+      ctx,
+      on ? '✅ Bot attivo in questa chat.' : '🤫 Bot in pausa in questa chat. Usa <code>/coc_on</code>.',
+      {
         parse_mode: 'HTML',
-      })
-      .catch(() => {});
+      },
+    ).catch(() => {});
   });
 
   bot.command('coc_off', async (ctx) => {
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id) {
-      await ctx.reply('Usa <code>/coc_off</code> in gruppo/supergruppo/canale.', { parse_mode: 'HTML' }).catch(() => {});
+      await replyTransient(ctx, 'Usa <code>/coc_off</code> in gruppo/supergruppo/canale.', { parse_mode: 'HTML' }).catch(() => {});
       return;
     }
     const isTgAdmin = await isTelegramChatAdmin(ctx);
     const sess = ctx.from?.id != null ? await tauth.getValidSession(ctx.from.id).catch(() => null) : null;
     const isAppAdmin = (sess?.user?.user_metadata?.role || '') === 'admin';
     if (!isTgAdmin && !isAppAdmin) {
-      await ctx.reply('Solo amministratori chat o ruolo <b>admin</b> CoCBoard possono usare questo comando.', { parse_mode: 'HTML' });
+      await replyTransient(ctx, 'Solo amministratori chat o ruolo <b>admin</b> CoCBoard possono usare questo comando.', { parse_mode: 'HTML' });
       return;
     }
     await sb.setTelegramChatEnabled(ctx.chat.id, false, ctx.from?.id).catch((e) => {
       throw new Error(e.message || 'Errore salvataggio stato chat');
     });
-    await ctx
-      .reply('🤫 Bot <b>spento</b> in questa chat. Per riattivarlo: <code>/coc_on</code>.', { parse_mode: 'HTML' })
-      .catch(() => {});
+    await replyTransient(ctx, '🤫 Bot <b>spento</b> in questa chat. Per riattivarlo: <code>/coc_on</code>.', { parse_mode: 'HTML' }).catch(() => {});
   });
 
   bot.command('coc_on', async (ctx) => {
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id) {
-      await ctx.reply('Usa <code>/coc_on</code> in gruppo/supergruppo/canale.', { parse_mode: 'HTML' }).catch(() => {});
+      await replyTransient(ctx, 'Usa <code>/coc_on</code> in gruppo/supergruppo/canale.', { parse_mode: 'HTML' }).catch(() => {});
       return;
     }
     const isTgAdmin = await isTelegramChatAdmin(ctx);
     const sess = ctx.from?.id != null ? await tauth.getValidSession(ctx.from.id).catch(() => null) : null;
     const isAppAdmin = (sess?.user?.user_metadata?.role || '') === 'admin';
     if (!isTgAdmin && !isAppAdmin) {
-      await ctx.reply('Solo amministratori chat o ruolo <b>admin</b> CoCBoard possono usare questo comando.', { parse_mode: 'HTML' });
+      await replyTransient(ctx, 'Solo amministratori chat o ruolo <b>admin</b> CoCBoard possono usare questo comando.', { parse_mode: 'HTML' });
       return;
     }
     await sb.setTelegramChatEnabled(ctx.chat.id, true, ctx.from?.id).catch((e) => {
       throw new Error(e.message || 'Errore salvataggio stato chat');
     });
-    await ctx.reply('✅ Bot riattivato in questa chat.', { parse_mode: 'HTML' }).catch(() => {});
+    await replyTransient(ctx, '✅ Bot riattivato in questa chat.', { parse_mode: 'HTML' }).catch(() => {});
   });
 
   bot.command('esci', async (ctx) => {
@@ -3192,7 +3210,7 @@ function setupBot(bot) {
 
   bot.command('linkclan', async (ctx) => {
     if (!isLinkedChatContext(ctx)) {
-      await ctx.reply('Usa <code>/linkclan TOKEN</code> nel <b>gruppo o canale</b> da collegare (non in privato).', {
+      await replyTransient(ctx, 'Usa <code>/linkclan TOKEN</code> nel <b>gruppo o canale</b> da collegare (non in privato).', {
         parse_mode: 'HTML',
       });
       return;
@@ -3202,7 +3220,8 @@ function setupBot(bot) {
     const arg = (ctx.message.text || '').split(/\s+/).slice(1).join(' ').trim();
     const token = arg.toLowerCase();
     if (!token) {
-      await ctx.reply(
+      await replyTransient(
+        ctx,
         'Uso: <code>/linkclan TOKEN</code>\n\nIl TOKEN lo ricevi in <b>privato</b> dal bot dopo «Aggiungi a canale/gruppo».',
         { parse_mode: 'HTML' }
       );
@@ -3215,11 +3234,11 @@ function setupBot(bot) {
       const hint = url
         ? `🔐 Prima <b>Accedi</b> in privato: <a href="${url}">apri il bot</a>`
         : '🔐 Prima accedi in chat privata con il bot.';
-      await ctx.reply(hint, { parse_mode: 'HTML' });
+      await replyTransient(ctx, hint, { parse_mode: 'HTML' });
       return;
     }
     if (!isClanLeader(sess.user)) {
-      await ctx.reply('Solo <b>Capo</b>, <b>Co-Capo</b> o <b>Admin</b> possono collegare la chat al clan.', {
+      await replyTransient(ctx, 'Solo <b>Capo</b>, <b>Co-Capo</b> o <b>Admin</b> possono collegare la chat al clan.', {
         parse_mode: 'HTML',
       });
       return;
@@ -3228,11 +3247,12 @@ function setupBot(bot) {
     try {
       clanTag = await sb.peekPendingChatLink(token, uid);
     } catch (e) {
-      await ctx.reply(`❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
+      await replyTransient(ctx, `❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
       return;
     }
     if (!clanTag) {
-      await ctx.reply(
+      await replyTransient(
+        ctx,
         'Token non valido, scaduto o già usato. Generane uno nuovo: in <b>privato</b> menù → «Aggiungi a canale/gruppo».',
         { parse_mode: 'HTML' }
       );
@@ -3242,7 +3262,8 @@ function setupBot(bot) {
       await pruneStaleTelegramChatLinksForClan(ctx.telegram, clanTag);
       const can = await sb.canLinkChatToClan(ctx.chat.id, clanTag);
       if (!can) {
-        await ctx.reply(
+        await replyTransient(
+          ctx,
           '⚠️ Massimo <b>3</b> gruppi/canali collegati per questo clan.\n' +
             'Scollegane uno con <code>/unlinkclan</code> in una chat ancora attiva, oppure riprova: ' +
             'i gruppi eliminati o da cui il bot è stato tolto vengono rimossi automaticamente dal conteggio.',
@@ -3252,7 +3273,7 @@ function setupBot(bot) {
       }
       const consumed = await sb.consumePendingChatLink(token, uid);
       if (!consumed) {
-        await ctx.reply('Token non più valido. Generane uno nuovo in privato.', { parse_mode: 'HTML' });
+        await replyTransient(ctx, 'Token non più valido. Generane uno nuovo in privato.', { parse_mode: 'HTML' });
         return;
       }
       await ctx.deleteMessage().catch(() => {});
@@ -3265,7 +3286,8 @@ function setupBot(bot) {
         cwl_missing_15m: true, cwl_round_end: true,
         capital_raids_enabled: false, clan_activity_enabled: false,
       }, uid).catch(() => {});
-      await ctx.reply(
+      await replyTransient(
+        ctx,
         `✅ Chat collegata al clan <code>${fmt.escapeHtml(clanTag)}</code>.\n\n` +
           `Ora chiunque nel gruppo può consultare <b>Membri</b>, <b>CWL</b>, <b>Guerre</b> senza login.\n` +
           `🔔 Avvisi guerra e CWL attivati — personalizza con <b>Gestione avvisi</b>.\n` +
@@ -3273,33 +3295,33 @@ function setupBot(bot) {
         { parse_mode: 'HTML' }
       );
     } catch (e) {
-      await ctx.reply(`❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
+      await replyTransient(ctx, `❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
     }
   });
 
   bot.command('unlinkclan', async (ctx) => {
     if (!isLinkedChatContext(ctx)) {
-      await ctx.reply('Usa <code>/unlinkclan</code> nel <b>gruppo o canale</b> da scollegare.', { parse_mode: 'HTML' });
+      await replyTransient(ctx, 'Usa <code>/unlinkclan</code> nel <b>gruppo o canale</b> da scollegare.', { parse_mode: 'HTML' });
       return;
     }
     const uid = ctx.from?.id;
     if (uid == null) return;
     const sess = await tauth.getValidSession(uid);
     if (!sess) {
-      await ctx.reply('Serve aver effettuato l’accesso (in privato).', { parse_mode: 'HTML' });
+      await replyTransient(ctx, 'Serve aver effettuato l’accesso (in privato).', { parse_mode: 'HTML' });
       return;
     }
     if (!isClanLeader(sess.user)) {
-      await ctx.reply('Solo <b>Capo</b>, <b>Co-Capo</b> o <b>Admin</b> possono scollegare la chat.', {
+      await replyTransient(ctx, 'Solo <b>Capo</b>, <b>Co-Capo</b> o <b>Admin</b> possono scollegare la chat.', {
         parse_mode: 'HTML',
       });
       return;
     }
     try {
       await sb.deleteTelegramChatLink(ctx.chat.id);
-      await ctx.reply('🔗 Collegamento tra questa chat e il clan <b>rimosso</b>.', { parse_mode: 'HTML' });
+      await replyTransient(ctx, '🔗 Collegamento tra questa chat e il clan <b>rimosso</b>.', { parse_mode: 'HTML' });
     } catch (e) {
-      await ctx.reply(`❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
+      await replyTransient(ctx, `❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
     }
   });
 
@@ -3559,7 +3581,7 @@ function setupBot(bot) {
       await ensureTgBotUsername(ctx.telegram);
       const url = privateChatUrl(cachedTgBotUsername);
       if (url) {
-        await ctx.reply(`📩 Supporto in privato: <a href="${url}">apri chat bot</a>`, { parse_mode: 'HTML' });
+        await replyTransient(ctx, `📩 Supporto in privato: <a href="${url}">apri chat bot</a>`, { parse_mode: 'HTML' });
       }
       return;
     }
@@ -3588,7 +3610,7 @@ function setupBot(bot) {
       `<i>Per uscire: «Torna al menù» o /start.</i>\n\n` +
       `Scrivi qui per inviare messaggi al supporto.`;
     pendingSupportOpen.set(uid, true);
-    await ctx.reply(text, { parse_mode: 'HTML', ...supportManageKb(true, Boolean(c)) }).catch(() => {});
+    await replyTransient(ctx, text, { parse_mode: 'HTML', ...supportManageKb(true, Boolean(c)) }).catch(() => {});
   });
 
   bot.action('support_user_menu', async (ctx) => {
@@ -3611,7 +3633,7 @@ function setupBot(bot) {
     if (uid == null) return;
     const r = await sb.reopenSupportTicket(uid).catch(() => ({ ok: false, reason: 'Errore riapertura ticket.' }));
     if (!r?.ok || !r.ticket) {
-      await ctx.reply(`❌ ${r?.reason || 'Nessun ticket chiuso recente da riaprire.'}`);
+      await replyTransient(ctx, `❌ ${r?.reason || 'Nessun ticket chiuso recente da riaprire.'}`);
       return;
     }
     await sb.appendSupportMessage(r.ticket.id, {
@@ -3620,7 +3642,8 @@ function setupBot(bot) {
       session_index: Number(r.ticket.session_index || 1),
     }).catch(() => {});
     pendingSupportOpen.set(uid, true);
-    await ctx.reply(
+    await replyTransient(
+      ctx,
       `♻️ Ticket #${r.ticket.id} riaperto.\n` +
         `🟣 <b>Supporto attivo:</b> i prossimi messaggi verranno inviati al ticket.\n` +
         `<i>Per uscire: «Torna al menù» o /start.</i>\n\n` +
@@ -3636,7 +3659,7 @@ function setupBot(bot) {
     if (uid == null) return;
     const t = await sb.getOpenTicketForUser(uid).catch(() => null);
     if (t) {
-      await ctx.reply(`Hai già un ticket aperto (#${t.id}). Scrivi qui per continuare.`);
+      await replyTransient(ctx, `Hai già un ticket aperto (#${t.id}). Scrivi qui per continuare.`);
       return;
     }
     let ticket;
@@ -3644,12 +3667,11 @@ function setupBot(bot) {
       ticket = await sb.createSupportTicket(uid, 'Richiesta supporto Telegram');
     } catch (e) {
       console.error('[cocboard-bot] support_user_new createSupportTicket', e?.message || e);
-      await ctx
-        .reply(
+      await replyTransient(
+        ctx,
           '❌ Impossibile aprire il ticket (errore database). Su Supabase esegui <code>schema-support-tickets-ensure.sql</code> (cartella telegram-bot); su Render verifica <code>SUPABASE_SERVICE_ROLE_KEY</code> = chiave <b>service_role</b>.',
           { parse_mode: 'HTML' }
-        )
-        .catch(() => {});
+      ).catch(() => {});
       return;
     }
     await sb
@@ -3662,9 +3684,7 @@ function setupBot(bot) {
       })
       .catch(() => {});
     pendingSupportOpen.set(uid, true);
-    await ctx
-      .reply(formatSupportWritePromptHtml(ticket.id), { parse_mode: 'HTML', ...supportActiveSessionSimpleKb() })
-      .catch(() => {});
+    await replyTransient(ctx, formatSupportWritePromptHtml(ticket.id), { parse_mode: 'HTML', ...supportActiveSessionSimpleKb() }).catch(() => {});
   });
 
   bot.action('support_user_cancel_active', async (ctx) => {
