@@ -203,9 +203,9 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
       sent.add('prep:' + war.endTime);
     }
     if (state === 'inWar') {
-      // 'start:' non pre-segnato: se il bot riavvia mid-war, l'avviso verrà
-      // inviato al secondo ciclo (noisy=true + sent vuoto). Preferibile a
-      // non inviarlo mai per tutta la durata della guerra.
+      // Evita spam su riavvii/nuovi container: se il bot riparte a guerra già
+      // iniziata non reinvia l'avviso "round/guerra iniziato".
+      sent.add('start:' + war.endTime);
       if (endDate0) {
         const mins0 = Math.ceil((endDate0.getTime() - Date.now()) / 60000);
         if (mins0 <= 240) sent.add('4h:' + war.endTime);

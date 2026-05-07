@@ -8,6 +8,7 @@
  */
 
 const { Markup } = require('telegraf');
+const tauth = require('./telegram-auth');
 
 const ON  = '✅';
 const OFF = '⚪';
@@ -224,6 +225,15 @@ function parseLeadMinutesInput(raw) {
   return null;
 }
 
+async function ensureSessionUser(ctx) {
+  if (ctx.cocboardUser) return ctx.cocboardUser;
+  const uid = ctx.from?.id;
+  if (uid == null) return null;
+  const sess = await tauth.getValidSession(uid).catch(() => null);
+  if (sess?.user) ctx.cocboardUser = sess.user;
+  return ctx.cocboardUser || null;
+}
+
 async function buildCategoryKb(sb, chatId, catId) {
   const cat = CAT_BY_ID[catId];
   if (!cat) return null;
@@ -314,7 +324,8 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
       await ctx.answerCbQuery('Flag non valido.').catch(() => {});
       return;
     }
-    if (!ctx.cocboardUser || !isCapoOrCoCapo(ctx.cocboardUser)) {
+    const actor = await ensureSessionUser(ctx);
+    if (!actor || !isCapoOrCoCapo(actor)) {
       await ctx.answerCbQuery('✋ Solo Capo / Co-Capo / Admin CoCBoard.').catch(() => {});
       return;
     }
@@ -363,7 +374,8 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
 
   bot.action(/^notif_custom_set:(war|cwl):(\d{1,4})$/, async (ctx) => {
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
-    if (!ctx.cocboardUser || !isCapoOrCoCapo(ctx.cocboardUser)) {
+    const actor = await ensureSessionUser(ctx);
+    if (!actor || !isCapoOrCoCapo(actor)) {
       await ctx.answerCbQuery('✋ Solo Capo / Co-Capo / Admin CoCBoard.').catch(() => {});
       return;
     }
@@ -385,7 +397,8 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
 
   bot.action(/^notif_custom_toggle:(war|cwl)$/, async (ctx) => {
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
-    if (!ctx.cocboardUser || !isCapoOrCoCapo(ctx.cocboardUser)) {
+    const actor = await ensureSessionUser(ctx);
+    if (!actor || !isCapoOrCoCapo(actor)) {
       await ctx.answerCbQuery('✋ Solo Capo / Co-Capo / Admin CoCBoard.').catch(() => {});
       return;
     }
@@ -402,7 +415,8 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
 
   bot.action(/^notif_custom_pause:(war|cwl)$/, async (ctx) => {
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
-    if (!ctx.cocboardUser || !isCapoOrCoCapo(ctx.cocboardUser)) {
+    const actor = await ensureSessionUser(ctx);
+    if (!actor || !isCapoOrCoCapo(actor)) {
       await ctx.answerCbQuery('✋ Solo Capo / Co-Capo / Admin CoCBoard.').catch(() => {});
       return;
     }
@@ -419,7 +433,8 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
 
   bot.action(/^notif_custom_delete:(war|cwl)$/, async (ctx) => {
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
-    if (!ctx.cocboardUser || !isCapoOrCoCapo(ctx.cocboardUser)) {
+    const actor = await ensureSessionUser(ctx);
+    if (!actor || !isCapoOrCoCapo(actor)) {
       await ctx.answerCbQuery('✋ Solo Capo / Co-Capo / Admin CoCBoard.').catch(() => {});
       return;
     }
@@ -436,7 +451,8 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
 
   bot.action(/^notif_custom_input:(war|cwl)$/, async (ctx) => {
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id || !ctx.from?.id) return;
-    if (!ctx.cocboardUser || !isCapoOrCoCapo(ctx.cocboardUser)) {
+    const actor = await ensureSessionUser(ctx);
+    if (!actor || !isCapoOrCoCapo(actor)) {
       await ctx.answerCbQuery('✋ Solo Capo / Co-Capo / Admin CoCBoard.').catch(() => {});
       return;
     }
@@ -458,7 +474,8 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
     const kind = pendingCustomInput.get(key);
     if (!kind) return next();
     pendingCustomInput.delete(key);
-    if (!ctx.cocboardUser || !isCapoOrCoCapo(ctx.cocboardUser)) {
+    const actor = await ensureSessionUser(ctx);
+    if (!actor || !isCapoOrCoCapo(actor)) {
       await ctx.reply('✋ Solo Capo / Co-Capo / Admin CoCBoard possono configurare gli alert.');
       return;
     }

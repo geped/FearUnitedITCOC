@@ -3259,9 +3259,9 @@ function setupBot(bot) {
       await sb.upsertTelegramChatLink(ctx.chat.id, clanTag, uid, ctx.chat.type);
       // Crea impostazioni notifiche di default: avvisi principali ON
       await sb.upsertChatNotificationSettings(ctx.chat.id, {
-        war_alerts_enabled: true, war_start_alert: true, war_missing_1h: true,
+        war_alerts_enabled: true, war_start_alert: false, war_missing_1h: true,
         war_missing_15m: true, war_result: true,
-        cwl_alerts_enabled: true, cwl_round_start: true, cwl_missing_1h: true,
+        cwl_alerts_enabled: true, cwl_round_start: false, cwl_missing_1h: true,
         cwl_missing_15m: true, cwl_round_end: true,
         capital_raids_enabled: false, clan_activity_enabled: false,
       }, uid).catch(() => {});
