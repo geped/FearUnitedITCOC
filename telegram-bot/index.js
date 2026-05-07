@@ -1882,13 +1882,16 @@ async function performFullLogout(ctx, { viaCommand }) {
 }
 
 function parseCwlViewKey(raw) {
-  if (raw === 'ov') return { view: 'ov', pPage: 0, rIdx: 0 };
+  if (raw === 'ov' || raw === 'lg') return { view: 'lg', pPage: 0, rIdx: 0 };
   if (raw === 'g') return { view: 'g', pPage: 0, rIdx: 0 };
   const pm = /^p:(\d+)$/.exec(raw);
   if (pm) return { view: 'p', pPage: Number(pm[1]), rIdx: 0 };
   const rm = /^r:(\d+)$/.exec(raw);
   if (rm) return { view: 'r', pPage: 0, rIdx: Number(rm[1]) };
-  return { view: 'ov', pPage: 0, rIdx: 0 };
+  const am = /^ant:(\d+)$/.exec(raw);
+  if (am) return { view: 'ant', pPage: 0, rIdx: Number(am[1]) };
+  if (raw === 'cf') return { view: 'cf', pPage: 0, rIdx: 0 };
+  return { view: 'lg', pPage: 0, rIdx: 0 };
 }
 
 function warSubmenuKb() {
@@ -2017,19 +2020,20 @@ function buildCwlNavKb(data, spec, webAppUrl) {
   const pPages = fmt.getCwlPlayerPageCount(data);
   const rCount = fmt.getCwlRoundCount(data);
   const defaultRoundIdx = fmt.getDefaultCwlRoundIndex(data);
-  const turniIdx = view === 'r' ? rIdx : defaultRoundIdx;
+  const turniIdx = (view === 'r' || view === 'ant') ? rIdx : defaultRoundIdx;
 
   const tab = (active, short, payload) =>
     Markup.button.callback(active ? `· ${short} ·` : short, payload);
 
   const rows = [
     [
-      tab(view === 'ov', '📊 Panoramica', 'cwl_v:ov'),
-      tab(view === 'g', '🏅 Gruppo', 'cwl_v:g'),
+      tab(view === 'lg' || view === 'ov', '🏆 Lega', 'cwl_v:lg'),
+      tab(view === 'p', '👥 Player', 'cwl_v:p:0'),
     ],
     [
-      tab(view === 'p', '👥 Roster', 'cwl_v:p:0'),
       tab(view === 'r', '⚔️ Turni', `cwl_v:r:${turniIdx}`),
+      tab(view === 'ant', '👁 Antep.', `cwl_v:ant:${turniIdx}`),
+      tab(view === 'cf', '⚖️ Confrto', 'cwl_v:cf'),
     ],
   ];
 
@@ -2043,21 +2047,22 @@ function buildCwlNavKb(data, spec, webAppUrl) {
     ]);
   }
 
-  if (view === 'r' && rCount > 1) {
+  if ((view === 'r' || view === 'ant') && rCount > 1) {
     const prev = Math.max(0, rIdx - 1);
     const next = Math.min(rCount - 1, rIdx + 1);
+    const prefix = view === 'ant' ? 'cwl_v:ant' : 'cwl_v:r';
     rows.push([
-      Markup.button.callback('◀ Turno', `cwl_v:r:${prev}`),
+      Markup.button.callback('◀ Turno', `${prefix}:${prev}`),
       Markup.button.callback(`· ${rIdx + 1}/${rCount} ·`, 'noop'),
-      Markup.button.callback('Turno ▶', `cwl_v:r:${next}`),
+      Markup.button.callback('Turno ▶', `${prefix}:${next}`),
     ]);
   }
 
-  if (view === 'r' && webAppUrl) {
+  if ((view === 'r' || view === 'ant') && webAppUrl) {
     rows.push([Markup.button.webApp('🌐 Visualizza versione web', webAppUrl)]);
   }
 
-  if (view !== 'ov') rows.push([Markup.button.callback('« CWL live', 'cwl_v:ov')]);
+  if (view !== 'lg' && view !== 'ov') rows.push([Markup.button.callback('« CWL Lega', 'cwl_v:lg')]);
   rows.push([Markup.button.callback('« Indietro', 'clan_home'), Markup.button.callback('« Menù', 'menu')]);
   return Markup.inlineKeyboard(rows);
 }
@@ -3233,9 +3238,18 @@ function setupBot(bot) {
       }
       await ctx.deleteMessage().catch(() => {});
       await sb.upsertTelegramChatLink(ctx.chat.id, clanTag, uid, ctx.chat.type);
+      // Crea impostazioni notifiche di default: avvisi principali ON
+      await sb.upsertChatNotificationSettings(ctx.chat.id, {
+        war_alerts_enabled: true, war_start_alert: true, war_missing_1h: true,
+        war_missing_15m: true, war_result: true,
+        cwl_alerts_enabled: true, cwl_round_start: true, cwl_missing_1h: true,
+        cwl_missing_15m: true, cwl_round_end: true,
+        capital_raids_enabled: false, clan_activity_enabled: false,
+      }, uid).catch(() => {});
       await ctx.reply(
         `✅ Chat collegata al clan <code>${fmt.escapeHtml(clanTag)}</code>.\n\n` +
           `Ora chiunque nel gruppo può consultare <b>Membri</b>, <b>CWL</b>, <b>Guerre</b> senza login.\n` +
+          `🔔 Avvisi guerra e CWL attivati — personalizza con <b>Gestione avvisi</b>.\n` +
           `Usa <code>/cocboard</code> per aprire il menù.`,
         { parse_mode: 'HTML' }
       );

@@ -192,7 +192,9 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
       sent.add('prep:' + war.endTime);
     }
     if (state === 'inWar') {
-      sent.add('start:' + war.endTime);
+      // 'start:' non pre-segnato: se il bot riavvia mid-war, l'avviso verrà
+      // inviato al secondo ciclo (noisy=true + sent vuoto). Preferibile a
+      // non inviarlo mai per tutta la durata della guerra.
       if (endDate0) {
         const mins0 = Math.ceil((endDate0.getTime() - Date.now()) / 60000);
         if (mins0 <= 240) sent.add('4h:' + war.endTime);
@@ -232,8 +234,10 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
 
   // ── Transizione: guerra iniziata ─────────────────────────────────────────
   if (state === 'inWar') {
-    const isNew = prevMem.state !== 'inWar' || prevMem.endTime !== war.endTime;
-    if (noisy && isNew) {
+    // Niente isNew check: sent Set garantisce dedup. Così dopo restart il
+    // secondo ciclo (noisy=true, sent vuoto) invia l'avviso anche se la
+    // guerra era già iniziata al momento del riavvio.
+    if (noisy) {
       const key = `start:${war.endTime}`;
       if (!sent.has(key)) {
         sent.add(key);
