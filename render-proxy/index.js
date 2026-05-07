@@ -1,5 +1,6 @@
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
+const WebSocket = require('ws');
 
 const app = express();
 app.use(express.json());
@@ -34,7 +35,8 @@ function supabase() {
     // Usa SERVICE_ROLE_KEY per le scritture dal proxy (bypassa RLS — solo operazioni interne)
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
     return createClient(process.env.SUPABASE_URL, key, {
-        auth: { autoRefreshToken: false, persistSession: false }
+        auth: { autoRefreshToken: false, persistSession: false },
+        realtime: { transport: WebSocket }
     });
 }
 
