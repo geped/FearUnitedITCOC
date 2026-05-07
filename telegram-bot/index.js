@@ -3889,32 +3889,6 @@ function setupBot(bot) {
     await ctx.reply(`✅ Segnalazione #${rid} archiviata.`);
   });
 
-  bot.action(/^support_admin_greport_mute24:(\d+)$/, async (ctx) => {
-    safeAnswerCb(ctx);
-    if (!(await isSupportStaff(ctx))) return;
-    const rid = Number(ctx.match[1]);
-    const hours = 24;
-    const r = await sb.getGlobalChatReportById(rid).catch(() => null);
-    const targetId = r?.reported_target_telegram_user_id != null ? Number(r.reported_target_telegram_user_id) : null;
-    if (!targetId) {
-      await ctx.reply('Target non identificato: impossibile applicare mute automatico.');
-      return;
-    }
-    const untilIso = new Date(Date.now() + hours * 3600 * 1000).toISOString();
-    await sb.setTelegramUserMutedUntil(targetId, untilIso, `Limitazione ${hours}h da segnalazione chat globale #${rid}`, ctx.from?.id).catch(() => {});
-    await sb.setGlobalChatReportStatus(rid, 'resolved', ctx.from?.id, `Mute ${hours}h applicato`, `mute${hours}h`).catch(() => {});
-    await ctx.telegram
-      .sendMessage(
-        targetId,
-        `🔇 Hai ricevuto una limitazione temporanea di ${hours}h per violazione regole in chat globale.\nMotivo: ${fmt.escapeHtml(
-          r?.reason || ''
-        )}\nSe ritieni ci sia un errore, contatta un amministratore.`,
-        { parse_mode: 'HTML' }
-      )
-      .catch(() => {});
-    await ctx.reply(`🔇 Mute ${hours}h applicato a <code>${targetId}</code>.`, { parse_mode: 'HTML' });
-  });
-
   bot.action(/^support_admin_greport_muteh:(\d+):(2|4|8|16|24|48)$/, async (ctx) => {
     safeAnswerCb(ctx);
     if (!(await isSupportStaff(ctx))) return;
@@ -4051,23 +4025,6 @@ function setupBot(bot) {
       .sendMessage(uid, '✅ Il tuo ban è stato rimosso. Ora puoi tornare a usare il bot.', { parse_mode: 'HTML' })
       .catch(() => {});
     await ctx.reply(`✅ Ban rimosso per utente <code>${uid}</code>.`, { parse_mode: 'HTML' });
-  });
-
-  bot.action(/^support_admin_mute_user24:(\d+)$/, async (ctx) => {
-    safeAnswerCb(ctx);
-    if (!(await isSupportAdmin(ctx))) return;
-    const uid = Number(ctx.match[1]);
-    const hours = 24;
-    const untilIso = new Date(Date.now() + hours * 3600 * 1000).toISOString();
-    await sb.setTelegramUserMutedUntil(uid, untilIso, `Limitazione ${hours}h da sezione utenti bannati`, ctx.from?.id).catch(() => {});
-    await ctx.telegram
-      .sendMessage(
-        uid,
-        `🔇 Hai ricevuto una limitazione temporanea di ${hours}h sull’utilizzo del bot. Contatta un amministratore per chiarimenti.`,
-        { parse_mode: 'HTML' }
-      )
-      .catch(() => {});
-    await ctx.reply(`🔇 Mute ${hours}h applicato a <code>${uid}</code>.`, { parse_mode: 'HTML' });
   });
 
   bot.action(/^support_admin_mute_userh:(\d+):(2|4|8|16|24|48)$/, async (ctx) => {

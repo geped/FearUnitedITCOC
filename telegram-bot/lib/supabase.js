@@ -394,11 +394,11 @@ async function getAdminDashboardStats() {
     // Utenti registrati (righe telegram_links = account bot collegati)
     client.from('telegram_links').select('*', { count: 'exact', head: true }),
     // Ban attivi
-    client.from('telegram_user_restrictions').select('*', { count: 'exact', head: true }).eq('restriction_type', 'ban'),
+    client.from('telegram_user_restrictions').select('*', { count: 'exact', head: true }).eq('banned', true),
     // Ticket aperti/in lavorazione
     client.from('telegram_support_tickets').select('*', { count: 'exact', head: true }).in('status', ['open', 'in_progress', 'waiting_user']),
     // Segnalazioni globali aperte
-    client.from('telegram_global_moderation').select('*', { count: 'exact', head: true }).in('status', ['open', 'in_review']),
+    client.from('telegram_global_reports').select('*', { count: 'exact', head: true }).in('status', ['open', 'in_review']),
   ]);
   const get = (i) => results[i]?.status === 'fulfilled' ? results[i].value : {};
   const linkedChats    = get(0).count ?? 0;

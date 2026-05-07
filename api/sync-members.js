@@ -1,5 +1,18 @@
+function isAuthorized(req) {
+    const authHeader = req.headers['authorization'] || '';
+    const provided = String(authHeader).replace(/^Bearer\s+/i, '').trim();
+    const cronSecret = (process.env.CRON_SECRET || '').trim();
+    const syncSecret = (process.env.SYNC_SECRET || '').trim();
+    if (!cronSecret && !syncSecret) return { ok: false, reason: 'CRON_SECRET o SYNC_SECRET non configurati.' };
+    const ok = (cronSecret && provided === cronSecret) || (syncSecret && provided === syncSecret);
+    return ok ? { ok: true } : { ok: false, reason: 'Non autorizzato.' };
+}
+
 module.exports = async (req, res) => {
     try {
+        const auth = isAuthorized(req);
+        if (!auth.ok) return res.status(401).json({ error: auth.reason });
+
         const proxyUrl = process.env.RENDER_PROXY_URL;
         if (!proxyUrl) return res.status(500).json({ error: 'RENDER_PROXY_URL non configurata su Vercel.' });
         const clanTag = req.query.clanTag || req.body?.clanTag;
