@@ -22,6 +22,16 @@ function normClanTag(t) {
     return s.startsWith('#') ? s : '#' + s;
 }
 
+/**
+ * CoC API espone la stagione CWL come data di inizio (YYYY-MM-DD).
+ * Nel DB storico usiamo YYYY-MM (allineato al selettore mese del sito).
+ */
+function normalizeCwlSeason(season) {
+    const s = String(season || '').trim();
+    const m = /^(\d{4}-\d{2})(?:-\d{2})?$/.exec(s);
+    return m ? m[1] : s;
+}
+
 /** Town Hall da oggetto membro guerra/roster CoC API (camelCase ufficiale) */
 function memberThLevel(m) {
     if (!m) return null;
@@ -481,7 +491,7 @@ async function getCwlStats(clanTagRaw) {
 
     const result = {
         state:         lg.state,
-        season:        lg.season,
+        season:        normalizeCwlSeason(lg.season),
         leagueNameEn,
         leagueNameIt,
         ourPosition,
@@ -504,6 +514,7 @@ async function saveCwlData(clanTag, cwl) {
     const sb = supabase();
     const tag = parseClanTag(clanTag);
     if (!tag) return;
+    const seasonKey = normalizeCwlSeason(cwl.season);
 
     // 1. Salva ogni turno concluso in cwl_wars
     const endedRounds = cwl.roundsData.filter(r =>
@@ -513,7 +524,7 @@ async function saveCwlData(clanTag, cwl) {
         try {
             await sb.from('cwl_wars').upsert({
                 clan_tag:     tag,
-                season:       cwl.season,
+                season:       seasonKey,
                 round:        rd.roundNumber,
                 war_tag:      null,
                 state:        rd.state,
@@ -542,7 +553,7 @@ async function saveCwlData(clanTag, cwl) {
     // 2. Salva/aggiorna cwl_seasons con group_standings e roster
     try {
         const seasonRow = {
-            season:          cwl.season,
+            season:          seasonKey,
             clan_tag:        tag,
             group_standings: cwl.groupStandings || null,
             roster:          cwl.players || null
@@ -570,7 +581,7 @@ async function saveCwlData(clanTag, cwl) {
                 return {
                     clan_tag:         tag,
                     player_name:      p.name,
-                    season:           cwl.season,
+                    season:           seasonKey,
                     participated:     made > 0,
                     stars,
                     destruction:      parseFloat(destr.toFixed(2)),

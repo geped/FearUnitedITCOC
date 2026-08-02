@@ -1,8 +1,9 @@
 'use strict';
 
-/** Stagione YYYY-MM precedente (mese di calendario). */
+/** Stagione YYYY-MM precedente (mese di calendario). Accetta anche YYYY-MM-DD (CoC API). */
 function prevSeasonYM(season) {
-  const [ys, ms] = String(season).split('-');
+  const base = String(season || '').trim().slice(0, 7);
+  const [ys, ms] = base.split('-');
   const y = Number(ys);
   const m = Number(ms);
   if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return null;

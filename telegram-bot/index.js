@@ -47,8 +47,15 @@ const SUPPORT_MAX_PHOTO_PER_SESSION = 2;
 const BONUS_ASSIGN_PAGE_SIZE = 6;
 /** Paginazione lista candidati nel wizard assistito. */
 const BONUS_WIZARD_PAGE = 6;
+/**
+ * Stagione in callback_data: YYYY-MM (storico manuale) oppure YYYY-MM-DD (CoC API / auto-save).
+ * Senza il giorno opzionale i click sulle ultime leghe non matchano nessun handler.
+ */
+const SEASON_CB = String.raw`(\d{4}-\d{2}(?:-\d{2})?)`;
 /** Stato wizard bonus: uid → risultato runBonusAssistant + metadati. */
 const bonusWizardByUid = new Map();
+/** Selezione manuale bonus (toggle in memoria → Conferma): uid → { clanTag, season, selected:Set }. */
+const bonusManualByUid = new Map();
 
 let cachedTgBotUsername = (process.env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '');
 /** Traccia l'ultimo messaggio menù per chat (privata + gruppo): consente la cancellazione al re-invio di /cocboard. */
@@ -365,7 +372,7 @@ function isGroupClanReadCallback(d) {
   if (d === 'info' || d === 'cwl' || d === 'war_menu') return true;
   if (d === 'bonus:hist' || d === 'bonus:hof') return true;
   if (/^bonus:\d+$/.test(d)) return true;
-  if (/^bonus:sv:\d{4}-\d{2}$/.test(d)) return true;
+  if (new RegExp(`^bonus:sv:${SEASON_CB}$`).test(d)) return true;
   if (/^mb\d+$/.test(d)) return true;
   if (d.startsWith('cwl_v:')) return true;
   if (d.startsWith('war:')) return true;
@@ -2206,8 +2213,14 @@ async function buildSearchPickKb(ctx) {
 }
 
 function bonusAssignSeasonLabelIt(season) {
-  const [y, m] = String(season).split('-');
-  if (!y || !m) return String(season);
+  const s = String(season || '').trim();
+  const full = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (full) {
+    const d = new Date(Number(full[1]), Number(full[2]) - 1, Number(full[3]));
+    return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+  const [y, m] = s.split('-');
+  if (!y || !m) return s;
   const d = new Date(Number(y), Number(m) - 1, 1);
   return d.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
 }
@@ -2243,31 +2256,46 @@ async function renderBonusAssignSeasonPick(ctx, clanTag) {
   }
 }
 
+async function ensureBonusManualState(uid, clanTag, season, allRows) {
+  let st = uid != null ? bonusManualByUid.get(uid) : null;
+  if (!st || st.season !== season || st.clanTag !== clanTag) {
+    st = {
+      clanTag,
+      season,
+      selected: new Set((allRows || []).filter((r) => r.bonus_assigned).map((r) => String(r.player_name))),
+    };
+    if (uid != null) bonusManualByUid.set(uid, st);
+  }
+  return st;
+}
+
 async function renderBonusAssignPage(ctx, clanTag, season, page) {
   const all = await sb.fetchCwlHistoryFullSeason(clanTag, season).catch(() => []);
   if (!all.length) {
     await renderBonusAssignSeasonPick(ctx, clanTag);
     return;
   }
+  const uid = ctx.from?.id;
+  const st = await ensureBonusManualState(uid, clanTag, season, all);
   const totalPages = Math.max(1, Math.ceil(all.length / BONUS_ASSIGN_PAGE_SIZE));
   const p = Math.min(Math.max(0, page), totalPages - 1);
   const slice = all.slice(p * BONUS_ASSIGN_PAGE_SIZE, (p + 1) * BONUS_ASSIGN_PAGE_SIZE);
-  const assignedN = all.filter((r) => r.bonus_assigned).length;
+  const assignedN = st.selected.size;
   const tagDisp = clanTag.startsWith('#') ? clanTag : `#${clanTag}`;
   let body =
     `${fmt.DIV}\n✏️ <b>Assegna bonus</b> · <i>${fmt.escapeHtml(bonusAssignSeasonLabelIt(season))}</i>\n` +
     `<code>${fmt.escapeHtml(tagDisp)}</code>\n${fmt.DIV}\n\n` +
-    `🏆 <b>${assignedN}</b> con bonus su <b>${all.length}</b> righe.\n` +
-    `Tocca un pulsante per <b>assegnare</b> o <b>rimuovere</b> il bonus.\n\n`;
+    `🏆 <b>${assignedN}</b> selezionati su <b>${all.length}</b> righe.\n` +
+    `Tocca i giocatori, poi <b>Conferma</b> per salvare.\n\n`;
   for (const r of slice) {
-    const mark = r.bonus_assigned ? '✅' : '·';
+    const mark = st.selected.has(String(r.player_name)) ? '✅' : '·';
     body += `${mark} <b>${fmt.escapeHtml(r.player_name)}</b> — score ${r.bonus_score ?? '—'}\n`;
   }
   if (totalPages > 1) body += `\n<i>Pagina ${p + 1}/${totalPages}</i>`;
   const kbRows = [];
   for (let i = 0; i < slice.length; i++) {
     const r = slice[i];
-    const mark = r.bonus_assigned ? '✅' : '⬜';
+    const mark = st.selected.has(String(r.player_name)) ? '✅' : '⬜';
     const short = String(r.player_name || '—').slice(0, 26);
     kbRows.push([Markup.button.callback(`${mark} ${short}`, `bonus:ast:${season}:${p}:${i}`)]);
   }
@@ -2276,6 +2304,7 @@ async function renderBonusAssignPage(ctx, clanTag, season, page) {
   if (totalPages > 1) nav.push(Markup.button.callback(`· ${p + 1}/${totalPages} ·`, 'noop'));
   if (p < totalPages - 1) nav.push(Markup.button.callback('▶', `bonus:asp:${season}:${p + 1}`));
   if (nav.length) kbRows.push(nav);
+  kbRows.push([Markup.button.callback('✅ Conferma', `bonus:asy:${season}`)]);
   kbRows.push([
     Markup.button.callback('« Stagioni', 'bonus:as'),
     Markup.button.callback('« Modalità', `bonus:azp:${season}`),
@@ -2290,6 +2319,7 @@ async function renderBonusAssignPage(ctx, clanTag, season, page) {
 
 async function renderBonusAssignModePick(ctx, clanTag, season) {
   bonusWizardByUid.delete(ctx.from?.id);
+  bonusManualByUid.delete(ctx.from?.id);
   const tagDisp = clanTag.startsWith('#') ? clanTag : `#${clanTag}`;
   const body =
     `${fmt.DIV}\n✏️ <b>Assegna bonus</b> · <i>${fmt.escapeHtml(bonusAssignSeasonLabelIt(season))}</i>\n` +
@@ -4594,7 +4624,7 @@ function setupBot(bot) {
     await renderBonusSeasonPicker(ctx, clanTag);
   });
 
-  bot.action(/^bonus:sv:(\d{4}-\d{2})$/, async (ctx) => {
+  bot.action(new RegExp(`^bonus:sv:${SEASON_CB}$`), async (ctx) => {
     await answerCbLoading(ctx);
     const clanTag = await resolveEffectiveClanTag(ctx);
     if (!clanTag) {
@@ -4667,7 +4697,7 @@ function setupBot(bot) {
     await renderBonusAssignSeasonPick(ctx, clanTag);
   });
 
-  bot.action(/^bonus:azp:(\d{4}-\d{2})$/, async (ctx) => {
+  bot.action(new RegExp(`^bonus:azp:${SEASON_CB}$`), async (ctx) => {
     await answerCbLoading(ctx);
     if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
       await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
@@ -4682,7 +4712,7 @@ function setupBot(bot) {
   });
 
   /** Messaggi vecchi con callback stagione diretto → stessa schermata modalità. */
-  bot.action(/^bonus:asz:(\d{4}-\d{2})$/, async (ctx) => {
+  bot.action(new RegExp(`^bonus:asz:${SEASON_CB}$`), async (ctx) => {
     await answerCbLoading(ctx);
     if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
       await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
@@ -4696,7 +4726,7 @@ function setupBot(bot) {
     await renderBonusAssignModePick(ctx, clanTag, ctx.match[1]);
   });
 
-  bot.action(/^bonus:azm:(\d{4}-\d{2})$/, async (ctx) => {
+  bot.action(new RegExp(`^bonus:azm:${SEASON_CB}$`), async (ctx) => {
     await answerCbLoading(ctx);
     if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
       await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
@@ -4707,10 +4737,11 @@ function setupBot(bot) {
       await ctx.answerCbQuery('Nessun clan').catch(() => {});
       return;
     }
+    bonusManualByUid.delete(ctx.from?.id);
     await renderBonusAssignPage(ctx, clanTag, ctx.match[1], 0);
   });
 
-  bot.action(/^bonus:aw:(\d{4}-\d{2})$/, async (ctx) => {
+  bot.action(new RegExp(`^bonus:aw:${SEASON_CB}$`), async (ctx) => {
     await answerCbLoading(ctx);
     if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
       await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
@@ -4724,7 +4755,7 @@ function setupBot(bot) {
     await renderBonusWizardSlots(ctx, clanTag, ctx.match[1]);
   });
 
-  bot.action(/^bonus:awn:(\d{4}-\d{2}):(\d+)$/, async (ctx) => {
+  bot.action(new RegExp(`^bonus:awn:${SEASON_CB}:(\\d+)$`), async (ctx) => {
     await answerCbLoading(ctx);
     if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
       await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
@@ -4737,7 +4768,7 @@ function setupBot(bot) {
     await renderBonusWizardPresets(ctx, clanTag, season, slots);
   });
 
-  bot.action(/^bonus:awm:(\d{4}-\d{2}):(\d+):(\d+)$/, async (ctx) => {
+  bot.action(new RegExp(`^bonus:awm:${SEASON_CB}:(\\d+):(\\d+)$`), async (ctx) => {
     await answerCbLoading(ctx);
     if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
       await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
@@ -4751,7 +4782,7 @@ function setupBot(bot) {
     await runBonusWizardComputeAndShow(ctx, clanTag, season, slots, mask);
   });
 
-  bot.action(/^bonus:awp:(\d{4}-\d{2}):(\d+)$/, async (ctx) => {
+  bot.action(new RegExp(`^bonus:awp:${SEASON_CB}:(\\d+)$`), async (ctx) => {
     await answerCbLoading(ctx);
     if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
       await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
@@ -4767,7 +4798,7 @@ function setupBot(bot) {
     await renderBonusWizardCandidatePage(ctx, page);
   });
 
-  bot.action(/^bonus:awt:(\d{4}-\d{2}):(\d+)$/, async (ctx) => {
+  bot.action(new RegExp(`^bonus:awt:${SEASON_CB}:(\\d+)$`), async (ctx) => {
     if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
       await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
       return;
@@ -4796,7 +4827,7 @@ function setupBot(bot) {
     await renderBonusWizardCandidatePage(ctx, st.wizardPage || 0);
   });
 
-  bot.action(/^bonus:awr:(\d{4}-\d{2})$/, async (ctx) => {
+  bot.action(new RegExp(`^bonus:awr:${SEASON_CB}$`), async (ctx) => {
     await answerCbLoading(ctx);
     if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
       await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
@@ -4811,7 +4842,7 @@ function setupBot(bot) {
     await renderBonusWizardPresets(ctx, st.clanTag, season, st.maxSlots);
   });
 
-  bot.action(/^bonus:awy:(\d{4}-\d{2})$/, async (ctx) => {
+  bot.action(new RegExp(`^bonus:awy:${SEASON_CB}$`), async (ctx) => {
     if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
       await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
       return;
@@ -4858,7 +4889,7 @@ function setupBot(bot) {
     }
   });
 
-  bot.action(/^bonus:asp:(\d{4}-\d{2}):(\d+)$/, async (ctx) => {
+  bot.action(new RegExp(`^bonus:asp:${SEASON_CB}:(\\d+)$`), async (ctx) => {
     await answerCbLoading(ctx);
     if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
       await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
@@ -4871,7 +4902,7 @@ function setupBot(bot) {
     await renderBonusAssignPage(ctx, clanTag, season, page);
   });
 
-  bot.action(/^bonus:ast:(\d{4}-\d{2}):(\d+):(\d+)$/, async (ctx) => {
+  bot.action(new RegExp(`^bonus:ast:${SEASON_CB}:(\\d+):(\\d+)$`), async (ctx) => {
     if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
       await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
       return;
@@ -4893,15 +4924,65 @@ function setupBot(bot) {
       await ctx.answerCbQuery('Riga non valida').catch(() => {});
       return;
     }
-    const next = { ...row, bonus_assigned: !row.bonus_assigned };
-    try {
-      await sb.upsertCwlHistoryAssignRow(next);
-    } catch (e) {
-      await ctx.answerCbQuery(String(e.message || 'Errore salvataggio').slice(0, 200)).catch(() => {});
+    const st = await ensureBonusManualState(ctx.from.id, clanTag, season, all);
+    const name = String(row.player_name);
+    if (st.selected.has(name)) {
+      st.selected.delete(name);
+      await ctx.answerCbQuery('Deselezionato').catch(() => {});
+    } else {
+      st.selected.add(name);
+      await ctx.answerCbQuery('Selezionato').catch(() => {});
+    }
+    bonusManualByUid.set(ctx.from.id, st);
+    await renderBonusAssignPage(ctx, clanTag, season, p);
+  });
+
+  bot.action(new RegExp(`^bonus:asy:${SEASON_CB}$`), async (ctx) => {
+    if (!ctx.cocboardUser || !isCapoOrCoCapoForBonus(ctx.cocboardUser)) {
+      await ctx.answerCbQuery('Solo Capo e Co-Capo.').catch(() => {});
       return;
     }
-    await ctx.answerCbQuery(next.bonus_assigned ? 'Bonus assegnato' : 'Bonus rimosso').catch(() => {});
-    await renderBonusAssignPage(ctx, clanTag, season, p);
+    const season = ctx.match[1];
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) {
+      await ctx.answerCbQuery('Nessun clan').catch(() => {});
+      return;
+    }
+    const st = bonusManualByUid.get(ctx.from.id);
+    if (!st || st.season !== season || st.clanTag !== clanTag) {
+      await ctx.answerCbQuery('Sessione scaduta: riapri Manuale.').catch(() => {});
+      return;
+    }
+    if (st.selected.size === 0) {
+      await ctx.answerCbQuery('Seleziona almeno un giocatore').catch(() => {});
+      return;
+    }
+    try {
+      const n = await sb.applyBonusSelectionForSeason(clanTag, season, [...st.selected]);
+      bonusManualByUid.delete(ctx.from.id);
+      await ctx.answerCbQuery(`Salvati ${n} record`).catch(() => {});
+      const tagDisp = clanTag.startsWith('#') ? clanTag : `#${clanTag}`;
+      const done =
+        `✅ <b>Bonus salvati</b> · ${fmt.escapeHtml(bonusAssignSeasonLabelIt(season))}\n` +
+        `<code>${fmt.escapeHtml(tagDisp)}</code>\n\n` +
+        `Assegnati: <b>${st.selected.size}</b> — ${fmt.escapeHtml([...st.selected].join(', '))}`;
+      try {
+        await ctx.editMessageText(done, {
+          parse_mode: 'HTML',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('« Bonus', 'bonus:0')],
+            [Markup.button.callback('« Menù', 'menu')],
+          ]),
+        });
+      } catch (_) {
+        await ctx.reply(done, {
+          parse_mode: 'HTML',
+          ...Markup.inlineKeyboard([[Markup.button.callback('« Menù', 'menu')]]),
+        });
+      }
+    } catch (e) {
+      await ctx.answerCbQuery(String(e.message || 'Errore').slice(0, 180)).catch(() => {});
+    }
   });
 
   bot.action('war_menu', async (ctx) => {
@@ -5258,7 +5339,7 @@ function setupBot(bot) {
     await renderWarLogCwlList(ctx, page);
   });
 
-  bot.action(/^war:cws:(\d{4}-\d{2})$/, async (ctx) => {
+  bot.action(new RegExp(`^war:cws:${SEASON_CB}$`), async (ctx) => {
     await answerCbLoading(ctx);
     const season = ctx.match[1];
     const clanTag = await resolveEffectiveClanTag(ctx);
@@ -5297,7 +5378,7 @@ function setupBot(bot) {
     await editOrReplyChunkedHtml(ctx, hubText, buildCwlHubKb(season));
   });
 
-  bot.action(/^cw:lg:(\d{4}-\d{2})$/, async (ctx) => {
+  bot.action(new RegExp(`^cw:lg:${SEASON_CB}$`), async (ctx) => {
     await answerCbLoading(ctx);
     const season = ctx.match[1];
     const clanTag = await resolveEffectiveClanTag(ctx);
@@ -5312,7 +5393,7 @@ function setupBot(bot) {
     await editOrReplyChunkedHtml(ctx, head + body, buildCwlBackToHubKb(season));
   });
 
-  bot.action(/^cw:pl:(\d{4}-\d{2}):(\d+)$/, async (ctx) => {
+  bot.action(new RegExp(`^cw:pl:${SEASON_CB}:(\\d+)$`), async (ctx) => {
     await answerCbLoading(ctx);
     const season = ctx.match[1];
     const page = Math.max(0, parseInt(ctx.match[2], 10) || 0);
@@ -5330,7 +5411,7 @@ function setupBot(bot) {
     await editOrReplyChunkedHtml(ctx, head + body, buildCwlPlayersNavKb(season, p, totalPages));
   });
 
-  bot.action(/^cw:tr:(\d{4}-\d{2})$/, async (ctx) => {
+  bot.action(new RegExp(`^cw:tr:${SEASON_CB}$`), async (ctx) => {
     await answerCbLoading(ctx);
     const season = ctx.match[1];
     const clanTag = await resolveEffectiveClanTag(ctx);
@@ -5344,7 +5425,7 @@ function setupBot(bot) {
     await editOrReplyChunkedHtml(ctx, head + body, buildCwlTurnsRoundKb(season, dbWars));
   });
 
-  bot.action(/^cw:rd:(\d{4}-\d{2}):(\d+)$/, async (ctx) => {
+  bot.action(new RegExp(`^cw:rd:${SEASON_CB}:(\\d+)$`), async (ctx) => {
     await answerCbLoading(ctx);
     const season = ctx.match[1];
     const round = parseInt(ctx.match[2], 10) || 0;
@@ -5359,7 +5440,7 @@ function setupBot(bot) {
     await editOrReplyChunkedHtml(ctx, text, buildCwlRoundBridgeKb(season, round));
   });
 
-  bot.action(/^cw:(us|op):(\d{4}-\d{2}):(\d+)$/, async (ctx) => {
+  bot.action(new RegExp(`^cw:(us|op):${SEASON_CB}:(\\d+)$`), async (ctx) => {
     await answerCbLoading(ctx);
     const side = ctx.match[1] === 'us' ? 'us' : 'op';
     const season = ctx.match[2];

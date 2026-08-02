@@ -85,20 +85,26 @@ function callbackSkipsUiWipe(data) {
   }
   // Navigazione interna war/cwl live (stessa bolla: edit testo)
   if (d.startsWith('wl_v:') || d.startsWith('cwl_v:')) return true;
-  // Assegnazione bonus (stessa bolla: edit testo + tastiera)
+  // Assegnazione / storico bonus (stessa bolla: edit testo + tastiera).
+  // Season: YYYY-MM oppure YYYY-MM-DD (CoC API).
+  const SEASON = String.raw`\d{4}-\d{2}(?:-\d{2})?`;
   if (
     d === 'bonus:as' ||
-    /^bonus:az[pm]:\d{4}-\d{2}$/.test(d) ||
-    /^bonus:asz:\d{4}-\d{2}$/.test(d) ||
-    /^bonus:asp:\d{4}-\d{2}:\d+$/.test(d) ||
-    /^bonus:ast:\d{4}-\d{2}:\d+:\d+$/.test(d) ||
-    /^bonus:aw:\d{4}-\d{2}$/.test(d) ||
-    /^bonus:awn:\d{4}-\d{2}:\d+$/.test(d) ||
-    /^bonus:awm:\d{4}-\d{2}:\d+:\d+$/.test(d) ||
-    /^bonus:awp:\d{4}-\d{2}:\d+$/.test(d) ||
-    /^bonus:awt:\d{4}-\d{2}:\d+$/.test(d) ||
-    /^bonus:awr:\d{4}-\d{2}$/.test(d) ||
-    /^bonus:awy:\d{4}-\d{2}$/.test(d)
+    d === 'bonus:hist' ||
+    d === 'bonus:hof' ||
+    new RegExp(`^bonus:sv:${SEASON}$`).test(d) ||
+    new RegExp(`^bonus:az[pm]:${SEASON}$`).test(d) ||
+    new RegExp(`^bonus:asz:${SEASON}$`).test(d) ||
+    new RegExp(`^bonus:asp:${SEASON}:\\d+$`).test(d) ||
+    new RegExp(`^bonus:ast:${SEASON}:\\d+:\\d+$`).test(d) ||
+    new RegExp(`^bonus:asy:${SEASON}$`).test(d) ||
+    new RegExp(`^bonus:aw:${SEASON}$`).test(d) ||
+    new RegExp(`^bonus:awn:${SEASON}:\\d+$`).test(d) ||
+    new RegExp(`^bonus:awm:${SEASON}:\\d+:\\d+$`).test(d) ||
+    new RegExp(`^bonus:awp:${SEASON}:\\d+$`).test(d) ||
+    new RegExp(`^bonus:awt:${SEASON}:\\d+$`).test(d) ||
+    new RegExp(`^bonus:awr:${SEASON}$`).test(d) ||
+    new RegExp(`^bonus:awy:${SEASON}$`).test(d)
   ) {
     return true;
   }

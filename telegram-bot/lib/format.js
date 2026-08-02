@@ -1398,9 +1398,18 @@ const MONTHS_IT = [
   'dicembre',
 ];
 
-/** season 'YYYY-MM' → Stagione aprile '26 */
+/** season 'YYYY-MM' o 'YYYY-MM-DD' → Stagione aprile '26 */
 function formatSeasonLabelIt(season) {
   if (!season || typeof season !== 'string') return '—';
+  const full = /^(\d{4})-(\d{2})-(\d{2})$/.exec(season.trim());
+  if (full) {
+    const y = Number(full[1]);
+    const mo = Number(full[2]);
+    const day = Number(full[3]);
+    if (mo < 1 || mo > 12) return escapeHtml(season);
+    const yy = String(y).slice(-2);
+    return `Stagione ${day} ${MONTHS_IT[mo - 1]} '${yy}`;
+  }
   const m = /^(\d{4})-(\d{2})$/.exec(season.trim());
   if (!m) return escapeHtml(season);
   const y = Number(m[1]);
