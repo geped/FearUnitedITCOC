@@ -88,9 +88,13 @@ test('missingAttacks: include TH e lato avversario', () => {
   assert.equal(l97.missing, 1);
 
   const opp = missingAttacks(sampleWar, 'opponent');
-  assert.equal(opp.length, 1);
-  assert.equal(opp[0].name, 'Opp2');
-  assert.equal(opp[0].th, 16);
+  assert.equal(opp.length, 2);
+  const opp2 = opp.find((m) => m.name === 'Opp2');
+  const cyc = opp.find((m) => m.name === 'CYCLONE99');
+  assert.equal(opp2.th, 16);
+  assert.equal(opp2.missing, 2);
+  assert.equal(cyc.th, 18);
+  assert.equal(cyc.missing, 1);
 });
 
 test('villagesNotThreeStarred: entrambi i lati', () => {
