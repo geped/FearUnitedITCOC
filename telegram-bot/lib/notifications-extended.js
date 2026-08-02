@@ -84,11 +84,69 @@ function warOutcome(war) {
   return '🤝 Pareggio';
 }
 
-function missingAttacks(war) {
+function memberTh(m) {
+  const v = m?.townHallLevel ?? m?.townhallLevel ?? m?.thLevel;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function missingAttacks(war, side = 'clan') {
   const aPM = war?.attacksPerMember || 1;
-  return (war?.clan?.members || [])
+  const members = side === 'opponent' ? (war?.opponent?.members || []) : (war?.clan?.members || []);
+  return members
     .filter((m) => (m.attacks?.length || 0) < aPM)
-    .map((m) => ({ name: m.name, missing: aPM - (m.attacks?.length || 0) }));
+    .map((m) => ({
+      name: m.name,
+      th: memberTh(m),
+      mapPosition: m.mapPosition ?? null,
+      missing: aPM - (m.attacks?.length || 0),
+    }))
+    .sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+}
+
+/** Villaggi con meno di 3★ in difesa (best attack ricevuto). */
+function villagesNotThreeStarred(war, side = 'clan') {
+  const defenders = side === 'opponent' ? (war?.opponent?.members || []) : (war?.clan?.members || []);
+  const attackers = side === 'opponent' ? (war?.clan?.members || []) : (war?.opponent?.members || []);
+  const bestByDef = new Map();
+  for (const atkMember of attackers) {
+    for (const a of atkMember.attacks || []) {
+      const tag = a.defenderTag;
+      if (!tag) continue;
+      const prev = bestByDef.get(tag) || { stars: 0, destruction: 0 };
+      const stars = Number(a.stars || 0);
+      const destr = Number(a.destructionPercentage || 0);
+      if (stars > prev.stars || (stars === prev.stars && destr > prev.destruction)) {
+        bestByDef.set(tag, { stars, destruction: destr });
+      }
+    }
+  }
+  return defenders
+    .map((m) => {
+      const best = bestByDef.get(m.tag) || { stars: 0, destruction: 0 };
+      return {
+        name: m.name,
+        th: memberTh(m),
+        mapPosition: m.mapPosition ?? null,
+        bestStars: best.stars,
+        bestDest: best.destruction,
+      };
+    })
+    .filter((v) => v.bestStars < 3)
+    .sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
+}
+
+function formatMissingLine(m) {
+  const th = m.th != null ? ` TH${m.th}` : '';
+  const pos = m.mapPosition != null ? `#${m.mapPosition} ` : '';
+  return `• ${pos}${fmt.escapeHtml(m.name || '—')}${th} (${m.missing} att.)`;
+}
+
+function formatOpenBaseLine(v) {
+  const th = v.th != null ? ` TH${v.th}` : '';
+  const pos = v.mapPosition != null ? `#${v.mapPosition} ` : '';
+  const st = v.bestStars > 0 ? `${v.bestStars}★` : '0★';
+  return `• ${pos}${fmt.escapeHtml(v.name || '—')}${th} · ${st}`;
 }
 
 function roleLabel(role) {
@@ -164,23 +222,44 @@ function buildWarAlertMsg(war, missing, isCwl, timeLabel) {
   const od    = Number(war?.opponent?.destructionPercentage || 0).toFixed(1);
   const hdr   = `${label} · <b>${cn}</b> vs <b>${on}</b>\n<b>${timeLabel}</b>`;
   const score = `📊 Stato attuale: <b>${cs}★</b> (${cd}%) vs <b>${os}★</b> (${od}%)`;
-  if (!missing.length) return `${hdr}\n${score}\n✅ Tutti hanno completato gli attacchi!`;
-  const list  = missing.slice(0, 15).map((m) => `• ${fmt.escapeHtml(m.name)} (${m.missing} att.)`).join('\n');
-  return `${hdr}\n${score}\n\n<b>Attacchi mancanti:</b>\n${list}`;
+
+  const missOurs = missing || missingAttacks(war, 'clan');
+  const missOpp  = missingAttacks(war, 'opponent');
+  const openOurs = villagesNotThreeStarred(war, 'clan');
+  const openOpp  = villagesNotThreeStarred(war, 'opponent');
+
+  const parts = [`${hdr}\n${score}`];
+  if (!missOurs.length) {
+    parts.push('✅ Tutti i nostri giocatori hanno completato gli attacchi!');
+  } else {
+    parts.push(`<b>Attacchi mancanti (noi):</b>\n${missOurs.slice(0, 15).map(formatMissingLine).join('\n')}`);
+  }
+  if (missOpp.length) {
+    parts.push(`<b>Attacchi mancanti (avversari):</b>\n${missOpp.slice(0, 15).map(formatMissingLine).join('\n')}`);
+  }
+  if (openOurs.length) {
+    parts.push(`<b>Villaggi non 3★ (nostri):</b>\n${openOurs.slice(0, 12).map(formatOpenBaseLine).join('\n')}`);
+  }
+  if (openOpp.length) {
+    parts.push(`<b>Villaggi non 3★ (avversari):</b>\n${openOpp.slice(0, 12).map(formatOpenBaseLine).join('\n')}`);
+  }
+  return parts.join('\n\n');
 }
 
-function buildWarFinalMsg(war, isCwl) {
+function buildWarFinalMsg(war, isCwl, streakInfo) {
   const c    = war?.clan || {};
   const o    = war?.opponent || {};
   const lbl  = isCwl ? '🏆 Recap round CWL' : '⚔️ Recap guerra';
   const out  = warOutcome(war);
-  const miss = missingAttacks(war);
+  const miss = missingAttacks(war, 'clan');
   let body   = `📣 <b>${lbl}</b>\n${out} · ${c.stars||0}★ vs ${o.stars||0}★ · ${Number(c.destructionPercentage||0).toFixed(1)}% vs ${Number(o.destructionPercentage||0).toFixed(1)}%`;
   if (miss.length) {
-    const list = miss.slice(0, 15).map((m) => `• ${fmt.escapeHtml(m.name)} (${m.missing} att.)`).join('\n');
-    body += `\n\n<b>Non hanno attaccato:</b>\n${list}`;
+    body += `\n\n<b>Non hanno attaccato:</b>\n${miss.slice(0, 15).map(formatMissingLine).join('\n')}`;
   } else {
     body += `\n✅ Tutti hanno completato gli attacchi.`;
+  }
+  if (streakInfo && streakInfo.won && Number(streakInfo.streak) > 0) {
+    body += `\n\n🔥 <b>Serie vittorie!</b>\nIl clan è ora a <b>${Number(streakInfo.streak)}</b> vittorie consecutive.`;
   }
   return body;
 }
@@ -376,7 +455,7 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
         const key = `4h:${war.endTime}`;
         if (!sent.has(key)) {
           sent.add(key);
-          if ((isCwl ? notif.cwl_missing_4h : notif.war_missing_4h) === true && miss.length > 0) {
+          if ((isCwl ? notif.cwl_missing_4h : notif.war_missing_4h) === true) {
             await send(buildWarAlertMsg(war, miss, isCwl, '⏰ 4 ore rimanenti'));
           }
         }
@@ -385,7 +464,7 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
         const key = `1h:${war.endTime}`;
         if (!sent.has(key)) {
           sent.add(key);
-          if ((isCwl ? notif.cwl_missing_1h : notif.war_missing_1h) === true && miss.length > 0) {
+          if ((isCwl ? notif.cwl_missing_1h : notif.war_missing_1h) === true) {
             await send(buildWarAlertMsg(war, miss, isCwl, '⏰ 1 ora rimanente'));
           }
         }
@@ -394,7 +473,7 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
         const key = `15m:${war.endTime}`;
         if (!sent.has(key)) {
           sent.add(key);
-          if ((isCwl ? notif.cwl_missing_15m : notif.war_missing_15m) === true && miss.length > 0) {
+          if ((isCwl ? notif.cwl_missing_15m : notif.war_missing_15m) === true) {
             await send(buildWarAlertMsg(war, miss, isCwl, '⏰ 15 minuti rimanenti'));
           }
         }
@@ -446,7 +525,22 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
     if (!sent.has(key)) {
       sent.add(key);
       if ((isCwl ? notif.cwl_round_end : notif.war_result) === true) {
-        await send(buildWarFinalMsg(war, isCwl));
+        let streakInfo = null;
+        const won = warOutcome(war).includes('Vittoria');
+        // Serie vittorie: stesso messaggio del recap (solo guerre classiche + flag attivo)
+        if (!isCwl && won && notif.clan_activity_enabled === true && notif.clan_war_streak === true) {
+          try {
+            const info = await api.clanInfo(clanTag);
+            const streak = Number(info?.warWinStreak);
+            if (Number.isFinite(streak) && streak > 0) {
+              streakInfo = { won: true, streak };
+              // Evita doppio messaggio dal poller attività clan
+              const snap = clanStateMem.get(clanTag) || {};
+              clanStateMem.set(clanTag, { ...snap, warWinStreak: streak, streakAnnouncedAt: streak });
+            }
+          } catch (_) {}
+        }
+        await send(buildWarFinalMsg(war, isCwl, streakInfo));
       }
       // Salvataggio automatico (solo guerre classiche)
       if (!isCwl) {
@@ -750,13 +844,18 @@ async function runClanActivityAlerts(bot, sb) {
 
     // Streak vittorie guerra in aumento
     const curStreak = info?.warWinStreak ?? null;
+    let streakAnnouncedAt = prev.streakAnnouncedAt ?? null;
     if (
       curStreak !== null &&
       prev.warWinStreak !== null &&
       Number(curStreak) > Number(prev.warWinStreak) &&
       notif.clan_war_streak === true
     ) {
-      await send(`🔥 <b>Serie vittorie!</b>\nIl clan è ora a <b>${Number(curStreak)}</b> vittorie consecutive.`);
+      // Se già annunciata nel recap finale guerra, non ripetere
+      if (Number(streakAnnouncedAt) !== Number(curStreak)) {
+        await send(`🔥 <b>Serie vittorie!</b>\nIl clan è ora a <b>${Number(curStreak)}</b> vittorie consecutive.`);
+        streakAnnouncedAt = curStreak;
+      }
     }
 
     // Aggiorna snapshot (condiviso: sovrascrivi con dati più recenti)
@@ -765,6 +864,7 @@ async function runClanActivityAlerts(bot, sb) {
       level: curLevel,
       name:  curName,
       warWinStreak: curStreak,
+      streakAnnouncedAt,
     });
   }
 

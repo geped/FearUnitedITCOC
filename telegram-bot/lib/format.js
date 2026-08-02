@@ -616,13 +616,18 @@ function formatCwlConfronto(data, rIdx) {
   for (let i = 0; i < Math.min(n, 20); i++) {
     const a = us[i];
     const b = them[i];
-    const thA = a ? `TH${a.thLevel || '?'}` : '—';
-    const thB = b ? `TH${b.thLevel || '?'}` : '—';
-    const nA = a ? escapeHtml(a.name.slice(0, 14)) : '—';
-    const nB = b ? escapeHtml(b.name.slice(0, 14)) : '—';
+    const thA = a ? `TH${a.thLevel || a.townhallLevel || a.townHallLevel || '?'}` : '—';
+    const thB = b ? `TH${b.thLevel || b.townhallLevel || b.townHallLevel || '?'}` : '—';
+    const nA = a ? escapeHtml(String(a.name || '—').slice(0, 14)) : '—';
+    const nB = b ? escapeHtml(String(b.name || '—').slice(0, 14)) : '—';
+    const posA = a?.mapPosition ?? i + 1;
+    const posB = b?.mapPosition ?? i + 1;
     const starsA = a ? (a.attacks || []).reduce((s, atk) => s + (atk.stars || 0), 0) : null;
     const starStr = starsA != null && a?.attacks?.length ? ` ${starsA}★` : '';
-    lines.push(`#${String(i + 1).padStart(2)} <b>${nA}</b> (${thA})${starStr} vs <b>${nB}</b> (${thB})`);
+    lines.push(
+      `#${String(posA).padStart(2)} <b>${nA}</b> (${thA})${starStr} vs ` +
+      `#${String(posB).padStart(2)} <b>${nB}</b> (${thB})`
+    );
   }
   if (n > 20) lines.push(`<i>… e altri ${n - 20}</i>`);
 
@@ -1950,21 +1955,22 @@ function formatWarLiveConfronto(data, page = 0) {
     '',
   ];
 
-  const header = `#  │ TH │ Σ  │ ${cName.padEnd(8)} ║ ${oName.padEnd(8)} │ TH │ Σ`;
-  const sep    = `───┼────┼────┼──────────╬──────────┼────┼───`;
+  const header = `#  │ TH │ Σ  │ ${cName.padEnd(8)} ║ #  │ ${oName.padEnd(8)} │ TH │ Σ`;
+  const sep    = `───┼────┼────┼──────────╬────┼──────────┼────┼───`;
 
   const rows = [header, sep];
   for (let i = start; i < end; i++) {
     const a = ourMembers[i];
     const b = themMembers[i];
-    const pos = String(i + 1).padStart(2);
-    const aTh  = a ? `TH${String(a.townhallLevel ?? '?').padEnd(2)}` : '    ';
+    const aPos = String(a?.mapPosition ?? i + 1).padStart(2);
+    const bPos = String(b?.mapPosition ?? i + 1).padStart(2);
+    const aTh  = a ? `TH${String(a.townhallLevel ?? a.townHallLevel ?? '?').padEnd(2)}` : '    ';
     const aSum = a ? String(heroSum(a)).padStart(3) : '  —';
     const aName = a ? escapeHtml((a.name || '—').slice(0, 8)).padEnd(8) : '        ';
-    const bTh  = b ? `TH${String(b.townhallLevel ?? '?').padEnd(2)}` : '    ';
+    const bTh  = b ? `TH${String(b.townhallLevel ?? b.townHallLevel ?? '?').padEnd(2)}` : '    ';
     const bSum = b ? String(heroSum(b)).padStart(3) : '  —';
     const bName = b ? escapeHtml((b.name || '—').slice(0, 8)).padEnd(8) : '        ';
-    rows.push(`${pos} │ ${aTh}│${aSum} │ ${aName} ║ ${bName} │ ${bTh}│${bSum}`);
+    rows.push(`${aPos} │ ${aTh}│${aSum} │ ${aName} ║ ${bPos} │ ${bName} │ ${bTh}│${bSum}`);
   }
 
   lines.push(`<pre>${rows.join('\n')}</pre>`);

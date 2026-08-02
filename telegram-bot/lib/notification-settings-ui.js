@@ -261,8 +261,11 @@ async function buildCategoryKb(sb, chatId, catId) {
     `notif_tog:${cat.master}`,
   )]);
   for (const f of cat.flags) {
+    // Con categoria OFF i sotto-avvisi risultano inattivi in UI (il runtime già li ignora).
+    const flagOn = masterOn && s[f.key] === true;
+    const suffix = masterOn ? '' : ' · off';
     rows.push([Markup.button.callback(
-      `${tog(s[f.key] === true)} ${f.label}`,
+      `${tog(flagOn)} ${f.label}${suffix}`,
       `notif_tog:${f.key}`,
     )]);
   }
@@ -281,7 +284,7 @@ function buildCategoryText(catId) {
     `${cat.emoji} <b>${cat.name}</b>\n\n` +
     `Usa il primo pulsante per attivare/disattivare l'intera categoria.\n` +
     `Poi abilita i singoli avvisi che desideri ricevere.\n\n` +
-    `<i>⚠️ La categoria deve essere ON affinché gli avvisi funzionino.</i>`
+    `<i>⚠️ Con categoria OFF nessun avviso parte (anche se i singoli flag restano salvati).</i>`
   );
 }
 
@@ -346,11 +349,25 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
       return;
     }
     const cur  = await sb.getChatNotificationSettings(ctx.chat.id).catch(() => ({}));
-    const next = !(cur[key] === true);
-    await sb.upsertChatNotificationSettings(ctx.chat.id, { [key]: next }, ctx.from?.id).catch(() => {});
+    const parentCat = CATEGORIES.find((c) => c.master === key || c.flags.some((f) => f.key === key));
+    const patch = {};
+    let next = !(cur[key] === true);
+    if (parentCat && parentCat.master !== key) {
+      const masterOn = cur[parentCat.master] === true;
+      if (!masterOn) {
+        // Categoria OFF: il tap riattiva categoria + questo avviso (UI mostrava già off).
+        patch[parentCat.master] = true;
+        patch[key] = true;
+        next = true;
+      } else {
+        patch[key] = next;
+      }
+    } else {
+      patch[key] = next;
+    }
+    await sb.upsertChatNotificationSettings(ctx.chat.id, patch, ctx.from?.id).catch(() => {});
     await ctx.answerCbQuery(next ? '✅ Attivato' : '⚪ Disattivato').catch(() => {});
     // Aggiorna tastiera: se è master o sub-flag di una categoria → riapri categoria, altrimenti main
-    const parentCat = CATEGORIES.find((c) => c.master === key || c.flags.some((f) => f.key === key));
     if (parentCat) {
       const kb = await buildCategoryKb(sb, ctx.chat.id, parentCat.id);
       if (kb) await ctx.editMessageReplyMarkup(kb.reply_markup).catch(() => {});

@@ -24,12 +24,11 @@ function normClanTag(t) {
 
 /**
  * CoC API espone la stagione CWL come data di inizio (YYYY-MM-DD).
- * Nel DB storico usiamo YYYY-MM (allineato al selettore mese del sito).
+ * La conserviamo così com'è: mesi con due leghe (es. inizio mese + metà mese)
+ * restano chiavi distinte e non vanno collassate a YYYY-MM.
  */
 function normalizeCwlSeason(season) {
-    const s = String(season || '').trim();
-    const m = /^(\d{4}-\d{2})(?:-\d{2})?$/.exec(s);
-    return m ? m[1] : s;
+    return String(season || '').trim();
 }
 
 /** Town Hall da oggetto membro guerra/roster CoC API (camelCase ufficiale) */
