@@ -93,6 +93,214 @@ const ALL_FLAG_KEYS = new Set([
   ...CATEGORIES.flatMap((c) => [c.master, ...c.flags.map((f) => f.key)]),
 ]);
 
+/** Esempi realistici allineati ai messaggi di notifications-extended.js */
+const FLAG_EXAMPLES = {
+  war_prep_start:
+    '🛡 <b>⚔️ Guerra Classica – Preparazione</b>\n' +
+    'Fear United IT vs monforts city\n' +
+    'Gli attacchi inizieranno presto.',
+  war_start_alert:
+    '⚔️ Guerra iniziata!\n' +
+    'Fear United IT vs monforts city\n' +
+    'Avete <b>23h 58m</b> per attaccare!',
+  war_missing_4h:
+    '⚔️ Guerra · <b>Fear United IT</b> vs <b>monforts city</b>\n' +
+    '<b>⏰ 4 ore rimanenti</b>\n' +
+    '📊 Stato attuale: <b>28★</b> (94.2%) vs <b>22★</b> (81.0%)\n\n' +
+    '<b>Attacchi mancanti (noi):</b>\n' +
+    '• #3 l97 TH18 (1 att.)\n' +
+    '• #12 Miky TH17 (2 att.)\n\n' +
+    '<b>Attacchi mancanti (avversari):</b>\n' +
+    '• #5 OppPlayer TH17 (1 att.)\n\n' +
+    '<b>Villaggi non 3★ (nostri):</b>\n' +
+    '• #8 Geped™ TH18 · 2★\n\n' +
+    '<b>Villaggi non 3★ (avversari):</b>\n' +
+    '• #2 EnemyBase TH18 · 0★\n' +
+    '• #11 OpenTH16 TH16 · 1★',
+  war_missing_1h:
+    '⚔️ Guerra · <b>Fear United IT</b> vs <b>monforts city</b>\n' +
+    '<b>⏰ 1 ora rimanente</b>\n' +
+    '📊 Stato attuale: <b>35★</b> (98.1%) vs <b>30★</b> (91.4%)\n\n' +
+    '<b>Attacchi mancanti (noi):</b>\n' +
+    '• #3 l97 TH18 (1 att.)\n\n' +
+    '<b>Villaggi non 3★ (avversari):</b>\n' +
+    '• #11 OpenTH16 TH16 · 1★',
+  war_missing_15m:
+    '⚔️ Guerra · <b>Fear United IT</b> vs <b>monforts city</b>\n' +
+    '<b>⏰ 15 minuti rimanenti</b>\n' +
+    '📊 Stato attuale: <b>15★</b> (100.0%) vs <b>13★</b> (93.0%)\n\n' +
+    '<b>Attacchi mancanti (noi):</b>\n' +
+    '• #1 l97 TH18 (1 att.)\n\n' +
+    '<b>Attacchi mancanti (avversari):</b>\n' +
+    '• #4 Enemy TH18 (1 att.)\n\n' +
+    '<b>Villaggi non 3★ (avversari):</b>\n' +
+    '• #7 BaseX TH17 · 2★',
+  war_3star:
+    '⭐⭐⭐ <b>Guerra Perfetta!</b>\n' +
+    'Fear United IT ha 3 stelle su tutti i villaggi! 🎉',
+  war_result:
+    '📣 <b>⚔️ Recap guerra</b>\n' +
+    '🏆 Vittoria · 45★ vs 38★ · 98.5% vs 91.2%\n\n' +
+    '<b>Non hanno attaccato:</b>\n' +
+    '• #9 PlayerX TH16 (1 att.)\n\n' +
+    '🔥 <b>Serie vittorie!</b>\n' +
+    'Il clan è ora a <b>29</b> vittorie consecutive.',
+
+  cwl_prep_start:
+    '🛡 <b>🏆 CWL – Preparazione</b>\n' +
+    'Fear United IT vs GOLDEN MYA\n' +
+    'Gli attacchi inizieranno presto.',
+  cwl_round_start:
+    '🏆 CWL – Round iniziato!\n' +
+    'Fear United IT vs GOLDEN MYA\n' +
+    'Avete <b>23h 55m</b> per attaccare!',
+  cwl_missing_4h:
+    '🏆 CWL · <b>Fear United IT</b> vs <b>GOLDEN MYA</b>\n' +
+    '<b>⏰ 4 ore rimanenti</b>\n' +
+    '📊 Stato attuale: <b>38★</b> (96.0%) vs <b>31★</b> (88.2%)\n\n' +
+    '<b>Attacchi mancanti (noi):</b>\n' +
+    '• #14 Ettore TH17 (1 att.)\n' +
+    '• #15 Gianni TH17 (1 att.)\n\n' +
+    '<b>Villaggi non 3★ (avversari):</b>\n' +
+    '• #6 nayza maung TH18 · 2★',
+  cwl_missing_1h:
+    '🏆 CWL · <b>Fear United IT</b> vs <b>GOLDEN MYA</b>\n' +
+    '<b>⏰ 1 ora rimanente</b>\n' +
+    '📊 Stato attuale: <b>41★</b> (98.0%) vs <b>34★</b> (90.1%)\n\n' +
+    '<b>Attacchi mancanti (noi):</b>\n' +
+    '• #15 Gianni TH17 (1 att.)',
+  cwl_missing_15m:
+    '🏆 CWL · <b>Fear United IT</b> vs <b>GOLDEN MYA</b>\n' +
+    '<b>⏰ 15 minuti rimanenti</b>\n' +
+    '📊 Stato attuale: <b>42★</b> (99.0%) vs <b>36★</b> (92.0%)\n\n' +
+    '✅ Tutti i nostri giocatori hanno completato gli attacchi!\n\n' +
+    '<b>Villaggi non 3★ (avversari):</b>\n' +
+    '• #12 Thant Zin TH18 · 2★',
+  cwl_round_end:
+    '📣 <b>🏆 Recap round CWL</b>\n' +
+    '🏆 Vittoria · 42★ vs 36★ · 99.0% vs 92.0%\n' +
+    '✅ Tutti hanno completato gli attacchi.',
+  cwl_end:
+    '🏁 <b>Stagione CWL terminata</b>\n' +
+    'Stagione: <b>2026-08-02</b>',
+  cwl_league_promotion:
+    '📈 <b>Promozione CWL</b>\n' +
+    'Nuova lega: <b>Master League I</b>',
+  cwl_league_demotion:
+    '📉 <b>Retrocessione CWL</b>\n' +
+    'Nuova lega: <b>Crystal League I</b>',
+
+  raid_start:
+    '🏛 <b>Raid Capitale – Iniziato!</b>\n' +
+    'Il weekend di raid è cominciato.\n' +
+    'Ricorda di completare i tuoi attacchi entro domenica! ⚔️',
+  raid_district_destroyed:
+    '🏰 <b>Raid Capitale</b>\n' +
+    '⚔️ Distretto <b>Barbarian Camp</b> di <i>Enemy Capital</i> completamente distrutto! (+12.450 oro)',
+  raid_clan_cleared:
+    '🏛 <b>Raid Capitale – Clan eliminato!</b>\n' +
+    'Tutti i 5 distretti di <b>Enemy Capital</b> sono stati distrutti! 🎉',
+  raid_capital_fallen:
+    '🏛 <b>Raid Capitale</b>\n' +
+    '⚠️ La nostra capitale è stata completamente distrutta da <b>Raiders FC</b>.',
+  raid_end:
+    '🏛 <b>Raid Capitale – Fine weekend</b>\n' +
+    'Il raid si è concluso!\n' +
+    '💰 Oro totale: <b>186.500</b>',
+  raid_loot_milestone:
+    '💰 <b>Raid Capitale</b>\n' +
+    'Milestone raggiunta: <b>100.000</b> oro!',
+
+  clan_member_join:
+    '👋 <b>Nuovo membro!</b>\n' +
+    '<b>NewPlayer</b> si è unito al clan.',
+  clan_member_leave:
+    '👋 <b>Membro uscito</b>\n' +
+    '<b>OldPlayer</b> ha lasciato il clan.',
+  clan_role_promoted:
+    '⬆️ <b>Promozione</b>\n' +
+    '<b>l97</b>: Membro → <b>Anziano</b>',
+  clan_role_demoted:
+    '⬇️ <b>Retrocessione</b>\n' +
+    '<b>PlayerX</b>: Anziano → Membro',
+  clan_level_up:
+    '🎉 <b>Livello clan!</b>\n' +
+    'Il clan è salito al livello <b>18</b>! 🏅',
+  clan_war_streak:
+    '🔥 <b>Serie vittorie!</b>\n' +
+    'Il clan è ora a <b>29</b> vittorie consecutive.',
+  clan_name_change:
+    '✏️ <b>Nome clan cambiato</b>\n' +
+    'Fear United → <b>Fear United IT</b>',
+
+  clan_games_enabled:
+    '🎯 <b>Giochi del clan</b>\n' +
+    'I Giochi del Clan sono iniziati!\n' +
+    'Completa le sfide e contribuisci ai punti del clan. 🏅\n\n' +
+    '<i>(Esempio illustrativo — lo stesso stile degli altri avvisi.)</i>',
+
+  custom_war:
+    '⚔️ Guerra · <b>Fear United IT</b> vs <b>monforts city</b>\n' +
+    '<b>⏰ 1h 30m alla fine del round</b>\n' +
+    '📊 Stato attuale: <b>32★</b> (95.0%) vs <b>28★</b> (89.0%)\n\n' +
+    '<b>Attacchi mancanti (noi):</b>\n' +
+    '• #5 PlayerY TH17 (1 att.)\n\n' +
+    '<i>Stesso formato degli avvisi fissi 4h/1h/15m, con la soglia che hai scelto.</i>',
+  custom_cwl:
+    '🏆 CWL · <b>Fear United IT</b> vs <b>GOLDEN MYA</b>\n' +
+    '<b>⏰ 45m alla fine del round</b>\n' +
+    '📊 Stato attuale: <b>40★</b> (97.5%) vs <b>33★</b> (90.0%)\n\n' +
+    '<b>Attacchi mancanti (noi):</b>\n' +
+    '• #10 PlayerZ TH18 (1 att.)\n\n' +
+    '<i>Stesso formato degli avvisi fissi CWL, con la soglia che hai scelto.</i>',
+};
+
+const FLAG_LABEL_BY_KEY = Object.fromEntries([
+  ...CATEGORIES.flatMap((c) => c.flags.map((f) => [f.key, f.label])),
+  ['clan_games_enabled', 'Giochi del clan'],
+  ['custom_war', 'Alert personalizzato guerra'],
+  ['custom_cwl', 'Alert personalizzato CWL'],
+]);
+
+function parentCatIdForFlag(flagKey) {
+  const cat = CATEGORIES.find((c) => c.flags.some((f) => f.key === flagKey) || c.master === flagKey);
+  return cat?.id || null;
+}
+
+function buildExampleText(flagKey) {
+  const label = FLAG_LABEL_BY_KEY[flagKey] || flagKey;
+  const sample = FLAG_EXAMPLES[flagKey];
+  if (!sample) {
+    return `👁 <b>Esempio</b> · ${label}\n\n<i>Anteprima non disponibile.</i>`;
+  }
+  return (
+    `👁 <b>Esempio avviso</b>\n` +
+    `<i>${label}</i>\n\n` +
+    `<code>────────</code>\n` +
+    `${sample}\n` +
+    `<code>────────</code>\n\n` +
+    `<i>Messaggio di esempio (nomi e numeri fittizi). Il testo reale userà i dati live della chat.</i>`
+  );
+}
+
+function buildExampleKb(flagKey) {
+  const catId = parentCatIdForFlag(flagKey);
+  const rows = [];
+  if (catId) {
+    rows.push([Markup.button.callback('« Torna alla categoria', `notif_cat:${catId}`)]);
+  } else if (flagKey === 'clan_games_enabled') {
+    rows.push([Markup.button.callback('« Avvisi', 'notif_menu')]);
+  } else if (flagKey === 'custom_war') {
+    rows.push([Markup.button.callback('« Alert guerra', 'notif_custom_edit:war')]);
+  } else if (flagKey === 'custom_cwl') {
+    rows.push([Markup.button.callback('« Alert CWL', 'notif_custom_edit:cwl')]);
+  } else {
+    rows.push([Markup.button.callback('« Avvisi', 'notif_menu')]);
+  }
+  rows.push([Markup.button.callback('« Menù avvisi', 'notif_menu')]);
+  return Markup.inlineKeyboard(rows);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Keyboard builders
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,10 +320,13 @@ async function buildMainKb(sb, chatId) {
       : ` ${OFF}`;
     return [Markup.button.callback(`${cat.emoji} ${cat.name}${suffix}`, `notif_cat:${cat.id}`)];
   });
-  rows.push([Markup.button.callback(
-    `🎯 Giochi del clan ${tog(s.clan_games_enabled === true)}`,
-    'notif_tog:clan_games_enabled',
-  )]);
+  rows.push([
+    Markup.button.callback(
+      `🎯 Giochi del clan ${tog(s.clan_games_enabled === true)}`,
+      'notif_tog:clan_games_enabled',
+    ),
+    Markup.button.callback('👁', 'notif_ex:clan_games_enabled'),
+  ]);
   rows.push([Markup.button.callback('⏱ Alert personalizzati', 'notif_custom_menu')]);
   rows.push([Markup.button.callback('« Menù', 'menu')]);
   return Markup.inlineKeyboard(rows);
@@ -162,6 +373,7 @@ async function buildCustomEditKb(sb, chatId, kind) {
   rows.push([Markup.button.callback('✍️ Inserisci ore/minuti manualmente', `notif_custom_input:${kind}`)]);
   rows.push([Markup.button.callback(`${enabled ? ON : OFF} Attiva alert`, `notif_custom_toggle:${kind}`)]);
   rows.push([Markup.button.callback(`${paused ? '▶️ Riprendi' : '⏸ Pausa'}`, `notif_custom_pause:${kind}`)]);
+  rows.push([Markup.button.callback('👁 Esempio messaggio', `notif_ex:custom_${kind}`)]);
   rows.push([Markup.button.callback('🗑 Elimina alert', `notif_custom_delete:${kind}`)]);
   rows.push([Markup.button.callback('« Alert personalizzati', 'notif_custom_menu')]);
   return Markup.inlineKeyboard(rows);
@@ -187,7 +399,8 @@ function buildCustomEditText(kind, c) {
     `${title} · <b>alert personalizzato</b>\n\n` +
     `Stato: ${enabled ? (paused ? '⏸ in pausa' : '✅ attivo') : '⚪ disattivato'}\n` +
     `Preavviso: <b>${fmtLeadMinutes(lead)}</b>\n\n` +
-    '<i>Quando il tempo rimanente scende sotto la soglia scelta, il bot invia un unico avviso.</i>'
+    '<i>Quando il tempo rimanente scende sotto la soglia scelta, il bot invia un unico avviso.</i>\n' +
+    '<i>Tocca 👁 per un esempio del messaggio.</i>'
   );
 }
 
@@ -264,10 +477,10 @@ async function buildCategoryKb(sb, chatId, catId) {
     // Con categoria OFF i sotto-avvisi risultano inattivi in UI (il runtime già li ignora).
     const flagOn = masterOn && s[f.key] === true;
     const suffix = masterOn ? '' : ' · off';
-    rows.push([Markup.button.callback(
-      `${tog(flagOn)} ${f.label}${suffix}`,
-      `notif_tog:${f.key}`,
-    )]);
+    rows.push([
+      Markup.button.callback(`${tog(flagOn)} ${f.label}${suffix}`, `notif_tog:${f.key}`),
+      Markup.button.callback('👁', `notif_ex:${f.key}`),
+    ]);
   }
   rows.push([Markup.button.callback('« Avvisi', 'notif_menu')]);
   return Markup.inlineKeyboard(rows);
@@ -283,7 +496,8 @@ function buildCategoryText(catId) {
   return (
     `${cat.emoji} <b>${cat.name}</b>\n\n` +
     `Usa il primo pulsante per attivare/disattivare l'intera categoria.\n` +
-    `Poi abilita i singoli avvisi che desideri ricevere.\n\n` +
+    `Poi abilita i singoli avvisi che desideri ricevere.\n` +
+    `Tocca <b>👁</b> accanto a un avviso per vedere un <b>esempio</b> del messaggio.\n\n` +
     `<i>⚠️ Con categoria OFF nessun avviso parte (anche se i singoli flag restano salvati).</i>`
   );
 }
@@ -291,6 +505,7 @@ function buildCategoryText(catId) {
 const MAIN_TEXT =
   '🔔 <b>Notifiche chat</b>\n\n' +
   'Seleziona una categoria per configurare gli avvisi.\n' +
+  'In ogni categoria puoi aprire <b>👁</b> per un esempio del messaggio.\n' +
   '<i>Solo Capo / Co-Capo / Admin CoCBoard possono modificare le impostazioni.</i>';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -328,6 +543,24 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
       return;
     }
     const text = buildCategoryText(catId);
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
+    } catch (_) {
+      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
+    }
+  });
+
+  // ── Anteprima esempio messaggio ────────────────────────────────────────────
+  bot.action(/^notif_ex:(.+)$/, async (ctx) => {
+    safeAnswerCb(ctx);
+    if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
+    const flagKey = ctx.match[1];
+    if (!FLAG_EXAMPLES[flagKey]) {
+      await ctx.answerCbQuery('Esempio non disponibile.').catch(() => {});
+      return;
+    }
+    const text = buildExampleText(flagKey);
+    const kb = buildExampleKb(flagKey);
     try {
       await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
     } catch (_) {

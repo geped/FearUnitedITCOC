@@ -431,6 +431,7 @@ function isPublicCallbackData(d) {
     d === 'notif_raids' ||
     d === 'notif_games' ||
     d.startsWith('notif_cat:') ||
+    d.startsWith('notif_ex:') ||
     d === 'notif_custom_menu' ||
     d.startsWith('notif_custom_') ||
     d === 'support_open' ||

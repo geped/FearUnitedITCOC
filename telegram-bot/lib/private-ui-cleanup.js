@@ -85,6 +85,17 @@ function callbackSkipsUiWipe(data) {
   }
   // Navigazione interna war/cwl live (stessa bolla: edit testo)
   if (d.startsWith('wl_v:') || d.startsWith('cwl_v:')) return true;
+  // Gestione avvisi (stessa bolla: categorie, esempi, toggle)
+  if (
+    d === 'notif_menu' ||
+    d.startsWith('notif_cat:') ||
+    d.startsWith('notif_ex:') ||
+    d.startsWith('notif_tog:') ||
+    d === 'notif_custom_menu' ||
+    d.startsWith('notif_custom_')
+  ) {
+    return true;
+  }
   // Assegnazione / storico bonus (stessa bolla: edit testo + tastiera).
   // Season: YYYY-MM oppure YYYY-MM-DD (CoC API).
   const SEASON = String.raw`\d{4}-\d{2}(?:-\d{2})?`;
