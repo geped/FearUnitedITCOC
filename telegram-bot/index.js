@@ -3368,7 +3368,8 @@ function setupBot(bot) {
         war_alerts_enabled: true, war_start_alert: false, war_missing_1h: true,
         war_missing_15m: true, war_result: true,
         cwl_alerts_enabled: true, cwl_round_start: false, cwl_missing_1h: true,
-        cwl_missing_15m: true, cwl_round_end: true,
+        cwl_missing_15m: true, cwl_3star: true, cwl_round_end: true,
+        cwl_prep_next: true, cwl_season_start: true, cwl_standings: true,
         capital_raids_enabled: false, clan_activity_enabled: false,
       }, uid).catch(() => {});
       await replyTransient(

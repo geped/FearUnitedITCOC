@@ -261,8 +261,10 @@ const NOTIF_BOOL_KEYS = [
   'war_prep_start', 'war_start_alert', 'war_missing_4h', 'war_missing_1h',
   'war_missing_15m', 'war_3star', 'war_result',
   // CWL
-  'cwl_prep_start', 'cwl_round_start', 'cwl_missing_4h', 'cwl_missing_1h',
-  'cwl_missing_15m', 'cwl_round_end', 'cwl_end',
+  'cwl_prep_start', 'cwl_prep_next', 'cwl_roster_reminder',
+  'cwl_round_start', 'cwl_missing_4h', 'cwl_missing_1h',
+  'cwl_missing_15m', 'cwl_3star', 'cwl_round_end',
+  'cwl_season_start', 'cwl_standings', 'cwl_end',
   'cwl_league_promotion', 'cwl_league_demotion',
   // Raid Capitale
   'raid_start', 'raid_district_destroyed', 'raid_clan_cleared',

@@ -107,3 +107,36 @@ test('villagesNotThreeStarred: entrambi i lati', () => {
   assert.ok(opp.some((v) => v.name === 'Opp2' && v.bestStars === 0));
   assert.equal(opp.filter((v) => v.name === 'CYCLONE99').length, 0);
 });
+
+const { mapCwlRoundToWar, listCwlWarsFromStats } = require('../telegram-bot/lib/cocboard-api');
+
+test('mapCwlRoundToWar: roundNumber, TH e destruction', () => {
+  const war = mapCwlRoundToWar({
+    roundNumber: 3,
+    state: 'inWar',
+    teamSize: 15,
+    attacksPerMember: 1,
+    endTime: '20260802T120000.000Z',
+    startTime: '20260801T120000.000Z',
+    clan: {
+      name: 'Fear',
+      tag: '#AAA',
+      stars: 10,
+      destruction: 80.5,
+      members: [{ tag: '#P1', name: 'A', thLevel: 18, mapPosition: 1, attacks: [] }],
+    },
+    opponent: {
+      name: 'Opp',
+      tag: '#BBB',
+      stars: 8,
+      destruction: 70,
+      members: [],
+    },
+  }, 7);
+  assert.equal(war.warType, 'cwl');
+  assert.equal(war.roundNumber, 3);
+  assert.equal(war.totalRounds, 7);
+  assert.equal(war.clan.destructionPercentage, 80.5);
+  assert.equal(war.clan.members[0].townHallLevel, 18);
+  assert.equal(listCwlWarsFromStats({ roundsData: [{ state: 'preparation', roundNumber: 1 }] }).length, 1);
+});

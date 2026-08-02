@@ -43,12 +43,17 @@ const CATEGORIES = [
     name: 'CWL',
     master: 'cwl_alerts_enabled',
     flags: [
+      { key: 'cwl_season_start',     label: 'Inizio stagione / gruppo' },
       { key: 'cwl_prep_start',       label: 'Preparazione round' },
-      { key: 'cwl_round_start',      label: 'Inizio round' },
+      { key: 'cwl_prep_next',        label: 'Prep turno successivo (overlap)' },
+      { key: 'cwl_roster_reminder',  label: 'Promemoria roster (~6h)' },
+      { key: 'cwl_round_start',      label: 'Inizio round (battle)' },
       { key: 'cwl_missing_4h',       label: 'Avviso 4 ore prima fine' },
       { key: 'cwl_missing_1h',       label: 'Avviso 1 ora prima fine' },
       { key: 'cwl_missing_15m',      label: 'Avviso 15 min prima fine' },
+      { key: 'cwl_3star',            label: 'Round perfetto (tutte 3★)' },
       { key: 'cwl_round_end',        label: 'Fine round (recap)' },
+      { key: 'cwl_standings',        label: 'Classifica gruppo post-round' },
       { key: 'cwl_end',              label: 'Fine stagione CWL' },
       { key: 'cwl_league_promotion', label: 'Promozione lega' },
       { key: 'cwl_league_demotion',  label: 'Retrocessione lega' },
@@ -146,16 +151,30 @@ const FLAG_EXAMPLES = {
     '🔥 <b>Serie vittorie!</b>\n' +
     'Il clan è ora a <b>29</b> vittorie consecutive.',
 
+  cwl_season_start:
+    '🏆 <b>CWL iniziata!</b>\n' +
+    'Lega: <b>Master I</b> · 15v15 · 8 clan nel gruppo\n' +
+    'Stagione: <b>2026-08-02</b>',
   cwl_prep_start:
-    '🛡 <b>🏆 CWL – Preparazione</b>\n' +
+    '🛡 <b>🏆 CWL – Preparazione · Turno 1/7</b>\n' +
     'Fear United IT vs GOLDEN MYA\n' +
     'Gli attacchi inizieranno presto.',
+  cwl_prep_next:
+    '🛡 <b>🏆 CWL – Prep turno successivo · Turno 4/7</b>\n' +
+    'Avversario: <b>Enemy Clan X</b>\n' +
+    'La battle del turno precedente è ancora in corso.\n' +
+    'Scegli il roster e riempi i CC per il prossimo round.',
+  cwl_roster_reminder:
+    '📋 <b>CWL · Prep · Turno 4/7</b>\n' +
+    'Mancano ~<b>5h 40m</b> alla battle vs <b>Enemy Clan X</b>.\n' +
+    'Linea attuale: <b>14/15</b> — conferma i partecipanti.',
   cwl_round_start:
-    '🏆 CWL – Round iniziato!\n' +
+    '🏆 CWL – Round iniziato! · Turno 3/7\n' +
     'Fear United IT vs GOLDEN MYA\n' +
-    'Avete <b>23h 55m</b> per attaccare!',
+    'Avete <b>23h 55m</b> per attaccare!\n' +
+    '1 attacco a persona.',
   cwl_missing_4h:
-    '🏆 CWL · <b>Fear United IT</b> vs <b>GOLDEN MYA</b>\n' +
+    '🏆 CWL · <b>Fear United IT</b> vs <b>GOLDEN MYA</b> · Turno 3/7\n' +
     '<b>⏰ 4 ore rimanenti</b>\n' +
     '📊 Stato attuale: <b>38★</b> (96.0%) vs <b>31★</b> (88.2%)\n\n' +
     '<b>Attacchi mancanti (noi):</b>\n' +
@@ -164,22 +183,31 @@ const FLAG_EXAMPLES = {
     '<b>Villaggi non 3★ (avversari):</b>\n' +
     '• #6 nayza maung TH18 · 2★',
   cwl_missing_1h:
-    '🏆 CWL · <b>Fear United IT</b> vs <b>GOLDEN MYA</b>\n' +
+    '🏆 CWL · <b>Fear United IT</b> vs <b>GOLDEN MYA</b> · Turno 3/7\n' +
     '<b>⏰ 1 ora rimanente</b>\n' +
     '📊 Stato attuale: <b>41★</b> (98.0%) vs <b>34★</b> (90.1%)\n\n' +
     '<b>Attacchi mancanti (noi):</b>\n' +
     '• #15 Gianni TH17 (1 att.)',
   cwl_missing_15m:
-    '🏆 CWL · <b>Fear United IT</b> vs <b>GOLDEN MYA</b>\n' +
+    '🏆 CWL · <b>Fear United IT</b> vs <b>GOLDEN MYA</b> · Turno 3/7\n' +
     '<b>⏰ 15 minuti rimanenti</b>\n' +
     '📊 Stato attuale: <b>42★</b> (99.0%) vs <b>36★</b> (92.0%)\n\n' +
     '✅ Tutti i nostri giocatori hanno completato gli attacchi!\n\n' +
     '<b>Villaggi non 3★ (avversari):</b>\n' +
     '• #12 Thant Zin TH18 · 2★',
+  cwl_3star:
+    '⭐⭐⭐ <b>Round CWL Perfetto! · Turno 3/7</b>\n' +
+    'Fear United IT ha 3 stelle su tutti i villaggi del round! 🎉',
   cwl_round_end:
-    '📣 <b>🏆 Recap round CWL</b>\n' +
+    '📣 <b>🏆 Recap round CWL · Turno 3/7</b>\n' +
     '🏆 Vittoria · 42★ vs 36★ · 99.0% vs 92.0%\n' +
     '✅ Tutti hanno completato gli attacchi.',
+  cwl_standings:
+    '📊 <b>CWL · Classifica gruppo · Turno 3/7</b>\n' +
+    '1. <b>Fear United IT</b> — 6⭐ (3W)\n' +
+    '2. <b>GOLDEN MYA</b> — 4⭐ (2W)\n' +
+    '3. <b>Enemy Clan X</b> — 4⭐ (2W)\n' +
+    '4. <b>Other Clan</b> — 2⭐ (1W)',
   cwl_end:
     '🏁 <b>Stagione CWL terminata</b>\n' +
     'Stagione: <b>2026-08-02</b>',
@@ -247,7 +275,7 @@ const FLAG_EXAMPLES = {
     '• #5 PlayerY TH17 (1 att.)\n\n' +
     '<i>Stesso formato degli avvisi fissi 4h/1h/15m, con la soglia che hai scelto.</i>',
   custom_cwl:
-    '🏆 CWL · <b>Fear United IT</b> vs <b>GOLDEN MYA</b>\n' +
+    '🏆 CWL · <b>Fear United IT</b> vs <b>GOLDEN MYA</b> · Turno 3/7\n' +
     '<b>⏰ 45m alla fine del round</b>\n' +
     '📊 Stato attuale: <b>40★</b> (97.5%) vs <b>33★</b> (90.0%)\n\n' +
     '<b>Attacchi mancanti (noi):</b>\n' +

@@ -48,6 +48,58 @@ async function warLog(clanTag) {
   return fetchJson('/api/war-log', { clanTag });
 }
 
+/** Converte un round di cwl-stats nel formato “war” usato dalle notifiche. */
+function mapCwlRoundToWar(round, totalRounds = 7) {
+  if (!round || !round.state) return null;
+  const mapMembers = (members) =>
+    (Array.isArray(members) ? members : []).map((m) => ({
+      name: m?.name,
+      tag: m?.tag,
+      mapPosition: m?.mapPosition ?? null,
+      townHallLevel: m?.thLevel ?? m?.townHallLevel ?? m?.townhallLevel ?? null,
+      attacks: (Array.isArray(m?.attacks) ? m.attacks : []).map((a) => ({
+        stars: Number(a?.stars || 0),
+        destructionPercentage: Number(a?.destruction ?? a?.destructionPercentage ?? 0),
+        defenderTag: a?.defenderTag || null,
+      })),
+    }));
+  const n = Number(round.roundNumber);
+  return {
+    state: round.state === 'ended' ? 'warEnded' : round.state,
+    warType: 'cwl',
+    roundNumber: Number.isFinite(n) && n > 0 ? n : null,
+    totalRounds: Number(totalRounds) || 7,
+    teamSize: Number(round.teamSize || 0),
+    attacksPerMember: Number(round.attacksPerMember || 1),
+    endTime: round.endTime || null,
+    startTime: round.startTime || null,
+    preparationStartTime: round.preparationStartTime || null,
+    clan: {
+      name: round?.clan?.name || '',
+      tag: round?.clan?.tag || null,
+      stars: Number(round?.clan?.stars || 0),
+      destructionPercentage: Number(round?.clan?.destruction ?? round?.clan?.destructionPercentage ?? 0),
+      members: mapMembers(round?.clan?.members),
+    },
+    opponent: {
+      name: round?.opponent?.name || '',
+      tag: round?.opponent?.tag || null,
+      stars: Number(round?.opponent?.stars || 0),
+      destructionPercentage: Number(
+        round?.opponent?.destruction ?? round?.opponent?.destructionPercentage ?? 0,
+      ),
+      members: mapMembers(round?.opponent?.members),
+    },
+  };
+}
+
+/** Tutte le guerre CWL della stagione corrente (prep / inWar / ended). */
+function listCwlWarsFromStats(cwl) {
+  const rounds = Array.isArray(cwl?.roundsData) ? cwl.roundsData : [];
+  const total = rounds.length || 7;
+  return rounds.map((r) => mapCwlRoundToWar(r, total)).filter(Boolean);
+}
+
 async function currentWar(clanTag) {
   const war = await fetchJson('/api/lookup', { type: 'current-war', clanTag });
   // In alcuni casi l'endpoint current-war non espone correttamente il round CWL:
@@ -56,48 +108,13 @@ async function currentWar(clanTag) {
   if (state && state !== 'notInWar') return war;
 
   const cwl = await cwlStats(clanTag).catch(() => null);
-  const rounds = Array.isArray(cwl?.roundsData) ? cwl.roundsData : [];
-  if (!rounds.length) return war;
+  const wars = listCwlWarsFromStats(cwl);
+  if (!wars.length) return war;
 
   const active =
-    rounds.find((r) => r && (r.state === 'inWar' || r.state === 'preparation')) ||
-    rounds[rounds.length - 1];
-  if (!active || !active.state) return war;
-
-  const mapMembers = (members) =>
-    (Array.isArray(members) ? members : []).map((m) => ({
-      name: m?.name,
-      tag: m?.tag,
-      attacks: (Array.isArray(m?.attacks) ? m.attacks : []).map((a) => ({
-        stars: Number(a?.stars || 0),
-        destructionPercentage: Number(a?.destruction ?? 0),
-        defenderTag: a?.defenderTag || null,
-      })),
-    }));
-
-  return {
-    state: active.state,
-    warType: 'cwl',
-    teamSize: Number(active.teamSize || 0),
-    attacksPerMember: Number(active.attacksPerMember || 1),
-    endTime: active.endTime || null,
-    startTime: active.startTime || null,
-    preparationStartTime: active.preparationStartTime || null,
-    clan: {
-      name: active?.clan?.name || '',
-      tag: active?.clan?.tag || null,
-      stars: Number(active?.clan?.stars || 0),
-      destructionPercentage: Number(active?.clan?.destruction || 0),
-      members: mapMembers(active?.clan?.members),
-    },
-    opponent: {
-      name: active?.opponent?.name || '',
-      tag: active?.opponent?.tag || null,
-      stars: Number(active?.opponent?.stars || 0),
-      destructionPercentage: Number(active?.opponent?.destruction || 0),
-      members: mapMembers(active?.opponent?.members),
-    },
-  };
+    wars.find((r) => r && (r.state === 'inWar' || r.state === 'preparation')) ||
+    wars[wars.length - 1];
+  return active || war;
 }
 
 async function capitalRaids(clanTag) {
@@ -167,6 +184,8 @@ module.exports = {
   cwlStats,
   warLog,
   currentWar,
+  mapCwlRoundToWar,
+  listCwlWarsFromStats,
   capitalRaids,
   saveWar,
   lookupPlayer,

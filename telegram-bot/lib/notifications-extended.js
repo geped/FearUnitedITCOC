@@ -212,6 +212,13 @@ async function sendToChat(telegram, chatId, text, onStale) {
   }
 }
 
+function cwlTurnLabel(war) {
+  const n = Number(war?.roundNumber);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const total = Number(war?.totalRounds) || 7;
+  return ` · Turno ${n}/${total}`;
+}
+
 function buildWarAlertMsg(war, missing, isCwl, timeLabel) {
   const label = isCwl ? '🏆 CWL' : '⚔️ Guerra';
   const cn    = fmt.escapeHtml(war?.clan?.name || '');
@@ -220,7 +227,8 @@ function buildWarAlertMsg(war, missing, isCwl, timeLabel) {
   const os    = Number(war?.opponent?.stars || 0);
   const cd    = Number(war?.clan?.destructionPercentage || 0).toFixed(1);
   const od    = Number(war?.opponent?.destructionPercentage || 0).toFixed(1);
-  const hdr   = `${label} · <b>${cn}</b> vs <b>${on}</b>\n<b>${timeLabel}</b>`;
+  const turn  = isCwl ? cwlTurnLabel(war) : '';
+  const hdr   = `${label} · <b>${cn}</b> vs <b>${on}</b>${turn}\n<b>${timeLabel}</b>`;
   const score = `📊 Stato attuale: <b>${cs}★</b> (${cd}%) vs <b>${os}★</b> (${od}%)`;
 
   const missOurs = missing || missingAttacks(war, 'clan');
@@ -249,7 +257,8 @@ function buildWarAlertMsg(war, missing, isCwl, timeLabel) {
 function buildWarFinalMsg(war, isCwl, streakInfo) {
   const c    = war?.clan || {};
   const o    = war?.opponent || {};
-  const lbl  = isCwl ? '🏆 Recap round CWL' : '⚔️ Recap guerra';
+  const turn = isCwl ? cwlTurnLabel(war) : '';
+  const lbl  = isCwl ? `🏆 Recap round CWL${turn}` : '⚔️ Recap guerra';
   const out  = warOutcome(war);
   const miss = missingAttacks(war, 'clan');
   let body   = `📣 <b>${lbl}</b>\n${out} · ${c.stars||0}★ vs ${o.stars||0}★ · ${Number(c.destructionPercentage||0).toFixed(1)}% vs ${Number(o.destructionPercentage||0).toFixed(1)}%`;
@@ -262,6 +271,21 @@ function buildWarFinalMsg(war, isCwl, streakInfo) {
     body += `\n\n🔥 <b>Serie vittorie!</b>\nIl clan è ora a <b>${Number(streakInfo.streak)}</b> vittorie consecutive.`;
   }
   return body;
+}
+
+function buildCwlStandingsMsg(cwl, war) {
+  const rows = Array.isArray(cwl?.groupStandings) ? cwl.groupStandings : [];
+  const turn = cwlTurnLabel(war);
+  const lines = rows.slice(0, 8).map((c, i) => {
+    const name = fmt.escapeHtml(c?.name || '—');
+    const stars = Number(c?.stars || 0);
+    const wars = Number(c?.warCount || 0);
+    return `${i + 1}. <b>${name}</b> — ${stars}⭐ (${wars}W)`;
+  });
+  if (!lines.length) {
+    return `📊 <b>CWL · Classifica gruppo${turn}</b>\n<i>Dati classifica non disponibili.</i>`;
+  }
+  return `📊 <b>CWL · Classifica gruppo${turn}</b>\n${lines.join('\n')}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -293,144 +317,214 @@ async function runExtendedWarAlerts(bot, sb) {
     }
   }
   // Pulizia memoria
-  if (warStateMem.size > 500) {
+  if (warStateMem.size > 800) {
     const k = warStateMem.keys().next();
     if (!k.done) warStateMem.delete(k.value);
   }
 }
 
-async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
-  const notif = await sb.getChatNotificationSettings(chatId).catch(() => ({}));
-  const custom = await sb.getChatCustomAlertSettings(chatId).catch(() => ({}));
+async function _cwlSeasonAlerts(telegram, chatId, clanTag, sb, notif, cwl) {
+  const key = `${chatId}:${clanTag}`;
+  const prev = cwlSeasonMem.get(key) || { season: null, state: 'unknown', leagueNameEn: null, sent: new Set() };
+  const sent = prev.sent;
+  const curSeason = String(cwl?.season || '');
+  const curState = String(cwl?.state || '');
+  const curLeague = String(cwl?.leagueNameEn || cwl?.leagueNameIt || '');
+  const send = (text) => sendToChat(telegram, chatId, text, () => sb.deleteTelegramChatLink(chatId));
 
-  // ── CWL stagione/lega (alert cwl_end + promo/retro) ─────────────────────
-  if (notif?.cwl_alerts_enabled === true) {
-    try {
-      const cwl = await getCachedCwlStats(clanTag);
-      const key = `${chatId}:${clanTag}`;
-      const prev = cwlSeasonMem.get(key) || { season: null, state: 'unknown', leagueNameEn: null, sent: new Set() };
-      const sent = prev.sent;
-      const curSeason = String(cwl?.season || '');
-      const curState = String(cwl?.state || '');
-      const curLeague = String(cwl?.leagueNameEn || '');
-      const send = (text) => sendToChat(telegram, chatId, text, () => sb.deleteTelegramChatLink(chatId));
+  const wasInactive =
+    !prev.state ||
+    prev.state === 'unknown' ||
+    prev.state === 'notInWar' ||
+    prev.state === 'ended';
+  const isActive =
+    curState &&
+    curState !== 'notInWar' &&
+    curState !== 'ended' &&
+    curState !== 'unknown';
+  const newSeason = curSeason && prev.season && prev.season !== curSeason;
 
-      // Fine stagione CWL
-      if (
-        notif.cwl_end === true &&
-        prev.state &&
-        prev.state !== 'unknown' &&
-        prev.state !== 'notInWar' &&
-        prev.state !== 'ended' &&
-        curState === 'ended'
-      ) {
-        const endKey = `cwl_end:${curSeason || prev.season || 'na'}`;
-        if (!sent.has(endKey)) {
-          sent.add(endKey);
-          await send(`🏁 <b>Stagione CWL terminata</b>\nStagione: <b>${fmt.escapeHtml(curSeason || '—')}</b>`);
-        }
-      }
-
-      // Cambio lega (promozione / retrocessione)
-      const prevRank = leagueRank(prev.leagueNameEn);
-      const curRank = leagueRank(curLeague);
-      if (prevRank > 0 && curRank > 0 && prevRank !== curRank) {
-        const lk = `cwl_league:${curSeason || 'na'}:${curLeague}`;
-        if (!sent.has(lk)) {
-          sent.add(lk);
-          if (curRank > prevRank && notif.cwl_league_promotion === true) {
-            await send(`📈 <b>Promozione CWL</b>\nNuova lega: <b>${fmt.escapeHtml(curLeague)}</b>`);
-          } else if (curRank < prevRank && notif.cwl_league_demotion === true) {
-            await send(`📉 <b>Retrocessione CWL</b>\nNuova lega: <b>${fmt.escapeHtml(curLeague)}</b>`);
-          }
-        }
-      }
-
-      cwlSeasonMem.set(key, {
-        season: curSeason || prev.season || null,
-        state: curState || prev.state || 'unknown',
-        leagueNameEn: curLeague || prev.leagueNameEn || null,
-        sent,
-      });
-    } catch (_) {
-      // Non bloccare il flusso principale notifiche guerra
+  if (
+    notif.cwl_season_start === true &&
+    ((wasInactive && isActive) || newSeason) &&
+    curSeason
+  ) {
+    const sk = `season_start:${curSeason}`;
+    if (!sent.has(sk)) {
+      sent.add(sk);
+      const league = fmt.escapeHtml(cwl?.leagueNameIt || cwl?.leagueNameEn || '—');
+      const size = Number(cwl?.teamSize || 15);
+      const clans = Array.isArray(cwl?.groupStandings) ? cwl.groupStandings.length : 8;
+      await send(
+        `🏆 <b>CWL iniziata!</b>\n` +
+        `Lega: <b>${league}</b> · ${size}v${size} · ${clans} clan nel gruppo\n` +
+        `Stagione: <b>${fmt.escapeHtml(curSeason)}</b>`,
+      );
     }
   }
 
-  const war   = await api.currentWar(clanTag);
+  if (
+    notif.cwl_end === true &&
+    prev.state &&
+    prev.state !== 'unknown' &&
+    prev.state !== 'notInWar' &&
+    prev.state !== 'ended' &&
+    curState === 'ended'
+  ) {
+    const endKey = `cwl_end:${curSeason || prev.season || 'na'}`;
+    if (!sent.has(endKey)) {
+      sent.add(endKey);
+      await send(`🏁 <b>Stagione CWL terminata</b>\nStagione: <b>${fmt.escapeHtml(curSeason || prev.season || '—')}</b>`);
+    }
+  }
+
+  const prevRank = leagueRank(prev.leagueNameEn);
+  const curRank = leagueRank(curLeague);
+  if (prevRank > 0 && curRank > 0 && prevRank !== curRank) {
+    const lk = `cwl_league:${curSeason || 'na'}:${curLeague}`;
+    if (!sent.has(lk)) {
+      sent.add(lk);
+      if (curRank > prevRank && notif.cwl_league_promotion === true) {
+        await send(`📈 <b>Promozione CWL</b>\nNuova lega: <b>${fmt.escapeHtml(curLeague)}</b>`);
+      } else if (curRank < prevRank && notif.cwl_league_demotion === true) {
+        await send(`📉 <b>Retrocessione CWL</b>\nNuova lega: <b>${fmt.escapeHtml(curLeague)}</b>`);
+      }
+    }
+  }
+
+  cwlSeasonMem.set(key, {
+    season: curSeason || prev.season || null,
+    state: curState || prev.state || 'unknown',
+    leagueNameEn: curLeague || prev.leagueNameEn || null,
+    sent,
+  });
+}
+
+/**
+ * Processa una singola guerra (classica o un round CWL).
+ * Mem key per-guerra: permette overlap prep+battle senza perdere stato.
+ */
+async function _processSingleWarAlerts({
+  telegram, chatId, clanTag, sb, notif, custom, war, isCwl, overlapPrep, cwl,
+}) {
+  if (!war) return;
   const state = String(war?.state || '');
-  const isCwl = String(war?.warType || '').toLowerCase() === 'cwl';
-
-  const masterOn = isCwl ? notif?.cwl_alerts_enabled === true : notif?.war_alerts_enabled === true;
-
-  const memKey  = `${chatId}:${clanTag}`;
-  const prevMem = warStateMem.get(memKey) || { state: 'unknown', endTime: null, sent: new Set() };
-  const sent    = prevMem.sent; // Set persistente tra cicli per questa guerra
-
-  // Aggiorna stato in memoria
-  const updatedMem = { state: state || 'notInWar', endTime: war?.endTime ?? null, sent };
-  warStateMem.set(memKey, updatedMem);
-
   if (!state || state === 'notInWar') return;
-  if (!masterOn) return;
 
-  const now     = Date.now();
+  const warId = war.endTime || `r${war.roundNumber || 0}`;
+  const memKey = `${chatId}:${clanTag}:${warId}`;
+  const prevMem = warStateMem.get(memKey) || { state: 'unknown', endTime: null, sent: new Set() };
+  const sent = prevMem.sent;
+
+  warStateMem.set(memKey, { state: state || 'notInWar', endTime: war?.endTime ?? null, sent });
+
+  const now = Date.now();
   const endDate = parseCocTime(war?.endTime);
-  const leftMs  = endDate ? endDate.getTime() - now : Infinity;
-  const noisy   = prevMem.state !== 'unknown'; // true = bot era già in esecuzione, non primo ciclo
+  const leftMs = endDate ? endDate.getTime() - now : Infinity;
+  const noisy = prevMem.state !== 'unknown';
+  const turn = isCwl ? cwlTurnLabel(war) : '';
 
-  // ── Primo ciclo dopo restart: pre-segna notifiche già avvenute (pattern identico ai raid) ──
-  // Evita di reinviare avvisi che erano già stati mandati prima del deploy.
   if (!noisy && war?.endTime) {
     const endDate0 = parseCocTime(war.endTime);
     if (state === 'preparation') {
       sent.add('prep:' + war.endTime);
+      sent.add('prep_next:' + war.endTime);
+      const start0 = parseCocTime(war.startTime);
+      if (start0) {
+        const minsToStart = Math.ceil((start0.getTime() - Date.now()) / 60000);
+        if (minsToStart <= 360) sent.add('roster:' + war.endTime);
+      }
     }
     if (state === 'inWar') {
-      // Evita spam su riavvii/nuovi container: se il bot riparte a guerra già
-      // iniziata non reinvia l'avviso "round/guerra iniziato".
       sent.add('start:' + war.endTime);
       if (endDate0) {
         const mins0 = Math.ceil((endDate0.getTime() - Date.now()) / 60000);
         if (mins0 <= 240) sent.add('4h:' + war.endTime);
-        if (mins0 <= 60)  sent.add('1h:' + war.endTime);
-        if (mins0 <= 15)  sent.add('15m:' + war.endTime);
+        if (mins0 <= 60) sent.add('1h:' + war.endTime);
+        if (mins0 <= 15) sent.add('15m:' + war.endTime);
+        if (custom) {
+          const lead = isCwl
+            ? Number(custom.cwl_lead_minutes || 0)
+            : Number(custom.war_lead_minutes || 0);
+          if (lead > 0 && mins0 <= lead) sent.add(`custom:${lead}:${war.endTime}`);
+        }
       }
-      // Guerra perfetta già raggiunta: non riaprire
       const ts0 = war.teamSize || 0;
       if (ts0 > 0 && (war?.clan?.stars || 0) >= ts0 * 3) {
         sent.add('3star:' + war.endTime);
       }
     }
-    if (state === 'warEnded') {
+    if (state === 'warEnded' || state === 'ended') {
       sent.add('final:' + war.endTime);
+      sent.add('standings:' + war.endTime);
     }
-    return; // primo ciclo: solo inizializzazione stato, niente notifiche
+    return;
   }
 
   const send = (text) => sendToChat(telegram, chatId, text, () => sb.deleteTelegramChatLink(chatId));
 
-  // ── Transizione: preparazione ────────────────────────────────────────────
+  // ── Preparazione ─────────────────────────────────────────────────────────
   if (state === 'preparation') {
     const isNew = prevMem.state !== 'preparation' || prevMem.endTime !== war.endTime;
     if (noisy && isNew) {
-      const key = `prep:${war.endTime}`;
-      if (!sent.has(key)) {
-        sent.add(key);
-        if (isCwl ? notif.cwl_prep_start === true : notif.war_prep_start === true) {
+      const cn = fmt.escapeHtml(war?.clan?.name || 'Il nostro clan');
+      const on = fmt.escapeHtml(war?.opponent?.name || 'Avversario');
+      if (overlapPrep && notif.cwl_prep_next === true) {
+        const key = `prep_next:${war.endTime}`;
+        if (!sent.has(key)) {
+          sent.add(key);
+          sent.add(`prep:${war.endTime}`); // evita doppio con prep_start
+          await send(
+            `🛡 <b>🏆 CWL – Prep turno successivo${turn}</b>\n` +
+            `Avversario: <b>${on}</b>\n` +
+            `La battle del turno precedente è ancora in corso.\n` +
+            `Scegli il roster e riempi i CC per il prossimo round.`,
+          );
+        }
+      } else if ((isCwl ? notif.cwl_prep_start === true : notif.war_prep_start === true)) {
+        const key = `prep:${war.endTime}`;
+        if (!sent.has(key)) {
+          sent.add(key);
           const lbl = isCwl ? '🏆 CWL' : '⚔️ Guerra Classica';
-          const cn  = fmt.escapeHtml(war?.clan?.name || 'Il nostro clan');
-          const on  = fmt.escapeHtml(war?.opponent?.name || 'Avversario');
-          await send(`🛡 <b>${lbl} – Preparazione</b>\n${cn} vs ${on}\nGli attacchi inizieranno presto.`);
+          await send(
+            `🛡 <b>${lbl} – Preparazione${turn}</b>\n` +
+            `${cn} vs ${on}\n` +
+            `Gli attacchi inizieranno presto.`,
+          );
+        }
+      }
+    }
+
+    // Promemoria roster ~6h prima dell'inizio battle (solo CWL)
+    if (isCwl && notif.cwl_roster_reminder === true) {
+      const startDate = parseCocTime(war.startTime);
+      if (startDate) {
+        const untilStart = startDate.getTime() - now;
+        const minsToStart = Math.ceil(untilStart / 60000);
+        if (minsToStart <= 360 && minsToStart > 0) {
+          const key = `roster:${war.endTime}`;
+          if (!sent.has(key)) {
+            sent.add(key);
+            const on = fmt.escapeHtml(war?.opponent?.name || 'Avversario');
+            const size = Number(war.teamSize || 0);
+            const lined = Array.isArray(war?.clan?.members) ? war.clan.members.length : 0;
+            const rosterHint =
+              size > 0 && lined > 0 && lined < size
+                ? `\nLinea attuale: <b>${lined}/${size}</b> — conferma i partecipanti.`
+                : `\nRicorda: conferma i ${size || 15} in linea e i CC di difesa.`;
+            await send(
+              `📋 <b>CWL · Prep${turn}</b>\n` +
+              `Mancano ~<b>${msLabel(untilStart)}</b> alla battle vs <b>${on}</b>.` +
+              rosterHint,
+            );
+          }
         }
       }
     }
   }
 
-  // ── Transizione: guerra iniziata ─────────────────────────────────────────
+  // ── Guerra / round in corso ──────────────────────────────────────────────
   if (state === 'inWar') {
-    // Avvisa "round/guerra iniziato" solo sulla transizione reale
-    // preparation -> inWar per evitare doppi invii su restart/ricampionamenti.
     const justStarted = prevMem.state === 'preparation' && prevMem.endTime === war.endTime;
     if (noisy && justStarted) {
       const key = `start:${war.endTime}`;
@@ -438,15 +532,15 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
         sent.add(key);
         const flagStart = isCwl ? notif.cwl_round_start : notif.war_start_alert;
         if (flagStart === true) {
-          const lbl = isCwl ? '🏆 CWL – Round iniziato!' : '⚔️ Guerra iniziata!';
-          const cn  = fmt.escapeHtml(war?.clan?.name || '');
-          const on  = fmt.escapeHtml(war?.opponent?.name || '');
-          await send(`${lbl}\n${cn} vs ${on}\nAvete <b>${msLabel(leftMs)}</b> per attaccare!`);
+          const lbl = isCwl ? `🏆 CWL – Round iniziato!${turn}` : '⚔️ Guerra iniziata!';
+          const cn = fmt.escapeHtml(war?.clan?.name || '');
+          const on = fmt.escapeHtml(war?.opponent?.name || '');
+          const atkHint = isCwl ? '\n1 attacco a persona.' : '';
+          await send(`${lbl}\n${cn} vs ${on}\nAvete <b>${msLabel(leftMs)}</b> per attaccare!${atkHint}`);
         }
       }
     }
 
-    // ── Avvisi basati sul tempo rimanente ──────────────────────────────────
     if (endDate && leftMs > 0) {
       const mins = Math.ceil(leftMs / 60000);
       const miss = missingAttacks(war);
@@ -479,7 +573,6 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
         }
       }
 
-      // ── Alert personalizzato (ore/minuti configurabili) ──────────────────
       const cfg = isCwl
         ? {
             enabled: custom?.cwl_enabled === true,
@@ -495,12 +588,14 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
         const key = `custom:${cfg.lead}:${war.endTime}`;
         if (mins <= cfg.lead && !sent.has(key)) {
           sent.add(key);
-          await send(buildWarAlertMsg(war, miss, isCwl, `⏰ ${leadLabel(cfg.lead)} alla fine del round`));
+          const lbl = isCwl
+            ? `⏰ ${leadLabel(cfg.lead)} alla fine del round`
+            : `⏰ ${leadLabel(cfg.lead)} alla fine della guerra`;
+          await send(buildWarAlertMsg(war, miss, isCwl, lbl));
         }
       }
 
-      // ── Guerra/round perfetto (3 stelle su tutti) ──────────────────────
-      const perfectEnabled = isCwl ? notif.cwl_round_end === true : notif.war_3star === true;
+      const perfectEnabled = isCwl ? notif.cwl_3star === true : notif.war_3star === true;
       if (perfectEnabled) {
         const ts = war.teamSize || 0;
         if (ts > 0 && (war?.clan?.stars || 0) >= ts * 3) {
@@ -509,7 +604,10 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
             sent.add(key);
             const cn = fmt.escapeHtml(war?.clan?.name || 'Il nostro clan');
             if (isCwl) {
-              await send(`⭐⭐⭐ <b>Round CWL Perfetto!</b>\n${cn} ha 3 stelle su tutti i villaggi del round! 🎉`);
+              await send(
+                `⭐⭐⭐ <b>Round CWL Perfetto!${turn}</b>\n` +
+                `${cn} ha 3 stelle su tutti i villaggi del round! 🎉`,
+              );
             } else {
               await send(`⭐⭐⭐ <b>Guerra Perfetta!</b>\n${cn} ha 3 stelle su tutti i villaggi! 🎉`);
             }
@@ -519,22 +617,21 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
     }
   }
 
-  // ── Recap finale ─────────────────────────────────────────────────────────
-  if (state === 'warEnded' || (endDate && endDate.getTime() <= now)) {
+  // ── Recap + classifica ───────────────────────────────────────────────────
+  const ended = state === 'warEnded' || state === 'ended' || (endDate && endDate.getTime() <= now && state !== 'preparation');
+  if (ended && state !== 'preparation') {
     const key = `final:${war.endTime}`;
     if (!sent.has(key)) {
       sent.add(key);
       if ((isCwl ? notif.cwl_round_end : notif.war_result) === true) {
         let streakInfo = null;
         const won = warOutcome(war).includes('Vittoria');
-        // Serie vittorie: stesso messaggio del recap (solo guerre classiche + flag attivo)
         if (!isCwl && won && notif.clan_activity_enabled === true && notif.clan_war_streak === true) {
           try {
             const info = await api.clanInfo(clanTag);
             const streak = Number(info?.warWinStreak);
             if (Number.isFinite(streak) && streak > 0) {
               streakInfo = { won: true, streak };
-              // Evita doppio messaggio dal poller attività clan
               const snap = clanStateMem.get(clanTag) || {};
               clanStateMem.set(clanTag, { ...snap, warWinStreak: streak, streakAnnouncedAt: streak });
             }
@@ -542,10 +639,75 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
         }
         await send(buildWarFinalMsg(war, isCwl, streakInfo));
       }
-      // Salvataggio automatico (solo guerre classiche)
+      if (isCwl && notif.cwl_standings === true) {
+        const sk = `standings:${war.endTime}`;
+        if (!sent.has(sk)) {
+          sent.add(sk);
+          let stats = cwl;
+          if (!stats?.groupStandings?.length) {
+            stats = await getCachedCwlStats(clanTag).catch(() => null);
+          }
+          await send(buildCwlStandingsMsg(stats, war));
+        }
+      }
       if (!isCwl) {
         api.saveWar(clanTag).catch((e) => console.warn('[notif-war] auto-save', clanTag, e.message));
       }
+    }
+  }
+}
+
+async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
+  const notif = await sb.getChatNotificationSettings(chatId).catch(() => ({}));
+  const custom = await sb.getChatCustomAlertSettings(chatId).catch(() => ({}));
+
+  let cwl = null;
+  if (notif?.cwl_alerts_enabled === true) {
+    try {
+      cwl = await getCachedCwlStats(clanTag);
+      await _cwlSeasonAlerts(telegram, chatId, clanTag, sb, notif, cwl);
+    } catch (_) {
+      // Non bloccare il flusso principale
+    }
+  }
+
+  const war = await api.currentWar(clanTag).catch(() => null);
+  const isCwlCurrent = String(war?.warType || '').toLowerCase() === 'cwl';
+
+  // Guerra classica: solo se current-war non è CWL
+  if (war && !isCwlCurrent && notif?.war_alerts_enabled === true) {
+    await _processSingleWarAlerts({
+      telegram, chatId, clanTag, sb, notif, custom, war, isCwl: false, overlapPrep: false, cwl: null,
+    });
+  }
+
+  // CWL: tutte le guerre attive/terminate della stagione (overlap prep+battle)
+  if (notif?.cwl_alerts_enabled === true) {
+    if (!cwl) {
+      try { cwl = await getCachedCwlStats(clanTag); } catch (_) { cwl = null; }
+    }
+    const wars = api.listCwlWarsFromStats(cwl);
+    const inWarRounds = wars.filter((w) => w.state === 'inWar');
+    const prepRounds = wars.filter((w) => w.state === 'preparation');
+    const endedRounds = wars.filter((w) => w.state === 'warEnded' || w.state === 'ended');
+
+    for (const w of prepRounds) {
+      await _processSingleWarAlerts({
+        telegram, chatId, clanTag, sb, notif, custom, war: w, isCwl: true,
+        overlapPrep: inWarRounds.length > 0, cwl,
+      });
+    }
+    for (const w of inWarRounds) {
+      await _processSingleWarAlerts({
+        telegram, chatId, clanTag, sb, notif, custom, war: w, isCwl: true,
+        overlapPrep: false, cwl,
+      });
+    }
+    for (const w of endedRounds) {
+      await _processSingleWarAlerts({
+        telegram, chatId, clanTag, sb, notif, custom, war: w, isCwl: true,
+        overlapPrep: false, cwl,
+      });
     }
   }
 }
