@@ -56,6 +56,18 @@ const SEASON_CB = String.raw`(\d{4}-\d{2}(?:-\d{2})?)`;
 const bonusWizardByUid = new Map();
 /** Selezione manuale bonus (toggle in memoria → Conferma): uid → { clanTag, season, selected:Set }. */
 const bonusManualByUid = new Map();
+/** Vista CWL “come altro clan” (come openCwlSeasonDetailAsClan sul sito): uid → { tag, name }. */
+const cwlFocusByUid = new Map();
+
+function clearCwlFocus(uid) {
+  if (uid != null) cwlFocusByUid.delete(uid);
+}
+
+function normTagLoose(t) {
+  const s = String(t || '').trim().toUpperCase();
+  if (!s) return '';
+  return s.startsWith('#') ? s : `#${s}`;
+}
 
 let cachedTgBotUsername = (process.env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '');
 /** Traccia l'ultimo messaggio menù per chat (privata + gruppo): consente la cancellazione al re-invio di /cocboard. */
@@ -1925,6 +1937,13 @@ function parseCwlViewKey(raw) {
   if (raw === 'ov') return { view: 'ov', pPage: 0, rIdx: 0 };
   if (raw === 'lg') return { view: 'lg', pPage: 0, rIdx: 0 };
   if (raw === 'g') return { view: 'g', pPage: 0, rIdx: 0 }; // compat
+  if (raw === 'pk:me') return { view: 'lg', pPage: 0, rIdx: 0, peek: 'me' };
+  const pkm = /^pk:(.+)$/.exec(raw);
+  if (pkm) {
+    const rawTag = String(pkm[1] || '').trim();
+    if (/^\d+$/.test(rawTag)) return { view: 'lg', pPage: 0, rIdx: 0, peekIdx: Number(rawTag) };
+    return { view: 'lg', pPage: 0, rIdx: 0, peekTag: normTagLoose(rawTag) };
+  }
   const pm = /^p:(\d+)$/.exec(raw);
   if (pm) return { view: 'p', pPage: Number(pm[1]), rIdx: 0 };
   const rm = /^r:(\d+)$/.exec(raw);
@@ -2055,8 +2074,12 @@ async function loadAndShowWarLive(ctx, clanTag, viewSpec) {
   return { text: formatted.text, kb, data };
 }
 
-function buildCwlNavKb(data, spec, webAppUrl) {
+function buildCwlNavKb(data, spec, webAppUrl, opts = {}) {
   const { view, pPage, rIdx } = spec;
+  const homeTag = normTagLoose(opts.homeTag);
+  const focusTag = normTagLoose(opts.focusTag || homeTag);
+  const isAlien = focusTag && homeTag && focusTag !== homeTag;
+
   if (!data || data.state === 'notInWar') {
     return Markup.inlineKeyboard([[Markup.button.callback('« Menù', 'menu')]]);
   }
@@ -2103,6 +2126,27 @@ function buildCwlNavKb(data, spec, webAppUrl) {
     ]);
   }
 
+  // Esplora altri clan del gruppo (solo tab Lega, come sul web)
+  if (view === 'lg' && Array.isArray(data.groupStandings) && data.groupStandings.length) {
+    const gs = data.groupStandings;
+    for (let i = 0; i < gs.length; i += 2) {
+      const row = [];
+      for (let j = i; j < Math.min(i + 2, gs.length); j++) {
+        const c = gs[j];
+        const tag = normTagLoose(c.tag);
+        const cbTag = tag.replace(/^#/, '');
+        if (!cbTag || cbTag.length > 20) continue;
+        const mark = tag && tag === focusTag ? '👁 ' : '';
+        const label = `${mark}${j + 1}. ${String(c.name || 'Clan').slice(0, 14)}`;
+        row.push(Markup.button.callback(label, `cwl_v:pk:${cbTag}`));
+      }
+      if (row.length) rows.push(row);
+    }
+    if (isAlien) {
+      rows.push([Markup.button.callback('↩ Torna al mio clan', 'cwl_v:pk:me')]);
+    }
+  }
+
   if ((view === 'r' || view === 'ant') && webAppUrl) {
     rows.push([Markup.button.webApp('🌐 Visualizza versione web', webAppUrl)]);
   }
@@ -2111,7 +2155,9 @@ function buildCwlNavKb(data, spec, webAppUrl) {
   return Markup.inlineKeyboard(rows);
 }
 
-async function loadAndShowCwl(ctx, clanTag, viewSpec) {
+async function loadAndShowCwl(ctx, clanTag, viewSpec, opts = {}) {
+  const homeTag = opts.homeTag || clanTag;
+  const focus = opts.focus || null;
   const data = await api.cwlStats(clanTag);
   let webAppUrl = null;
   if (
@@ -2133,8 +2179,16 @@ async function loadAndShowCwl(ctx, clanTag, viewSpec) {
     }
   }
   const formatted = fmt.formatCwlScreen(data, viewSpec.view, viewSpec.pPage, viewSpec.rIdx);
-  const kb = await buildCwlNavKb(data, formatted, webAppUrl);
-  return { text: formatted.text, kb, data };
+  let text = formatted.text;
+  if (focus?.tag && normTagLoose(focus.tag) !== normTagLoose(homeTag)) {
+    const fname = fmt.escapeHtml(String(focus.name || focus.tag).slice(0, 28));
+    text = `👁 <b>Vista clan:</b> ${fname}\n<i>Stesse schede del tuo clan, dal loro punto di vista.</i>\n\n${text}`;
+  }
+  const kb = buildCwlNavKb(data, formatted, webAppUrl, {
+    homeTag,
+    focusTag: focus?.tag || homeTag,
+  });
+  return { text, kb, data };
 }
 
 async function sendCwlMessages(ctx, text, kb) {
@@ -3416,8 +3470,9 @@ function setupBot(bot) {
   bot.command('cwl', async (ctx) => {
     await cmdNeedClan(ctx, async (clanTag) => {
       const chatId = ctx.chat?.id;
+      clearCwlFocus(ctx.from?.id);
       await _deletePrevCwlCmdMsg(ctx.telegram, chatId);
-      const { text, kb } = await loadAndShowCwl(ctx, clanTag, { view: 'lg', pPage: 0, rIdx: 0 });
+      const { text, kb } = await loadAndShowCwl(ctx, clanTag, { view: 'lg', pPage: 0, rIdx: 0 }, { homeTag: clanTag });
       const parts = fmt.chunkForTelegram(text);
       for (let i = 0; i < parts.length; i++) {
         const extra = i === parts.length - 1 ? kb : {};
@@ -4261,6 +4316,7 @@ function setupBot(bot) {
     if (ctx.from?.id != null) {
       pendingCommunity.delete(ctx.from.id);
       resetSupportContextForUser(ctx.from.id);
+      clearCwlFocus(ctx.from.id);
     }
     const sess = await tauth.getValidSession(ctx.from.id);
     if (sess) {
@@ -4276,6 +4332,7 @@ function setupBot(bot) {
 
   bot.action('clan_home', async (ctx) => {
     safeAnswerCb(ctx);
+    clearCwlFocus(ctx.from?.id);
     await renderClanHubMenu(ctx);
   });
 
@@ -4562,6 +4619,7 @@ function setupBot(bot) {
       await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
       return;
     }
+    clearCwlFocus(ctx.from?.id);
     if (ctx.chat?.type === 'private' && ctx.from?.id != null && fs.existsSync(CWL_HEADER_IMAGE_PATH)) {
       const hdr = await ctx.replyWithPhoto(
         { source: fs.createReadStream(CWL_HEADER_IMAGE_PATH) },
@@ -4569,21 +4627,71 @@ function setupBot(bot) {
       ).catch(() => null);
       if (hdr?.message_id) privateUi.notePrivateUiMessage(ctx.from.id, hdr.message_id);
     }
-    const { text, kb } = await loadAndShowCwl(ctx, clanTag, { view: 'lg', pPage: 0, rIdx: 0 });
+    const { text, kb } = await loadAndShowCwl(ctx, clanTag, { view: 'lg', pPage: 0, rIdx: 0 }, { homeTag: clanTag });
     await editOrReplyCwl(ctx, text, kb);
   });
 
   bot.action(/^cwl_v:(.+)$/, async (ctx) => {
     await answerCbLoading(ctx);
-    const clanTag = await resolveEffectiveClanTag(ctx);
-    if (!clanTag) {
+    const homeTag = await resolveEffectiveClanTag(ctx);
+    if (!homeTag) {
       await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
       return;
     }
+    const uid = ctx.from?.id;
     const key = ctx.match[1];
     const spec = parseCwlViewKey(key);
-    const { text, kb } = await loadAndShowCwl(ctx, clanTag, spec);
-    await editOrReplyCwl(ctx, text, kb);
+
+    // Peek altro clan del gruppo (solo CWL live)
+    if (spec.peek === 'me') {
+      clearCwlFocus(uid);
+    } else if (spec.peekTag) {
+      const tTag = normTagLoose(spec.peekTag);
+      if (tTag === normTagLoose(homeTag)) {
+        clearCwlFocus(uid);
+      } else {
+        let name = tTag;
+        try {
+          const base = await api.cwlStats(homeTag);
+          const hit = (base?.groupStandings || []).find((c) => normTagLoose(c.tag) === tTag);
+          if (hit?.name) name = hit.name;
+        } catch (_) {}
+        cwlFocusByUid.set(uid, { tag: tTag, name });
+      }
+    } else if (typeof spec.peekIdx === 'number') {
+      // Compat vecchi pulsanti con indice
+      try {
+        const base = await api.cwlStats(homeTag);
+        const gs = base?.groupStandings || [];
+        const target = gs[spec.peekIdx];
+        if (!target?.tag) {
+          await ctx.answerCbQuery('Clan non trovato in lega').catch(() => {});
+          return;
+        }
+        const tTag = normTagLoose(target.tag);
+        if (tTag === normTagLoose(homeTag)) clearCwlFocus(uid);
+        else cwlFocusByUid.set(uid, { tag: tTag, name: target.name || tTag });
+      } catch (e) {
+        await ctx.answerCbQuery(String(e.message || 'Errore').slice(0, 180)).catch(() => {});
+        return;
+      }
+    }
+
+    const focus = uid != null ? cwlFocusByUid.get(uid) : null;
+    const viewTag = focus?.tag || homeTag;
+    try {
+      const { text, kb } = await loadAndShowCwl(ctx, viewTag, spec, { homeTag, focus });
+      await editOrReplyCwl(ctx, text, kb);
+    } catch (e) {
+      await ctx.answerCbQuery(String(e.message || 'Errore CWL').slice(0, 180)).catch(() => {});
+      if (focus) {
+        clearCwlFocus(uid);
+        try {
+          const { text, kb } = await loadAndShowCwl(ctx, homeTag, { view: 'lg', pPage: 0, rIdx: 0 }, { homeTag });
+          await editOrReplyCwl(ctx, text, kb);
+        } catch (_) {}
+      }
+    }
   });
 
   bot.action(/^bonus:(\d+)$/, async (ctx) => {
