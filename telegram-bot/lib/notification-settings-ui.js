@@ -268,19 +268,17 @@ const FLAG_EXAMPLES = {
     '<i>(Esempio illustrativo — lo stesso stile degli altri avvisi.)</i>',
 
   custom_war:
-    '⚔️ Guerra · <b>Fear United IT</b> vs <b>monforts city</b>\n' +
-    '<b>⏰ 1h 30m alla fine del round</b>\n' +
-    '📊 Stato attuale: <b>32★</b> (95.0%) vs <b>28★</b> (89.0%)\n\n' +
-    '<b>Attacchi mancanti (noi):</b>\n' +
-    '• #5 PlayerY TH17 (1 att.)\n\n' +
-    '<i>Stesso formato degli avvisi fissi 4h/1h/15m, con la soglia che hai scelto.</i>',
+    '🛡 <b>⚔️ Guerra – Preparazione</b>\n' +
+    '<b>Fear United IT</b> vs <b>monforts city</b>\n' +
+    '<b>⏰ 1h 30m all\'inizio della battle</b>\n' +
+    'Tempo residuo: <b>1h 28m</b>\n\n' +
+    '<i>In battle lo stesso alert conta alla fine della guerra.</i>',
   custom_cwl:
-    '🏆 CWL · <b>Fear United IT</b> vs <b>GOLDEN MYA</b> · Turno 3/7\n' +
-    '<b>⏰ 45m alla fine del round</b>\n' +
-    '📊 Stato attuale: <b>40★</b> (97.5%) vs <b>33★</b> (90.0%)\n\n' +
-    '<b>Attacchi mancanti (noi):</b>\n' +
-    '• #10 PlayerZ TH18 (1 att.)\n\n' +
-    '<i>Stesso formato degli avvisi fissi CWL, con la soglia che hai scelto.</i>',
+    '🛡 <b>🏆 CWL – Preparazione · Turno 1/7</b>\n' +
+    '<b>Fear United IT</b> vs <b>GOLDEN MYA</b>\n' +
+    '<b>⏰ 3h 2m all\'inizio della battle</b>\n' +
+    'Tempo residuo: <b>2h 58m</b>\n\n' +
+    '<i>In battle lo stesso alert conta alla fine del round.</i>',
 };
 
 const FLAG_LABEL_BY_KEY = Object.fromEntries([
@@ -410,7 +408,8 @@ async function buildCustomEditKb(sb, chatId, kind) {
 function buildCustomMainText(c) {
   return (
     '⏱ <b>Alert personalizzati</b>\n\n' +
-    'Scegli quando ricevere l’avviso automatico prima della fine guerra/round.\n' +
+    'In <b>preparazione</b>: avviso prima dell’<b>inizio</b> della battle.\n' +
+    'In <b>battle</b>: avviso prima della <b>fine</b> del round/guerra.\n' +
     'Puoi modificare, mettere in pausa o eliminare l’alert quando vuoi.\n\n' +
     `${customStatusLine('⚔️ Guerra', c.war_enabled === true, c.war_paused === true, c.war_lead_minutes)}\n` +
     `${customStatusLine('🏆 CWL', c.cwl_enabled === true, c.cwl_paused === true, c.cwl_lead_minutes)}`
@@ -427,7 +426,7 @@ function buildCustomEditText(kind, c) {
     `${title} · <b>alert personalizzato</b>\n\n` +
     `Stato: ${enabled ? (paused ? '⏸ in pausa' : '✅ attivo') : '⚪ disattivato'}\n` +
     `Preavviso: <b>${fmtLeadMinutes(lead)}</b>\n\n` +
-    '<i>Quando il tempo rimanente scende sotto la soglia scelta, il bot invia un unico avviso.</i>\n' +
+    '<i>Prep → countdown all’inizio battle. Battle → countdown alla fine.</i>\n' +
     '<i>Tocca 👁 per un esempio del messaggio.</i>'
   );
 }
