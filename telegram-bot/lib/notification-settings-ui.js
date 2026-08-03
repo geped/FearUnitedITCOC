@@ -505,7 +505,7 @@ async function afterCustomAlertSaved(ctx, sb, kind) {
     return;
   }
   const probe = await notifExt
-    .probeAndSendCustomAlert(ctx.telegram, ctx.chat.id, clanTag, kind, sb)
+    .probeAndSendCustomAlert(ctx.telegram, ctx.chat.id, clanTag, kind, sb, { force: true })
     .catch((e) => ({ status: 'fetch_error', detail: e.message || 'errore' }));
   const sent = await ctx.reply(probe.detail || `Stato: ${probe.status}`, { parse_mode: 'HTML' }).catch(() => null);
   // Diagnostica: lascia leggibile ~50s (l'alert vero, se inviato, resta in chat)

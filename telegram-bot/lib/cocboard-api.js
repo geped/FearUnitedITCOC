@@ -319,7 +319,7 @@ function mapCwlRoundToWar(round, totalRounds = 7) {
 /** Tutte le guerre CWL della stagione corrente (prep / inWar / ended). */
 function listCwlWarsFromStats(cwl) {
   const rounds = Array.isArray(cwl?.roundsData) ? cwl.roundsData : [];
-  const total = rounds.length || 7;
+  const total = Math.max(rounds.length, 7);
   return rounds.map((r) => mapCwlRoundToWar(r, total)).filter(Boolean);
 }
 
