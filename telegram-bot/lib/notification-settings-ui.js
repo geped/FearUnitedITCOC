@@ -9,6 +9,7 @@
 
 const { Markup } = require('telegraf');
 const tauth = require('./telegram-auth');
+const notifExt = require('./notifications-extended');
 
 const ON  = '✅';
 const OFF = '⚪';
@@ -399,6 +400,7 @@ async function buildCustomEditKb(sb, chatId, kind) {
   rows.push([Markup.button.callback('✍️ Inserisci ore/minuti manualmente', `notif_custom_input:${kind}`)]);
   rows.push([Markup.button.callback(`${enabled ? ON : OFF} Attiva alert`, `notif_custom_toggle:${kind}`)]);
   rows.push([Markup.button.callback(`${paused ? '▶️ Riprendi' : '⏸ Pausa'}`, `notif_custom_pause:${kind}`)]);
+  rows.push([Markup.button.callback('📣 Prova / invia ora', `notif_custom_probe:${kind}`)]);
   rows.push([Markup.button.callback('👁 Esempio messaggio', `notif_ex:custom_${kind}`)]);
   rows.push([Markup.button.callback('🗑 Elimina alert', `notif_custom_delete:${kind}`)]);
   rows.push([Markup.button.callback('« Alert personalizzati', 'notif_custom_menu')]);
@@ -427,6 +429,7 @@ function buildCustomEditText(kind, c) {
     `Stato: ${enabled ? (paused ? '⏸ in pausa' : '✅ attivo') : '⚪ disattivato'}\n` +
     `Preavviso: <b>${fmtLeadMinutes(lead)}</b>\n\n` +
     '<i>Prep → countdown all’inizio battle. Battle → countdown alla fine.</i>\n' +
+    '<i>Usa «📣 Prova / invia ora» per verificare subito.</i>\n' +
     '<i>Tocca 👁 per un esempio del messaggio.</i>'
   );
 }
@@ -488,6 +491,27 @@ async function replyEphemeral(ctx, text, extra = {}) {
     await deleteLater(ctx.telegram, ctx.chat.id, sent.message_id);
   }
   return sent;
+}
+
+async function afterCustomAlertSaved(ctx, sb, kind) {
+  const link = await sb.getTelegramChatLink(ctx.chat.id).catch(() => null);
+  const clanTag = link?.clan_tag;
+  if (!clanTag) {
+    await replyEphemeral(
+      ctx,
+      '⚠️ Chat senza clan collegato: impossibile verificare l’alert ora.',
+      { parse_mode: 'HTML' },
+    );
+    return;
+  }
+  const probe = await notifExt
+    .probeAndSendCustomAlert(ctx.telegram, ctx.chat.id, clanTag, kind, sb)
+    .catch((e) => ({ status: 'fetch_error', detail: e.message || 'errore' }));
+  const sent = await ctx.reply(probe.detail || `Stato: ${probe.status}`, { parse_mode: 'HTML' }).catch(() => null);
+  // Diagnostica: lascia leggibile ~50s (l'alert vero, se inviato, resta in chat)
+  if (sent?.message_id != null && ctx.chat?.id != null) {
+    await deleteLater(ctx.telegram, ctx.chat.id, sent.message_id, 50_000);
+  }
 }
 
 async function buildCategoryKb(sb, chatId, catId) {
@@ -686,6 +710,19 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
     const c = await sb.getChatCustomAlertSettings(ctx.chat.id).catch(() => ({}));
     const kb = await buildCustomEditKb(sb, ctx.chat.id, kind);
     await ctx.editMessageText(buildCustomEditText(kind, c), { parse_mode: 'HTML', ...kb }).catch(() => {});
+    await afterCustomAlertSaved(ctx, sb, kind);
+  });
+
+  bot.action(/^notif_custom_probe:(war|cwl)$/, async (ctx) => {
+    if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
+    const actor = await ensureSessionUser(ctx);
+    if (!actor || !isCapoOrCoCapo(actor)) {
+      await ctx.answerCbQuery('✋ Solo Capo / Co-Capo / Admin CoCBoard.').catch(() => {});
+      return;
+    }
+    const kind = ctx.match[1];
+    await ctx.answerCbQuery('🔎 Verifico…').catch(() => {});
+    await afterCustomAlertSaved(ctx, sb, kind);
   });
 
   bot.action(/^notif_custom_toggle:(war|cwl)$/, async (ctx) => {
@@ -704,6 +741,7 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
     const next = await sb.getChatCustomAlertSettings(ctx.chat.id).catch(() => ({}));
     const kb = await buildCustomEditKb(sb, ctx.chat.id, kind);
     await ctx.editMessageText(buildCustomEditText(kind, next), { parse_mode: 'HTML', ...kb }).catch(() => {});
+    if (!enabled) await afterCustomAlertSaved(ctx, sb, kind);
   });
 
   bot.action(/^notif_custom_pause:(war|cwl)$/, async (ctx) => {
@@ -812,6 +850,7 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
     if (ctx.message?.message_id != null) {
       await deleteLater(ctx.telegram, ctx.chat.id, ctx.message.message_id);
     }
+    await afterCustomAlertSaved(ctx, sb, kind);
   });
 
   // ── Compatibilità: vecchi callback (notif_war / cwl / raids / games) ───────

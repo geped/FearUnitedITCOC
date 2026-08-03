@@ -53,6 +53,32 @@ function parseCocTime(t) {
   return new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}.000Z`);
 }
 
+/** Inizio battle: startTime, oppure stima da endTime/−24h o preparationStartTime/+23h. */
+function resolveBattleStart(war) {
+  let startDate = parseCocTime(war?.startTime);
+  if (startDate) return startDate;
+  const endD = parseCocTime(war?.endTime);
+  if (endD) return new Date(endD.getTime() - 24 * 3600 * 1000);
+  const prepD = parseCocTime(war?.preparationStartTime);
+  if (prepD) return new Date(prepD.getTime() + 23 * 3600 * 1000);
+  return null;
+}
+
+function warMemKey(chatId, clanTag, war) {
+  const warId = war?.endTime || `r${war?.roundNumber || 0}`;
+  return `${chatId}:${clanTag}:${warId}`;
+}
+
+function getOrCreateWarMem(chatId, clanTag, war) {
+  const memKey = warMemKey(chatId, clanTag, war);
+  let prev = warStateMem.get(memKey);
+  if (!prev) {
+    prev = { state: 'unknown', endTime: war?.endTime ?? null, sent: new Set() };
+    warStateMem.set(memKey, prev);
+  }
+  return prev;
+}
+
 function msLabel(ms) {
   if (ms <= 0) return '0 min';
   const mins = Math.ceil(ms / 60000);
@@ -497,13 +523,7 @@ async function _processSingleWarAlerts({
     }
 
     // startTime mancante: stima da endTime (−24h) o preparationStartTime (+23h)
-    let startDate = parseCocTime(war.startTime);
-    if (!startDate) {
-      const endD = parseCocTime(war.endTime);
-      const prepD = parseCocTime(war.preparationStartTime);
-      if (endD) startDate = new Date(endD.getTime() - 24 * 3600 * 1000);
-      else if (prepD) startDate = new Date(prepD.getTime() + 23 * 3600 * 1000);
-    }
+    const startDate = resolveBattleStart(war);
     const untilStart = startDate ? startDate.getTime() - now : NaN;
     const minsToStart = Number.isFinite(untilStart) ? Math.ceil(untilStart / 60000) : Infinity;
 
@@ -1121,5 +1141,176 @@ async function runClanActivityAlerts(bot, sb) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-module.exports = { runExtendedWarAlerts, runExtendedRaidAlerts, runClanActivityAlerts };
+/**
+ * Valuta e (se in finestra) invia subito l'alert personalizzato.
+ * Usato quando l'utente lo configura, così non dipende solo dal poller.
+ *
+ * @returns {Promise<{ status: string, detail: string }>}
+ */
+async function probeAndSendCustomAlert(telegram, chatId, clanTag, kind, sb) {
+  const isCwl = kind === 'cwl';
+  const custom = await sb.getChatCustomAlertSettings(chatId).catch(() => ({}));
+  const enabled = isCwl ? custom.cwl_enabled === true : custom.war_enabled === true;
+  const paused = isCwl ? custom.cwl_paused === true : custom.war_paused === true;
+  const lead = isCwl ? Number(custom.cwl_lead_minutes || 0) : Number(custom.war_lead_minutes || 0);
+
+  if (!enabled) return { status: 'disabled', detail: 'Alert disattivato.' };
+  if (paused) return { status: 'paused', detail: 'Alert in pausa.' };
+  if (!(lead > 0)) return { status: 'no_lead', detail: 'Preavviso non impostato.' };
+
+  let wars = [];
+  try {
+    if (isCwl) {
+      cwlStatsCache.delete(String(clanTag || ''));
+      const cwl = await api.cwlStats(clanTag);
+      wars = api.listCwlWarsFromStats(cwl).filter(
+        (w) => w.state === 'preparation' || w.state === 'inWar',
+      );
+      console.log(
+        '[notif-war] probe cwl',
+        clanTag,
+        'state=',
+        cwl?.state,
+        'rounds=',
+        (cwl?.roundsData || []).length,
+        'active=',
+        wars.map((w) => `${w.state}/r${w.roundNumber}`).join(',') || '-',
+      );
+    } else {
+      const war = await api.currentWar(clanTag);
+      const wt = String(war?.warType || '').toLowerCase();
+      if (war && war.state && war.state !== 'notInWar' && wt !== 'cwl') {
+        wars = [war];
+      }
+    }
+  } catch (e) {
+    console.warn('[notif-war] probe fetch', clanTag, e.message);
+    return {
+      status: 'fetch_error',
+      detail: `Errore lettura CoC: ${e.message || 'sconosciuto'}`,
+    };
+  }
+
+  if (!wars.length) {
+    return {
+      status: 'no_war',
+      detail: isCwl
+        ? 'Nessun turno CWL in preparazione o in battle in questo momento. L’alert partirà automaticamente quando ci sarà un round attivo.'
+        : 'Nessuna guerra classica attiva. L’alert partirà quando inizierà una guerra.',
+    };
+  }
+
+  const now = Date.now();
+  const send = (text) => sendToChat(telegram, chatId, text, () => sb.deleteTelegramChatLink(chatId));
+
+  const ordered = [
+    ...wars.filter((w) => w.state === 'preparation'),
+    ...wars.filter((w) => w.state === 'inWar'),
+  ];
+
+  for (const war of ordered) {
+    const turn = isCwl ? cwlTurnLabel(war) : '';
+    const mem = getOrCreateWarMem(chatId, clanTag, war);
+    mem.state = war.state;
+    mem.endTime = war.endTime ?? null;
+
+    if (war.state === 'preparation') {
+      const startDate = resolveBattleStart(war);
+      if (!startDate) {
+        return {
+          status: 'no_start',
+          detail: 'Turno in prep trovato ma senza orario di inizio battle (API). Riprova tra poco.',
+        };
+      }
+      const untilStart = startDate.getTime() - now;
+      const minsToStart = Math.ceil(untilStart / 60000);
+      if (minsToStart <= 0) {
+        return {
+          status: 'starting',
+          detail: 'La battle sta per iniziare (o è appena iniziata).',
+        };
+      }
+      if (minsToStart > lead) {
+        return {
+          status: 'waiting',
+          detail:
+            `Mancano <b>${msLabel(untilStart)}</b> all’inizio della battle${turn}.\n` +
+            `L’avviso partirà automaticamente quando resteranno ≤ <b>${leadLabel(lead)}</b>.`,
+        };
+      }
+      const key = `custom_start:${war.endTime || war.roundNumber || 'x'}`;
+      if (mem.sent.has(key)) {
+        return {
+          status: 'already_sent',
+          detail: `Alert già inviato per questo turno (mancano ${msLabel(untilStart)}).`,
+        };
+      }
+      const cn = fmt.escapeHtml(war?.clan?.name || '');
+      const on = fmt.escapeHtml(war?.opponent?.name || '');
+      const lbl = isCwl ? '🏆 CWL' : '⚔️ Guerra';
+      const ok = await send(
+        `🛡 <b>${lbl} – Preparazione${turn}</b>\n` +
+        `<b>${cn}</b> vs <b>${on}</b>\n` +
+        `<b>⏰ ${msLabel(untilStart)} all'inizio della battle</b>\n` +
+        `<i>Soglia alert: ${leadLabel(lead)}</i>`,
+      );
+      if (ok) {
+        mem.sent.add(key);
+        return {
+          status: 'sent',
+          detail: `📣 Avviso inviato ora (mancano <b>${msLabel(untilStart)}</b> all’inizio).`,
+        };
+      }
+      return { status: 'send_failed', detail: 'Invio Telegram fallito (permessi chat?).' };
+    }
+
+    if (war.state === 'inWar') {
+      const endDate = parseCocTime(war.endTime);
+      if (!endDate) {
+        return { status: 'no_end', detail: 'Battle attiva ma senza orario di fine.' };
+      }
+      const leftMs = endDate.getTime() - now;
+      const mins = Math.ceil(leftMs / 60000);
+      if (mins <= 0) {
+        return { status: 'ending', detail: 'Il round sta finendo.' };
+      }
+      if (mins > lead) {
+        return {
+          status: 'waiting',
+          detail:
+            `Mancano <b>${msLabel(leftMs)}</b> alla fine del round${turn}.\n` +
+            `L’avviso partirà automaticamente quando resteranno ≤ <b>${leadLabel(lead)}</b>.`,
+        };
+      }
+      const key = `custom_end:${war.endTime || war.roundNumber || 'x'}`;
+      if (mem.sent.has(key)) {
+        return {
+          status: 'already_sent',
+          detail: `Alert già inviato per questo round (mancano ${msLabel(leftMs)}).`,
+        };
+      }
+      const miss = missingAttacks(war);
+      const lbl = isCwl
+        ? `⏰ ${msLabel(leftMs)} alla fine del round`
+        : `⏰ ${msLabel(leftMs)} alla fine della guerra`;
+      const ok = await send(buildWarAlertMsg(war, miss, isCwl, lbl));
+      if (ok) {
+        mem.sent.add(key);
+        return {
+          status: 'sent',
+          detail: `📣 Avviso inviato ora (mancano <b>${msLabel(leftMs)}</b> alla fine).`,
+        };
+      }
+      return { status: 'send_failed', detail: 'Invio Telegram fallito (permessi chat?).' };
+    }
+  }
+
+  return { status: 'no_war', detail: 'Nessun turno utilizzabile.' };
+}
+
+module.exports = {
+  runExtendedWarAlerts,
+  runExtendedRaidAlerts,
+  runClanActivityAlerts,
+  probeAndSendCustomAlert,
+};
