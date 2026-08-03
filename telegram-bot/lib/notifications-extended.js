@@ -198,17 +198,21 @@ async function getCachedCwlStats(clanTag) {
   return data;
 }
 
-/** Invia messaggio a chatId; cancella il link se la chat è stale/inaccessibile. */
+/** Invia messaggio a chatId; cancella il link se la chat è stale/inaccessibile. @returns {boolean} */
 async function sendToChat(telegram, chatId, text, onStale) {
   try {
     await telegram.sendMessage(chatId, text, { parse_mode: 'HTML', disable_web_page_preview: true });
+    return true;
   } catch (e) {
     const s = String(e.message || '');
     if (s.includes('chat not found') || s.includes('bot was kicked') ||
         s.includes('bot is not a member') || s.includes('Forbidden') ||
         s.includes('deactivated')) {
       if (onStale) await onStale().catch(() => {});
+    } else {
+      console.warn('[notif-war] send failed', chatId, s);
     }
+    return false;
   }
 }
 
@@ -425,8 +429,8 @@ async function _processSingleWarAlerts({
   const turn = isCwl ? cwlTurnLabel(war) : '';
 
   if (!noisy && war?.endTime) {
-    // Solo transizioni “una tantum”: NON pre-segnare countdown/custom/roster,
-    // altrimenti un restart/deploy durante la finestra mangia l’avviso.
+    // Solo transizioni “una tantum”: NON pre-segnare countdown/custom/roster.
+    // NON fare return: i countdown devono poter partire al primo ciclo post-deploy.
     if (state === 'preparation') {
       sent.add('prep:' + war.endTime);
       sent.add('prep_next:' + war.endTime);
@@ -442,10 +446,9 @@ async function _processSingleWarAlerts({
       sent.add('final:' + war.endTime);
       sent.add('standings:' + war.endTime);
     }
-    return;
   }
 
-  const send = (text) => sendToChat(telegram, chatId, text, () => sb.deleteTelegramChatLink(chatId));
+  const send = async (text) => sendToChat(telegram, chatId, text, () => sb.deleteTelegramChatLink(chatId));
 
   const customCfg = isCwl
     ? {
@@ -468,34 +471,43 @@ async function _processSingleWarAlerts({
       if (overlapPrep && notif.cwl_prep_next === true) {
         const key = `prep_next:${war.endTime}`;
         if (!sent.has(key)) {
-          sent.add(key);
-          sent.add(`prep:${war.endTime}`); // evita doppio con prep_start
-          await send(
+          if (await send(
             `🛡 <b>🏆 CWL – Prep turno successivo${turn}</b>\n` +
             `Avversario: <b>${on}</b>\n` +
             `La battle del turno precedente è ancora in corso.\n` +
             `Scegli il roster e riempi i CC per il prossimo round.`,
-          );
+          )) {
+            sent.add(key);
+            sent.add(`prep:${war.endTime}`);
+          }
         }
       } else if ((isCwl ? notif.cwl_prep_start === true : notif.war_prep_start === true)) {
         const key = `prep:${war.endTime}`;
         if (!sent.has(key)) {
-          sent.add(key);
           const lbl = isCwl ? '🏆 CWL' : '⚔️ Guerra Classica';
-          await send(
+          if (await send(
             `🛡 <b>${lbl} – Preparazione${turn}</b>\n` +
             `${cn} vs ${on}\n` +
             `Gli attacchi inizieranno presto.`,
-          );
+          )) {
+            sent.add(key);
+          }
         }
       }
     }
 
-    const startDate = parseCocTime(war.startTime);
+    // startTime mancante: stima da endTime (−24h) o preparationStartTime (+23h)
+    let startDate = parseCocTime(war.startTime);
+    if (!startDate) {
+      const endD = parseCocTime(war.endTime);
+      const prepD = parseCocTime(war.preparationStartTime);
+      if (endD) startDate = new Date(endD.getTime() - 24 * 3600 * 1000);
+      else if (prepD) startDate = new Date(prepD.getTime() + 23 * 3600 * 1000);
+    }
     const untilStart = startDate ? startDate.getTime() - now : NaN;
     const minsToStart = Number.isFinite(untilStart) ? Math.ceil(untilStart / 60000) : Infinity;
 
-    // Alert personalizzato in prep → countdown all'INIZIO battle (startTime)
+    // Alert personalizzato in prep → countdown all'INIZIO battle
     if (
       customCfg.enabled &&
       !customCfg.paused &&
@@ -504,26 +516,38 @@ async function _processSingleWarAlerts({
       minsToStart > 0 &&
       minsToStart <= customCfg.lead
     ) {
-      const key = `custom_start:${customCfg.lead}:${war.endTime}`;
+      const key = `custom_start:${war.endTime || warId}`;
       if (!sent.has(key)) {
-        sent.add(key);
         const cn = fmt.escapeHtml(war?.clan?.name || '');
         const on = fmt.escapeHtml(war?.opponent?.name || '');
         const lbl = isCwl ? '🏆 CWL' : '⚔️ Guerra';
-        await send(
+        const ok = await send(
           `🛡 <b>${lbl} – Preparazione${turn}</b>\n` +
           `<b>${cn}</b> vs <b>${on}</b>\n` +
-          `<b>⏰ ${leadLabel(customCfg.lead)} all'inizio della battle</b>\n` +
-          `Tempo residuo: <b>${msLabel(untilStart)}</b>`,
+          `<b>⏰ ${msLabel(untilStart)} all'inizio della battle</b>\n` +
+          `<i>Soglia alert: ${leadLabel(customCfg.lead)}</i>`,
         );
+        if (ok) sent.add(key);
+        else console.warn('[notif-war] custom_start send failed', chatId, clanTag);
       }
+    } else if (customCfg.enabled && !customCfg.paused && customCfg.lead > 0) {
+      console.log(
+        '[notif-war] custom_start skip',
+        chatId,
+        clanTag,
+        'minsToStart=',
+        minsToStart,
+        'lead=',
+        customCfg.lead,
+        'start=',
+        war.startTime || null,
+      );
     }
 
     // Promemoria roster ~6h prima dell'inizio battle (solo CWL)
     if (isCwl && notif.cwl_roster_reminder === true && minsToStart <= 360 && minsToStart > 0) {
       const key = `roster:${war.endTime}`;
       if (!sent.has(key)) {
-        sent.add(key);
         const on = fmt.escapeHtml(war?.opponent?.name || 'Avversario');
         const size = Number(war.teamSize || 0);
         const lined = Array.isArray(war?.clan?.members) ? war.clan.members.length : 0;
@@ -531,11 +555,13 @@ async function _processSingleWarAlerts({
           size > 0 && lined > 0 && lined < size
             ? `\nLinea attuale: <b>${lined}/${size}</b> — conferma i partecipanti.`
             : `\nRicorda: conferma i ${size || 15} in linea e i CC di difesa.`;
-        await send(
+        if (await send(
           `📋 <b>CWL · Prep${turn}</b>\n` +
           `Mancano ~<b>${msLabel(untilStart)}</b> alla battle vs <b>${on}</b>.` +
           rosterHint,
-        );
+        )) {
+          sent.add(key);
+        }
       }
     }
   }
@@ -592,13 +618,14 @@ async function _processSingleWarAlerts({
 
       const cfg = customCfg;
       if (cfg.enabled && !cfg.paused && Number.isFinite(cfg.lead) && cfg.lead > 0) {
-        const key = `custom_end:${cfg.lead}:${war.endTime}`;
+        const key = `custom_end:${war.endTime || warId}`;
         if (mins <= cfg.lead && !sent.has(key)) {
-          sent.add(key);
           const lbl = isCwl
-            ? `⏰ ${leadLabel(cfg.lead)} alla fine del round`
-            : `⏰ ${leadLabel(cfg.lead)} alla fine della guerra`;
-          await send(buildWarAlertMsg(war, miss, isCwl, lbl));
+            ? `⏰ ${msLabel(leftMs)} alla fine del round`
+            : `⏰ ${msLabel(leftMs)} alla fine della guerra`;
+          if (await send(buildWarAlertMsg(war, miss, isCwl, lbl))) {
+            sent.add(key);
+          }
         }
       }
 
@@ -725,6 +752,20 @@ async function _warAlertsForChat(telegram, chatId, clanTag, sb) {
         endedRounds = [...endedRounds, fallback];
       }
       console.warn('[notif-war] CWL fallback currentWar', clanTag, fallback.state);
+    }
+
+    if (!prepRounds.length && !inWarRounds.length) {
+      console.warn(
+        '[notif-war] no active CWL rounds',
+        clanTag,
+        'cwlState=',
+        cwl?.state || null,
+        'rounds=',
+        wars.length,
+        'current=',
+        warState,
+        warType || '-',
+      );
     }
 
     for (const w of prepRounds) {

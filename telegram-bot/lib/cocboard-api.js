@@ -89,11 +89,164 @@ async function fetchCoC(proxyPath, vercelPath, searchParams, timeoutMs = 55000) 
   return fetchJson(vercelPath, searchParams, Math.min(timeoutMs, 28000));
 }
 
+function normTag(tag) {
+  return String(tag || '').replace(/^#/, '').toUpperCase();
+}
+
+function encodeClanTag(tag) {
+  const t = String(tag || '').trim();
+  const withHash = t.startsWith('#') ? t : `#${t}`;
+  return encodeURIComponent(withHash);
+}
+
+/** Chiamata diretta CoC API (stesso token del proxy Render) — evita Vercel e self-HTTP. */
+async function fetchCocApi(path, timeoutMs = 20000) {
+  const token = process.env.COC_API_TOKEN;
+  if (!token) throw new Error('COC_API_TOKEN mancante');
+  const r = await fetch(`https://api.clashofclans.com/v1${path}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+    },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const err = new Error(data.reason || data.message || `CoC HTTP ${r.status}`);
+    err.status = r.status;
+    err.body = data;
+    throw err;
+  }
+  return data;
+}
+
+/**
+ * Guerre CWL attive del clan via API CoC diretta (leaguegroup + solo war del clan).
+ * Molto più affidabile di /api/cwl-stats via Vercel per le notifiche.
+ */
+async function cwlActiveWarsDirect(clanTag) {
+  const raw = String(clanTag || '').trim();
+  const withHash = raw.startsWith('#') ? raw : `#${raw}`;
+  const norm = normTag(withHash);
+  const lg = await fetchCocApi(`/clans/${encodeClanTag(withHash)}/currentwar/leaguegroup`, 25000);
+  if (!lg || lg.state === 'notInWar') {
+    return { state: 'notInWar', season: null, roundsData: [], groupStandings: [] };
+  }
+
+  const warTagToRound = {};
+  (lg.rounds || []).forEach((round, idx) => {
+    (round.warTags || []).filter((t) => t && t !== '#0').forEach((wt) => {
+      warTagToRound[wt] = idx + 1;
+    });
+  });
+  const warTags = Object.keys(warTagToRound);
+  const warResults = await Promise.all(
+    warTags.map(async (wt) => {
+      try {
+        const w = await fetchCocApi(`/clanwarleagues/wars/${encodeURIComponent(wt)}`, 20000);
+        return w && w.state !== 'notInWar' ? w : null;
+      } catch (_) {
+        return null;
+      }
+    }),
+  );
+
+  const roundsData = [];
+  for (let i = 0; i < warTags.length; i++) {
+    const war = warResults[i];
+    if (!war) continue;
+    const ourSide =
+      normTag(war.clan?.tag) === norm ? war.clan
+        : normTag(war.opponent?.tag) === norm ? war.opponent
+          : null;
+    if (!ourSide) continue;
+    const theirSide = ourSide === war.clan ? war.opponent : war.clan;
+    const mapMembers = (members) =>
+      (members || []).map((m) => ({
+        tag: m.tag,
+        name: m.name,
+        thLevel: m.townhallLevel ?? m.townHallLevel ?? null,
+        mapPosition: m.mapPosition ?? null,
+        attacks: (m.attacks || []).map((a) => ({
+          defenderTag: a.defenderTag,
+          stars: a.stars,
+          destruction: a.destructionPercentage,
+          order: a.order,
+        })),
+      }));
+    roundsData.push({
+      roundNumber: warTagToRound[warTags[i]] || roundsData.length + 1,
+      state: war.state,
+      startTime: war.startTime || null,
+      preparationStartTime: war.preparationStartTime || null,
+      endTime: war.endTime || null,
+      teamSize: war.teamSize || 15,
+      attacksPerMember: war.attacksPerMember || 1,
+      clan: {
+        tag: ourSide.tag,
+        name: ourSide.name,
+        stars: ourSide.stars || 0,
+        destruction: +(ourSide.destructionPercentage || 0).toFixed(2),
+        members: mapMembers(ourSide.members),
+      },
+      opponent: {
+        tag: theirSide?.tag,
+        name: theirSide?.name || 'Sconosciuto',
+        stars: theirSide?.stars || 0,
+        destruction: +(theirSide?.destructionPercentage || 0).toFixed(2),
+        members: mapMembers(theirSide?.members),
+      },
+    });
+  }
+  roundsData.sort((a, b) => (a.roundNumber || 0) - (b.roundNumber || 0));
+
+  const groupStandings = (lg.clans || []).map((c) => ({
+    tag: c.tag,
+    name: c.name,
+    stars: 0,
+    warCount: 0,
+  }));
+
+  return {
+    state: lg.state,
+    season: lg.season || null,
+    leagueNameEn: null,
+    leagueNameIt: null,
+    teamSize: roundsData[0]?.teamSize || 15,
+    groupStandings,
+    roundsData,
+    players: [],
+  };
+}
+
+async function currentWarDirect(clanTag) {
+  const raw = String(clanTag || '').trim();
+  const withHash = raw.startsWith('#') ? raw : `#${raw}`;
+  try {
+    const war = await fetchCocApi(`/clans/${encodeClanTag(withHash)}/currentwar`, 20000);
+    if (war && war.state && war.state !== 'notInWar') return war;
+  } catch (_) {}
+  const cwl = await cwlActiveWarsDirect(withHash);
+  const wars = listCwlWarsFromStats(cwl);
+  return (
+    wars.find((r) => r.state === 'inWar' || r.state === 'preparation') ||
+    wars[wars.length - 1] ||
+    { state: 'notInWar' }
+  );
+}
+
 async function clanMembers(clanTag) {
   return fetchJson('/api/clan-members', { clanTag });
 }
 
 async function clanInfo(clanTag) {
+  if (process.env.COC_API_TOKEN) {
+    try {
+      return await fetchCocApi(`/clans/${encodeClanTag(clanTag)}`, 15000);
+    } catch (e) {
+      console.warn('[cocboard-api] clanInfo direct failed', e.message);
+    }
+  }
   try {
     const data = await fetchCoC('/clan-info', '/api/clan-info', { clanTag }, 20000);
     return data;
@@ -103,6 +256,13 @@ async function clanInfo(clanTag) {
 }
 
 async function cwlStats(clanTag) {
+  if (process.env.COC_API_TOKEN) {
+    try {
+      return await cwlActiveWarsDirect(clanTag);
+    } catch (e) {
+      console.warn('[cocboard-api] cwl direct failed', e.message);
+    }
+  }
   const data = await fetchCoC('/cwl-live', '/api/cwl-stats', { clanTag }, 55000);
   return data;
 }
@@ -164,6 +324,13 @@ function listCwlWarsFromStats(cwl) {
 }
 
 async function currentWar(clanTag) {
+  if (process.env.COC_API_TOKEN) {
+    try {
+      return await currentWarDirect(clanTag);
+    } catch (e) {
+      console.warn('[cocboard-api] currentWar direct failed', e.message);
+    }
+  }
   let war = null;
   try {
     war = await fetchCoC('/current-war', '/api/lookup', { type: 'current-war', clanTag }, 20000);
