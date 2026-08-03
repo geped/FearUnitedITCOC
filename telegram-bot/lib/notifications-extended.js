@@ -79,7 +79,13 @@ function getOrCreateWarMem(chatId, clanTag, war) {
   return prev;
 }
 
-/** Pulisce i flag “custom già inviato” (nuovo lead / Prova forzata). */
+/**
+ * Alert personalizzati in attesa di soglia (niente API: solo confronto orologio).
+ * key: `${chatId}:${kind}:${warKey}`
+ * value: { chatId, clanTag, kind, leadMin, targetMs, warKey, payload, isCwl }
+ */
+const pendingCustomAlerts = new Map();
+
 function clearCustomSentForChat(chatId, clanTag) {
   const prefix = `${Number(chatId)}:${String(clanTag)}:`;
   for (const [k, mem] of warStateMem.entries()) {
@@ -90,20 +96,32 @@ function clearCustomSentForChat(chatId, clanTag) {
       }
     }
   }
+  for (const [k] of pendingCustomAlerts.entries()) {
+    if (k.startsWith(`${Number(chatId)}:`)) pendingCustomAlerts.delete(k);
+  }
 }
-
-/** Tolleranza bot vs timer di gioco (minuti). */
-const CUSTOM_LEAD_GRACE_MIN = 8;
 
 function msLabel(ms) {
   if (ms <= 0) return '0 min';
-  const mins = Math.ceil(ms / 60000);
+  // floor: allinea al timer di gioco (ceil mostrava ~1 min in più)
+  const mins = Math.max(0, Math.floor(ms / 60000));
   if (mins >= 60) {
     const h = Math.floor(mins / 60);
     const r = mins % 60;
     return r > 0 ? `${h}h ${r} min` : `${h}h`;
   }
   return `${mins} min`;
+}
+
+function leadMs(minutes) {
+  return Number(minutes || 0) * 60 * 1000;
+}
+
+/** True se il tempo residuo è entro la soglia (puntuale, senza anticipo). */
+function withinCustomLead(remainingMs, leadMinutes) {
+  const lead = leadMs(leadMinutes);
+  if (!(lead > 0) || !Number.isFinite(remainingMs)) return false;
+  return remainingMs > 0 && remainingMs <= lead;
 }
 
 function leadLabel(minutes) {
@@ -542,31 +560,51 @@ async function _processSingleWarAlerts({
     // startTime mancante: stima da endTime (−24h) o preparationStartTime (+23h)
     const startDate = resolveBattleStart(war);
     const untilStart = startDate ? startDate.getTime() - now : NaN;
-    const minsToStart = Number.isFinite(untilStart) ? Math.ceil(untilStart / 60000) : Infinity;
+    const minsToStart = Number.isFinite(untilStart) ? Math.max(0, Math.floor(untilStart / 60000)) : Infinity;
 
-    // Alert personalizzato in prep → countdown all'INIZIO battle
-    // Grace: tollera drift orologio bot vs client di gioco (~pochi minuti).
+    // Schedula alert personalizzato puntuale (invio automatico alla soglia)
     if (
       customCfg.enabled &&
       !customCfg.paused &&
       Number.isFinite(customCfg.lead) &&
       customCfg.lead > 0 &&
-      minsToStart > 0 &&
-      minsToStart <= customCfg.lead + CUSTOM_LEAD_GRACE_MIN
+      startDate &&
+      untilStart > 0
     ) {
-      const key = `custom_start:${war.endTime || warId}`;
-      if (!sent.has(key)) {
-        const cn = fmt.escapeHtml(war?.clan?.name || '');
-        const on = fmt.escapeHtml(war?.opponent?.name || '');
-        const lbl = isCwl ? '🏆 CWL' : '⚔️ Guerra';
+      const warKey = String(war.endTime || warId);
+      const pendKey = `${chatId}:${isCwl ? 'cwl' : 'war'}:start:${warKey}`;
+      const sentKey = `custom_start:${warKey}`;
+      if (!sent.has(sentKey)) {
+        pendingCustomAlerts.set(pendKey, {
+          chatId,
+          clanTag,
+          warKey,
+          mode: 'start',
+          isCwl,
+          leadMin: customCfg.lead,
+          targetMs: startDate.getTime() - leadMs(customCfg.lead),
+          deadlineMs: startDate.getTime(),
+          sentKey,
+          memKey,
+          text:
+            `🛡 <b>${isCwl ? '🏆 CWL' : '⚔️ Guerra'} – Preparazione${turn}</b>\n` +
+            `<b>${fmt.escapeHtml(war?.clan?.name || '')}</b> vs <b>${fmt.escapeHtml(war?.opponent?.name || '')}</b>\n` +
+            `<b>⏰ Mancano ${leadLabel(customCfg.lead)} all'inizio della battle</b>`,
+        });
+      }
+      // Invio immediato solo se siamo già DENTRO la soglia (niente anticipo)
+      if (withinCustomLead(untilStart, customCfg.lead) && !sent.has(sentKey)) {
         const ok = await send(
-          `🛡 <b>${lbl} – Preparazione${turn}</b>\n` +
-          `<b>${cn}</b> vs <b>${on}</b>\n` +
-          `<b>⏰ ${msLabel(untilStart)} all'inizio della battle</b>\n` +
-          `<i>Soglia alert: ${leadLabel(customCfg.lead)}</i>`,
+          `🛡 <b>${isCwl ? '🏆 CWL' : '⚔️ Guerra'} – Preparazione${turn}</b>\n` +
+          `<b>${fmt.escapeHtml(war?.clan?.name || '')}</b> vs <b>${fmt.escapeHtml(war?.opponent?.name || '')}</b>\n` +
+          `<b>⏰ Mancano ${leadLabel(customCfg.lead)} all'inizio della battle</b>`,
         );
-        if (ok) sent.add(key);
-        else console.warn('[notif-war] custom_start send failed', chatId, clanTag);
+        if (ok) {
+          sent.add(sentKey);
+          pendingCustomAlerts.delete(pendKey);
+        } else {
+          console.warn('[notif-war] custom_start send failed', chatId, clanTag);
+        }
       }
     } else if (customCfg.enabled && !customCfg.paused && customCfg.lead > 0) {
       console.log(
@@ -579,8 +617,6 @@ async function _processSingleWarAlerts({
         customCfg.lead,
         'start=',
         war.startTime || null,
-        'end=',
-        war.endTime || null,
       );
     }
 
@@ -625,7 +661,7 @@ async function _processSingleWarAlerts({
     }
 
     if (endDate && leftMs > 0) {
-      const mins = Math.ceil(leftMs / 60000);
+      const mins = Math.floor(leftMs / 60000);
       const miss = missingAttacks(war);
 
       if (mins <= 240 && mins > 60) {
@@ -657,14 +693,35 @@ async function _processSingleWarAlerts({
       }
 
       const cfg = customCfg;
-      if (cfg.enabled && !cfg.paused && Number.isFinite(cfg.lead) && cfg.lead > 0) {
-        const key = `custom_end:${war.endTime || warId}`;
-        if (mins <= cfg.lead + CUSTOM_LEAD_GRACE_MIN && !sent.has(key)) {
-          const lbl = isCwl
-            ? `⏰ ${msLabel(leftMs)} alla fine del round`
-            : `⏰ ${msLabel(leftMs)} alla fine della guerra`;
+      if (cfg.enabled && !cfg.paused && Number.isFinite(cfg.lead) && cfg.lead > 0 && leftMs > 0) {
+        const warKey = String(war.endTime || warId);
+        const pendKey = `${chatId}:${isCwl ? 'cwl' : 'war'}:end:${warKey}`;
+        const sentKey = `custom_end:${warKey}`;
+        if (!sent.has(sentKey) && endDate) {
+          pendingCustomAlerts.set(pendKey, {
+            chatId,
+            clanTag,
+            warKey,
+            mode: 'end',
+            isCwl,
+            leadMin: cfg.lead,
+            targetMs: endDate.getTime() - leadMs(cfg.lead),
+            deadlineMs: endDate.getTime(),
+            sentKey,
+            memKey,
+            text: buildWarAlertMsg(
+              war,
+              miss,
+              isCwl,
+              `⏰ Mancano ${leadLabel(cfg.lead)} alla fine del ${isCwl ? 'round' : 'guerra'}`,
+            ),
+          });
+        }
+        if (withinCustomLead(leftMs, cfg.lead) && !sent.has(sentKey)) {
+          const lbl = `⏰ Mancano ${leadLabel(cfg.lead)} alla fine del ${isCwl ? 'round' : 'guerra'}`;
           if (await send(buildWarAlertMsg(war, miss, isCwl, lbl))) {
-            sent.add(key);
+            sent.add(sentKey);
+            pendingCustomAlerts.delete(pendKey);
           }
         }
       }
@@ -1162,11 +1219,48 @@ async function runClanActivityAlerts(bot, sb) {
 }
 
 /**
- * Valuta e (se in finestra) invia subito l'alert personalizzato.
- * Usato quando l'utente lo configura, così non dipende solo dal poller.
+ * Tick veloce: invia alert personalizzati alla soglia esatta (solo orologio, no CoC API).
+ */
+async function runPendingCustomAlerts(bot, sb) {
+  if (!pendingCustomAlerts.size) return;
+  const now = Date.now();
+  const telegram = bot.telegram;
+  for (const [pendKey, p] of [...pendingCustomAlerts.entries()]) {
+    try {
+      if (!p || p.targetMs == null) {
+        pendingCustomAlerts.delete(pendKey);
+        continue;
+      }
+      if (now < p.targetMs) continue;
+      if (now >= p.deadlineMs) {
+        pendingCustomAlerts.delete(pendKey);
+        continue;
+      }
+      const mem = warStateMem.get(p.memKey) || getOrCreateWarMem(p.chatId, p.clanTag, { endTime: p.warKey });
+      if (mem.sent && mem.sent.has(p.sentKey)) {
+        pendingCustomAlerts.delete(pendKey);
+        continue;
+      }
+      const ok = await sendToChat(telegram, p.chatId, p.text, () => sb.deleteTelegramChatLink(p.chatId));
+      if (ok) {
+        if (!mem.sent) mem.sent = new Set();
+        mem.sent.add(p.sentKey);
+        warStateMem.set(p.memKey, mem);
+        pendingCustomAlerts.delete(pendKey);
+        console.log('[notif-war] custom pending fired', pendKey, 'lead=', p.leadMin);
+      }
+    } catch (e) {
+      console.warn('[notif-war] pending custom', pendKey, e.message);
+    }
+  }
+}
+
+/**
+ * Stato alert personalizzato. Non anticipa: sopra soglia → waiting + schedula automatico.
+ * L'invio immediato avviene solo se remainingMs <= lead (soglia già raggiunta).
  *
  * @param {object} [opts]
- * @param {boolean} [opts.force] - se true, ignora “già inviato” e reinoltra
+ * @param {boolean} [opts.force] - reinoltra anche se già inviato (solo se già in soglia)
  * @returns {Promise<{ status: string, detail: string }>}
  */
 async function probeAndSendCustomAlert(telegram, chatId, clanTag, kind, sb, opts = {}) {
@@ -1181,7 +1275,6 @@ async function probeAndSendCustomAlert(telegram, chatId, clanTag, kind, sb, opts
   if (paused) return { status: 'paused', detail: 'Alert in pausa.' };
   if (!(lead > 0)) return { status: 'no_lead', detail: 'Preavviso non impostato.' };
 
-  // Nuovo lead / Prova: non restare bloccati su “già inviato” di un tentativo precedente
   clearCustomSentForChat(chatId, clanTag);
 
   let wars = [];
@@ -1191,16 +1284,6 @@ async function probeAndSendCustomAlert(telegram, chatId, clanTag, kind, sb, opts
       const cwl = await api.cwlStats(clanTag);
       wars = api.listCwlWarsFromStats(cwl).filter(
         (w) => w.state === 'preparation' || w.state === 'inWar',
-      );
-      console.log(
-        '[notif-war] probe cwl',
-        clanTag,
-        'state=',
-        cwl?.state,
-        'rounds=',
-        (cwl?.roundsData || []).length,
-        'active=',
-        wars.map((w) => `${w.state}/r${w.roundNumber}/start=${w.startTime || '-'}`).join(',') || '-',
       );
     } else {
       const war = await api.currentWar(clanTag);
@@ -1228,7 +1311,6 @@ async function probeAndSendCustomAlert(telegram, chatId, clanTag, kind, sb, opts
 
   const now = Date.now();
   const send = (text) => sendToChat(telegram, chatId, text, () => sb.deleteTelegramChatLink(chatId));
-
   const ordered = [
     ...wars.filter((w) => w.state === 'preparation'),
     ...wars.filter((w) => w.state === 'inWar'),
@@ -1239,6 +1321,8 @@ async function probeAndSendCustomAlert(telegram, chatId, clanTag, kind, sb, opts
     const mem = getOrCreateWarMem(chatId, clanTag, war);
     mem.state = war.state;
     mem.endTime = war.endTime ?? null;
+    const warKey = String(war.endTime || `r${war.roundNumber || 0}`);
+    const memKey = warMemKey(chatId, clanTag, war);
 
     if (war.state === 'preparation') {
       const startDate = resolveBattleStart(war);
@@ -1249,47 +1333,67 @@ async function probeAndSendCustomAlert(telegram, chatId, clanTag, kind, sb, opts
         };
       }
       const untilStart = startDate.getTime() - now;
-      const minsToStart = Math.ceil(untilStart / 60000);
-      if (minsToStart <= 0) {
+      if (untilStart <= 0) {
         return {
           status: 'starting',
           detail: 'La battle sta per iniziare (o è appena iniziata).',
         };
       }
-      // Grace: se imposti un preavviso vicino al timer di gioco, invia subito
-      if (minsToStart > lead + CUSTOM_LEAD_GRACE_MIN) {
-        return {
-          status: 'waiting',
-          detail:
-            `Mancano <b>${msLabel(untilStart)}</b> all’inizio della battle${turn}.\n` +
-            `L’avviso partirà automaticamente quando resteranno ≤ <b>${leadLabel(lead)}</b>\n` +
-            `<i>(tolleranza ±${CUSTOM_LEAD_GRACE_MIN} min rispetto al timer di gioco)</i>.`,
-        };
-      }
-      const key = `custom_start:${war.endTime || war.roundNumber || 'x'}`;
-      if (!force && mem.sent.has(key)) {
-        return {
-          status: 'already_sent',
-          detail:
-            `Alert già inviato per questo turno (mancano ${msLabel(untilStart)}).\n` +
-            `Tocca di nuovo <b>📣 Prova / invia ora</b> per reinviarlo.`,
-        };
-      }
-      mem.sent.delete(key);
+
+      const pendKey = `${chatId}:${isCwl ? 'cwl' : 'war'}:start:${warKey}`;
+      const sentKey = `custom_start:${warKey}`;
       const cn = fmt.escapeHtml(war?.clan?.name || '');
       const on = fmt.escapeHtml(war?.opponent?.name || '');
       const lbl = isCwl ? '🏆 CWL' : '⚔️ Guerra';
-      const ok = await send(
+      const alertText =
         `🛡 <b>${lbl} – Preparazione${turn}</b>\n` +
         `<b>${cn}</b> vs <b>${on}</b>\n` +
-        `<b>⏰ ${msLabel(untilStart)} all'inizio della battle</b>\n` +
-        `<i>Soglia alert: ${leadLabel(lead)}</i>`,
-      );
+        `<b>⏰ Mancano ${leadLabel(lead)} all'inizio della battle</b>`;
+
+      pendingCustomAlerts.set(pendKey, {
+        chatId,
+        clanTag,
+        warKey,
+        mode: 'start',
+        isCwl,
+        leadMin: lead,
+        targetMs: startDate.getTime() - leadMs(lead),
+        deadlineMs: startDate.getTime(),
+        sentKey,
+        memKey,
+        text: alertText,
+      });
+
+      // Sopra soglia: non anticipare — solo conferma e schedula
+      if (!withinCustomLead(untilStart, lead)) {
+        const fireAt = new Date(startDate.getTime() - leadMs(lead));
+        return {
+          status: 'waiting',
+          detail:
+            `⏱ Ora mancano <b>${msLabel(untilStart)}</b> all’inizio${turn}.\n` +
+            `Soglia impostata: <b>${leadLabel(lead)}</b>.\n` +
+            `L’alert automatico partirà quando il timer arriverà a <b>${leadLabel(lead)}</b>` +
+            ` (≈ ${fireAt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}).\n` +
+            `<i>Prova non anticipa l’invio: verifica solo che tutto sia configurato.</i>`,
+        };
+      }
+
+      if (!force && mem.sent.has(sentKey)) {
+        return {
+          status: 'already_sent',
+          detail:
+            `Alert già inviato per la soglia <b>${leadLabel(lead)}</b>.\n` +
+            `Tocca di nuovo <b>📣 Prova / invia ora</b> per reinviarlo.`,
+        };
+      }
+      mem.sent.delete(sentKey);
+      const ok = await send(alertText);
       if (ok) {
-        mem.sent.add(key);
+        mem.sent.add(sentKey);
+        pendingCustomAlerts.delete(pendKey);
         return {
           status: 'sent',
-          detail: `📣 Avviso inviato ora (mancano <b>${msLabel(untilStart)}</b> all’inizio).`,
+          detail: `📣 Avviso inviato: soglia <b>${leadLabel(lead)}</b> già raggiunta.`,
         };
       }
       return { status: 'send_failed', detail: 'Invio Telegram fallito (permessi chat?).' };
@@ -1301,38 +1405,59 @@ async function probeAndSendCustomAlert(telegram, chatId, clanTag, kind, sb, opts
         return { status: 'no_end', detail: 'Battle attiva ma senza orario di fine.' };
       }
       const leftMs = endDate.getTime() - now;
-      const mins = Math.ceil(leftMs / 60000);
-      if (mins <= 0) {
+      if (leftMs <= 0) {
         return { status: 'ending', detail: 'Il round sta finendo.' };
       }
-      if (mins > lead + CUSTOM_LEAD_GRACE_MIN) {
+
+      const pendKey = `${chatId}:${isCwl ? 'cwl' : 'war'}:end:${warKey}`;
+      const sentKey = `custom_end:${warKey}`;
+      const miss = missingAttacks(war);
+      const lbl = isCwl
+        ? `⏰ Mancano ${leadLabel(lead)} alla fine del round`
+        : `⏰ Mancano ${leadLabel(lead)} alla fine della guerra`;
+      const alertText = buildWarAlertMsg(war, miss, isCwl, lbl);
+
+      pendingCustomAlerts.set(pendKey, {
+        chatId,
+        clanTag,
+        warKey,
+        mode: 'end',
+        isCwl,
+        leadMin: lead,
+        targetMs: endDate.getTime() - leadMs(lead),
+        deadlineMs: endDate.getTime(),
+        sentKey,
+        memKey,
+        text: alertText,
+      });
+
+      if (!withinCustomLead(leftMs, lead)) {
+        const fireAt = new Date(endDate.getTime() - leadMs(lead));
         return {
           status: 'waiting',
           detail:
-            `Mancano <b>${msLabel(leftMs)}</b> alla fine del round${turn}.\n` +
-            `L’avviso partirà automaticamente quando resteranno ≤ <b>${leadLabel(lead)}</b>.`,
+            `⏱ Ora mancano <b>${msLabel(leftMs)}</b> alla fine${turn}.\n` +
+            `Soglia: <b>${leadLabel(lead)}</b> — l’alert partirà automaticamente` +
+            ` (≈ ${fireAt.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}).`,
         };
       }
-      const key = `custom_end:${war.endTime || war.roundNumber || 'x'}`;
-      if (!force && mem.sent.has(key)) {
+
+      if (!force && mem.sent.has(sentKey)) {
         return {
           status: 'already_sent',
           detail:
-            `Alert già inviato per questo round (mancano ${msLabel(leftMs)}).\n` +
+            `Alert già inviato per la soglia <b>${leadLabel(lead)}</b>.\n` +
             `Tocca di nuovo <b>📣 Prova / invia ora</b> per reinviarlo.`,
         };
       }
-      mem.sent.delete(key);
-      const miss = missingAttacks(war);
-      const lbl = isCwl
-        ? `⏰ ${msLabel(leftMs)} alla fine del round`
-        : `⏰ ${msLabel(leftMs)} alla fine della guerra`;
-      const ok = await send(buildWarAlertMsg(war, miss, isCwl, lbl));
+      mem.sent.delete(sentKey);
+      const ok = await send(alertText);
       if (ok) {
-        mem.sent.add(key);
+        mem.sent.add(sentKey);
+        pendingCustomAlerts.delete(pendKey);
         return {
           status: 'sent',
-          detail: `📣 Avviso inviato ora (mancano <b>${msLabel(leftMs)}</b> alla fine).`,
+          detail: `📣 Avviso inviato (soglia <b>${leadLabel(lead)}</b>).`,
         };
       }
       return { status: 'send_failed', detail: 'Invio Telegram fallito (permessi chat?).' };
@@ -1346,5 +1471,6 @@ module.exports = {
   runExtendedWarAlerts,
   runExtendedRaidAlerts,
   runClanActivityAlerts,
+  runPendingCustomAlerts,
   probeAndSendCustomAlert,
 };

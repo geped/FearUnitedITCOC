@@ -5855,6 +5855,10 @@ async function main() {
     notifExt.runExtendedRaidAlerts(bot, sb).catch(() => {});
     notifExt.runClanActivityAlerts(bot, sb).catch(() => {});
   }, 60_000);
+  // Alert personalizzati: tick orologio ogni 10s (soglia puntuale, senza richiamare CoC)
+  setInterval(() => {
+    notifExt.runPendingCustomAlerts(bot, sb).catch(() => {});
+  }, 10_000);
 
   // Self-ping ogni 12 minuti per evitare spin-down Render free tier.
   // Usa l'URL esterno del servizio (RENDER_EXTERNAL_URL) — i self-ping localhost non evitano il suspend.
@@ -5962,6 +5966,9 @@ async function mountOnApp(externalApp) {
     notifExt.runExtendedRaidAlerts(bot, sb).catch((e) => console.warn('[notif] raid:', e.message));
     notifExt.runClanActivityAlerts(bot, sb).catch((e) => console.warn('[notif] activity:', e.message));
   }, 60_000);
+  setInterval(() => {
+    notifExt.runPendingCustomAlerts(bot, sb).catch((e) => console.warn('[notif] pending-custom:', e.message));
+  }, 10_000);
 
   const webhookSecretPath = pickWebhookPath();
   const hookUrl = webhookPublicUrl();
