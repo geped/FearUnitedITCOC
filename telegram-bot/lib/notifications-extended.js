@@ -397,21 +397,19 @@ async function _cwlSeasonAlerts(telegram, chatId, clanTag, sb, notif, cwl) {
   const curLeague = String(cwl?.leagueNameEn || cwl?.leagueNameIt || '');
   const send = (text) => sendToChat(telegram, chatId, text, () => sb.deleteTelegramChatLink(chatId));
 
-  const wasInactive =
-    !prev.state ||
-    prev.state === 'unknown' ||
-    prev.state === 'notInWar' ||
-    prev.state === 'ended';
   const isActive =
     curState &&
     curState !== 'notInWar' &&
     curState !== 'ended' &&
     curState !== 'unknown';
   const newSeason = curSeason && prev.season && prev.season !== curSeason;
+  // Cold-start / primo ciclo: memorizza senza notificare (evita «CWL iniziata!» a ogni redeploy)
+  const coldStart = prev.state === 'unknown';
 
   if (
+    !coldStart &&
     notif.cwl_season_start === true &&
-    ((wasInactive && isActive) || newSeason) &&
+    (((prev.state === 'notInWar' || prev.state === 'ended' || !prev.state) && isActive) || newSeason) &&
     curSeason
   ) {
     const sk = `season_start:${curSeason}`;
@@ -426,6 +424,8 @@ async function _cwlSeasonAlerts(telegram, chatId, clanTag, sb, notif, cwl) {
         `Stagione: <b>${fmt.escapeHtml(curSeason)}</b>`,
       );
     }
+  } else if (coldStart && curSeason && isActive) {
+    sent.add(`season_start:${curSeason}`);
   }
 
   if (
@@ -475,6 +475,11 @@ async function _processSingleWarAlerts({
   if (!war) return;
   const state = String(war?.state || '');
   if (!state || state === 'notInWar') return;
+
+  // Sub-flag fissi solo se master ON; custom lead è indipendente (customCfg sotto)
+  const masterOn = isCwl
+    ? notif?.cwl_alerts_enabled === true
+    : notif?.war_alerts_enabled === true;
 
   const warId = war.endTime || `r${war.roundNumber || 0}`;
   const memKey = `${chatId}:${clanTag}:${warId}`;
@@ -529,7 +534,7 @@ async function _processSingleWarAlerts({
     if (noisy && isNew) {
       const cn = fmt.escapeHtml(war?.clan?.name || 'Il nostro clan');
       const on = fmt.escapeHtml(war?.opponent?.name || 'Avversario');
-      if (overlapPrep && notif.cwl_prep_next === true) {
+      if (overlapPrep && masterOn && notif.cwl_prep_next === true) {
         const key = `prep_next:${war.endTime}`;
         if (!sent.has(key)) {
           if (await send(
@@ -542,7 +547,7 @@ async function _processSingleWarAlerts({
             sent.add(`prep:${war.endTime}`);
           }
         }
-      } else if ((isCwl ? notif.cwl_prep_start === true : notif.war_prep_start === true)) {
+      } else if (masterOn && (isCwl ? notif.cwl_prep_start === true : notif.war_prep_start === true)) {
         const key = `prep:${war.endTime}`;
         if (!sent.has(key)) {
           const lbl = isCwl ? '🏆 CWL' : '⚔️ Guerra Classica';
@@ -621,7 +626,7 @@ async function _processSingleWarAlerts({
     }
 
     // Promemoria roster ~6h prima dell'inizio battle (solo CWL)
-    if (isCwl && notif.cwl_roster_reminder === true && minsToStart <= 360 && minsToStart > 0) {
+    if (isCwl && masterOn && notif.cwl_roster_reminder === true && minsToStart <= 360 && minsToStart > 0) {
       const key = `roster:${war.endTime}`;
       if (!sent.has(key)) {
         const on = fmt.escapeHtml(war?.opponent?.name || 'Avversario');
@@ -650,7 +655,7 @@ async function _processSingleWarAlerts({
       if (!sent.has(key)) {
         sent.add(key);
         const flagStart = isCwl ? notif.cwl_round_start : notif.war_start_alert;
-        if (flagStart === true) {
+        if (masterOn && flagStart === true) {
           const lbl = isCwl ? `🏆 CWL – Round iniziato!${turn}` : '⚔️ Guerra iniziata!';
           const cn = fmt.escapeHtml(war?.clan?.name || '');
           const on = fmt.escapeHtml(war?.opponent?.name || '');
@@ -666,28 +671,37 @@ async function _processSingleWarAlerts({
 
       if (mins <= 240 && mins > 60) {
         const key = `4h:${war.endTime}`;
-        if (!sent.has(key)) {
-          sent.add(key);
-          if ((isCwl ? notif.cwl_missing_4h : notif.war_missing_4h) === true) {
-            await send(buildWarAlertMsg(war, miss, isCwl, '⏰ 4 ore rimanenti'));
+        if (
+          !sent.has(key) &&
+          masterOn &&
+          (isCwl ? notif.cwl_missing_4h : notif.war_missing_4h) === true
+        ) {
+          if (await send(buildWarAlertMsg(war, miss, isCwl, '⏰ 4 ore rimanenti'))) {
+            sent.add(key);
           }
         }
       }
       if (mins <= 60 && mins > 15) {
         const key = `1h:${war.endTime}`;
-        if (!sent.has(key)) {
-          sent.add(key);
-          if ((isCwl ? notif.cwl_missing_1h : notif.war_missing_1h) === true) {
-            await send(buildWarAlertMsg(war, miss, isCwl, '⏰ 1 ora rimanente'));
+        if (
+          !sent.has(key) &&
+          masterOn &&
+          (isCwl ? notif.cwl_missing_1h : notif.war_missing_1h) === true
+        ) {
+          if (await send(buildWarAlertMsg(war, miss, isCwl, '⏰ 1 ora rimanente'))) {
+            sent.add(key);
           }
         }
       }
       if (mins <= 15) {
         const key = `15m:${war.endTime}`;
-        if (!sent.has(key)) {
-          sent.add(key);
-          if ((isCwl ? notif.cwl_missing_15m : notif.war_missing_15m) === true) {
-            await send(buildWarAlertMsg(war, miss, isCwl, '⏰ 15 minuti rimanenti'));
+        if (
+          !sent.has(key) &&
+          masterOn &&
+          (isCwl ? notif.cwl_missing_15m : notif.war_missing_15m) === true
+        ) {
+          if (await send(buildWarAlertMsg(war, miss, isCwl, '⏰ 15 minuti rimanenti'))) {
+            sent.add(key);
           }
         }
       }
@@ -726,7 +740,7 @@ async function _processSingleWarAlerts({
         }
       }
 
-      const perfectEnabled = isCwl ? notif.cwl_3star === true : notif.war_3star === true;
+      const perfectEnabled = masterOn && (isCwl ? notif.cwl_3star === true : notif.war_3star === true);
       if (perfectEnabled) {
         const ts = war.teamSize || 0;
         if (ts > 0 && (war?.clan?.stars || 0) >= ts * 3) {
@@ -754,7 +768,7 @@ async function _processSingleWarAlerts({
     const key = `final:${war.endTime}`;
     if (!sent.has(key)) {
       sent.add(key);
-      if ((isCwl ? notif.cwl_round_end : notif.war_result) === true) {
+      if (masterOn && (isCwl ? notif.cwl_round_end : notif.war_result) === true) {
         let streakInfo = null;
         const won = warOutcome(war).includes('Vittoria');
         if (!isCwl && won && notif.clan_activity_enabled === true && notif.clan_war_streak === true) {
@@ -770,7 +784,7 @@ async function _processSingleWarAlerts({
         }
         await send(buildWarFinalMsg(war, isCwl, streakInfo));
       }
-      if (isCwl && notif.cwl_standings === true) {
+      if (isCwl && masterOn && notif.cwl_standings === true) {
         const sk = `standings:${war.endTime}`;
         if (!sent.has(sk)) {
           sent.add(sk);
@@ -965,13 +979,14 @@ async function _raidAlertsForChat(telegram, chatId, clanTag, sb) {
   // Raid ongoing
   const startTime = current.startTime;
 
-  // Primo rilevamento di questa stagione di raid → inizializza senza notificare
+  // Nuovo weekend (startTime diverso) oppure primo rilevamento
   if (!prevMem.startTime || prevMem.startTime !== startTime) {
     const initDestroyed = new Set();
-    const initCleared   = new Set();
+    const initCleared = new Set();
+    const initSent = new Set(sent);
     for (const entry of (current.attackLog || [])) {
-      const et      = entry.defender?.tag || 'unknown';
-      let allDone   = (entry.districts || []).length > 0;
+      const et = entry.defender?.tag || 'unknown';
+      let allDone = (entry.districts || []).length > 0;
       for (const d of (entry.districts || [])) {
         if ((d.destructionPercent || 0) >= 100) {
           initDestroyed.add(`${et}:${d.id}`);
@@ -981,17 +996,51 @@ async function _raidAlertsForChat(telegram, chatId, clanTag, sb) {
       }
       if (allDone) initCleared.add(et);
     }
-    // Marca start come "già visto" per non notificarlo al riavvio
-    const initSent = new Set(sent);
-    initSent.add(`start:${startTime}`);
+
+    // Seed milestone/loot/capitale già raggiunti (no spam post-restart mid-raid)
+    const totalLootInit = (current.attackLog || []).reduce(
+      (acc, e) => acc + Number(e.capitalTotalLoot || 0),
+      0,
+    );
+    const step = 50_000;
+    const reachedInit = Math.floor(totalLootInit / step);
+    for (let i = 1; i <= reachedInit; i++) {
+      initSent.add(`loot:${startTime}:${i * step}`);
+    }
+    for (const defEntry of (current.defenseLog || [])) {
+      const districts = defEntry.districts || [];
+      if (!districts.length) continue;
+      if (districts.every((d) => Number(d.destructionPercent || 0) >= 100)) {
+        initSent.add(`capital_fallen:${startTime}:${defEntry.attacker?.tag || 'unknown'}`);
+      }
+    }
+
+    const isColdStart = !prevMem.startTime;
+    const isNewWeekend = Boolean(prevMem.startTime && prevMem.startTime !== startTime);
+
+    if (isColdStart) {
+      // Redeploy / primo ciclo: non notificare inizio già in corso
+      initSent.add(`start:${startTime}`);
+    } else if (isNewWeekend && notif.raid_start === true && !initSent.has(`start:${startTime}`)) {
+      initSent.add(`start:${startTime}`);
+      await send(
+        `🏛 <b>Raid Capitale – Iniziato!</b>\n` +
+        `Il weekend di raid è cominciato.\n` +
+        `Ricorda di completare i tuoi attacchi entro domenica! ⚔️`,
+      );
+    }
+
     raidStateMem.set(memKey, {
-      state: 'ongoing', startTime,
-      destroyed: initDestroyed, clearedEnemies: initCleared, sent: initSent,
+      state: 'ongoing',
+      startTime,
+      destroyed: initDestroyed,
+      clearedEnemies: initCleared,
+      sent: initSent,
     });
     return;
   }
 
-  // Transizione not-ongoing → ongoing (vero inizio raid, bot era già in esecuzione)
+  // Transizione ended/unknown → ongoing con stesso startTime (glitch API / gap poll)
   if (prevMem.state !== 'ongoing') {
     const key = `start:${startTime}`;
     if (!sent.has(key) && notif.raid_start === true) {

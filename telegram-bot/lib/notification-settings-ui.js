@@ -266,7 +266,7 @@ const FLAG_EXAMPLES = {
     '🎯 <b>Giochi del clan</b>\n' +
     'I Giochi del Clan sono iniziati!\n' +
     'Completa le sfide e contribuisci ai punti del clan. 🏅\n\n' +
-    '<i>(Esempio illustrativo — lo stesso stile degli altri avvisi.)</i>',
+    '<i>Anteprima — avviso automatico non ancora attivo (in arrivo).</i>',
 
   custom_war:
     '🛡 <b>⚔️ Guerra – Preparazione</b>\n' +
@@ -348,11 +348,7 @@ async function buildMainKb(sb, chatId) {
     return [Markup.button.callback(`${cat.emoji} ${cat.name}${suffix}`, `notif_cat:${cat.id}`)];
   });
   rows.push([
-    Markup.button.callback(
-      `🎯 Giochi del clan ${tog(s.clan_games_enabled === true)}`,
-      'notif_tog:clan_games_enabled',
-    ),
-    Markup.button.callback('👁', 'notif_ex:clan_games_enabled'),
+    Markup.button.callback('🎯 Giochi del clan · presto', 'notif_ex:clan_games_enabled'),
   ]);
   rows.push([Markup.button.callback('⏱ Alert personalizzati', 'notif_custom_menu')]);
   rows.push([Markup.button.callback('« Menù', 'menu')]);
@@ -623,6 +619,10 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
   bot.action(/^notif_tog:(.+)$/, async (ctx) => {
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
     const key = ctx.match[1];
+    if (key === 'clan_games_enabled') {
+      await ctx.answerCbQuery('Giochi del clan: avviso automatico in arrivo.').catch(() => {});
+      return;
+    }
     if (!ALL_FLAG_KEYS.has(key)) {
       await ctx.answerCbQuery('Flag non valido.').catch(() => {});
       return;
