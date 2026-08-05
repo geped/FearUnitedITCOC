@@ -214,14 +214,24 @@ function formatAuthedMenuIntro({
   hasClanOverride,
   chatHint,
   groupMenuBanner,
+  cocTag,
+  clanRole,
+  profilesCount,
 }) {
   const hint = chatHint ? `\n\n📍 <i>${escapeHtml(chatHint)}</i>` : '';
   const banner = groupMenuBanner ? groupMenuBanner : '';
+  const villaggio = cocTag
+    ? `\n🎯 Profilo: <code>${escapeHtml(cocTag)}</code>${clanRole ? ` · ${escapeHtml(clanRole)}` : ''}`
+    : '';
+  const multi =
+    Number(profilesCount) > 1
+      ? `\n👤 Profili CoC: <b>${Number(profilesCount)}</b> — Account → «Profili CoC» per cambiare`
+      : '';
   if (!clanTag) {
     return (
       `⚔️ <b>CoCBoard</b>\n` +
       `${DIV2}\n` +
-      `👤 <b>${escapeHtml(displayName || 'Giocatore')}</b>\n` +
+      `👤 <b>${escapeHtml(displayName || 'Giocatore')}</b>${villaggio}${multi}\n` +
       `${DIV}\n\n` +
       `⚠️ <b>Nessun clan</b> collegato al profilo.\n\n` +
       `• Entra in un clan in game, oppure\n` +
@@ -235,11 +245,10 @@ function formatAuthedMenuIntro({
   return (
     `⚔️ <b>CoCBoard</b>\n` +
     `${DIV2}\n` +
-    `👤 <b>${escapeHtml(displayName || 'Comandante')}</b>\n` +
+    `👤 <b>${escapeHtml(displayName || 'Giocatore')}</b>${villaggio}${multi}\n` +
     `🏠 <b>${escapeHtml(clanName || clanTag)}</b>\n` +
-    `└ Tag <code>${escapeHtml(clanTag)}</code>${src}\n` +
-    `${DIV}\n\n` +
-    `Scegli una sezione qui sotto o <code>/help</code>.` +
+    `<code>${escapeHtml(clanTag)}</code>${src}\n` +
+    `${DIV}\n` +
     hint +
     banner
   );

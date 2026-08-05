@@ -32,6 +32,9 @@ const pendingLinkWizard = new Map();
 const pendingCommunity = new Map();
 /** Handlers UI multi-profilo (impostati in setupBot) */
 let profilesHandlers = null;
+/** Evita di ripresentare il gate profili a ogni /start nella stessa sessione bot */
+const profileGateDone = new Set();
+
 /** Dopo login da Community (profilo CoCBoard) → scelta chat globale vs menù */
 const postAuthGlobalResume = new Map();
 /** Supporto: ticket attivo per admin (chat continua) + aperture utente. */
@@ -782,7 +785,9 @@ async function handlePendingMessage(ctx) {
         }
         await replyTransient(ctx, '✅ <b>Accesso effettuato.</b>', { parse_mode: 'HTML' });
         ctx.cocboardUser = data.user;
+        if (uid != null) profileGateDone.delete(uid);
         const gated = await (profilesHandlers?.afterLoginMaybeGate?.(ctx, data.session.access_token));
+        if (uid != null) profileGateDone.add(uid);
         if (gated) return;
         if (postAuthGlobalResume.get(uid) === 'global_profile') {
           postAuthGlobalResume.delete(uid);
@@ -1701,10 +1706,15 @@ async function mainMenuKeyboard(ctx, user, hasClanTag, clanTag, clanName) {
   }
   const gUrl = guideUrl();
   const acctBtn = Markup.button.callback('⚙️ Account', 'acct');
+  const profBtn = Markup.button.callback('👤 Profili CoC', 'prof_menu');
+  if (!grp) {
+    rows.push([profBtn, acctBtn]);
+  }
   if (gUrl) {
     const guideBtn = grp ? Markup.button.url('📘 Guida', gUrl) : Markup.button.webApp('📘 Guida', gUrl);
-    rows.push([acctBtn, guideBtn]);
-  } else {
+    if (grp) rows.push([acctBtn, guideBtn]);
+    else rows.push([guideBtn]);
+  } else if (grp) {
     rows.push([acctBtn]);
   }
   rows.push([Markup.button.callback('🚪 Logout', 'auth_logout')]);
@@ -1842,10 +1852,50 @@ async function sendMainMenu(ctx) {
   const user = sess?.user || ctx.cocboardUser;
   if (!user) return sendGuestMenu(ctx);
 
-  const meta = user.user_metadata || {};
-  const display = meta.username || (user.email || '').split('@')[0] || 'Comandante';
+  // Gate multi-profilo anche su /start (una volta per sessione bot)
+  if (
+    !isLinkedChatContext(ctx) &&
+    sess?.session?.access_token &&
+    profilesHandlers &&
+    uid != null &&
+    !profileGateDone.has(uid)
+  ) {
+    try {
+      const gated = await profilesHandlers.afterLoginMaybeGate(ctx, sess.session.access_token);
+      profileGateDone.add(uid);
+      if (gated) {
+        ctx.cocboardUser = (await tauth.getValidSession(uid))?.user || user;
+        return;
+      }
+      const refreshed = await tauth.getValidSession(uid);
+      if (refreshed?.user) ctx.cocboardUser = refreshed.user;
+    } catch (e) {
+      console.warn('[profiles] menu gate', e.message);
+      profileGateDone.add(uid);
+    }
+  }
+
+  const u = ctx.cocboardUser || user;
+  const meta = u.user_metadata || {};
+  const display = meta.username || (u.email || '').split('@')[0] || 'Comandante';
   const { clanTag, clanName, hasOverride } = await resolveEffectiveClanContext(ctx);
   const grp = isLinkedChatContext(ctx);
+  let profilesCount = 1;
+  try {
+    const row = await sb.getFullRow(uid);
+    if (row?.auth_access_token) {
+      const boot = await profilesApi.bootstrap(row.auth_access_token);
+      profilesCount = (boot.profiles || []).length || 1;
+    }
+  } catch (_) {}
+  const roleLbl = (() => {
+    const r = String(meta.clan_role || (meta.role !== 'admin' ? meta.role : '') || '').toLowerCase();
+    if (r === 'capo') return 'Capo';
+    if (r === 'co-capo') return 'Co-Capo';
+    if (r === 'anziano') return 'Anziano';
+    if (r === 'membro') return 'Membro';
+    return r || '';
+  })();
   const intro = fmt.formatAuthedMenuIntro({
     displayName: display,
     clanTag,
@@ -1853,8 +1903,11 @@ async function sendMainMenu(ctx) {
     hasClanOverride: hasOverride,
     chatHint: grp ? 'Sei in gruppo o canale.' : '',
     groupMenuBanner: '',
+    cocTag: meta.coc_tag || null,
+    clanRole: roleLbl,
+    profilesCount,
   });
-  const kb = await mainMenuKeyboard(ctx, user, !!clanTag, clanTag, clanName);
+  const kb = await mainMenuKeyboard(ctx, u, !!clanTag, clanTag, clanName);
   if (ctx.callbackQuery) {
     try {
       await ctx.editMessageText(intro, { parse_mode: 'HTML', ...kb });
@@ -1939,6 +1992,7 @@ async function performFullLogout(ctx, { viaCommand }) {
   } catch (e) {
     console.error('[cocboard-bot] clearAuthSession', e.message || e);
   }
+  profileGateDone.delete(uid);
   pendingAuth.delete(uid);
   pendingSearch.delete(uid);
   pendingLinkWizard.delete(uid);
@@ -4441,6 +4495,9 @@ function setupBot(bot) {
     isLinkedChatContext,
     sendMainMenu,
     replyTransient,
+    onProfilePicked: (telegramUserId) => {
+      if (telegramUserId != null) profileGateDone.add(Number(telegramUserId));
+    },
   });
 
   // Impostazioni notifiche (menu gerarchico per categorie + toggle singoli flag)

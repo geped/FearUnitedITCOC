@@ -136,6 +136,80 @@ async function upsertPrefs(admin, userId, patch) {
 /**
  * Migrazione lazy: utenti legacy → 1 profilo da user_metadata.
  */
+async function fetchLivePlayer(playerTag) {
+  const proxyUrl = process.env.RENDER_PROXY_URL;
+  if (!proxyUrl) return null;
+  const tag = normalizeTag(playerTag);
+  if (!tag) return null;
+  try {
+    const r = await fetch(`${proxyUrl}/player?playerTag=${encodeURIComponent(tag)}`, {
+      headers: { 'x-sync-key': process.env.SYNC_SECRET || '' },
+      signal: AbortSignal.timeout(20000),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return null;
+    return data;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Aggiorna un profilo (e opzionalmente metadata Auth) dai dati live CoC.
+ */
+async function refreshProfileRowFromLive(admin, profile, { syncMetaUser = null, prefs = null } = {}) {
+  const player = await fetchLivePlayer(profile.coc_tag);
+  if (!player?.tag) return profile;
+
+  const patch = {
+    username: player.name || profile.username,
+    clan_role: mapClanRole(player.role),
+    coc_clan_tag: normalizeTag(player.clan?.tag) || null,
+    coc_clan_name: player.clan?.name || null,
+    coc_clan_badge_url:
+      player.clan?.badgeUrls?.medium || player.clan?.badgeUrls?.small || null,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { data: updated, error } = await admin
+    .from('user_coc_profiles')
+    .update(patch)
+    .eq('id', profile.id)
+    .select('*')
+    .single();
+  if (error) throw error;
+
+  if (syncMetaUser) {
+    await syncUserMetadata(admin, syncMetaUser.id, updated, prefs, syncMetaUser);
+  }
+  return updated || { ...profile, ...patch };
+}
+
+/**
+ * Refresh live di tutti i profili; sincronizza metadata sull'attivo.
+ */
+async function refreshAllProfilesLive(admin, user, profiles, prefs) {
+  const out = [];
+  let active = null;
+  const activeId = prefs?.active_profile_id || prefs?.default_profile_id || profiles[0]?.id;
+  for (const p of profiles) {
+    const isActive = p.id === activeId;
+    try {
+      const refreshed = await refreshProfileRowFromLive(admin, p, {
+        syncMetaUser: isActive ? user : null,
+        prefs,
+      });
+      out.push(refreshed);
+      if (isActive) active = refreshed;
+    } catch (e) {
+      console.warn('[profiles] refresh live', p.coc_tag, e.message);
+      out.push(p);
+      if (isActive) active = p;
+    }
+  }
+  return { profiles: out, active: active || out[0] || null };
+}
+
 async function ensureMigrated(admin, user) {
   const userId = user.id;
   let profiles = await listProfiles(admin, userId);
@@ -214,18 +288,32 @@ async function ensureMigrated(admin, user) {
 
 function needsProfileSelection(prefs, profiles) {
   if (!profiles.length) return true;
-  if (profiles.length === 1 && !prefs?.always_ask_profile) return false;
   if (prefs?.always_ask_profile) return true;
+  if (profiles.length === 1) return false;
+  // 2+ profili: chiedi solo se non c'è un predefinito valido
   if (prefs?.default_profile_id) {
-    const ok = profiles.some((p) => p.id === prefs.default_profile_id);
-    return !ok;
+    return !profiles.some((p) => p.id === prefs.default_profile_id);
   }
-  return profiles.length > 1;
+  return true;
 }
 
-async function bootstrapForUser(user) {
+async function bootstrapForUser(user, opts = {}) {
   const admin = adminClient();
-  const { profiles, prefs, active } = await ensureMigrated(admin, user);
+  let { profiles, prefs, active } = await ensureMigrated(admin, user);
+
+  // Sempre aggiorna clan/ruolo live da CoC (evita clan vecchio in metadata)
+  if (opts.skipLiveRefresh !== true && profiles.length) {
+    try {
+      const live = await refreshAllProfilesLive(admin, user, profiles, prefs);
+      profiles = live.profiles;
+      active = live.active;
+      // Ricarica prefs (metadata può essere cambiato)
+      prefs = (await getPrefs(admin, user.id)) || prefs;
+    } catch (e) {
+      console.warn('[profiles] bootstrap live refresh', e.message);
+    }
+  }
+
   const needs_selection = needsProfileSelection(prefs, profiles);
   return {
     ok: true,
@@ -246,11 +334,18 @@ async function bootstrapForUser(user) {
 async function switchActiveProfile(user, profileId, opts = {}) {
   const admin = adminClient();
   const { profiles, prefs } = await ensureMigrated(admin, user);
-  const target = profiles.find((p) => p.id === profileId);
+  let target = profiles.find((p) => p.id === profileId);
   if (!target) {
     const err = new Error('Profilo non trovato.');
     err.status = 404;
     throw err;
+  }
+
+  // Refresh live prima di attivare
+  try {
+    target = await refreshProfileRowFromLive(admin, target);
+  } catch (e) {
+    console.warn('[profiles] switch live refresh', e.message);
   }
 
   // Solo allinea metadata Auth (es. Mini App dedicata) senza cambiare profilo attivo salvato
@@ -413,6 +508,13 @@ async function addProfileForUser(user, player) {
       default_profile_id: prefs?.default_profile_id || created.id,
     });
     await syncUserMetadata(admin, user.id, created, nextPrefs, user);
+  } else if (profiles.length >= 1) {
+    // Dal 2° profilo in poi: togli predefinito così al prossimo login si sceglie
+    // (salvo che l'utente abbia già impostato always_ask o un default esplicito dopo)
+    nextPrefs = await upsertPrefs(admin, user.id, {
+      default_profile_id: null,
+      always_ask_profile: false,
+    });
   }
 
   return { ok: true, profile: profileToPublic(created), count: profiles.length + 1 };
@@ -591,6 +693,9 @@ module.exports = {
   resolveLoginEmailFromInput,
   getUserFromJwt,
   bearerFromReq,
+  refreshProfileRowFromLive,
+  refreshAllProfilesLive,
+  fetchLivePlayer,
   listProfiles,
   getPrefs,
 };

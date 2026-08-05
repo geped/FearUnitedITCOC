@@ -798,17 +798,12 @@ function applyClanFromApiClanObject(clan) {
 }
 
 /**
- * Se non c'è `coc_clan_tag` nei metadata, risolve il clan come il bot Telegram:
- * 1) lookup player da `coc_tag` (pubblico)
+ * Risolve il clan live dal player CoC (preferito) così non resta il clan vecchio in metadata.
+ * 1) lookup player da `coc_tag` (pubblico) → clan attuale
  * 2) roster `members` su Supabase se l'API CoC non risponde
- * 3) `/api/lookup?type=session-clan` (JWT): `telegram_links.player_tag`, override `clan_tag`
- *
- * Così chi è in clan (anche solo collegato da bot) non vede "nessun clan" se i metadata Auth sono indietro.
- * `telegram_moderator` non sostituisce l'appartenenza al clan: limita solo il pannello CoCBoardBot.
+ * 3) `/api/lookup?type=session-clan` (JWT)
  */
 async function tryHydrateClanFromUserMetadata(user) {
-  if (window._userClanTag) return;
-
   const meta = user?.user_metadata || {};
   const normPlayer = (raw) => {
     if (!raw || !String(raw).trim()) return null;
@@ -823,7 +818,14 @@ async function tryHydrateClanFromUserMetadata(user) {
     try {
       const r = await fetch(`/api/lookup?type=player&playerTag=${encodeURIComponent(playerTag)}`);
       const data = await r.json();
-      if (r.ok && applyClanFromApiClanObject(data.clan)) return;
+      if (r.ok) {
+        if (data.clan && applyClanFromApiClanObject(data.clan)) return;
+        // In game senza clan: non tenere il clan vecchio dai metadata
+        window._userClanTag = null;
+        window._clanName = '';
+        window._clanBadgeUrl = null;
+        return;
+      }
     } catch (_) {}
     try {
       const row = await _fetchMemberRowForProfile(playerTag);
@@ -834,6 +836,9 @@ async function tryHydrateClanFromUserMetadata(user) {
       }
     } catch (_) {}
   }
+
+  // Fallback metadata solo se live non disponibile
+  if (window._userClanTag) return;
 
   try {
     const session = (await db.auth.getSession())?.data?.session;
@@ -1087,6 +1092,7 @@ function wireProfilesUiOnce() {
   });
   document.getElementById('prof-add-submit')?.addEventListener('click', async () => {
     const errEl = document.getElementById('prof-add-error');
+    const submitBtn = document.getElementById('prof-add-submit');
     errEl.style.display = 'none';
     const playerTag = document.getElementById('prof-add-tag').value.trim();
     const apiToken = document.getElementById('prof-add-token').value.trim();
@@ -1095,6 +1101,9 @@ function wireProfilesUiOnce() {
       errEl.style.display = 'block';
       return;
     }
+    const prevLabel = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Caricamento…';
     try {
       const headers = await authBearerHeaders();
       const r = await fetch('/api/register-with-coc', {
@@ -1111,6 +1120,9 @@ function wireProfilesUiOnce() {
     } catch (e) {
       errEl.textContent = e.message || 'Errore';
       errEl.style.display = 'block';
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = prevLabel || 'Collega villaggio';
     }
   });
   document.getElementById('prof-wipe-submit')?.addEventListener('click', async () => {
@@ -1155,6 +1167,8 @@ async function ensureProfilesBeforeApp(user) {
     const state = await profilesApi('profiles-bootstrap');
     window._profilesState = state;
     updateActiveProfileChip(state);
+    // Metadata Auth aggiornati dal refresh live → rinnova JWT locale
+    await db.auth.refreshSession().catch(() => {});
     if (state.needs_selection && !window.__cocboardFromMiniAppProfile) {
       renderProfilesModal(state, { gate: true });
       return false;
@@ -1674,7 +1688,12 @@ document.getElementById("sync-btn").addEventListener("click", async () => {
   const status = document.getElementById("sync-status");
   status.textContent = "Sincronizzazione in corso…";
   try {
-    const res = await fetch(`/api/sync-members${clanQ()}`, { method: 'POST' });
+    const { data: { session } } = await db.auth.getSession();
+    const headers = {};
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+    const res = await fetch(`/api/sync-members${clanQ()}`, { method: 'POST', headers });
     let data = {};
     try {
       data = await res.json();

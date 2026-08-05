@@ -146,6 +146,9 @@ function setup(bot, deps) {
       const token = await getAccessToken(sb, ctx.from.id);
       await profilesApi.switchProfile(token, profileId);
       await refreshCtxUser(tauth, ctx);
+      if (ctx.from?.id != null && typeof deps.onProfilePicked === 'function') {
+        deps.onProfilePicked(ctx.from.id);
+      }
       await replyTransient(ctx, '✅ Profilo attivo aggiornato.', { parse_mode: 'HTML' }, 2500);
       await sendMainMenu(ctx);
     } catch (e) {
@@ -402,6 +405,9 @@ function setup(bot, deps) {
         console.warn('[profiles] afterLogin', e.message);
       }
       return false;
+    },
+    markGateDone(telegramUserId) {
+      /* no-op placeholder — parent tracks profileGateDone */
     },
   };
 }
