@@ -627,6 +627,55 @@ h3 { font-size: 1.05rem; }
   flex-wrap: wrap;
   gap: 0.35rem;
 }
+.profiles-row-identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+.profiles-th {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.profiles-th-empty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  font-size: 0.65rem;
+  color: var(--text-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.profiles-row-clan {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--text-2);
+}
+.profiles-clan-badge {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.profiles-busy-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  color: #fff;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  z-index: 5;
+  border-radius: inherit;
+}
+#profiles-modal .modal-box { position: relative; }
 
 .btn-danger {
     background: none;

@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.user_coc_profiles (
     coc_clan_tag         TEXT,
     coc_clan_name        TEXT,
     coc_clan_badge_url   TEXT,
+    town_hall_level      INT,
     label                TEXT,
     created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -20,6 +21,9 @@ CREATE TABLE IF NOT EXISTS public.user_coc_profiles (
 
 CREATE INDEX IF NOT EXISTS user_coc_profiles_user_id_idx
   ON public.user_coc_profiles (user_id);
+
+ALTER TABLE public.user_coc_profiles
+  ADD COLUMN IF NOT EXISTS town_hall_level INT;
 
 CREATE TABLE IF NOT EXISTS public.user_account_prefs (
     user_id              UUID PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,

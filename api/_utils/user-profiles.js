@@ -55,6 +55,7 @@ function profileToPublic(row) {
     coc_clan_tag: row.coc_clan_tag,
     coc_clan_name: row.coc_clan_name,
     coc_clan_badge_url: row.coc_clan_badge_url,
+    town_hall_level: row.town_hall_level != null ? Number(row.town_hall_level) : null,
     label: row.label || null,
     created_at: row.created_at,
   };
@@ -168,6 +169,7 @@ async function refreshProfileRowFromLive(admin, profile, { syncMetaUser = null, 
     coc_clan_name: player.clan?.name || null,
     coc_clan_badge_url:
       player.clan?.badgeUrls?.medium || player.clan?.badgeUrls?.small || null,
+    town_hall_level: Number(player.townHallLevel) || profile.town_hall_level || null,
     updated_at: new Date().toISOString(),
   };
 

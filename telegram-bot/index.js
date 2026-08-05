@@ -1586,17 +1586,20 @@ async function buildWebAppHandoffUrl(ctx, extraParams = {}) {
   if (!base || !ctx.from?.id) return null;
   await tauth.getValidSession(ctx.from.id);
   const params = { ...extraParams };
-  // Mini App dedicata: passa profile id al sito (senza alterare il profilo attivo del bot)
-  try {
-    const row = await sb.getFullRow(ctx.from.id);
-    if (row?.auth_access_token) {
-      const boot = await profilesApi.bootstrap(row.auth_access_token);
-      if (boot.prefs?.mini_app_profile_id) {
-        params.tg_profile = boot.prefs.mini_app_profile_id;
+  const forcedClan = params.clan_tag || params.clanTag || null;
+  // Mini App dedicata: solo in chat privata e senza clan forzato da gruppo
+  if (!forcedClan && !isLinkedChatContext(ctx)) {
+    try {
+      const row = await sb.getFullRow(ctx.from.id);
+      if (row?.auth_access_token) {
+        const boot = await profilesApi.bootstrap(row.auth_access_token);
+        if (boot.prefs?.mini_app_profile_id) {
+          params.tg_profile = boot.prefs.mini_app_profile_id;
+        }
       }
+    } catch (e) {
+      console.warn('[profiles] mini-app handoff', e.message);
     }
-  } catch (e) {
-    console.warn('[profiles] mini-app handoff', e.message);
   }
   const code = await sb.createWebAppHandoff(ctx.from.id);
   const q = new URLSearchParams({ tg_h: code });
@@ -1606,10 +1609,15 @@ async function buildWebAppHandoffUrl(ctx, extraParams = {}) {
   return `${base}/?${q.toString()}`;
 }
 
-function buildGuestWebUrl(openTab) {
+function buildGuestWebUrl(openTab, clanTag) {
   const base = (process.env.COCBOARD_SITE_HOME_URL || '').trim().replace(/\/$/, '');
   if (!base) return null;
   const q = new URLSearchParams({ open_tab: String(openTab || '') });
+  if (clanTag) {
+    let t = String(clanTag).trim().toUpperCase();
+    if (!t.startsWith('#')) t = '#' + t.replace(/^#+/, '');
+    q.set('clan_tag', t);
+  }
   return `${base}/?${q.toString()}`;
 }
 
@@ -1777,11 +1785,11 @@ async function renderClanWebAppsMenu(ctx) {
   if (isAuthed) ctx.cocboardUser = sess.user;
   await ensureTgBotUsername(ctx.telegram);
   const loginUrl = privateChatUrl(cachedTgBotUsername);
-  // Clan tag per ospiti in gruppo: codificato nel startapp così la Mini App sa quale clan mostrare
-  const guestClanTag = (!isAuthed && isLinkedChatContext(ctx))
+  // In gruppo collegato: SEMPRE il clan della chat (ospiti e autenticati), mai il profilo attivo
+  const grp = isLinkedChatContext(ctx);
+  const linkedClanTag = grp
     ? await resolveEffectiveClanTag(ctx).catch(() => null)
     : null;
-  const grp = isLinkedChatContext(ctx);
   const webPairs = isAuthed
     ? [...webPairsBase, ['👤 Profilo (web)', 'profilo', null, null]]
     : webPairsBase;
@@ -1790,14 +1798,14 @@ async function renderClanWebAppsMenu(ctx) {
       const lockedA = !isAuthed && !MINI_APP_GUEST_ALLOWED_TABS.has(ta);
       let ua = null;
       if (!lockedA) {
-        if (grp) ua = buildGuestWebUrl(ta);
+        if (grp) ua = buildGuestWebUrl(ta, linkedClanTag);
         else if (isAuthed) ua = await buildWebAppHandoffUrl(ctx, { open_tab: ta });
         else ua = buildGuestWebUrl(ta);
       }
       if (lockedA) {
         if (grp) {
           const botUser = (cachedTgBotUsername || 'cocboardbot').replace(/^@/, '');
-          const rawTag = (guestClanTag || '').replace(/^#/, '').trim();
+          const rawTag = (linkedClanTag || '').replace(/^#/, '').trim();
           const sp = rawTag ? `${ta}__${rawTag}` : ta;
           rows.push([Markup.button.url(`${la} 🔒`, `https://t.me/${botUser}/home?startapp=${sp}`)]);
         } else if (loginUrl) {
@@ -1809,31 +1817,31 @@ async function renderClanWebAppsMenu(ctx) {
       }
       if (!ua || !String(ua).startsWith('https://')) continue;
       if (!lb || !tb) {
-        rows.push([webLaunchButton(ctx, la, ua, ta, guestClanTag)]);
+        rows.push([webLaunchButton(ctx, la, ua, ta, linkedClanTag)]);
         continue;
       }
       const lockedB = !isAuthed && !MINI_APP_GUEST_ALLOWED_TABS.has(tb);
       let ub = null;
       if (!lockedB) {
-        if (grp) ub = buildGuestWebUrl(tb);
+        if (grp) ub = buildGuestWebUrl(tb, linkedClanTag);
         else if (isAuthed) ub = await buildWebAppHandoffUrl(ctx, { open_tab: tb });
         else ub = buildGuestWebUrl(tb);
       }
       if (lockedB) {
         if (grp) {
           const botUser = (cachedTgBotUsername || 'cocboardbot').replace(/^@/, '');
-          const rawTag = (guestClanTag || '').replace(/^#/, '').trim();
+          const rawTag = (linkedClanTag || '').replace(/^#/, '').trim();
           const sp = rawTag ? `${tb}__${rawTag}` : tb;
-          rows.push([webLaunchButton(ctx, la, ua, ta, guestClanTag), Markup.button.url(`${lb} 🔒`, `https://t.me/${botUser}/home?startapp=${sp}`)]);
+          rows.push([webLaunchButton(ctx, la, ua, ta, linkedClanTag), Markup.button.url(`${lb} 🔒`, `https://t.me/${botUser}/home?startapp=${sp}`)]);
         } else if (loginUrl) {
-          rows.push([webLaunchButton(ctx, la, ua, ta, guestClanTag), Markup.button.url(`${lb} 🔒`, loginUrl)]);
+          rows.push([webLaunchButton(ctx, la, ua, ta, linkedClanTag), Markup.button.url(`${lb} 🔒`, loginUrl)]);
         } else {
-          rows.push([webLaunchButton(ctx, la, ua, ta, guestClanTag), Markup.button.callback(`${lb} 🔒`, 'noop')]);
+          rows.push([webLaunchButton(ctx, la, ua, ta, linkedClanTag), Markup.button.callback(`${lb} 🔒`, 'noop')]);
         }
       } else if (ub && String(ub).startsWith('https://')) {
-        rows.push([webLaunchButton(ctx, la, ua, ta, guestClanTag), webLaunchButton(ctx, lb, ub, tb, guestClanTag)]);
+        rows.push([webLaunchButton(ctx, la, ua, ta, linkedClanTag), webLaunchButton(ctx, lb, ub, tb, linkedClanTag)]);
       } else {
-        rows.push([webLaunchButton(ctx, la, ua, ta, guestClanTag)]);
+        rows.push([webLaunchButton(ctx, la, ua, ta, linkedClanTag)]);
       }
     } catch (_) { /* singolo tab fallito — prosegui con i successivi */ }
   }

@@ -39,6 +39,13 @@ const db = window.sb;
     const p = new URLSearchParams(window.location.search);
     const ot = p.get('open_tab');
     const allowed = new Set(['members', 'cerca', 'cwl', 'cwl_warlog', 'login', 'warlog', 'profilo', 'rankings', 'bonus', 'botadmin']);
+    const clanFromQ = p.get('clan_tag') || p.get('clanTag');
+    if (clanFromQ && String(clanFromQ).trim()) {
+      let t = String(clanFromQ).trim().toUpperCase();
+      if (!t.startsWith('#')) t = '#' + t.replace(/^#+/, '');
+      window.__cocboardForcedClanTag = t;
+      window.__cocboardGuestClanTag = t;
+    }
     if (allowed.has(ot)) {
       window.__cocboardOpenTab = ot;
     } else {
@@ -49,7 +56,10 @@ const db = window.sb;
         const tab = parts[0];
         const rawTag = parts[1] || '';
         if (allowed.has(tab)) window.__cocboardOpenTab = tab;
-        if (rawTag) window.__cocboardGuestClanTag = `#${rawTag}`;
+        if (rawTag) {
+          window.__cocboardGuestClanTag = `#${rawTag}`;
+          window.__cocboardForcedClanTag = `#${rawTag}`;
+        }
       }
     }
   } catch (_) {}
@@ -78,8 +88,9 @@ async function authFetch(url, options = {}) {
 
 // Restituisce '?clanTag=XXXX' da aggiungere alle fetch API
 function clanQ() {
-  return window._userClanTag
-    ? `?clanTag=${encodeURIComponent(window._userClanTag)}`
+  const tag = window.__cocboardForcedClanTag || window._userClanTag;
+  return tag
+    ? `?clanTag=${encodeURIComponent(tag)}`
     : '';
 }
 
@@ -804,6 +815,23 @@ function applyClanFromApiClanObject(clan) {
  * 3) `/api/lookup?type=session-clan` (JWT)
  */
 async function tryHydrateClanFromUserMetadata(user) {
+  // Mini App da gruppo collegato: clan forzato dalla chat, non dal profilo attivo
+  if (window.__cocboardForcedClanTag) {
+    const forced = normClanTag(window.__cocboardForcedClanTag);
+    window._userClanTag = forced;
+    window._clanName = '';
+    window._clanBadgeUrl = null;
+    try {
+      const r = await fetch(`/api/clan-info?clanTag=${encodeURIComponent(forced)}`);
+      const data = await r.json().catch(() => ({}));
+      if (r.ok && data?.tag) {
+        applyClanFromApiClanObject(data);
+        return;
+      }
+    } catch (_) {}
+    return;
+  }
+
   const meta = user?.user_metadata || {};
   const normPlayer = (raw) => {
     if (!raw || !String(raw).trim()) return null;
@@ -820,7 +848,6 @@ async function tryHydrateClanFromUserMetadata(user) {
       const data = await r.json();
       if (r.ok) {
         if (data.clan && applyClanFromApiClanObject(data.clan)) return;
-        // In game senza clan: non tenere il clan vecchio dai metadata
         window._userClanTag = null;
         window._clanName = '';
         window._clanBadgeUrl = null;
@@ -837,7 +864,6 @@ async function tryHydrateClanFromUserMetadata(user) {
     } catch (_) {}
   }
 
-  // Fallback metadata solo se live non disponibile
   if (window._userClanTag) return;
 
   try {
@@ -917,6 +943,26 @@ function updateActiveProfileChip(state) {
   el.textContent = `${p.username || 'Villaggio'} (${p.coc_tag})${clan}`;
 }
 
+function setProfilesModalBusy(busy, msg) {
+  const modal = document.getElementById('profiles-modal');
+  if (!modal) return;
+  let overlay = document.getElementById('profiles-busy-overlay');
+  if (busy) {
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'profiles-busy-overlay';
+      overlay.className = 'profiles-busy-overlay';
+      modal.querySelector('.modal-box')?.appendChild(overlay);
+    }
+    overlay.textContent = msg || 'Caricamento…';
+    overlay.style.display = 'flex';
+    modal.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+  } else if (overlay) {
+    overlay.style.display = 'none';
+    modal.querySelectorAll('button').forEach((b) => { b.disabled = false; });
+  }
+}
+
 function renderProfilesModal(state, { gate = false } = {}) {
   window._profilesState = state;
   window._profilesGateMode = !!gate;
@@ -943,11 +989,26 @@ function renderProfilesModal(state, { gate = false } = {}) {
     if (prefs.active_profile_id === p.id) marks.push('●');
     if (prefs.default_profile_id === p.id) marks.push('⭐');
     if (prefs.mini_app_profile_id === p.id) marks.push('📱');
+    const th = Number(p.town_hall_level) || 0;
+    const thN = String(Math.min(Math.max(th || 1, 1), 18)).padStart(2, '0');
+    const thSrc = th > 0 ? `th/level_${thN}.webp` : '';
+    const badge = (p.coc_clan_badge_url || '').replace(/"/g, '');
+    const name = (p.label || p.username || 'Villaggio').replace(/[<>]/g, '');
+    const tag = (p.coc_tag || '').replace(/[<>]/g, '');
+    const role = (p.clan_role || '').replace(/[<>]/g, '');
+    const clanName = (p.coc_clan_name || '').replace(/[<>]/g, '');
     row.innerHTML = `
       <div class="profiles-row-main">
-        <div>
-          <strong>${marks.join(' ')} ${(p.label || p.username || 'Villaggio').replace(/[<>]/g,'')}</strong>
-          <div class="profiles-row-meta mono">${(p.coc_tag || '').replace(/[<>]/g,'')} · ${(p.clan_role || '').replace(/[<>]/g,'')}${p.coc_clan_name ? ' · ' + String(p.coc_clan_name).replace(/[<>]/g,'') : ''}</div>
+        <div class="profiles-row-identity">
+          ${thSrc ? `<img class="profiles-th" src="${thSrc}" alt="TH${th}" onerror="this.onerror=null;this.src='th/level_${thN}.png'">` : '<span class="profiles-th profiles-th-empty">TH?</span>'}
+          <div>
+            <strong>${marks.join(' ')} ${name}</strong>
+            <div class="profiles-row-meta mono">${tag} · ${role || '—'}</div>
+            <div class="profiles-row-clan">
+              ${badge ? `<img class="profiles-clan-badge" src="${badge}" alt="">` : ''}
+              <span>${clanName || (p.coc_clan_tag || 'Nessun clan')}</span>
+            </div>
+          </div>
         </div>
       </div>
       <div class="profiles-row-actions"></div>
@@ -1025,44 +1086,77 @@ function renderProfilesModal(state, { gate = false } = {}) {
   }
 
   modal.style.display = 'flex';
+  setProfilesModalBusy(false);
   updateActiveProfileChip(state);
 }
 
 async function refreshProfilesModal(opts = {}) {
-  const state = await profilesApi('profiles-bootstrap');
-  renderProfilesModal(state, opts);
-  return state;
+  setProfilesModalBusy(true, 'Caricamento profili…');
+  try {
+    const state = await profilesApi('profiles-bootstrap');
+    renderProfilesModal(state, opts);
+    return state;
+  } catch (e) {
+    setProfilesModalBusy(false);
+    throw e;
+  }
 }
 
 async function switchProfileAndReload(profileId, { setDefault = false } = {}) {
-  await profilesApi('profiles-switch', {
-    method: 'POST',
-    body: { profile_id: profileId, set_default: setDefault === true },
-  });
-  await db.auth.refreshSession().catch(() => {});
-  document.getElementById('profiles-modal').style.display = 'none';
-  const { data } = await db.auth.getUser();
-  if (data?.user) await showApp(data.user);
-  else location.reload();
+  window.__cocboardManualProfilePick = true;
+  setProfilesModalBusy(true, setDefault ? 'Imposto predefinito e attivo…' : 'Attivo profilo…');
+  try {
+    await profilesApi('profiles-switch', {
+      method: 'POST',
+      body: { profile_id: profileId, set_default: setDefault === true },
+    });
+    await db.auth.refreshSession().catch(() => {});
+    document.getElementById('profiles-modal').style.display = 'none';
+    const { data } = await db.auth.getUser();
+    if (data?.user) await showApp(data.user);
+    else location.reload();
+  } catch (e) {
+    setProfilesModalBusy(false);
+    alert(e.message || 'Errore cambio profilo');
+  }
 }
 
 async function setDefaultProfileId(profileId) {
-  await profilesApi('profiles-set-default', { method: 'POST', body: { profile_id: profileId } });
-  await refreshProfilesModal({ gate: false });
+  setProfilesModalBusy(true, 'Salvo predefinito…');
+  try {
+    await profilesApi('profiles-set-default', { method: 'POST', body: { profile_id: profileId } });
+    await refreshProfilesModal({ gate: false });
+  } catch (e) {
+    setProfilesModalBusy(false);
+    alert(e.message || 'Errore');
+  }
 }
 
 async function setMiniAppProfileId(profileId) {
-  await profilesApi('profiles-mini-app', { method: 'POST', body: { profile_id: profileId } });
-  await refreshProfilesModal({ gate: false });
+  setProfilesModalBusy(true, 'Salvo Mini App…');
+  try {
+    await profilesApi('profiles-mini-app', { method: 'POST', body: { profile_id: profileId } });
+    await refreshProfilesModal({ gate: false });
+  } catch (e) {
+    setProfilesModalBusy(false);
+    alert(e.message || 'Errore');
+  }
 }
 
 async function toggleAlwaysAsk(on) {
-  await profilesApi('profiles-always-ask', { method: 'POST', body: { always_ask: on === true } });
-  await refreshProfilesModal({ gate: false });
+  setProfilesModalBusy(true, 'Salvo preferenza…');
+  try {
+    await profilesApi('profiles-always-ask', { method: 'POST', body: { always_ask: on === true } });
+    await refreshProfilesModal({ gate: false });
+  } catch (e) {
+    setProfilesModalBusy(false);
+    alert(e.message || 'Errore');
+  }
 }
 
 async function removeProfileId(profileId) {
   if (!confirm('Scollegare questo villaggio dal tuo account?')) return;
+  setProfilesModalBusy(true, 'Scollegamento…');
   try {
     await profilesApi('profiles-remove', { method: 'POST', body: { profile_id: profileId } });
     await db.auth.refreshSession().catch(() => {});
@@ -1070,6 +1164,7 @@ async function removeProfileId(profileId) {
     const { data } = await db.auth.getUser();
     if (data?.user) await showApp(data.user);
   } catch (e) {
+    setProfilesModalBusy(false);
     alert(e.message || 'Impossibile scollegare.');
   }
 }
@@ -1078,7 +1173,14 @@ function wireProfilesUiOnce() {
   if (window.__profilesUiWired) return;
   window.__profilesUiWired = true;
   document.getElementById('profiles-btn')?.addEventListener('click', () => {
-    void refreshProfilesModal({ gate: false }).catch((e) => alert(e.message));
+    const btn = document.getElementById('profiles-btn');
+    const prev = btn?.textContent;
+    if (btn) { btn.disabled = true; btn.textContent = 'Caricamento…'; }
+    void refreshProfilesModal({ gate: false })
+      .catch((e) => alert(e.message))
+      .finally(() => {
+        if (btn) { btn.disabled = false; btn.textContent = prev || 'Profili'; }
+      });
   });
   document.getElementById('profiles-modal-close')?.addEventListener('click', () => {
     if (window._profilesGateMode) return;
@@ -1153,7 +1255,8 @@ async function ensureProfilesBeforeApp(user) {
   wireProfilesUiOnce();
   try {
     // Mini App con profilo dedicato (tg_profile): attiva quel profilo per la sessione web
-    if (window.__cocboardTgProfile) {
+    // Mai in gruppo collegato (clan forzato): resta il clan della chat
+    if (window.__cocboardTgProfile && !window.__cocboardForcedClanTag) {
       const pid = window.__cocboardTgProfile;
       delete window.__cocboardTgProfile;
       window.__cocboardFromMiniAppProfile = true;
@@ -1162,6 +1265,8 @@ async function ensureProfilesBeforeApp(user) {
         body: { profile_id: pid },
       });
       await db.auth.refreshSession().catch(() => {});
+    } else if (window.__cocboardForcedClanTag) {
+      delete window.__cocboardTgProfile;
     }
 
     const state = await profilesApi('profiles-bootstrap');
@@ -1169,18 +1274,22 @@ async function ensureProfilesBeforeApp(user) {
     updateActiveProfileChip(state);
     // Metadata Auth aggiornati dal refresh live → rinnova JWT locale
     await db.auth.refreshSession().catch(() => {});
-    if (state.needs_selection && !window.__cocboardFromMiniAppProfile) {
+    if (state.needs_selection && !window.__cocboardFromMiniAppProfile && !window.__cocboardForcedClanTag) {
       renderProfilesModal(state, { gate: true });
       return false;
     }
-    // Applica default se diverso dall'attivo (non in apertura Mini App dedicata)
+    // Applica predefinito SOLO al primo avvio sessione browser, mai dopo un "Usa" manuale
     if (
+      !window.__cocboardManualProfilePick &&
+      !window.__cocboardDefaultApplied &&
       !window.__cocboardFromMiniAppProfile &&
+      !window.__cocboardForcedClanTag &&
       state.prefs?.default_profile_id &&
       state.active?.id &&
       state.prefs.default_profile_id !== state.active.id &&
       !state.prefs.always_ask_profile
     ) {
+      window.__cocboardDefaultApplied = true;
       await profilesApi('profiles-switch', {
         method: 'POST',
         body: { profile_id: state.prefs.default_profile_id },
@@ -1188,6 +1297,8 @@ async function ensureProfilesBeforeApp(user) {
       await db.auth.refreshSession().catch(() => {});
       const { data } = await db.auth.getUser();
       if (data?.user) user = data.user;
+    } else {
+      window.__cocboardDefaultApplied = true;
     }
   } catch (e) {
     console.warn('[profiles]', e.message);
@@ -1222,13 +1333,21 @@ async function showApp(sessionUser) {
   const isTelegramModerator = user.user_metadata?.telegram_moderator === true;
   const canEdit   = ['admin', 'capo', 'co-capo'].includes(role);
 
-  // Info clan da metadata (normalizza; stringhe vuote = assente)
-  // Fallback: clan tag ospite passato via startapp per utenti anonimi Telegram
-  const rawMetaClan = user.user_metadata?.coc_clan_tag || window.__cocboardGuestClanTag || null;
+  // Info clan: priorità clan forzato da gruppo Telegram, poi metadata
+  const rawMetaClan =
+    window.__cocboardForcedClanTag ||
+    user.user_metadata?.coc_clan_tag ||
+    window.__cocboardGuestClanTag ||
+    null;
   window._userClanTag =
     rawMetaClan && String(rawMetaClan).trim() ? normClanTag(rawMetaClan) : null;
-  window._clanName     = user.user_metadata?.coc_clan_name || '';
-  window._clanBadgeUrl = user.user_metadata?.coc_clan_badge_url || null;
+  if (window.__cocboardForcedClanTag) {
+    window._clanName = '';
+    window._clanBadgeUrl = null;
+  } else {
+    window._clanName = user.user_metadata?.coc_clan_name || '';
+    window._clanBadgeUrl = user.user_metadata?.coc_clan_badge_url || null;
+  }
 
   await tryHydrateClanFromUserMetadata(user);
 
