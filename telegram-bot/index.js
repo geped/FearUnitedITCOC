@@ -873,7 +873,9 @@ async function handlePendingMessage(ctx) {
         }
         await replyTransient(ctx, `✅ Registrato come <b>${fmt.escapeHtml(reg.username)}</b>.`, { parse_mode: 'HTML' });
         ctx.cocboardUser = sign.user;
+        if (uid != null) profileGateDone.delete(uid);
         const gatedReg = await (profilesHandlers?.afterLoginMaybeGate?.(ctx, sign.session.access_token));
+        if (uid != null) profileGateDone.add(uid);
         if (gatedReg) return;
         if (postAuthGlobalResume.get(uid) === 'global_profile') {
           postAuthGlobalResume.delete(uid);
