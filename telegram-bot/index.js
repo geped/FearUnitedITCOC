@@ -17,6 +17,8 @@ const privateUi = require('./lib/private-ui-cleanup');
 const bonusAssist = require('./lib/bonus-assistant');
 const notifUi = require('./lib/notification-settings-ui');
 const notifExt = require('./lib/notifications-extended');
+const profilesUi = require('./lib/profiles-ui');
+const profilesApi = require('./lib/profiles-api');
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -28,6 +30,8 @@ const pendingSearch = new Map();
 const pendingLinkWizard = new Map();
 /** Wizard community: tag manuale chat globale, bozza reclutamento */
 const pendingCommunity = new Map();
+/** Handlers UI multi-profilo (impostati in setupBot) */
+let profilesHandlers = null;
 /** Dopo login da Community (profilo CoCBoard) → scelta chat globale vs menù */
 const postAuthGlobalResume = new Map();
 /** Supporto: ticket attivo per admin (chat continua) + aperture utente. */
@@ -175,8 +179,10 @@ function parseRequestedMiniAppTabFromCommand(ctx) {
 }
 
 function isCoCboardAdminUser(user) {
-  const role = user?.user_metadata?.role || '';
-  return String(role).toLowerCase() === 'admin';
+  const meta = user?.user_metadata || {};
+  if (meta.account_is_admin === true) return true;
+  if (user?.app_metadata?.is_admin === true) return true;
+  return String(meta.role || '').toLowerCase() === 'admin';
 }
 
 function isCoCboardModeratorUser(user) {
@@ -222,15 +228,22 @@ async function isTelegramChatAdmin(ctx) {
   }
 }
 
-/** Capo / Co-Capo / Admin: collegano la chat al clan. */
+/** Capo / Co-Capo / Admin account: collegano la chat al clan. */
+function effectiveClanRole(user) {
+  const meta = user?.user_metadata || {};
+  if (isCoCboardAdminUser(user)) return 'admin';
+  const clanRole = meta.clan_role || meta.role || 'utente';
+  return String(clanRole).toLowerCase();
+}
+
 function isClanLeader(user) {
-  const r = user?.user_metadata?.role || 'utente';
+  const r = effectiveClanRole(user);
   return ['admin', 'capo', 'co-capo'].includes(r);
 }
 
 /** Capo / Co-Capo / Admin: assegnazione bonus CWL dal bot. */
 function isCapoOrCoCapoForBonus(user) {
-  const r = user?.user_metadata?.role || 'utente';
+  const r = effectiveClanRole(user);
   return r === 'admin' || r === 'capo' || r === 'co-capo';
 }
 
@@ -768,6 +781,9 @@ async function handlePendingMessage(ctx) {
           await ctx.telegram.deleteMessage(uid, loadingMsg.message_id).catch(() => {});
         }
         await replyTransient(ctx, '✅ <b>Accesso effettuato.</b>', { parse_mode: 'HTML' });
+        ctx.cocboardUser = data.user;
+        const gated = await (profilesHandlers?.afterLoginMaybeGate?.(ctx, data.session.access_token));
+        if (gated) return;
         if (postAuthGlobalResume.get(uid) === 'global_profile') {
           postAuthGlobalResume.delete(uid);
           await sendPostAuthGlobalChoice(ctx);
@@ -851,6 +867,9 @@ async function handlePendingMessage(ctx) {
           await ctx.telegram.deleteMessage(uid, loadingMsg.message_id).catch(() => {});
         }
         await replyTransient(ctx, `✅ Registrato come <b>${fmt.escapeHtml(reg.username)}</b>.`, { parse_mode: 'HTML' });
+        ctx.cocboardUser = sign.user;
+        const gatedReg = await (profilesHandlers?.afterLoginMaybeGate?.(ctx, sign.session.access_token));
+        if (gatedReg) return;
         if (postAuthGlobalResume.get(uid) === 'global_profile') {
           postAuthGlobalResume.delete(uid);
           await sendPostAuthGlobalChoice(ctx);
@@ -1559,9 +1578,22 @@ async function buildWebAppHandoffUrl(ctx, extraParams = {}) {
   const base = (process.env.COCBOARD_SITE_HOME_URL || '').trim().replace(/\/$/, '');
   if (!base || !ctx.from?.id) return null;
   await tauth.getValidSession(ctx.from.id);
+  const params = { ...extraParams };
+  // Mini App dedicata: passa profile id al sito (senza alterare il profilo attivo del bot)
+  try {
+    const row = await sb.getFullRow(ctx.from.id);
+    if (row?.auth_access_token) {
+      const boot = await profilesApi.bootstrap(row.auth_access_token);
+      if (boot.prefs?.mini_app_profile_id) {
+        params.tg_profile = boot.prefs.mini_app_profile_id;
+      }
+    }
+  } catch (e) {
+    console.warn('[profiles] mini-app handoff', e.message);
+  }
   const code = await sb.createWebAppHandoff(ctx.from.id);
   const q = new URLSearchParams({ tg_h: code });
-  Object.entries(extraParams).forEach(([k, v]) => {
+  Object.entries(params).forEach(([k, v]) => {
     if (v != null && v !== '') q.set(k, String(v));
   });
   return `${base}/?${q.toString()}`;
@@ -2780,6 +2812,10 @@ function setupBot(bot) {
       await sendGuestMenu(ctx);
       return;
     }
+    if (profilesHandlers && ctx.message?.text && !txt.startsWith('/')) {
+      const handledProf = await profilesHandlers.handlePendingText(ctx);
+      if (handledProf) return;
+    }
     if (pendingAuth.has(ctx.from.id) && ctx.message?.text && !txt.startsWith('/')) {
       await handlePendingMessage(ctx);
       return;
@@ -3362,7 +3398,15 @@ function setupBot(bot) {
         return;
       }
       await ctx.deleteMessage().catch(() => {});
-      await sb.upsertTelegramChatLink(ctx.chat.id, clanTag, uid, ctx.chat.type);
+      let linkProfileId = ctx.cocboardUser?.user_metadata?.active_profile_id || null;
+      try {
+        const tokRow = await sb.getFullRow(uid);
+        if (tokRow?.auth_access_token) {
+          const boot = await profilesApi.bootstrap(tokRow.auth_access_token);
+          linkProfileId = boot.active?.id || linkProfileId;
+        }
+      } catch (_) {}
+      await sb.upsertTelegramChatLink(ctx.chat.id, clanTag, uid, ctx.chat.type, linkProfileId);
       // Crea impostazioni notifiche di default: avvisi principali ON
       await sb.upsertChatNotificationSettings(ctx.chat.id, {
         war_alerts_enabled: true, war_start_alert: false, war_missing_1h: true,
@@ -4366,6 +4410,7 @@ function setupBot(bot) {
       savedClanOverride: saved,
     });
     const kb = Markup.inlineKeyboard([
+      [Markup.button.callback('👤 Profili CoC', 'prof_menu')],
       [Markup.button.callback('🚪 Logout', 'auth_logout')],
       [Markup.button.callback('« Menù', 'menu')],
     ]);
@@ -4387,6 +4432,15 @@ function setupBot(bot) {
       .catch(async () => {
         await ctx.reply(body, { parse_mode: 'HTML', ...Markup.inlineKeyboard(rows) });
       });
+  });
+
+  profilesHandlers = profilesUi.setup(bot, {
+    sb,
+    tauth,
+    safeAnswerCb,
+    isLinkedChatContext,
+    sendMainMenu,
+    replyTransient,
   });
 
   // Impostazioni notifiche (menu gerarchico per categorie + toggle singoli flag)
@@ -5631,7 +5685,16 @@ function setupBot(bot) {
 
   bot.action('me', async (ctx) => {
     safeAnswerCb(ctx);
-    const tag = ctx.cocboardUser?.user_metadata?.coc_tag;
+    let tag = ctx.cocboardUser?.user_metadata?.coc_tag;
+    if (isLinkedChatContext(ctx)) {
+      try {
+        const link = await sb.getTelegramChatLink(ctx.chat.id);
+        if (link?.linked_by_profile_id) {
+          const prof = await sb.getCocProfileById(link.linked_by_profile_id);
+          if (prof?.coc_tag) tag = prof.coc_tag;
+        }
+      } catch (_) {}
+    }
     if (!tag) {
       await ctx.answerCbQuery('Nessun villaggio sul profilo').catch(() => {});
       return;

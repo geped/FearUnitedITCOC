@@ -157,8 +157,10 @@
             <span id="user-email" class="sidebar-user-email"></span>
             <div class="sidebar-user-row">
                 <span id="user-role-badge" class="badge badge-gold" style="display:none"></span>
-                <button id="logout-btn" class="btn-logout" style="margin-left:auto">Esci</button>
+                <button type="button" id="profiles-btn" class="btn-logout" title="Profili CoC" style="margin-left:auto">Profili</button>
+                <button id="logout-btn" class="btn-logout">Esci</button>
             </div>
+            <div id="active-profile-chip" class="active-profile-chip" style="display:none"></div>
         </div>
     </aside>
 
@@ -866,6 +868,43 @@
       </div>
     </div>
 
+  </div>
+</div>
+
+<!-- Multi-profilo CoC -->
+<div id="profiles-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-header">
+      <h2 id="profiles-modal-title">Profili CoC</h2>
+      <button type="button" class="modal-close" id="profiles-modal-close" aria-label="Chiudi">&times;</button>
+    </div>
+    <div class="modal-tab-content">
+      <p id="profiles-modal-hint" style="font-size:0.85rem;color:var(--text-2);margin-bottom:0.75rem"></p>
+      <div id="profiles-list"></div>
+      <div id="profiles-actions" style="margin-top:1rem;display:flex;flex-wrap:wrap;gap:0.5rem"></div>
+      <div id="profiles-add-form" style="display:none;margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem">
+        <div class="coc-hint-box" style="margin-bottom:0.75rem">
+          <span>Collega un altro villaggio con tag + chiave API CoC (max 10).</span>
+        </div>
+        <div class="input-wrap" style="margin-bottom:0.5rem">
+          <input type="text" id="prof-add-tag" placeholder="Tag giocatore (#ABC123)" autocomplete="off">
+        </div>
+        <div class="input-wrap" style="margin-bottom:0.5rem">
+          <input type="text" id="prof-add-token" placeholder="Chiave API CoC" autocomplete="off">
+        </div>
+        <button type="button" class="btn-primary" id="prof-add-submit">Collega villaggio</button>
+        <button type="button" class="btn-logout" id="prof-add-cancel" style="margin-left:0.5rem">Annulla</button>
+        <div id="prof-add-error" style="display:none;margin-top:0.5rem;color:#f88"></div>
+      </div>
+      <div id="profiles-wipe-box" style="display:none;margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem">
+        <p style="font-size:0.85rem;color:#f88;margin-bottom:0.5rem">
+          Elimina l’intero account CoCBoard (tutti i profili). Digita <b>ELIMINA</b> per confermare.
+        </p>
+        <input type="text" id="prof-wipe-confirm" placeholder="ELIMINA" style="width:100%;margin-bottom:0.5rem">
+        <button type="button" class="btn-primary" id="prof-wipe-submit" style="background:#a33">Elimina account</button>
+        <button type="button" class="btn-logout" id="prof-wipe-cancel">Annulla</button>
+      </div>
+    </div>
   </div>
 </div>
 

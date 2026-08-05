@@ -62,7 +62,14 @@ async function signInWithEmailPassword(email, password) {
 }
 
 async function signInWithPasswordFromInput(rawUsername, password) {
-  const email = resolveLoginEmail(rawUsername);
+  let email = '';
+  try {
+    const profilesApi = require('./profiles-api');
+    email = await profilesApi.resolveLoginEmail(rawUsername);
+  } catch (_) {
+    email = resolveLoginEmail(rawUsername);
+  }
+  if (!email) email = resolveLoginEmail(rawUsername);
   if (!email) throw new Error('Nome utente vuoto.');
   return signInWithEmailPassword(email, password);
 }

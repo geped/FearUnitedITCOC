@@ -178,6 +178,18 @@ async function markTutorialCompleted(telegramUserId) {
     .eq('telegram_user_id', telegramUserId);
 }
 
+async function getCocProfileById(profileId) {
+  const client = sb();
+  if (!client || !profileId) return null;
+  const { data, error } = await client
+    .from('user_coc_profiles')
+    .select('*')
+    .eq('id', String(profileId))
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data || null;
+}
+
 /** chatId: ctx.chat.id (number) */
 async function getTelegramChatLink(chatId) {
   const client = sb();
@@ -780,7 +792,7 @@ async function getUsageDailyStats(days = 14) {
   }));
 }
 
-async function upsertTelegramChatLink(chatId, clanTag, linkedByTelegramUserId, chatType) {
+async function upsertTelegramChatLink(chatId, clanTag, linkedByTelegramUserId, chatType, linkedByProfileId) {
   const client = sb();
   if (!client) throw new Error('Supabase non configurato.');
   const id = Number(chatId);
@@ -789,17 +801,18 @@ async function upsertTelegramChatLink(chatId, clanTag, linkedByTelegramUserId, c
   const now = new Date().toISOString();
   const { data: ex } = await client.from('telegram_chat_links').select('created_at').eq('telegram_chat_id', id).maybeSingle();
   const createdAt = ex?.created_at || now;
-  const { error } = await client.from('telegram_chat_links').upsert(
-    {
-      telegram_chat_id: id,
-      clan_tag: tag,
-      linked_by_telegram_user_id: linkedByTelegramUserId ?? null,
-      chat_type: chatType || null,
-      updated_at: now,
-      created_at: createdAt,
-    },
-    { onConflict: 'telegram_chat_id' }
-  );
+  const row = {
+    telegram_chat_id: id,
+    clan_tag: tag,
+    linked_by_telegram_user_id: linkedByTelegramUserId ?? null,
+    chat_type: chatType || null,
+    updated_at: now,
+    created_at: createdAt,
+  };
+  if (linkedByProfileId !== undefined) {
+    row.linked_by_profile_id = linkedByProfileId || null;
+  }
+  const { error } = await client.from('telegram_chat_links').upsert(row, { onConflict: 'telegram_chat_id' });
   if (error) throw new Error(error.message);
 }
 
@@ -1166,6 +1179,7 @@ module.exports = {
   createWebAppHandoff,
   markTutorialCompleted,
   getTelegramChatLink,
+  getCocProfileById,
   getTelegramChatControl,
   setTelegramChatEnabled,
   listEnabledTelegramChatLinks,

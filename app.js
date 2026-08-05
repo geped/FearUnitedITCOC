@@ -350,13 +350,16 @@ void (async function cocboardTelegramHandoffBootstrap() {
   try {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('tg_h') || params.get('h');
+    const tgProfile = params.get('tg_profile');
     if (code) {
       const r = await fetch(`/api/lookup?type=telegram-handoff&code=${encodeURIComponent(code)}`);
       const j = await r.json().catch(() => ({}));
       if (r.ok && j.access_token && j.refresh_token) {
         await db.auth.setSession({ access_token: j.access_token, refresh_token: j.refresh_token });
+        if (tgProfile) window.__cocboardTgProfile = tgProfile;
         params.delete('tg_h');
         params.delete('h');
+        params.delete('tg_profile');
         params.delete('cwl_round');
         params.delete('open_tab');
         const qs = params.toString();
@@ -418,7 +421,7 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
     const remember = document.getElementById('login-remember')?.checked;
     if (remember) localStorage.setItem(COCSAVED_LOGIN_KEY, rawInput.trim());
     else localStorage.removeItem(COCSAVED_LOGIN_KEY);
-    const email    = resolveLoginEmail(rawInput);
+    const email    = await resolveLoginEmailAsync(rawInput);
     const pwd = document.getElementById("password").value;
     let { error } = await db.auth.signInWithPassword({ email, password: pwd });
     if (error) {
@@ -843,6 +846,342 @@ async function tryHydrateClanFromUserMetadata(user) {
   } catch (_) {}
 }
 
+
+// ── Multi-profilo CoC ─────────────────────────────────────────────────────────
+window._profilesState = null;
+window._profilesGateMode = false;
+
+function isAccountAdminUser(user) {
+  const meta = user?.user_metadata || {};
+  if (meta.account_is_admin === true) return true;
+  if (user?.app_metadata?.is_admin === true) return true;
+  return String(meta.role || '').toLowerCase() === 'admin';
+}
+
+function effectiveClanRoleFromUser(user) {
+  if (isAccountAdminUser(user)) return 'admin';
+  const meta = user?.user_metadata || {};
+  return String(meta.clan_role || meta.role || 'utente').toLowerCase();
+}
+
+async function authBearerHeaders() {
+  const { data: { session } } = await db.auth.getSession();
+  if (!session?.access_token) throw new Error('Sessione scaduta.');
+  return {
+    Authorization: `Bearer ${session.access_token}`,
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  };
+}
+
+async function profilesApi(type, { method = 'GET', body = null } = {}) {
+  const headers = await authBearerHeaders();
+  const url = `/api/lookup?type=${encodeURIComponent(type)}`;
+  const opts = { method, headers };
+  if (body != null) opts.body = JSON.stringify(body);
+  const r = await fetch(url, opts);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const err = new Error(j.error || `HTTP ${r.status}`);
+    err.code = j.code;
+    throw err;
+  }
+  return j;
+}
+
+async function resolveLoginEmailAsync(rawInput) {
+  try {
+    const r = await fetch('/api/lookup?type=resolve-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ username: rawInput }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.email) return j.email;
+  } catch (_) {}
+  return resolveLoginEmail(rawInput);
+}
+
+function updateActiveProfileChip(state) {
+  const el = document.getElementById('active-profile-chip');
+  if (!el) return;
+  const p = state?.active;
+  if (!p) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  const clan = p.coc_clan_name ? ` · ${p.coc_clan_name}` : '';
+  el.textContent = `${p.username || 'Villaggio'} (${p.coc_tag})${clan}`;
+}
+
+function renderProfilesModal(state, { gate = false } = {}) {
+  window._profilesState = state;
+  window._profilesGateMode = !!gate;
+  const modal = document.getElementById('profiles-modal');
+  const list = document.getElementById('profiles-list');
+  const actions = document.getElementById('profiles-actions');
+  const title = document.getElementById('profiles-modal-title');
+  const hint = document.getElementById('profiles-modal-hint');
+  const closeBtn = document.getElementById('profiles-modal-close');
+  if (!modal || !list) return;
+
+  title.textContent = gate ? 'Scegli il profilo CoC' : 'Profili CoC';
+  hint.textContent = gate
+    ? 'Hai più villaggi collegati. Seleziona quello da usare ora, oppure aggiungine uno.'
+    : '● attivo · ⭐ predefinito · 📱 Mini App. Max 10 profili.';
+  closeBtn.style.display = gate ? 'none' : 'block';
+
+  const prefs = state.prefs || {};
+  list.innerHTML = '';
+  (state.profiles || []).forEach((p) => {
+    const row = document.createElement('div');
+    row.className = 'profiles-row' + (prefs.active_profile_id === p.id ? ' active' : '');
+    const marks = [];
+    if (prefs.active_profile_id === p.id) marks.push('●');
+    if (prefs.default_profile_id === p.id) marks.push('⭐');
+    if (prefs.mini_app_profile_id === p.id) marks.push('📱');
+    row.innerHTML = `
+      <div class="profiles-row-main">
+        <div>
+          <strong>${marks.join(' ')} ${(p.label || p.username || 'Villaggio').replace(/[<>]/g,'')}</strong>
+          <div class="profiles-row-meta mono">${(p.coc_tag || '').replace(/[<>]/g,'')} · ${(p.clan_role || '').replace(/[<>]/g,'')}${p.coc_clan_name ? ' · ' + String(p.coc_clan_name).replace(/[<>]/g,'') : ''}</div>
+        </div>
+      </div>
+      <div class="profiles-row-actions"></div>
+    `;
+    const acts = row.querySelector('.profiles-row-actions');
+    const useBtn = document.createElement('button');
+    useBtn.className = 'btn-primary btn-sm';
+    useBtn.textContent = prefs.active_profile_id === p.id ? 'In uso' : 'Usa';
+    useBtn.disabled = prefs.active_profile_id === p.id;
+    useBtn.onclick = () => void switchProfileAndReload(p.id, { setDefault: false });
+    acts.appendChild(useBtn);
+
+    if (!gate) {
+      const defBtn = document.createElement('button');
+      defBtn.className = 'btn-logout btn-sm';
+      defBtn.textContent = prefs.default_profile_id === p.id ? '⭐ Predefinito' : 'Rendi predefinito';
+      defBtn.onclick = () => void setDefaultProfileId(p.id);
+      acts.appendChild(defBtn);
+
+      const miniBtn = document.createElement('button');
+      miniBtn.className = 'btn-logout btn-sm';
+      miniBtn.textContent = prefs.mini_app_profile_id === p.id ? '📱 Mini App' : 'Imposta Mini App';
+      miniBtn.onclick = () => void setMiniAppProfileId(p.id);
+      acts.appendChild(miniBtn);
+
+      if ((state.profiles || []).length > 1) {
+        const rm = document.createElement('button');
+        rm.className = 'btn-logout btn-sm';
+        rm.textContent = 'Scollega';
+        rm.onclick = () => void removeProfileId(p.id);
+        acts.appendChild(rm);
+      }
+    } else {
+      const keep = document.createElement('button');
+      keep.className = 'btn-logout btn-sm';
+      keep.textContent = 'Usa e mantieni predefinito';
+      keep.onclick = () => void switchProfileAndReload(p.id, { setDefault: true });
+      acts.appendChild(keep);
+    }
+    list.appendChild(row);
+  });
+
+  actions.innerHTML = '';
+  if ((state.profiles || []).length < (state.max_profiles || 10)) {
+    const add = document.createElement('button');
+    add.className = 'btn-primary btn-sm';
+    add.textContent = '➕ Aggiungi villaggio';
+    add.onclick = () => {
+      document.getElementById('profiles-add-form').style.display = 'block';
+      document.getElementById('profiles-wipe-box').style.display = 'none';
+    };
+    actions.appendChild(add);
+  }
+  if (!gate) {
+    const ask = document.createElement('button');
+    ask.className = 'btn-logout btn-sm';
+    ask.textContent = prefs.always_ask_profile ? 'Chiedi sempre: ON' : 'Chiedi sempre: OFF';
+    ask.onclick = () => void toggleAlwaysAsk(!prefs.always_ask_profile);
+    actions.appendChild(ask);
+
+    const clearMini = document.createElement('button');
+    clearMini.className = 'btn-logout btn-sm';
+    clearMini.textContent = 'Mini App: eredita attivo';
+    clearMini.onclick = () => void setMiniAppProfileId(null);
+    actions.appendChild(clearMini);
+
+    const wipe = document.createElement('button');
+    wipe.className = 'btn-logout btn-sm';
+    wipe.textContent = 'Elimina account…';
+    wipe.onclick = () => {
+      document.getElementById('profiles-wipe-box').style.display = 'block';
+      document.getElementById('profiles-add-form').style.display = 'none';
+    };
+    actions.appendChild(wipe);
+  }
+
+  modal.style.display = 'flex';
+  updateActiveProfileChip(state);
+}
+
+async function refreshProfilesModal(opts = {}) {
+  const state = await profilesApi('profiles-bootstrap');
+  renderProfilesModal(state, opts);
+  return state;
+}
+
+async function switchProfileAndReload(profileId, { setDefault = false } = {}) {
+  await profilesApi('profiles-switch', {
+    method: 'POST',
+    body: { profile_id: profileId, set_default: setDefault === true },
+  });
+  await db.auth.refreshSession().catch(() => {});
+  document.getElementById('profiles-modal').style.display = 'none';
+  const { data } = await db.auth.getUser();
+  if (data?.user) await showApp(data.user);
+  else location.reload();
+}
+
+async function setDefaultProfileId(profileId) {
+  await profilesApi('profiles-set-default', { method: 'POST', body: { profile_id: profileId } });
+  await refreshProfilesModal({ gate: false });
+}
+
+async function setMiniAppProfileId(profileId) {
+  await profilesApi('profiles-mini-app', { method: 'POST', body: { profile_id: profileId } });
+  await refreshProfilesModal({ gate: false });
+}
+
+async function toggleAlwaysAsk(on) {
+  await profilesApi('profiles-always-ask', { method: 'POST', body: { always_ask: on === true } });
+  await refreshProfilesModal({ gate: false });
+}
+
+async function removeProfileId(profileId) {
+  if (!confirm('Scollegare questo villaggio dal tuo account?')) return;
+  try {
+    await profilesApi('profiles-remove', { method: 'POST', body: { profile_id: profileId } });
+    await db.auth.refreshSession().catch(() => {});
+    await refreshProfilesModal({ gate: false });
+    const { data } = await db.auth.getUser();
+    if (data?.user) await showApp(data.user);
+  } catch (e) {
+    alert(e.message || 'Impossibile scollegare.');
+  }
+}
+
+function wireProfilesUiOnce() {
+  if (window.__profilesUiWired) return;
+  window.__profilesUiWired = true;
+  document.getElementById('profiles-btn')?.addEventListener('click', () => {
+    void refreshProfilesModal({ gate: false }).catch((e) => alert(e.message));
+  });
+  document.getElementById('profiles-modal-close')?.addEventListener('click', () => {
+    if (window._profilesGateMode) return;
+    document.getElementById('profiles-modal').style.display = 'none';
+  });
+  document.getElementById('prof-add-cancel')?.addEventListener('click', () => {
+    document.getElementById('profiles-add-form').style.display = 'none';
+  });
+  document.getElementById('prof-wipe-cancel')?.addEventListener('click', () => {
+    document.getElementById('profiles-wipe-box').style.display = 'none';
+  });
+  document.getElementById('prof-add-submit')?.addEventListener('click', async () => {
+    const errEl = document.getElementById('prof-add-error');
+    errEl.style.display = 'none';
+    const playerTag = document.getElementById('prof-add-tag').value.trim();
+    const apiToken = document.getElementById('prof-add-token').value.trim();
+    if (!playerTag || !apiToken) {
+      errEl.textContent = 'Tag e chiave API obbligatori.';
+      errEl.style.display = 'block';
+      return;
+    }
+    try {
+      const headers = await authBearerHeaders();
+      const r = await fetch('/api/register-with-coc', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ action: 'add-profile', playerTag, apiToken }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Errore');
+      document.getElementById('profiles-add-form').style.display = 'none';
+      document.getElementById('prof-add-tag').value = '';
+      document.getElementById('prof-add-token').value = '';
+      await refreshProfilesModal({ gate: window._profilesGateMode });
+    } catch (e) {
+      errEl.textContent = e.message || 'Errore';
+      errEl.style.display = 'block';
+    }
+  });
+  document.getElementById('prof-wipe-submit')?.addEventListener('click', async () => {
+    const confirmTxt = document.getElementById('prof-wipe-confirm').value.trim();
+    if (confirmTxt.toUpperCase() !== 'ELIMINA') {
+      alert('Digita ELIMINA per confermare.');
+      return;
+    }
+    if (!confirm('Confermi l’eliminazione definitiva dell’account?')) return;
+    try {
+      const headers = await authBearerHeaders();
+      const r = await fetch('/api/register-with-coc', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ action: 'delete-account', confirm: 'ELIMINA' }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || 'Errore');
+      await db.auth.signOut();
+      location.reload();
+    } catch (e) {
+      alert(e.message || 'Errore eliminazione');
+    }
+  });
+}
+
+async function ensureProfilesBeforeApp(user) {
+  wireProfilesUiOnce();
+  try {
+    // Mini App con profilo dedicato (tg_profile): attiva quel profilo per la sessione web
+    if (window.__cocboardTgProfile) {
+      const pid = window.__cocboardTgProfile;
+      delete window.__cocboardTgProfile;
+      window.__cocboardFromMiniAppProfile = true;
+      await profilesApi('profiles-switch', {
+        method: 'POST',
+        body: { profile_id: pid },
+      });
+      await db.auth.refreshSession().catch(() => {});
+    }
+
+    const state = await profilesApi('profiles-bootstrap');
+    window._profilesState = state;
+    updateActiveProfileChip(state);
+    if (state.needs_selection && !window.__cocboardFromMiniAppProfile) {
+      renderProfilesModal(state, { gate: true });
+      return false;
+    }
+    // Applica default se diverso dall'attivo (non in apertura Mini App dedicata)
+    if (
+      !window.__cocboardFromMiniAppProfile &&
+      state.prefs?.default_profile_id &&
+      state.active?.id &&
+      state.prefs.default_profile_id !== state.active.id &&
+      !state.prefs.always_ask_profile
+    ) {
+      await profilesApi('profiles-switch', {
+        method: 'POST',
+        body: { profile_id: state.prefs.default_profile_id },
+      });
+      await db.auth.refreshSession().catch(() => {});
+      const { data } = await db.auth.getUser();
+      if (data?.user) user = data.user;
+    }
+  } catch (e) {
+    console.warn('[profiles]', e.message);
+  }
+  return true;
+}
+
+
 async function showApp(sessionUser) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
@@ -854,8 +1193,18 @@ async function showApp(sessionUser) {
     if (data?.user) user = data.user;
   } catch (_) {}
 
-  const role = user.user_metadata?.role || 'utente';
-  const isAdmin   = role === 'admin';
+  const okProfiles = await ensureProfilesBeforeApp(user);
+  if (!okProfiles) {
+    // Gate profili: resta in app shell ma aspetta scelta
+    return;
+  }
+  try {
+    const { data } = await db.auth.getUser();
+    if (data?.user) user = data.user;
+  } catch (_) {}
+
+  const role = effectiveClanRoleFromUser(user);
+  const isAdmin   = isAccountAdminUser(user);
   const isTelegramModerator = user.user_metadata?.telegram_moderator === true;
   const canEdit   = ['admin', 'capo', 'co-capo'].includes(role);
 

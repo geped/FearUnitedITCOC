@@ -92,7 +92,10 @@ function callbackSkipsUiWipe(data) {
     d.startsWith('notif_ex:') ||
     d.startsWith('notif_tog:') ||
     d === 'notif_custom_menu' ||
-    d.startsWith('notif_custom_')
+    d.startsWith('notif_custom_') ||
+    d === 'prof_menu' ||
+    d === 'prof_gate' ||
+    d.startsWith('prof_')
   ) {
     return true;
   }

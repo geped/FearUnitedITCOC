@@ -544,10 +544,113 @@ module.exports = async (req, res) => {
                 return res.status(200).json({ clan: null, source: 'player_not_in_clan' });
             }
             return res.status(200).json({ clan: c, source: 'coc_api' });
+        } else if (
+          type === 'profiles' ||
+          type === 'profiles-bootstrap' ||
+          type === 'profiles-switch' ||
+          type === 'profiles-set-default' ||
+          type === 'profiles-always-ask' ||
+          type === 'profiles-mini-app' ||
+          type === 'profiles-remove' ||
+          type === 'resolve-login'
+        ) {
+            const profilesUtil = require('./_utils/user-profiles');
+
+            if (type === 'resolve-login') {
+                if (req.method !== 'POST' && req.method !== 'GET') {
+                    return res.status(405).json({ error: 'Metodo non consentito.' });
+                }
+                const input =
+                    (req.method === 'POST' ? (req.body && req.body.username) : null) ||
+                    req.query.username ||
+                    req.query.q ||
+                    '';
+                try {
+                    const email = await profilesUtil.resolveLoginEmailFromInput(input);
+                    if (!email) return res.status(400).json({ error: 'username obbligatorio.' });
+                    return res.status(200).json({ ok: true, email });
+                } catch (e) {
+                    return res.status(500).json({ error: e.message });
+                }
+            }
+
+            const token = profilesUtil.bearerFromReq(req);
+            if (!token) return res.status(401).json({ error: 'Autenticazione richiesta.' });
+
+            let user;
+            try {
+                user = await profilesUtil.getUserFromJwt(token);
+            } catch (e) {
+                return res.status(e.status || 401).json({ error: e.message });
+            }
+
+            try {
+                if (type === 'profiles' || type === 'profiles-bootstrap') {
+                    if (req.method !== 'GET' && req.method !== 'POST') {
+                        return res.status(405).json({ error: 'Metodo non consentito.' });
+                    }
+                    const data = await profilesUtil.bootstrapForUser(user);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'profiles-switch') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const profileId = body.profile_id || body.profileId;
+                    if (!profileId) return res.status(400).json({ error: 'profile_id obbligatorio.' });
+                    const data = await profilesUtil.switchActiveProfile(user, profileId, {
+                        setDefault: body.set_default === true || body.setDefault === true,
+                        clearAlwaysAsk: body.clear_always_ask === true,
+                        metadataOnly: body.metadata_only === true || body.metadataOnly === true,
+                    });
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'profiles-set-default') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const profileId = body.profile_id ?? body.profileId ?? null;
+                    const data = await profilesUtil.setDefaultProfile(user, profileId || null);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'profiles-always-ask') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const data = await profilesUtil.setAlwaysAsk(
+                        user,
+                        body.always_ask === true || body.alwaysAsk === true,
+                    );
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'profiles-mini-app') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const profileId = body.profile_id ?? body.profileId ?? null;
+                    const data = await profilesUtil.setMiniAppProfile(user, profileId || null);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'profiles-remove') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const profileId = body.profile_id || body.profileId;
+                    if (!profileId) return res.status(400).json({ error: 'profile_id obbligatorio.' });
+                    const data = await profilesUtil.removeProfile(user, profileId);
+                    return res.status(200).json(data);
+                }
+            } catch (e) {
+                return res.status(e.status || 500).json({
+                    error: e.message || 'Errore profili.',
+                    code: e.code || undefined,
+                });
+            }
+            return res.status(400).json({ error: 'type profili non gestito.' });
         } else {
             return res.status(400).json({
                 error:
-                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto',
+                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login',
             });
         }
         const r = await fetch(`${proxyUrl}${proxyPath}`, {

@@ -61,11 +61,26 @@ module.exports = async (req, res) => {
         }
 
         const merged = { ...(cur.user.user_metadata || {}) };
-        if (role !== undefined) merged.role = role;
+        if (role !== undefined) {
+            merged.role = role;
+            if (String(role).toLowerCase() === 'admin') {
+                merged.account_is_admin = true;
+            } else if (merged.account_is_admin === true && String(role).toLowerCase() !== 'admin') {
+                // Demote admin account: clear sticky flag; keep clan_role if present
+                merged.account_is_admin = false;
+                if (merged.clan_role) merged.role = merged.clan_role;
+            }
+        }
         if (username !== undefined) merged.username = username;
         if (telegram_moderator !== undefined) merged.telegram_moderator = !!telegram_moderator;
 
         const updates = { user_metadata: merged };
+        if (role !== undefined) {
+            updates.app_metadata = {
+                ...(cur.user.app_metadata || {}),
+                is_admin: String(role).toLowerCase() === 'admin',
+            };
+        }
         if (newPassword) {
             if (newPassword.length < 6) return res.status(400).json({ error: 'Password min 6 caratteri.' });
             updates.password = newPassword;
@@ -73,6 +88,20 @@ module.exports = async (req, res) => {
 
         const { error } = await supabase.auth.admin.updateUserById(userId, updates);
         if (error) return res.status(500).json({ error: error.message });
+
+        // Allinea prefs.account_is_admin se tabella presente
+        if (role !== undefined) {
+            try {
+                await supabase.from('user_account_prefs').upsert(
+                    {
+                        user_id: userId,
+                        account_is_admin: String(role).toLowerCase() === 'admin',
+                        updated_at: new Date().toISOString(),
+                    },
+                    { onConflict: 'user_id' },
+                );
+            } catch (_) {}
+        }
 
         if (telegram_moderator !== undefined) {
             await syncTelegramStaffModeratorRow(supabase, userId, !!telegram_moderator);
@@ -105,7 +134,10 @@ async function authenticateBotPanel(req) {
 
     const role = user.user_metadata?.role || 'utente';
     const isModerator = user.user_metadata?.telegram_moderator === true;
-    const isAdmin = role === 'admin';
+    const isAdmin =
+        role === 'admin' ||
+        user.user_metadata?.account_is_admin === true ||
+        user.app_metadata?.is_admin === true;
     if (!isAdmin && !isModerator) {
         return { error: 'Accesso negato al pannello CoCBoardBot.', status: 403 };
     }
