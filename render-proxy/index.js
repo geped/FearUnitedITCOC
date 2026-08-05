@@ -854,6 +854,8 @@ app.get('/clan-info', authMiddleware, async (req, res) => {
             badgeUrls: data.badgeUrls,
             clanLevel: data.clanLevel,
             warLeague: data.warLeague || null,
+            capitalLeague: data.capitalLeague || null,
+            clanCapitalPoints: data.clanCapitalPoints ?? null,
             members: data.members,
             description: data.description || '',
             type: data.type || '',

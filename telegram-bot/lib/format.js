@@ -1,5 +1,7 @@
 'use strict';
 
+const raidCap = require('./raid-capital');
+
 const MEMBERS_PER_PAGE = 12;
 const BONUS_PER_PAGE = 10;
 const RANKINGS_SHOWN = 25;
@@ -2284,4 +2286,9 @@ module.exports = {
   WAR_LIVE_PLAYERS_PER_PAGE,
   WAR_LIVE_CONFRONTO_PER_PAGE,
   WAR_LIVE_PLAN_PER_PAGE,
+  // Raid Capitale
+  formatRaidCapitalPage: raidCap.formatRaidCapitalPage,
+  formatRaidCountdownMessage: raidCap.formatRaidCountdownMessage,
+  formatRaidEndMessage: raidCap.formatRaidEndMessage,
+  RAID_MEMBERS_PER_PAGE: raidCap.RAID_MEMBERS_PER_PAGE,
 };

@@ -2059,6 +2059,7 @@ function warSubmenuKb() {
       Markup.button.callback('🏹 War classiche', 'war:classic'),
       Markup.button.callback('🏆 Cronologia leghe', 'war:cwl'),
     ],
+    [Markup.button.callback('🏛 Raid Capitale', 'war:raid')],
     [Markup.button.callback('« Indietro', 'clan_home'), Markup.button.callback('« Menù', 'menu')],
   ]);
 }
@@ -5231,6 +5232,61 @@ function setupBot(bot) {
     } catch (_) {
       await ctx.reply(body, { parse_mode: 'HTML', ...warSubmenuKb() });
     }
+  });
+
+  async function renderRaidCapitalView(ctx, page) {
+    const clanTag = await resolveEffectiveClanTag(ctx);
+    if (!clanTag) {
+      await ctx.answerCbQuery('Nessun clan collegato').catch(() => {});
+      return;
+    }
+    await answerCbLoading(ctx, '⏳ Raid…');
+    let season = null;
+    let clanInfo = null;
+    let members = null;
+    try {
+      const [raids, info, mem] = await Promise.all([
+        api.capitalRaids(clanTag).catch(() => null),
+        api.clanInfo(clanTag).catch(() => null),
+        api.clanMembers(clanTag).catch(() => null),
+      ]);
+      const items = raids?.items || [];
+      season = items.find((it) => it.state === 'ongoing') || items[0] || null;
+      clanInfo = info;
+      members = mem;
+    } catch (e) {
+      await ctx.answerCbQuery(String(e.message || 'Errore').slice(0, 180)).catch(() => {});
+    }
+    const view = fmt.formatRaidCapitalPage(season, clanInfo, members, page);
+    const rows = [];
+    if (view.pages > 1) {
+      const nav = [];
+      if (view.page > 0) nav.push(Markup.button.callback('◀', `war:raid:p:${view.page - 1}`));
+      nav.push(Markup.button.callback(`· ${view.page + 1}/${view.pages} ·`, 'noop'));
+      if (view.page < view.pages - 1) nav.push(Markup.button.callback('▶', `war:raid:p:${view.page + 1}`));
+      rows.push(nav);
+    }
+    rows.push([Markup.button.callback('🔄 Aggiorna', `war:raid:p:${view.page}`)]);
+    rows.push([Markup.button.callback('« Registro guerre', 'war_menu')]);
+    rows.push([
+      Markup.button.callback('« Indietro', 'clan_home'),
+      Markup.button.callback('« Menù', 'menu'),
+    ]);
+    const kb = Markup.inlineKeyboard(rows);
+    try {
+      await ctx.editMessageText(view.text, { parse_mode: 'HTML', ...kb });
+    } catch (_) {
+      await ctx.reply(view.text, { parse_mode: 'HTML', ...kb });
+    }
+  }
+
+  bot.action('war:raid', async (ctx) => {
+    await renderRaidCapitalView(ctx, 0);
+  });
+
+  bot.action(/^war:raid:p:(\d+)$/, async (ctx) => {
+    const page = Number(ctx.match[1] || 0);
+    await renderRaidCapitalView(ctx, Number.isFinite(page) ? page : 0);
   });
 
   function buildClassicWarListKb(itemsSorted, page) {

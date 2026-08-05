@@ -11,6 +11,7 @@
 
 const api = require('./cocboard-api');
 const fmt = require('./format');
+const raidCap = require('./raid-capital');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // State memories
@@ -964,15 +965,14 @@ async function _raidAlertsForChat(telegram, chatId, clanTag, sb) {
       const key = `end:${current.startTime}`;
       if (!sent.has(key) && notif.raid_end === true) {
         sent.add(key);
-        const totalLoot = (current.attackLog || [])
-          .reduce((acc, e) => acc + (e.capitalTotalLoot || 0), 0);
-        await send(
-          `🏛 <b>Raid Capitale – Fine weekend</b>\n` +
-          `Il raid si è concluso!\n💰 Oro totale: <b>${totalLoot.toLocaleString('it-IT')}</b>`,
-        );
+        let membersPayload = null;
+        try {
+          membersPayload = await api.clanMembers(clanTag);
+        } catch (_) {}
+        await send(raidCap.formatRaidEndMessage(current, membersPayload));
       }
     }
-    raidStateMem.set(memKey, { ...prevMem, state: current?.state || 'unknown' });
+    raidStateMem.set(memKey, { ...prevMem, state: current?.state || 'unknown', sent });
     return;
   }
 
@@ -1012,6 +1012,17 @@ async function _raidAlertsForChat(telegram, chatId, clanTag, sb) {
       if (!districts.length) continue;
       if (districts.every((d) => Number(d.destructionPercent || 0) >= 100)) {
         initSent.add(`capital_fallen:${startTime}:${defEntry.attacker?.tag || 'unknown'}`);
+      }
+    }
+
+    // Seed countdown già scaduti (no spam post-restart mid-raid)
+    const endInit = raidCap.parseCocTime(current.endTime);
+    if (endInit) {
+      const leftInit = endInit.getTime() - Date.now();
+      for (const lead of [1440, 720, 180]) {
+        if (leftInit <= lead * 60 * 1000) {
+          initSent.add(`missing:${startTime}:${lead}`);
+        }
       }
     }
 
@@ -1123,6 +1134,57 @@ async function _raidAlertsForChat(telegram, chatId, clanTag, sb) {
         await send(
           `💥 <b>Raid Capitale</b>\nLa nostra capitale è stata completata al 100% da <b>${fmt.escapeHtml(defEntry.attacker?.name || 'Clan avversario')}</b>.`
         );
+      }
+    }
+  }
+
+  // Countdown fine raid: 1g / 12h / 3h + custom
+  const endDate = raidCap.parseCocTime(current.endTime);
+  if (endDate) {
+    const leftMs = endDate.getTime() - Date.now();
+    const includeList = notif.raid_missing_include_list === true;
+    let membersPayload = null;
+    const needList = includeList;
+    const fixedLeads = [
+      { mins: 1440, flag: 'raid_missing_1d' },
+      { mins: 720, flag: 'raid_missing_12h' },
+      { mins: 180, flag: 'raid_missing_3h' },
+    ];
+    const custom = await sb.getChatCustomAlertSettings(chatId).catch(() => ({}));
+    const customLead = Number(custom?.raid_lead_minutes || 0);
+    const customOn =
+      custom?.raid_enabled === true &&
+      custom?.raid_paused !== true &&
+      Number.isFinite(customLead) &&
+      customLead > 0;
+
+    const dueLeads = [];
+    for (const L of fixedLeads) {
+      if (notif[L.flag] !== true) continue;
+      if (!raidCap.leadReached(leftMs, L.mins)) continue;
+      const key = `missing:${startTime}:${L.mins}`;
+      if (sent.has(key)) continue;
+      dueLeads.push({ mins: L.mins, key });
+    }
+    if (customOn && raidCap.leadReached(leftMs, customLead)) {
+      const key = `missing:${startTime}:custom:${customLead}`;
+      if (!sent.has(key)) dueLeads.push({ mins: customLead, key });
+    }
+
+    if (dueLeads.length) {
+      if (needList) {
+        try {
+          membersPayload = await api.clanMembers(clanTag);
+        } catch (_) {}
+      }
+      for (const L of dueLeads) {
+        const text = raidCap.formatRaidCountdownMessage(
+          current,
+          membersPayload,
+          L.mins,
+          includeList,
+        );
+        if (await send(text)) sent.add(L.key);
       }
     }
   }
@@ -1312,8 +1374,106 @@ async function runPendingCustomAlerts(bot, sb) {
  * @param {boolean} [opts.force] - reinoltra anche se già inviato (solo se già in soglia)
  * @returns {Promise<{ status: string, detail: string }>}
  */
+async function probeAndSendRaidCustomAlert(telegram, chatId, clanTag, sb, opts = {}) {
+  const force = opts.force === true;
+  const custom = await sb.getChatCustomAlertSettings(chatId).catch(() => ({}));
+  const notif = await sb.getChatNotificationSettings(chatId).catch(() => ({}));
+  const enabled = custom.raid_enabled === true;
+  const paused = custom.raid_paused === true;
+  const lead = Number(custom.raid_lead_minutes || 0);
+
+  if (!enabled) return { status: 'disabled', detail: 'Alert raid disattivato.' };
+  if (paused) return { status: 'paused', detail: 'Alert raid in pausa.' };
+  if (!(lead > 0)) return { status: 'no_lead', detail: 'Preavviso raid non impostato.' };
+  if (notif?.capital_raids_enabled !== true) {
+    return {
+      status: 'master_off',
+      detail: 'Attiva prima la categoria «Raid Capitale» in Gestione avvisi.',
+    };
+  }
+
+  let current = null;
+  try {
+    const raidData = await api.capitalRaids(clanTag);
+    current = (raidData?.items || []).find((it) => it.state === 'ongoing') || null;
+  } catch (e) {
+    return { status: 'fetch_error', detail: `Errore lettura CoC: ${e.message || 'sconosciuto'}` };
+  }
+  if (!current) {
+    return {
+      status: 'no_raid',
+      detail: 'Nessun raid capitale in corso. L’alert partirà automaticamente durante il weekend.',
+    };
+  }
+
+  const endDate = raidCap.parseCocTime(current.endTime);
+  if (!endDate) return { status: 'no_end', detail: 'endTime raid non disponibile dall’API.' };
+  const leftMs = endDate.getTime() - Date.now();
+  if (leftMs <= 0) {
+    return { status: 'ended', detail: 'Il raid è già concluso (o in chiusura).' };
+  }
+
+  const memKey = `${chatId}:${clanTag}`;
+  const mem = raidStateMem.get(memKey) || {
+    state: 'ongoing',
+    startTime: current.startTime,
+    destroyed: new Set(),
+    clearedEnemies: new Set(),
+    sent: new Set(),
+  };
+  if (!mem.sent) mem.sent = new Set();
+  const sentKey = `missing:${current.startTime}:custom:${lead}`;
+
+  if (!raidCap.leadReached(leftMs, lead) && !force) {
+    return {
+      status: 'waiting',
+      detail:
+        `⏱ Soglia non ancora raggiunta. Mancano <b>${raidCap.msLabel(leftMs)}</b> ` +
+        `(alert a <b>${raidCap.msLabel(lead * 60000)}</b> dalla fine).`,
+    };
+  }
+
+  // force sotto soglia: reinoltra; force sopra soglia: invia comunque per prova
+  if (!force && mem.sent.has(sentKey)) {
+    return { status: 'already', detail: 'Avviso custom raid già inviato per questo weekend.' };
+  }
+  if (force && !raidCap.leadReached(leftMs, lead)) {
+    return {
+      status: 'waiting',
+      detail:
+        `⏱ Ancora fuori soglia (restano <b>${raidCap.msLabel(leftMs)}</b>). ` +
+        `L’invio automatico avverrà a <b>${raidCap.msLabel(lead * 60000)}</b> dalla fine.`,
+    };
+  }
+
+  let membersPayload = null;
+  if (notif.raid_missing_include_list === true) {
+    try {
+      membersPayload = await api.clanMembers(clanTag);
+    } catch (_) {}
+  }
+  const text = raidCap.formatRaidCountdownMessage(
+    current,
+    membersPayload,
+    lead,
+    notif.raid_missing_include_list === true,
+  );
+  const ok = await sendToChat(telegram, chatId, text, () => sb.deleteTelegramChatLink(chatId));
+  if (ok) {
+    mem.sent.add(sentKey);
+    mem.state = 'ongoing';
+    mem.startTime = current.startTime;
+    raidStateMem.set(memKey, mem);
+    return { status: 'sent', detail: `📣 Avviso raid inviato (soglia <b>${raidCap.msLabel(lead * 60000)}</b>).` };
+  }
+  return { status: 'send_failed', detail: 'Invio Telegram fallito (permessi chat?).' };
+}
+
 async function probeAndSendCustomAlert(telegram, chatId, clanTag, kind, sb, opts = {}) {
   const force = opts.force === true;
+  if (kind === 'raid') {
+    return probeAndSendRaidCustomAlert(telegram, chatId, clanTag, sb, { force });
+  }
   const isCwl = kind === 'cwl';
   const custom = await sb.getChatCustomAlertSettings(chatId).catch(() => ({}));
   const enabled = isCwl ? custom.cwl_enabled === true : custom.war_enabled === true;

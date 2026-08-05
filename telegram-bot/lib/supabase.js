@@ -281,6 +281,7 @@ const NOTIF_BOOL_KEYS = [
   // Raid Capitale
   'raid_start', 'raid_district_destroyed', 'raid_clan_cleared',
   'raid_capital_fallen', 'raid_end', 'raid_loot_milestone',
+  'raid_missing_1d', 'raid_missing_12h', 'raid_missing_3h', 'raid_missing_include_list',
   // Attività Clan
   'clan_member_join', 'clan_member_leave', 'clan_role_promoted',
   'clan_role_demoted', 'clan_level_up', 'clan_war_streak', 'clan_name_change',
@@ -331,6 +332,9 @@ function _defaultCustomAlertSettings(chatId) {
     cwl_enabled: false,
     cwl_paused: false,
     cwl_lead_minutes: null,
+    raid_enabled: false,
+    raid_paused: false,
+    raid_lead_minutes: null,
   };
 }
 
@@ -372,6 +376,12 @@ async function upsertChatCustomAlertSettings(chatId, patch, updatedBy) {
       patch.cwl_lead_minutes !== undefined
         ? (patch.cwl_lead_minutes == null ? null : Number(patch.cwl_lead_minutes))
         : (prev.cwl_lead_minutes == null ? null : Number(prev.cwl_lead_minutes)),
+    raid_enabled: patch.raid_enabled !== undefined ? patch.raid_enabled === true : prev.raid_enabled === true,
+    raid_paused: patch.raid_paused !== undefined ? patch.raid_paused === true : prev.raid_paused === true,
+    raid_lead_minutes:
+      patch.raid_lead_minutes !== undefined
+        ? (patch.raid_lead_minutes == null ? null : Number(patch.raid_lead_minutes))
+        : (prev.raid_lead_minutes == null ? null : Number(prev.raid_lead_minutes)),
     updated_by: updatedBy != null ? Number(updatedBy) : null,
     updated_at: new Date().toISOString(),
   };

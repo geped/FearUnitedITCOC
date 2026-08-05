@@ -33,6 +33,10 @@ ALTER TABLE telegram_chat_notification_settings
   ADD COLUMN IF NOT EXISTS raid_capital_fallen     BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS raid_end                BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS raid_loot_milestone     BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS raid_missing_1d         BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS raid_missing_12h        BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS raid_missing_3h         BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS raid_missing_include_list BOOLEAN NOT NULL DEFAULT false,
 
   -- ── Attività Clan (nuovo master + sub-flag) ───────────────────────────────
   ADD COLUMN IF NOT EXISTS clan_activity_enabled   BOOLEAN NOT NULL DEFAULT false,

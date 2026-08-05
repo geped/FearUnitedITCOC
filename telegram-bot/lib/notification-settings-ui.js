@@ -70,7 +70,11 @@ const CATEGORIES = [
       { key: 'raid_district_destroyed', label: 'Distretto nemico distrutto' },
       { key: 'raid_clan_cleared',       label: 'Clan nemico eliminato' },
       { key: 'raid_capital_fallen',     label: 'Nostra capitale caduta' },
-      { key: 'raid_end',                label: 'Fine raid' },
+      { key: 'raid_missing_1d',         label: 'Mancano ~1 giorno' },
+      { key: 'raid_missing_12h',        label: 'Mancano ~12 ore' },
+      { key: 'raid_missing_3h',         label: 'Mancano ~3 ore' },
+      { key: 'raid_missing_include_list', label: 'Nei countdown: elenco chi manca' },
+      { key: 'raid_end',                label: 'Fine raid (recap completo)' },
       { key: 'raid_loot_milestone',     label: 'Milestone oro (50k/100k…)' },
     ],
   },
@@ -235,7 +239,34 @@ const FLAG_EXAMPLES = {
   raid_end:
     '🏛 <b>Raid Capitale – Fine weekend</b>\n' +
     'Il raid si è concluso!\n' +
-    '💰 Oro totale: <b>186.500</b>',
+    '💰 Oro totale: <b>186.500</b>\n\n' +
+    '✅ <b>Completati</b> (2)\n' +
+    '• <b>PlayerA</b> · 6/6 att · 💰 42.100\n' +
+    '• <b>PlayerB</b> · 5/5 att · 💰 31.000\n\n' +
+    '⏳ <b>Attacchi rimasti</b> (1)\n' +
+    '• <b>PlayerC</b> · 2/5 att · 💰 8.200\n\n' +
+    '❌ <b>Non hanno attaccato</b> (2)\n' +
+    '• <b>PlayerD</b>\n' +
+    '• <b>PlayerE</b>',
+  raid_missing_1d:
+    '🏛 <b>Raid Capitale – Promemoria</b>\n' +
+    'Mancano <b>1g</b> alla fine.\n' +
+    'Fine: <b>lun 09:00</b> (ora IT)\n' +
+    '💰 Oro clan: <b>120.000</b>',
+  raid_missing_12h:
+    '🏛 <b>Raid Capitale – Promemoria</b>\n' +
+    'Mancano <b>12h</b> alla fine.\n' +
+    'Fine: <b>lun 09:00</b> (ora IT)\n' +
+    '💰 Oro clan: <b>145.000</b>\n\n' +
+    '❌ <b>Non hanno attaccato</b> (3)\n' +
+    '• <b>PlayerD</b>\n• <b>PlayerE</b>\n• <b>PlayerF</b>',
+  raid_missing_3h:
+    '🏛 <b>Raid Capitale – Promemoria</b>\n' +
+    'Mancano <b>3h</b> alla fine.\n' +
+    'Fine: <b>lun 09:00</b> (ora IT)',
+  raid_missing_include_list:
+    'Opzione: nei messaggi countdown (1g/12h/3h/custom) viene aggiunto l’elenco ' +
+    'di chi ha completato, chi ha attacchi rimasti e chi è a zero.',
   raid_loot_milestone:
     '💰 <b>Raid Capitale</b>\n' +
     'Milestone raggiunta: <b>100.000</b> oro!',
@@ -280,6 +311,11 @@ const FLAG_EXAMPLES = {
     '<b>⏰ 3h 2m all\'inizio della battle</b>\n' +
     'Tempo residuo: <b>2h 58m</b>\n\n' +
     '<i>In battle lo stesso alert conta alla fine del round.</i>',
+  custom_raid:
+    '🏛 <b>Raid Capitale – Promemoria</b>\n' +
+    'Mancano <b>12h</b> alla fine (soglia 12h).\n' +
+    'Fine: <b>lun 09:00</b> (ora IT)\n' +
+    '💰 Oro clan: <b>145.000</b>',
 };
 
 const FLAG_LABEL_BY_KEY = Object.fromEntries([
@@ -287,6 +323,7 @@ const FLAG_LABEL_BY_KEY = Object.fromEntries([
   ['clan_games_enabled', 'Giochi del clan'],
   ['custom_war', 'Alert personalizzato guerra'],
   ['custom_cwl', 'Alert personalizzato CWL'],
+  ['custom_raid', 'Alert personalizzato Raid'],
 ]);
 
 function parentCatIdForFlag(flagKey) {
@@ -321,6 +358,8 @@ function buildExampleKb(flagKey) {
     rows.push([Markup.button.callback('« Alert guerra', 'notif_custom_edit:war')]);
   } else if (flagKey === 'custom_cwl') {
     rows.push([Markup.button.callback('« Alert CWL', 'notif_custom_edit:cwl')]);
+  } else if (flagKey === 'custom_raid') {
+    rows.push([Markup.button.callback('« Alert Raid', 'notif_custom_edit:raid')]);
   } else {
     rows.push([Markup.button.callback('« Avvisi', 'notif_menu')]);
   }
@@ -375,6 +414,7 @@ async function buildCustomMainKb(sb, chatId) {
   const rows = [
     [Markup.button.callback(`⚔️ Guerra (${fmtLeadMinutes(c.war_lead_minutes)})`, 'notif_custom_edit:war')],
     [Markup.button.callback(`🏆 CWL (${fmtLeadMinutes(c.cwl_lead_minutes)})`, 'notif_custom_edit:cwl')],
+    [Markup.button.callback(`🏛 Raid (${fmtLeadMinutes(c.raid_lead_minutes)})`, 'notif_custom_edit:raid')],
     [Markup.button.callback('« Avvisi', 'notif_menu')],
   ];
   return Markup.inlineKeyboard(rows);
@@ -382,9 +422,14 @@ async function buildCustomMainKb(sb, chatId) {
 
 async function buildCustomEditKb(sb, chatId, kind) {
   const c = await sb.getChatCustomAlertSettings(chatId).catch(() => ({}));
-  const isWar = kind === 'war';
-  const enabled = isWar ? c.war_enabled === true : c.cwl_enabled === true;
-  const paused = isWar ? c.war_paused === true : c.cwl_paused === true;
+  const enabled =
+    kind === 'war' ? c.war_enabled === true
+      : kind === 'cwl' ? c.cwl_enabled === true
+        : c.raid_enabled === true;
+  const paused =
+    kind === 'war' ? c.war_paused === true
+      : kind === 'cwl' ? c.cwl_paused === true
+        : c.raid_paused === true;
   const rows = [];
   for (let i = 0; i < CUSTOM_MIN_PRESETS.length; i += 2) {
     const a = CUSTOM_MIN_PRESETS[i];
@@ -406,28 +451,85 @@ async function buildCustomEditKb(sb, chatId, kind) {
 function buildCustomMainText(c) {
   return (
     '⏱ <b>Alert personalizzati</b>\n\n' +
-    'In <b>preparazione</b>: avviso prima dell’<b>inizio</b> della battle.\n' +
-    'In <b>battle</b>: avviso prima della <b>fine</b> del round/guerra.\n' +
+    'In <b>preparazione</b>: avviso prima dell’<b>inizio</b> della battle (guerra/CWL).\n' +
+    'In <b>battle</b> / <b>raid</b>: avviso prima della <b>fine</b>.\n' +
     'Puoi modificare, mettere in pausa o eliminare l’alert quando vuoi.\n\n' +
     `${customStatusLine('⚔️ Guerra', c.war_enabled === true, c.war_paused === true, c.war_lead_minutes)}\n` +
-    `${customStatusLine('🏆 CWL', c.cwl_enabled === true, c.cwl_paused === true, c.cwl_lead_minutes)}`
+    `${customStatusLine('🏆 CWL', c.cwl_enabled === true, c.cwl_paused === true, c.cwl_lead_minutes)}\n` +
+    `${customStatusLine('🏛 Raid', c.raid_enabled === true, c.raid_paused === true, c.raid_lead_minutes)}`
   );
 }
 
 function buildCustomEditText(kind, c) {
-  const isWar = kind === 'war';
-  const title = isWar ? '⚔️ Guerra classica' : '🏆 CWL';
-  const enabled = isWar ? c.war_enabled === true : c.cwl_enabled === true;
-  const paused = isWar ? c.war_paused === true : c.cwl_paused === true;
-  const lead = isWar ? c.war_lead_minutes : c.cwl_lead_minutes;
+  const title =
+    kind === 'war' ? '⚔️ Guerra classica'
+      : kind === 'cwl' ? '🏆 CWL'
+        : '🏛 Raid Capitale';
+  const enabled =
+    kind === 'war' ? c.war_enabled === true
+      : kind === 'cwl' ? c.cwl_enabled === true
+        : c.raid_enabled === true;
+  const paused =
+    kind === 'war' ? c.war_paused === true
+      : kind === 'cwl' ? c.cwl_paused === true
+        : c.raid_paused === true;
+  const lead =
+    kind === 'war' ? c.war_lead_minutes
+      : kind === 'cwl' ? c.cwl_lead_minutes
+        : c.raid_lead_minutes;
+  const hint = kind === 'raid'
+    ? '<i>Countdown alla fine del weekend raid (endTime API, ~lunedì 07:00 UTC).</i>\n'
+    : '<i>Prep → countdown all’inizio battle. Battle → countdown alla fine.</i>\n';
   return (
     `${title} · <b>alert personalizzato</b>\n\n` +
     `Stato: ${enabled ? (paused ? '⏸ in pausa' : '✅ attivo') : '⚪ disattivato'}\n` +
     `Preavviso: <b>${fmtLeadMinutes(lead)}</b>\n\n` +
-    '<i>Prep → countdown all’inizio battle. Battle → countdown alla fine.</i>\n' +
+    hint +
     '<i>Usa «📣 Prova / invia ora» per verificare subito.</i>\n' +
     '<i>Tocca 👁 per un esempio del messaggio.</i>'
   );
+}
+
+function enabledPatch(kind, enabled) {
+  if (kind === 'war') return { war_enabled: enabled };
+  if (kind === 'cwl') return { cwl_enabled: enabled };
+  return { raid_enabled: enabled };
+}
+
+function pausedPatch(kind, paused) {
+  if (kind === 'war') return { war_paused: paused };
+  if (kind === 'cwl') return { cwl_paused: paused };
+  return { raid_paused: paused };
+}
+
+function setLeadPatch(kind, mins) {
+  if (kind === 'war') return { war_enabled: true, war_paused: false, war_lead_minutes: mins };
+  if (kind === 'cwl') return { cwl_enabled: true, cwl_paused: false, cwl_lead_minutes: mins };
+  return { raid_enabled: true, raid_paused: false, raid_lead_minutes: mins };
+}
+
+function deletePatch(kind) {
+  if (kind === 'war') return { war_enabled: false, war_paused: false, war_lead_minutes: null };
+  if (kind === 'cwl') return { cwl_enabled: false, cwl_paused: false, cwl_lead_minutes: null };
+  return { raid_enabled: false, raid_paused: false, raid_lead_minutes: null };
+}
+
+function kindLabelIt(kind) {
+  if (kind === 'war') return 'guerra';
+  if (kind === 'cwl') return 'CWL';
+  return 'Raid';
+}
+
+function isKindEnabled(c, kind) {
+  if (kind === 'war') return c.war_enabled === true;
+  if (kind === 'cwl') return c.cwl_enabled === true;
+  return c.raid_enabled === true;
+}
+
+function isKindPaused(c, kind) {
+  if (kind === 'war') return c.war_paused === true;
+  if (kind === 'cwl') return c.cwl_paused === true;
+  return c.raid_paused === true;
 }
 
 function parseLeadMinutesInput(raw) {
@@ -661,7 +763,7 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
     }
   });
 
-  // ── Alert personalizzati (war/cwl) ────────────────────────────────────────
+  // ── Alert personalizzati (war/cwl/raid) ───────────────────────────────────
   bot.action('notif_custom_menu', async (ctx) => {
     safeAnswerCb(ctx);
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
@@ -675,7 +777,7 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
     }
   });
 
-  bot.action(/^notif_custom_edit:(war|cwl)$/, async (ctx) => {
+  bot.action(/^notif_custom_edit:(war|cwl|raid)$/, async (ctx) => {
     safeAnswerCb(ctx);
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
     const kind = ctx.match[1];
@@ -689,7 +791,7 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
     }
   });
 
-  bot.action(/^notif_custom_set:(war|cwl):(\d{1,4})$/, async (ctx) => {
+  bot.action(/^notif_custom_set:(war|cwl|raid):(\d{1,4})$/, async (ctx) => {
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
     const actor = await ensureSessionUser(ctx);
     if (!actor || !isCapoOrCoCapo(actor)) {
@@ -702,10 +804,7 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
       await ctx.answerCbQuery('Valore non valido.').catch(() => {});
       return;
     }
-    const patch = kind === 'war'
-      ? { war_enabled: true, war_paused: false, war_lead_minutes: mins }
-      : { cwl_enabled: true, cwl_paused: false, cwl_lead_minutes: mins };
-    await sb.upsertChatCustomAlertSettings(ctx.chat.id, patch, ctx.from?.id).catch(() => {});
+    await sb.upsertChatCustomAlertSettings(ctx.chat.id, setLeadPatch(kind, mins), ctx.from?.id).catch(() => {});
     await ctx.answerCbQuery(`✅ Alert impostato: ${fmtLeadMinutes(mins)} prima`).catch(() => {});
     const c = await sb.getChatCustomAlertSettings(ctx.chat.id).catch(() => ({}));
     const kb = await buildCustomEditKb(sb, ctx.chat.id, kind);
@@ -713,7 +812,7 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
     await afterCustomAlertSaved(ctx, sb, kind);
   });
 
-  bot.action(/^notif_custom_probe:(war|cwl)$/, async (ctx) => {
+  bot.action(/^notif_custom_probe:(war|cwl|raid)$/, async (ctx) => {
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
     const actor = await ensureSessionUser(ctx);
     if (!actor || !isCapoOrCoCapo(actor)) {
@@ -725,7 +824,7 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
     await afterCustomAlertSaved(ctx, sb, kind);
   });
 
-  bot.action(/^notif_custom_toggle:(war|cwl)$/, async (ctx) => {
+  bot.action(/^notif_custom_toggle:(war|cwl|raid)$/, async (ctx) => {
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
     const actor = await ensureSessionUser(ctx);
     if (!actor || !isCapoOrCoCapo(actor)) {
@@ -734,9 +833,8 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
     }
     const kind = ctx.match[1];
     const c = await sb.getChatCustomAlertSettings(ctx.chat.id).catch(() => ({}));
-    const enabled = kind === 'war' ? c.war_enabled === true : c.cwl_enabled === true;
-    const patch = kind === 'war' ? { war_enabled: !enabled } : { cwl_enabled: !enabled };
-    await sb.upsertChatCustomAlertSettings(ctx.chat.id, patch, ctx.from?.id).catch(() => {});
+    const enabled = isKindEnabled(c, kind);
+    await sb.upsertChatCustomAlertSettings(ctx.chat.id, enabledPatch(kind, !enabled), ctx.from?.id).catch(() => {});
     await ctx.answerCbQuery(!enabled ? '✅ Alert attivato' : '⚪ Alert disattivato').catch(() => {});
     const next = await sb.getChatCustomAlertSettings(ctx.chat.id).catch(() => ({}));
     const kb = await buildCustomEditKb(sb, ctx.chat.id, kind);
@@ -744,7 +842,7 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
     if (!enabled) await afterCustomAlertSaved(ctx, sb, kind);
   });
 
-  bot.action(/^notif_custom_pause:(war|cwl)$/, async (ctx) => {
+  bot.action(/^notif_custom_pause:(war|cwl|raid)$/, async (ctx) => {
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
     const actor = await ensureSessionUser(ctx);
     if (!actor || !isCapoOrCoCapo(actor)) {
@@ -753,16 +851,15 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
     }
     const kind = ctx.match[1];
     const c = await sb.getChatCustomAlertSettings(ctx.chat.id).catch(() => ({}));
-    const paused = kind === 'war' ? c.war_paused === true : c.cwl_paused === true;
-    const patch = kind === 'war' ? { war_paused: !paused } : { cwl_paused: !paused };
-    await sb.upsertChatCustomAlertSettings(ctx.chat.id, patch, ctx.from?.id).catch(() => {});
+    const paused = isKindPaused(c, kind);
+    await sb.upsertChatCustomAlertSettings(ctx.chat.id, pausedPatch(kind, !paused), ctx.from?.id).catch(() => {});
     await ctx.answerCbQuery(!paused ? '⏸ Alert in pausa' : '▶️ Alert riattivato').catch(() => {});
     const next = await sb.getChatCustomAlertSettings(ctx.chat.id).catch(() => ({}));
     const kb = await buildCustomEditKb(sb, ctx.chat.id, kind);
     await ctx.editMessageText(buildCustomEditText(kind, next), { parse_mode: 'HTML', ...kb }).catch(() => {});
   });
 
-  bot.action(/^notif_custom_delete:(war|cwl)$/, async (ctx) => {
+  bot.action(/^notif_custom_delete:(war|cwl|raid)$/, async (ctx) => {
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id) return;
     const actor = await ensureSessionUser(ctx);
     if (!actor || !isCapoOrCoCapo(actor)) {
@@ -770,17 +867,14 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
       return;
     }
     const kind = ctx.match[1];
-    const patch = kind === 'war'
-      ? { war_enabled: false, war_paused: false, war_lead_minutes: null }
-      : { cwl_enabled: false, cwl_paused: false, cwl_lead_minutes: null };
-    await sb.upsertChatCustomAlertSettings(ctx.chat.id, patch, ctx.from?.id).catch(() => {});
+    await sb.upsertChatCustomAlertSettings(ctx.chat.id, deletePatch(kind), ctx.from?.id).catch(() => {});
     await ctx.answerCbQuery('🗑 Alert eliminato').catch(() => {});
     const next = await sb.getChatCustomAlertSettings(ctx.chat.id).catch(() => ({}));
     const kb = await buildCustomEditKb(sb, ctx.chat.id, kind);
     await ctx.editMessageText(buildCustomEditText(kind, next), { parse_mode: 'HTML', ...kb }).catch(() => {});
   });
 
-  bot.action(/^notif_custom_input:(war|cwl)$/, async (ctx) => {
+  bot.action(/^notif_custom_input:(war|cwl|raid)$/, async (ctx) => {
     if (!isLinkedChatContext(ctx) || !ctx.chat?.id || !ctx.from?.id) return;
     const actor = await ensureSessionUser(ctx);
     if (!actor || !isCapoOrCoCapo(actor)) {
@@ -793,7 +887,7 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
     await ctx.answerCbQuery('✍️ Inserisci il tempo nel prossimo messaggio').catch(() => {});
     await replyEphemeral(
       ctx,
-      `✍️ Inserisci il preavviso per ${kind === 'war' ? 'guerra' : 'CWL'}.\n` +
+      `✍️ Inserisci il preavviso per ${kindLabelIt(kind)}.\n` +
       'Formati: <code>90</code>, <code>90m</code>, <code>2h</code>, <code>2h 30m</code>, <code>1:45</code>.',
       {
         parse_mode: 'HTML',
@@ -838,13 +932,10 @@ function setup(bot, { sb, safeAnswerCb, isLinkedChatContext, isCapoOrCoCapo }) {
       );
       return;
     }
-    const patch = kind === 'war'
-      ? { war_enabled: true, war_paused: false, war_lead_minutes: mins }
-      : { cwl_enabled: true, cwl_paused: false, cwl_lead_minutes: mins };
-    await sb.upsertChatCustomAlertSettings(ctx.chat.id, patch, ctx.from?.id).catch(() => {});
+    await sb.upsertChatCustomAlertSettings(ctx.chat.id, setLeadPatch(kind, mins), ctx.from?.id).catch(() => {});
     await replyEphemeral(
       ctx,
-      `✅ Alert personalizzato ${kind === 'war' ? 'guerra' : 'CWL'} impostato: <b>${fmtLeadMinutes(mins)}</b> prima.`,
+      `✅ Alert personalizzato ${kindLabelIt(kind)} impostato: <b>${fmtLeadMinutes(mins)}</b> prima.`,
       { parse_mode: 'HTML' },
     );
     if (ctx.message?.message_id != null) {
