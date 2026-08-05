@@ -1253,6 +1253,7 @@ function wireProfilesUiOnce() {
 
 async function ensureProfilesBeforeApp(user) {
   wireProfilesUiOnce();
+  if (!user?.id || user.is_anonymous) return true;
   try {
     // Mini App con profilo dedicato (tg_profile): attiva quel profilo per la sessione web
     // Mai in gruppo collegato (clan forzato): resta il clan della chat
