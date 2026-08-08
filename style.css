@@ -3493,6 +3493,7 @@ tbody tr:last-child td { border-bottom: none; }
     padding: 1rem 1.25rem;
 }
 .profilo-bh-icon { color: var(--gold); opacity: 0.8; }
+.profilo-bh-icon-img { width: 44px; height: 44px; object-fit: contain; flex-shrink: 0; }
 .profilo-bh-label { font-size: 0.72rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.2rem; }
 .profilo-bh-val { font-family: var(--font-display); font-size: 1.1rem; color: var(--text); }
 .profilo-bh-sub { font-size: 0.8rem; color: var(--text-3); margin-top: 0.1rem; }

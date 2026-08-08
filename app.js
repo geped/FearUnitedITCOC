@@ -5930,19 +5930,21 @@ function renderPlayerView(p, prefix) {
 
   // Mappa prefix → IDs container
   const ids = {
-    heroes:    `${prefix}-heroes`,
-    equipment: `${prefix}-equipment`,
-    pets:      `${prefix}-pets`,
-    troops:    `${prefix}-troops`,
-    spells:    `${prefix}-spells`,
-    siege:     `${prefix}-siege`,
-    achHome:   `${prefix}-ach-home`,
-    bhStats:   `${prefix}-bh-stats`,
-    builderU:  `${prefix}-builder-units`,
-    builderA:  `${prefix}-builder-ach`,
-    capStats:  `${prefix}-capital-stats`,
-    capTroops: `${prefix}-capital-troops`,
-    petsSec:   `${prefix}-pets-sec`,
+    heroes:      `${prefix}-heroes`,
+    equipment:   `${prefix}-equipment`,
+    pets:        `${prefix}-pets`,
+    troops:      `${prefix}-troops`,
+    superTroops: `${prefix}-super-troops`,
+    spells:      `${prefix}-spells`,
+    siege:       `${prefix}-siege`,
+    achHome:     `${prefix}-ach-home`,
+    bhStats:     `${prefix}-bh-stats`,
+    builderH:    `${prefix}-builder-heroes`,
+    builderU:    `${prefix}-builder-units`,
+    builderA:    `${prefix}-builder-ach`,
+    capStats:    `${prefix}-capital-stats`,
+    capTroops:   `${prefix}-capital-troops`,
+    petsSec:     `${prefix}-pets-sec`,
   };
   // Per 'profilo' il prefisso dei section IDs è ps-
   // Per 'cp' il prefisso è cp-
@@ -5955,7 +5957,8 @@ function renderPlayerView(p, prefix) {
   // `p.troops`, mescolati alle truppe normali. Filtrarli da `p.pets` (che non esiste)
   // lasciava la sezione famigli sempre vuota per ogni giocatore.
   const pets     = (p.troops||[]).filter(x=>isHomeV(x)&&PETS_SET.has(x.name));
-  const troopsAll= (p.troops||[]).filter(x=>isHomeV(x)&&!PETS_SET.has(x.name)&&!SIEGE_SET.has(x.name));
+  const troopsAll= (p.troops||[]).filter(x=>isHomeV(x)&&!PETS_SET.has(x.name)&&!SIEGE_SET.has(x.name)&&!SUPER_TROOP_SET.has(x.name));
+  const superTroops = (p.troops||[]).filter(x=>isHomeV(x)&&SUPER_TROOP_SET.has(x.name));
   const spells   = (p.spells||[]).filter(isHomeV);
   const siege    = (p.troops||[]).filter(x=>isHomeV(x)&&SIEGE_SET.has(x.name));
   const achHome  = (p.achievements||[]).filter(a=>a.village==='home'||!a.village);
@@ -5964,6 +5967,7 @@ function renderPlayerView(p, prefix) {
   _renderEquipmentGrouped(ids.equipment, equipment);
   _renderUnits(ids.pets,         pets,      'pets');
   _renderUnits(ids.troops,    troopsAll, 'troops');
+  _renderUnits(ids.superTroops, superTroops, 'troops');
   _renderUnits(ids.spells,    spells,    'spells');
   _renderUnits(ids.siege,     siege,     'troops');
   _renderAchievements(ids.achHome, achHome);
@@ -5973,8 +5977,13 @@ function renderPlayerView(p, prefix) {
 
   // Builder
   const bhEl = document.getElementById(ids.bhStats);
+  const bhLvl = p.builderHallLevel || null;
+  const bhImg = bhLvl ? bhImgUrl(bhLvl) : '';
   if (bhEl) bhEl.innerHTML = `<div class="profilo-bh-card">
-    <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28" style="color:var(--gold);opacity:.8"><path d="M19 3H5v2h1v14H4v2h16v-2h-2V5h1V3zm-4 16h-6v-5h6v5zm0-7h-6V8h6v4z"/></svg>
+    ${bhImg
+      ? `<img src="${bhImg}" alt="Base del Costruttore" class="profilo-bh-icon-img" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+         <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28" style="color:var(--gold);opacity:.8;display:none"><path d="M19 3H5v2h1v14H4v2h16v-2h-2V5h1V3zm-4 16h-6v-5h6v5zm0-7h-6V8h6v4z"/></svg>`
+      : `<svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28" style="color:var(--gold);opacity:.8"><path d="M19 3H5v2h1v14H4v2h16v-2h-2V5h1V3zm-4 16h-6v-5h6v5zm0-7h-6V8h6v4z"/></svg>`}
     <div>
       <div class="profilo-bh-label">Base del Costruttore</div>
       <div class="profilo-bh-val">BH ${p.builderHallLevel??'—'}</div>
@@ -5982,12 +5991,11 @@ function renderPlayerView(p, prefix) {
     </div>
   </div>`;
 
-  const builderUnits = [
-    ...(p.heroes||[]).filter(x=>x.village==='builderBase'),
-    ...(p.troops||[]).filter(x=>x.village==='builderBase'),
-  ];
+  const builderHeroes = (p.heroes||[]).filter(x=>x.village==='builderBase');
+  const builderTroops = (p.troops||[]).filter(x=>x.village==='builderBase');
   const achBuilder = (p.achievements||[]).filter(a=>a.village==='builderBase');
-  _renderUnits(ids.builderU, builderUnits, 'troops');
+  _renderUnits(ids.builderH, builderHeroes, 'heroes');
+  _renderUnits(ids.builderU, builderTroops, 'troops');
   _renderAchievements(ids.builderA, achBuilder);
 
   // Capital
@@ -6081,7 +6089,39 @@ const UNIT_WIKI_URL = {
   // ── Macchine d'assedio / truppe nuove (aggiunte in game, ago 2026) ──
   'Troop Launcher':       'https://static.wikia.nocookie.net/clashofclans/images/c/c2/Troop_Launcher_info.png/revision/latest',
   'Electrofire Wizard':   'https://static.wikia.nocookie.net/clashofclans/images/2/2e/Electrofire_Wizard_info.png/revision/latest',
+  // ── Equipaggiamento con slug coc.guide inesistente (verificato ago 2026) ──
+  'Invisibility Vial':    'https://static.wikia.nocookie.net/clashofclans/images/0/08/Invisibility_Vial.png/revision/latest',
+  'Giant Arrow':          'https://static.wikia.nocookie.net/clashofclans/images/b/bb/Giant_Arrow.png/revision/latest',
+  'Healer Puppet':        'https://static.wikia.nocookie.net/clashofclans/images/d/dd/Healer_Puppet.png/revision/latest',
+  'Rage Gem':             'https://static.wikia.nocookie.net/clashofclans/images/8/8f/Rage_Gem.png/revision/latest',
+  'Rocket Backpack':      'https://static.wikia.nocookie.net/clashofclans/images/8/8f/Rocket_Backpack.png/revision/latest',
+  'Electro Fangs':        'https://static.wikia.nocookie.net/clashofclans/images/2/2c/Electro_Fangs.png/revision/latest',
+  // ── Incantesimo nuovo (Anime Fury update, giu 2026) ──
+  'Angry Spell':          'https://static.wikia.nocookie.net/clashofclans/images/9/92/Angry_Spell_info.png/revision/latest',
+  // ── Macchine d'assedio con slug coc.guide inesistente ──
+  'Flame Flinger':        'https://static.wikia.nocookie.net/clashofclans/images/f/f4/Flame_Flinger_info.png/revision/latest',
+  'Sky Wagon':            'https://static.wikia.nocookie.net/clashofclans/images/f/fd/Sky_Wagon_info.png/revision/latest',
+  // ── Eroi builder con slug coc.guide inesistente ──
+  'Battle Machine':       'https://static.wikia.nocookie.net/clashofclans/images/f/f1/Battle_Machine_info.png/revision/latest',
 };
+
+// ── ANTEPRIME BASE DEL COSTRUTTORE (edificio) per livello, Fandom Wiki ────────
+const BH_WIKI_URL = {
+  1:  'https://static.wikia.nocookie.net/clashofclans/images/1/19/Builder_Hall1.png/revision/latest',
+  2:  'https://static.wikia.nocookie.net/clashofclans/images/0/03/Builder_Hall2.png/revision/latest',
+  3:  'https://static.wikia.nocookie.net/clashofclans/images/3/38/Builder_Hall3.png/revision/latest',
+  4:  'https://static.wikia.nocookie.net/clashofclans/images/b/be/Builder_Hall4.png/revision/latest',
+  5:  'https://static.wikia.nocookie.net/clashofclans/images/2/22/Builder_Hall5.png/revision/latest',
+  6:  'https://static.wikia.nocookie.net/clashofclans/images/2/29/Builder_Hall6.png/revision/latest',
+  7:  'https://static.wikia.nocookie.net/clashofclans/images/7/7f/Builder_Hall7.png/revision/latest',
+  8:  'https://static.wikia.nocookie.net/clashofclans/images/0/0e/Builder_Hall8.png/revision/latest',
+  9:  'https://static.wikia.nocookie.net/clashofclans/images/4/43/Builder_Hall9.png/revision/latest',
+  10: 'https://static.wikia.nocookie.net/clashofclans/images/8/87/Builder_Hall10.png/revision/latest',
+};
+function bhImgUrl(level) {
+  const n = Math.max(1, Math.min(10, parseInt(level, 10) || 1));
+  return BH_WIKI_URL[n] || '';
+}
 
 // ── MAPPA CDN UNITÀ (API name → coc.guide category + slug) ───────────────────
 const UNIT_COC_SLUG = {
@@ -6289,26 +6329,27 @@ const UNIT_NAME_IT = {
   'Grand Warden':'Gran Sorvegliante','Royal Champion':'Campionessa Reale',
   'Minion Prince':'Principe degli Sgherri','Dragon Duke':'Duca Drago',
   'Battle Machine':'Macchina da Battaglia','Battle Copter':'Elicottero da Battaglia','B.O.B':'B.O.B',
-  // Truppe home
-  'Barbarian':'Barbaro','Archer':'Arciera','Giant':'Gigante','Goblin':'Goblin',
-  'Wall Breaker':'Spaccamuri','Balloon':'Mongolfiera','Wizard':'Mago',
-  'Healer':'Guaritrice','Dragon':'Drago','P.E.K.K.A':'P.E.K.K.A',
-  'Minion':'Servitore','Hog Rider':'Cavalcatore di Cinghiale',
+  // Truppe home — nomi ufficiali IT verificati su coc.guide/it (dati estratti dal gioco)
+  'Barbarian':'Barbaro','Archer':'Arciere','Giant':'Gigante','Goblin':'Goblin',
+  'Wall Breaker':'Spaccamuro','Balloon':'Mongolfiera','Wizard':'Stregone',
+  'Healer':'Guaritore','Dragon':'Drago','P.E.K.K.A':'P.E.K.K.A',
+  'Minion':'Sgherro','Hog Rider':'Domatore di Cinghiali',
   'Valkyrie':'Valchiria','Golem':'Golem','Witch':'Strega',
-  'Lava Hound':'Segugio di Lava','Bowler':'Bocciatore',
-  'Baby Dragon':'Piccolo Drago','Miner':'Minatore',
-  'Super Barbarian':'Super Barbaro','Sneaky Goblin':'Goblin Furtivo',
-  'Super Giant':'Super Gigante','Rocket Balloon':'Mongolfiera Razzo',
-  'Inferno Dragon':'Drago Inferno','Super Witch':'Super Strega',
-  'Ice Hound':'Segugio di Ghiaccio','Super Bowler':'Super Bocciatore',
-  'Super Dragon':'Super Drago','Electro Dragon':'Drago Elettro',
-  'Yeti':'Yeti','Dragon Rider':'Cavalcatore di Draghi',
-  'Electro Titan':'Titano Elettro','Root Rider':'Cavalcatore di Radici',
-  'Thrower':'Lanciatore','Super Archer':'Super Arciera',
-  'Super Wall Breaker':'Super Spaccamuri','Super Miner':'Super Minatore',
-  'Super Hog Rider':'Super Cavalcatore','Super Yeti':'Super Yeti',
+  'Lava Hound':'Mastino Lavico','Bowler':'Bocciatore',
+  'Baby Dragon':'Cucciolo di Drago','Miner':'Minatore',
+  'Super Barbarian':'Superbarbaro','Sneaky Goblin':'Goblin Furtivo',
+  'Super Giant':'Supergigante','Rocket Balloon':'Mongolfiera Razzo',
+  'Inferno Dragon':'Drago Infernale','Super Witch':'Superstrega',
+  'Ice Hound':'Mastino Glaciale','Super Bowler':'Superbocciatore',
+  'Super Dragon':'Superdrago','Electro Dragon':'Drago Elettro',
+  'Yeti':'Yeti','Dragon Rider':'Cavalcadraghi',
+  'Electro Titan':'Titana delle Folgori','Root Rider':'Guardiana delle Selve',
+  'Thrower':'Lanciatore','Super Archer':'Superarciere',
+  'Super Wall Breaker':'Superspaccamuro','Super Miner':'Superminatore',
+  'Super Hog Rider':'Superdomatore di Cinghiali','Super Yeti':'Super Yeti',
+  'Super Minion':'Supersgherro','Ram Rider':'Domatrice di Arieti',
   'Furnace':'Fornace','Meteor Golem':'Golem Meteorite',
-  'Apprentice Warden':'Custode Apprendista',
+  'Apprentice Warden':'Apprendista Sorvegliante',
   // Incantesimi
   'Lightning Spell':'Fulmine','Healing Spell':'Guarigione','Rage Spell':'Rabbia',
   'Freeze Spell':'Congelamento','Jump Spell':'Salto','Earthquake Spell':'Terremoto',
@@ -6318,10 +6359,10 @@ const UNIT_NAME_IT = {
   'Ice Block Spell':'Blocco di ghiaccio','Totem Spell':'Totem',
   'Poison Spell':'Veleno',
   'Dark Spell':'Oscuro',
-  // Macchine d'assedio
-  'Wall Wrecker':'Sfondamura','Battle Blimp':'Dirigibile da Battaglia',
-  'Stone Slammer':'Frantumatore di Pietre','Siege Barracks':'Caserma d\'Assedio',
-  'Log Launcher':'Lancia-Tronchi','Flame Flinger':'Sganciapietre',
+  // Macchine d'assedio — nomi confermati coc.guide/it dove disponibili
+  'Wall Wrecker':'Sgretolamuri','Battle Blimp':'Dirigibile',
+  'Stone Slammer':'Frantumatore di Pietre','Siege Barracks':'Caserma Volante',
+  'Log Launcher':'Sputatronchi','Flame Flinger':'Sganciapietre',
   'Battle Drill':'Trivella da Battaglia',
   'Sky Wagon':'Vagone del Cielo',
   // Equipaggiamento — nuovi items
@@ -6332,6 +6373,7 @@ const UNIT_NAME_IT = {
   'Flame Blower':'Mantice Sputafuoco','Stun Blaster':'Rivoltella Sonica',
   'Electro Fangs':'Zanne Elettriche',
   'Rocket Backpack':'Zaino a Razzo',
+  'Earthquake Boots':'Stivali del Terremoto',
   // Famigli
   'L.A.S.S.I':'L.A.S.S.I','Electro Owl':'Gufo Elettro','Mighty Yak':'Yak Possente',
   'Unicorn':'Unicorno','Frosty':'Gelido','Diggy':'Scavino',
@@ -6339,17 +6381,17 @@ const UNIT_NAME_IT = {
   'Spirit Fox':'Volpe Spirito','Angry Jelly':'Medusa Arrabbiata',
   'Greedy Raven':'Corvo Alalesta',
   'Sneezy':'Starnuto',
-  // Truppe builder
-  'Raged Barbarian':'Barbaro Furioso','Sneaky Archer':'Arciera Furtiva',
+  // Truppe builder — nomi confermati coc.guide/it
+  'Raged Barbarian':'Barbaro Furioso','Sneaky Archer':'Arciere Furtivo',
   'Boxer Giant':'Gigante Pugile','Beta Minion':'Beta Servitore',
   'Bomber':'Bombarolo',
-  'Cannon Cart':'Carrello Cannone','Night Witch':'Strega Notturna',
+  'Cannon Cart':'Cannone a Rotelle','Night Witch':'Strega Notturna',
   'Drop Ship':'Nave Lanciatore','Super P.E.K.K.A':'Super P.E.K.K.A',
-  'Hog Glider':'Aliante Cinghiale',
+  'Hog Glider':'Domatore Volante',
   // Truppe capitale
-  'Super Wizard':'Super Mago','Super Valkyrie':'Super Valchiria',
+  'Super Wizard':'Superstregone','Super Valkyrie':'Supervalchiria',
   // Rinomina in game (ago 2026) e nuove aggiunte
-  'Power P.E.K.K.A':'Power P.E.K.K.A','Troop Launcher':'Lancia-Truppe',
+  'Power P.E.K.K.A':'P.E.K.K.A Micidiale','Troop Launcher':'Lancia-Truppe',
   'Electrofire Wizard':'Mago Elettrofuoco',
 };
 
@@ -6383,6 +6425,8 @@ function _unitFallbackColor(name) {
 
 const PETS_SET = new Set(['L.A.S.S.I','Electro Owl','Mighty Yak','Unicorn','Frosty','Diggy','Poison Lizard','Phoenix','Spirit Fox','Angry Jelly','Sneezy','Greedy Raven']);
 const SIEGE_SET = new Set(['Wall Wrecker','Battle Blimp','Stone Slammer','Siege Barracks','Log Launcher','Flame Flinger','Battle Drill','Sky Wagon','Troop Launcher']);
+// Super Truppe (potenziamenti temporanei sbloccabili con gemme): sezione separata in "Il mio profilo"
+const SUPER_TROOP_SET = new Set(['Super Barbarian','Super Archer','Super Giant','Sneaky Goblin','Super Wall Breaker','Rocket Balloon','Super Wizard','Super Dragon','Inferno Dragon','Super Miner','Super Yeti','Super Minion','Super Hog Rider','Super Valkyrie','Super Witch','Ice Hound','Super Bowler']);
 
 // ── MAPPA EQUIPAGGIAMENTO → EROE PROPRIETARIO ─────────────────────────────────
 // Fonte: wiki ufficiale Supercell (marzo 2026)
@@ -7151,13 +7195,15 @@ async function openCercaPlayer(playerTag, fromClanTag) {
         </div>
         <div class="profilo-section"><h3 class="profilo-section-title">Equipaggiamento Eroi</h3><div id="cp-equipment"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Truppe</h3><div id="cp-troops" class="profilo-units-grid"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Super Truppe</h3><div id="cp-super-troops" class="profilo-units-grid"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Incantesimi</h3><div id="cp-spells" class="profilo-units-grid"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Macchine d'Assedio</h3><div id="cp-siege" class="profilo-units-grid"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Obiettivi Villaggio</h3><div id="cp-ach-home" class="profilo-achievements-list"></div></div>
       </div>
       <div id="cp-tab-builder" style="display:none">
         <div id="cp-bh-stats" class="profilo-bh-stats"></div>
-        <div class="profilo-section"><h3 class="profilo-section-title">Truppe &amp; Eroi Builder</h3><div id="cp-builder-units" class="profilo-units-grid"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Eroi Builder</h3><div id="cp-builder-heroes" class="profilo-units-grid"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Truppe Builder</h3><div id="cp-builder-units" class="profilo-units-grid"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Obiettivi Builder</h3><div id="cp-builder-ach" class="profilo-achievements-list"></div></div>
       </div>
       <div id="cp-tab-capital" style="display:none">
@@ -7365,13 +7411,15 @@ async function openRankPlayer(playerTag) {
         </div>
         <div class="profilo-section"><h3 class="profilo-section-title">Equipaggiamento Eroi</h3><div id="rk-equipment"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Truppe</h3><div id="rk-troops" class="profilo-units-grid"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Super Truppe</h3><div id="rk-super-troops" class="profilo-units-grid"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Incantesimi</h3><div id="rk-spells" class="profilo-units-grid"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Macchine d'Assedio</h3><div id="rk-siege" class="profilo-units-grid"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Obiettivi Villaggio</h3><div id="rk-ach-home" class="profilo-achievements-list"></div></div>
       </div>
       <div id="rk-tab-builder" style="display:none">
         <div id="rk-bh-stats" class="profilo-bh-stats"></div>
-        <div class="profilo-section"><h3 class="profilo-section-title">Truppe &amp; Eroi Builder</h3><div id="rk-builder-units" class="profilo-units-grid"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Eroi Builder</h3><div id="rk-builder-heroes" class="profilo-units-grid"></div></div>
+        <div class="profilo-section"><h3 class="profilo-section-title">Truppe Builder</h3><div id="rk-builder-units" class="profilo-units-grid"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Obiettivi Builder</h3><div id="rk-builder-ach" class="profilo-achievements-list"></div></div>
       </div>
       <div id="rk-tab-capital" style="display:none">
