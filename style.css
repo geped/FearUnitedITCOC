@@ -4147,6 +4147,24 @@ tbody tr:last-child td { border-bottom: none; }
     border-radius: var(--radius-sm);
     padding: 0.05rem 0.3rem;
 }
+.carte-card-dupe-btn {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--red, #d64545);
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 700;
+    line-height: 1;
+    border-radius: 50%;
+    cursor: pointer;
+}
+.carte-card-dupe-btn:hover { filter: brightness(1.15); transform: scale(1.08); }
 
 .carte-admin-toggle {
     margin-top: 1.2rem;

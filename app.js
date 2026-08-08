@@ -256,6 +256,10 @@ function _unitImgFallbackUrls(u, category) {
     const p = String(loc).replace(/^\//, '');
     out.push(p.startsWith('http') ? p : p);
   }
+  // UNIT_WIKI_URL è definita più sotto nel file: la funzione viene invocata solo a runtime,
+  // quando tutto lo script è già stato valutato, quindi qui la mappa è già popolata.
+  const wiki = UNIT_WIKI_URL[name];
+  if (wiki) out.push(wiki);
   const gh = getGhWidgetsUrl(name);
   if (gh) out.push(gh);
   const guide = getCocGuideUrl(name, category);
@@ -1722,12 +1726,17 @@ function renderCardEventContent() {
   const grid = cardsInCat.map(c => {
     const qty = coll[c.key] || 0;
     const stateCls = qty === 2 ? 'state-2' : qty === 1 ? 'state-1' : 'state-0';
+    const dupeBtn = (qty === 2 && !readOnly)
+      ? `<span class="carte-card-dupe-btn" title="Rimuovi doppione"
+           onclick="event.stopPropagation();_onCardEventRemoveDupe('${c.key}')">✕</span>`
+      : '';
     return `<button type="button" class="carte-card ${stateCls}" ${readOnly ? 'disabled' : ''}
         onclick="_onCardEventClick('${c.key}')" title="${escH(c.name_it)}">
       <img src="${escH(c.icon_url)}" alt="${escH(c.name_it)}" loading="lazy"
            onerror="this.style.visibility='hidden'">
       <span class="carte-card-name">${escH(c.name_it)}</span>
       ${qty === 2 ? '<span class="carte-card-badge">x2</span>' : ''}
+      ${dupeBtn}
     </button>`;
   }).join('');
 
@@ -1784,6 +1793,28 @@ async function _onCardEventClick(cardKey) {
     await profilesApi('cards-save', { method: 'POST', body: { coc_tag: tag, card_key: cardKey, qty_state: next } });
     if (!window._cardEventData.collections[tag]) window._cardEventData.collections[tag] = {};
     window._cardEventData.collections[tag][cardKey] = next;
+    renderCardEventContent();
+  } catch (e) {
+    alert(e.message || 'Errore salvataggio carta.');
+  }
+}
+
+async function _onCardEventRemoveDupe(cardKey) {
+  const cat = window._cardEventCatalog;
+  const tag = window._cardEventActiveTag;
+  if (!cat || !tag) return;
+  if (!cat.settings?.live) { alert('Evento non attivo: sezione in sola lettura.'); return; }
+  const card = cat.cards.find(c => c.key === cardKey);
+  if (!card) return;
+  const coll = (window._cardEventData?.collections && window._cardEventData.collections[tag]) || {};
+  const qty = coll[cardKey] || 0;
+  if (qty !== 2) return;
+  if (!confirm(`Rimuovere il doppione di «${card.name_it}»? Rimarrà 1 copia.`)) return;
+
+  try {
+    await profilesApi('cards-save', { method: 'POST', body: { coc_tag: tag, card_key: cardKey, qty_state: 1 } });
+    if (!window._cardEventData.collections[tag]) window._cardEventData.collections[tag] = {};
+    window._cardEventData.collections[tag][cardKey] = 1;
     renderCardEventContent();
   } catch (e) {
     alert(e.message || 'Errore salvataggio carta.');
@@ -5920,9 +5951,10 @@ function renderPlayerView(p, prefix) {
   const isHomeV = x => !x.village || x.village === 'home';
   const heroes   = (p.heroes||[]).filter(isHomeV);
   const equipment= (p.heroEquipment||[]).filter(x=>!x.village||x.village==='home');
-  // I famigli arrivano in `p.pets` (non in `p.troops`).
-  // Se li filtriamo dalla lista sbagliata, la sezione famigli mostra iconcine di fallback/vuota.
-  const pets     = (p.pets||[]).filter(x=>isHomeV(x)&&PETS_SET.has(x.name));
+  // L'API CoC non restituisce mai un campo `pets` separato: i famigli arrivano dentro
+  // `p.troops`, mescolati alle truppe normali. Filtrarli da `p.pets` (che non esiste)
+  // lasciava la sezione famigli sempre vuota per ogni giocatore.
+  const pets     = (p.troops||[]).filter(x=>isHomeV(x)&&PETS_SET.has(x.name));
   const troopsAll= (p.troops||[]).filter(x=>isHomeV(x)&&!PETS_SET.has(x.name)&&!SIEGE_SET.has(x.name));
   const spells   = (p.spells||[]).filter(isHomeV);
   const siege    = (p.troops||[]).filter(x=>isHomeV(x)&&SIEGE_SET.has(x.name));
@@ -6019,6 +6051,36 @@ const UNIT_WIKI_URL = {
   'Frosty':           'https://static.wikia.nocookie.net/clashofclans/images/8/8b/Frosty_field.png/revision/latest',
   // Super Truppe senza copertura coc.guide
   'Super Valkyrie':   'https://static.wikia.nocookie.net/clashofclans/images/2/25/Super_Valkyrie_Info.png/revision/latest',
+  // ── Truppe base/dark elixir con slug coc.guide inesistente o rotto (verificato ago 2026) ──
+  'Meteor Golem':     'https://static.wikia.nocookie.net/clashofclans/images/2/21/Meteor_Golem_info.png/revision/latest',
+  'Minion':           'https://static.wikia.nocookie.net/clashofclans/images/a/a4/Minion_info.png/revision/latest',
+  'Hog Rider':        'https://static.wikia.nocookie.net/clashofclans/images/5/54/Hog_Rider_info.png/revision/latest',
+  'Valkyrie':         'https://static.wikia.nocookie.net/clashofclans/images/7/7d/Valkyrie_info.png/revision/latest',
+  'Witch':            'https://static.wikia.nocookie.net/clashofclans/images/4/4a/Witch_info.png/revision/latest',
+  'Lava Hound':       'https://static.wikia.nocookie.net/clashofclans/images/0/0a/Lava_Hound_info.png/revision/latest',
+  'Druid':            'https://static.wikia.nocookie.net/clashofclans/images/9/9a/Druid_info.png/revision/latest',
+  'Furnace':          'https://static.wikia.nocookie.net/clashofclans/images/2/23/Furnace_info.png/revision/latest',
+  'Ruin Witch':       'https://static.wikia.nocookie.net/clashofclans/images/2/23/Ruin_Witch_info.png/revision/latest',
+  // ── Truppe builder base con slug coc.guide inesistente o rotto ──
+  'Beta Minion':      'https://static.wikia.nocookie.net/clashofclans/images/6/63/Beta_Minion_info.png/revision/latest',
+  'Drop Ship':        'https://static.wikia.nocookie.net/clashofclans/images/1/17/Drop_Ship_info.png/revision/latest',
+  // "Super P.E.K.K.A" builder base è stata rinominata "Power P.E.K.K.A" in game (l'API CoC
+  // ora restituisce questo nome): copriamo entrambe le chiavi per compatibilità.
+  'Power P.E.K.K.A':  'https://static.wikia.nocookie.net/clashofclans/images/1/1f/Power_P.E.K.K.A_info.png/revision/latest',
+  'Super P.E.K.K.A':  'https://static.wikia.nocookie.net/clashofclans/images/1/1f/Power_P.E.K.K.A_info.png/revision/latest',
+  // ── Super truppe con slug coc.guide inesistente o rotto ──
+  'Super Barbarian':      'https://static.wikia.nocookie.net/clashofclans/images/1/1c/Super_Barbarian_info.png/revision/latest',
+  'Super Archer':         'https://static.wikia.nocookie.net/clashofclans/images/e/ea/Super_Archer_info.png/revision/latest',
+  'Super Giant':          'https://static.wikia.nocookie.net/clashofclans/images/d/d9/Super_Giant_info.png/revision/latest',
+  'Sneaky Goblin':        'https://static.wikia.nocookie.net/clashofclans/images/f/ff/Sneaky_Goblin_info.png/revision/latest',
+  'Super Wall Breaker':   'https://static.wikia.nocookie.net/clashofclans/images/b/b1/Super_Wall_Breaker_info.png/revision/latest',
+  'Rocket Balloon':       'https://static.wikia.nocookie.net/clashofclans/images/9/9e/Rocket_Balloon_info.png/revision/latest',
+  'Inferno Dragon':       'https://static.wikia.nocookie.net/clashofclans/images/d/de/Inferno_Dragon_info.png/revision/latest',
+  'Super Yeti':           'https://static.wikia.nocookie.net/clashofclans/images/1/19/Super_Yeti_info.png/revision/latest',
+  'Super Witch':          'https://static.wikia.nocookie.net/clashofclans/images/7/7c/Super_Witch_info.png/revision/latest',
+  // ── Macchine d'assedio / truppe nuove (aggiunte in game, ago 2026) ──
+  'Troop Launcher':       'https://static.wikia.nocookie.net/clashofclans/images/c/c2/Troop_Launcher_info.png/revision/latest',
+  'Electrofire Wizard':   'https://static.wikia.nocookie.net/clashofclans/images/2/2e/Electrofire_Wizard_info.png/revision/latest',
 };
 
 // ── MAPPA CDN UNITÀ (API name → coc.guide category + slug) ───────────────────
@@ -6286,6 +6348,9 @@ const UNIT_NAME_IT = {
   'Hog Glider':'Aliante Cinghiale',
   // Truppe capitale
   'Super Wizard':'Super Mago','Super Valkyrie':'Super Valchiria',
+  // Rinomina in game (ago 2026) e nuove aggiunte
+  'Power P.E.K.K.A':'Power P.E.K.K.A','Troop Launcher':'Lancia-Truppe',
+  'Electrofire Wizard':'Mago Elettrofuoco',
 };
 
 function _unitNameIt(name) { return UNIT_NAME_IT[name] || name; }
@@ -6317,7 +6382,7 @@ function _unitFallbackColor(name) {
 }
 
 const PETS_SET = new Set(['L.A.S.S.I','Electro Owl','Mighty Yak','Unicorn','Frosty','Diggy','Poison Lizard','Phoenix','Spirit Fox','Angry Jelly','Sneezy','Greedy Raven']);
-const SIEGE_SET = new Set(['Wall Wrecker','Battle Blimp','Stone Slammer','Siege Barracks','Log Launcher','Flame Flinger','Battle Drill','Sky Wagon']);
+const SIEGE_SET = new Set(['Wall Wrecker','Battle Blimp','Stone Slammer','Siege Barracks','Log Launcher','Flame Flinger','Battle Drill','Sky Wagon','Troop Launcher']);
 
 // ── MAPPA EQUIPAGGIAMENTO → EROE PROPRIETARIO ─────────────────────────────────
 // Fonte: wiki ufficiale Supercell (marzo 2026)
