@@ -8,8 +8,14 @@
 -- Esegui su Supabase (SQL Editor) oppure via migrazione MCP.
 -- (Sostituisce la versione precedente di questo file, che invece filtrava/nascondeva
 --  del tutto gli scambi "già posseduti": ora vengono mostrati ma marcati come gialli.)
+--
+-- NB: la firma della funzione cambia (nuove colonne di output), quindi Postgres non
+-- permette un semplice CREATE OR REPLACE ("cannot change return type of existing
+-- function") — va prima droppata la versione precedente.
 
-CREATE OR REPLACE FUNCTION public.find_self_card_matches(p_user_id UUID)
+DROP FUNCTION IF EXISTS public.find_self_card_matches(UUID);
+
+CREATE FUNCTION public.find_self_card_matches(p_user_id UUID)
 RETURNS TABLE (
     profile_a          UUID,
     coc_tag_a          TEXT,
