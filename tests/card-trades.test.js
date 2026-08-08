@@ -188,6 +188,57 @@ describe('card-trades: applySelfTrade', () => {
   });
 });
 
+describe('card-trades: notifiche outbox (bot Telegram)', () => {
+  it('sendRoomMessage accoda una notifica "message" per il destinatario', async () => {
+    const admin = seedBase();
+    const opened = await cardTrades.getOrCreateRoom(admin, fakeUser(USER_A), 'p-a1', '#BBB1');
+    await cardTrades.sendRoomMessage(admin, fakeUser(USER_A), opened.room.id, 'p-a1', 'Ciao, scambiamo?');
+    const outbox = admin.db.tables.card_event_notify_outbox || [];
+    assert.equal(outbox.length, 1);
+    assert.equal(outbox[0].kind, 'message');
+    assert.equal(outbox[0].user_id, USER_B);
+  });
+
+  it('proposeTrade accoda una notifica "proposal" per il destinatario', async () => {
+    const admin = seedBase();
+    const opened = await cardTrades.getOrCreateRoom(admin, fakeUser(USER_A), 'p-a1', '#BBB1');
+    await cardTrades.proposeTrade(admin, fakeUser(USER_A), opened.room.id, 'p-a1', 'elx_barbarian', 'elx_archer');
+    const outbox = (admin.db.tables.card_event_notify_outbox || []).filter((r) => r.kind === 'proposal');
+    assert.equal(outbox.length, 1);
+    assert.equal(outbox[0].user_id, USER_B);
+    assert.equal(outbox[0].payload.card_give_name, 'Barbaro');
+  });
+
+  it('accettare una proposta accoda una notifica "trade_done" per il proponente', async () => {
+    const admin = seedBase();
+    const opened = await cardTrades.getOrCreateRoom(admin, fakeUser(USER_A), 'p-a1', '#BBB1');
+    const proposed = await cardTrades.proposeTrade(admin, fakeUser(USER_A), opened.room.id, 'p-a1', 'elx_barbarian', 'elx_archer');
+    await cardTrades.respondProposal(admin, fakeUser(USER_B), proposed.proposal.id, 'p-b1', 'accept');
+    const outbox = (admin.db.tables.card_event_notify_outbox || []).filter((r) => r.kind === 'trade_done');
+    assert.equal(outbox.length, 1);
+    assert.equal(outbox[0].user_id, USER_A, 'notifica destinata a chi ha proposto lo scambio');
+  });
+
+  it('notifyMatchesForTag accoda notifiche "match" per entrambi i lati senza duplicati', async () => {
+    const admin = seedBase();
+    admin.db.rpcStubs = {
+      find_card_matches: [
+        { other_coc_tag: '#BBB1', card_give: 'elx_barbarian', card_get: 'elx_archer', category: 'elixir' },
+      ],
+    };
+    await cardTrades.notifyMatchesForTag(admin, '#AAA1');
+    let outbox = admin.db.tables.card_event_notify_outbox || [];
+    assert.equal(outbox.length, 2);
+    assert.ok(outbox.some((r) => r.user_id === USER_A && r.payload.other_coc_tag === '#BBB1'));
+    assert.ok(outbox.some((r) => r.user_id === USER_B && r.payload.other_coc_tag === '#AAA1'));
+
+    // Richiamandola di nuovo con lo stesso match non deve duplicare (dedupe_key).
+    await cardTrades.notifyMatchesForTag(admin, '#AAA1');
+    outbox = admin.db.tables.card_event_notify_outbox || [];
+    assert.equal(outbox.length, 2, 'nessuna riga duplicata per lo stesso match');
+  });
+});
+
 describe('card-trades: matching (enrichment su risultati RPC)', () => {
   it('getMatchesForProfile arricchisce i risultati con profilo e metadati carta', async () => {
     const admin = seedBase();

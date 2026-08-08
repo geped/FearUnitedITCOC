@@ -38,6 +38,12 @@ class QueryBuilder {
   insert(rows) { this._insertRows = Array.isArray(rows) ? rows : [rows]; return this; }
   update(patch) { this._updatePatch = patch; return this; }
   delete() { this._delete = true; return this; }
+  upsert(rows, opts = {}) {
+    this._upsertRows = Array.isArray(rows) ? rows : [rows];
+    this._upsertConflict = (opts.onConflict || '').split(',').filter(Boolean);
+    this._upsertIgnore = opts.ignoreDuplicates === true;
+    return this;
+  }
 
   _rowMatches(row) {
     return this.filters.every((f) => {
@@ -59,6 +65,25 @@ class QueryBuilder {
 
   async _run() {
     const rows = this.db.tables[this.table] || (this.db.tables[this.table] = []);
+
+    if (this._upsertRows) {
+      const out = [];
+      for (const r of this._upsertRows) {
+        const existing = this._upsertConflict.length
+          ? rows.find((x) => this._upsertConflict.every((c) => String(x[c]) === String(r[c])))
+          : null;
+        if (existing) {
+          if (!this._upsertIgnore) Object.assign(existing, r);
+          out.push(existing);
+        } else {
+          const row = { id: nextId(this.table), created_at: new Date().toISOString(), ...r };
+          rows.push(row);
+          out.push(row);
+        }
+      }
+      if (this._single) return { data: out[0], error: null };
+      return { data: out, error: null };
+    }
 
     if (this._insertRows) {
       const inserted = this._insertRows.map((r) => {

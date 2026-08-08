@@ -122,6 +122,8 @@ function callbackSkipsUiWipe(data) {
   ) {
     return true;
   }
+  // Evento "Clash of Cards" (scambio carte): stessa bolla per tutta la navigazione interna.
+  if (d === 'cards' || d.startsWith('cards:')) return true;
   return false;
 }
 

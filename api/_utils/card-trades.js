@@ -61,6 +61,85 @@ function enrichCardKeys(row, keys) {
   return out;
 }
 
+// ── NOTIFICHE (outbox → bot Telegram) ────────────────────────────────────
+// Best-effort: un fallimento qui non deve mai rompere il flusso di scambio.
+async function queueNotification(admin, { userId, kind, dedupeKey, payload }) {
+  if (!userId || !dedupeKey) return;
+  try {
+    await admin
+      .from('card_event_notify_outbox')
+      .upsert(
+        { user_id: userId, kind, dedupe_key: String(dedupeKey), payload: payload || {} },
+        { onConflict: 'user_id,kind,dedupe_key', ignoreDuplicates: true },
+      );
+  } catch (_) {
+    // silenzioso: le notifiche sono un extra, non devono bloccare lo scambio
+  }
+}
+
+async function profileUserId(admin, profileId) {
+  const { data } = await admin.from('user_coc_profiles').select('id, user_id, username').eq('id', profileId).maybeSingle();
+  return data || null;
+}
+
+/**
+ * Dopo che un profilo aggiorna la sua collezione, ricalcola i match p2p per quel tag
+ * e accoda una notifica sia per il proprietario del tag sia per la controparte
+ * (i dati del match dalla prospettiva di A bastano per costruire anche quella di B,
+ * evitando una seconda chiamata RPC per ogni avversario).
+ */
+async function notifyMatchesForTag(admin, cocTag) {
+  try {
+    const { data: matches, error } = await admin.rpc('find_card_matches', { p_coc_tag: cocTag });
+    if (error || !matches?.length) return;
+    const { data: me } = await admin.from('user_coc_profiles').select('id, user_id, username, coc_tag').eq('coc_tag', cocTag).maybeSingle();
+    if (!me) return;
+    const otherTags = [...new Set(matches.map((m) => m.other_coc_tag))];
+    const { data: others } = await admin
+      .from('user_coc_profiles')
+      .select('id, user_id, username, coc_tag')
+      .in('coc_tag', otherTags);
+    const otherByTag = Object.fromEntries((others || []).map((p) => [p.coc_tag, p]));
+
+    for (const m of matches) {
+      const other = otherByTag[m.other_coc_tag];
+      if (!other) continue;
+      const giveMeta = cardMeta(m.card_give);
+      const getMeta = cardMeta(m.card_get);
+      await queueNotification(admin, {
+        userId: me.user_id,
+        kind: 'match',
+        dedupeKey: `${me.coc_tag}|${other.coc_tag}|${m.card_give}|${m.card_get}`,
+        payload: {
+          my_coc_tag: me.coc_tag,
+          other_coc_tag: other.coc_tag,
+          other_username: other.username,
+          card_give: m.card_give,
+          card_get: m.card_get,
+          card_give_name: giveMeta?.name_it,
+          card_get_name: getMeta?.name_it,
+        },
+      });
+      await queueNotification(admin, {
+        userId: other.user_id,
+        kind: 'match',
+        dedupeKey: `${other.coc_tag}|${me.coc_tag}|${m.card_get}|${m.card_give}`,
+        payload: {
+          my_coc_tag: other.coc_tag,
+          other_coc_tag: me.coc_tag,
+          other_username: me.username,
+          card_give: m.card_get,
+          card_get: m.card_give,
+          card_give_name: getMeta?.name_it,
+          card_get_name: giveMeta?.name_it,
+        },
+      });
+    }
+  } catch (_) {
+    // best-effort
+  }
+}
+
 // ── MATCHING ────────────────────────────────────────────────────────────
 
 async function getMatchesForProfile(admin, user, profileId) {
@@ -288,6 +367,18 @@ async function sendRoomMessage(admin, user, roomId, myProfileId, bodyText) {
     .single();
   if (error) throw error;
   await admin.from('card_event_rooms').update({ updated_at: new Date().toISOString() }).eq('id', roomId);
+
+  const otherProfileId = room.profile_lo === me.id ? room.profile_hi : room.profile_lo;
+  const other = await profileUserId(admin, otherProfileId);
+  if (other?.user_id) {
+    queueNotification(admin, {
+      userId: other.user_id,
+      kind: 'message',
+      dedupeKey: msg.id,
+      payload: { room_id: roomId, sender_username: me.username, body: text },
+    });
+  }
+
   return { ok: true, message: msg };
 }
 
@@ -356,6 +447,23 @@ async function proposeTrade(admin, user, roomId, myProfileId, cardGive, cardGet)
   });
   await admin.from('card_event_rooms').update({ updated_at: new Date().toISOString() }).eq('id', roomId);
 
+  const otherProfile = await profileUserId(admin, otherId);
+  if (otherProfile?.user_id) {
+    queueNotification(admin, {
+      userId: otherProfile.user_id,
+      kind: 'proposal',
+      dedupeKey: proposal.id,
+      payload: {
+        room_id: roomId,
+        proposer_username: me.username,
+        card_give: cardGive,
+        card_get: cardGet,
+        card_give_name: give.name_it,
+        card_get_name: get.name_it,
+      },
+    });
+  }
+
   return { ok: true, proposal: enrichCardKeys(proposal, ['card_give', 'card_get']) };
 }
 
@@ -407,6 +515,22 @@ async function respondProposal(admin, user, proposalId, myProfileId, action) {
       kind: 'system',
       body: `Scambio completato: ${giveMeta?.name_it || proposal.card_give} ↔ ${getMeta?.name_it || proposal.card_get}`,
     });
+    const proposer = await profileUserId(admin, proposal.proposer_profile);
+    if (proposer?.user_id) {
+      queueNotification(admin, {
+        userId: proposer.user_id,
+        kind: 'trade_done',
+        dedupeKey: proposalId,
+        payload: {
+          room_id: room.id,
+          accepted_by_username: me.username,
+          card_give: proposal.card_give,
+          card_get: proposal.card_get,
+          card_give_name: giveMeta?.name_it,
+          card_get_name: getMeta?.name_it,
+        },
+      });
+    }
     return { ok: true, status: 'accepted' };
   }
 
@@ -477,4 +601,5 @@ module.exports = {
   respondProposal,
   applySelfTrade,
   getTradeLog,
+  notifyMatchesForTag,
 };

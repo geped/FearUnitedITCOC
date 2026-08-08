@@ -1172,6 +1172,50 @@ async function listCwlWarSeasonsFromDb(clanTagRaw) {
   return [...seen].sort((a, b) => b.localeCompare(a));
 }
 
+/**
+ * Evento "Clash of Cards" — outbox notifiche (match/messaggio/proposta/scambio).
+ * Scritta dal sito (api/_utils/card-trades.js) con SERVICE_ROLE, letta qui dal bot.
+ */
+async function listPendingCardNotifications(limit = 25) {
+  const client = sb();
+  if (!client) return [];
+  const { data, error } = await client
+    .from('card_event_notify_outbox')
+    .select('*')
+    .is('sent_at', null)
+    .order('created_at', { ascending: true })
+    .limit(limit);
+  if (error) {
+    console.warn('[cards-notify] list:', error.message);
+    return [];
+  }
+  return data || [];
+}
+
+async function markCardNotificationsSent(ids) {
+  const client = sb();
+  if (!client || !ids?.length) return;
+  await client
+    .from('card_event_notify_outbox')
+    .update({ sent_at: new Date().toISOString() })
+    .in('id', ids);
+}
+
+/** Risale dall'utente Supabase (destinatario di una notifica) al suo telegram_user_id. */
+async function getTelegramUserIdForSupabaseUser(userId) {
+  const client = sb();
+  if (!client || !userId) return null;
+  const { data, error } = await client
+    .from('telegram_links')
+    .select('telegram_user_id, updated_at')
+    .eq('supabase_user_id', userId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data.telegram_user_id || null;
+}
+
 module.exports = {
   sb,
   getFullRow,
@@ -1242,4 +1286,7 @@ module.exports = {
   setGlobalChatReportStatus,
   setGlobalReportTargetTelegramUser,
   getUsageDailyStats,
+  listPendingCardNotifications,
+  markCardNotificationsSent,
+  getTelegramUserIdForSupabaseUser,
 };

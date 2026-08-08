@@ -4148,25 +4148,6 @@ tbody tr:last-child td { border-bottom: none; }
     border-radius: var(--radius-sm);
     padding: 0.05rem 0.3rem;
 }
-.carte-card-dupe-btn {
-    position: absolute;
-    top: 4px;
-    left: 4px;
-    width: 16px;
-    height: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--red, #d64545);
-    color: #fff;
-    font-size: 0.6rem;
-    font-weight: 700;
-    line-height: 1;
-    border-radius: 50%;
-    cursor: pointer;
-}
-.carte-card-dupe-btn:hover { filter: brightness(1.15); transform: scale(1.08); }
-
 .carte-admin-toggle {
     margin-top: 1.2rem;
     padding-top: 0.8rem;
@@ -4275,3 +4256,44 @@ tbody tr:last-child td { border-bottom: none; }
     background: var(--bg-1);
     color: var(--text);
 }
+
+/* ── Modale scelta quantità carta ────────────────────────────────────── */
+.carte-qty-modal-body { padding: 0.5rem 1.2rem 1.3rem; text-align: center; }
+.carte-qty-modal-img { width: 64px; height: 64px; object-fit: contain; margin-bottom: 0.5rem; }
+.carte-qty-modal-hint { color: var(--text-3); font-size: 0.85rem; margin: 0 0 0.9rem; }
+.carte-qty-modal-opts { display: flex; flex-direction: column; gap: 0.5rem; }
+.carte-qty-opt {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    width: 100%;
+    text-align: left;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.6rem 0.8rem;
+    cursor: pointer;
+    color: var(--text);
+    transition: border-color 0.15s, background 0.15s;
+}
+.carte-qty-opt:hover { border-color: var(--gold); }
+.carte-qty-opt.active { border-color: var(--gold); background: var(--gold-glow); }
+.carte-qty-opt-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-1);
+    border-radius: 50%;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--gold);
+}
+.carte-qty-opt-text { display: flex; flex-direction: column; gap: 0.1rem; }
+.carte-qty-opt-text strong { font-size: 0.88rem; }
+.carte-qty-opt-text small { color: var(--text-3); font-size: 0.72rem; }
+.carte-qty-opt-check { position: absolute; right: 0.7rem; color: var(--gold); font-weight: 700; }

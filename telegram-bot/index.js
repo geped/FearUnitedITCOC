@@ -19,6 +19,8 @@ const notifUi = require('./lib/notification-settings-ui');
 const notifExt = require('./lib/notifications-extended');
 const profilesUi = require('./lib/profiles-ui');
 const profilesApi = require('./lib/profiles-api');
+const cardsUi = require('./lib/cards-ui');
+const cardsNotify = require('./lib/card-event-notify');
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -32,6 +34,8 @@ const pendingLinkWizard = new Map();
 const pendingCommunity = new Map();
 /** Handlers UI multi-profilo (impostati in setupBot) */
 let profilesHandlers = null;
+/** Handlers UI evento "Clash of Cards" (scambio carte, impostati in setupBot) */
+let cardsHandlers = null;
 /** Evita di ripresentare il gate profili a ogni /start nella stessa sessione bot */
 const profileGateDone = new Set();
 
@@ -1700,6 +1704,7 @@ async function mainMenuKeyboard(ctx, user, hasClanTag, clanTag, clanName) {
   }
   if (!grp) {
     rows.push([Markup.button.callback('💬 Community', 'comm_hub')]);
+    rows.push([Markup.button.callback('🎴 Carte scambio', 'cards')]);
   }
   rows.push([
     Markup.button.callback('🔍 Cerca', 'nav_search'),
@@ -2008,6 +2013,7 @@ async function performFullLogout(ctx, { viaCommand }) {
   pendingLinkWizard.delete(uid);
   pendingCommunity.delete(uid);
   postAuthGlobalResume.delete(uid);
+  cardsHandlers?.clearUserState(uid);
   const subG = await sbcCommunity.getGlobalSubscriber(uid).catch(() => null);
   if (subG?.hub_message_id != null) {
     try {
@@ -2839,6 +2845,7 @@ function setupBot(bot) {
       pendingSearch.delete(ctx.from.id);
       pendingLinkWizard.delete(ctx.from.id);
       pendingCommunity.delete(ctx.from.id);
+      cardsHandlers?.clearUserState(ctx.from.id);
       resetSupportContextForUser(ctx.from.id);
       // Obbligatorio qui: questo ramo faceva next() prima del blocco leaveGlobalIfActive sotto.
       if (ctx.chat?.type === 'private') {
@@ -2851,6 +2858,10 @@ function setupBot(bot) {
       if (cmd !== '/assistenza') {
         resetSupportContextForUser(ctx.from.id);
       }
+    }
+    if (cardsHandlers && ctx.message?.text) {
+      const handledCards = await cardsHandlers.handlePendingText(ctx);
+      if (handledCards) return;
     }
     if (pendingLinkWizard.has(ctx.from.id) && ctx.message?.text) {
       if (txt === '/cancel') {
@@ -4428,6 +4439,7 @@ function setupBot(bot) {
       pendingCommunity.delete(ctx.from.id);
       resetSupportContextForUser(ctx.from.id);
       clearCwlFocus(ctx.from.id);
+      cardsHandlers?.clearUserState(ctx.from.id);
     }
     const sess = await tauth.getValidSession(ctx.from.id);
     if (sess) {
@@ -4517,6 +4529,16 @@ function setupBot(bot) {
     safeAnswerCb,
     isLinkedChatContext,
     isCapoOrCoCapo: isCapoOrCoCapoForBonus,
+  });
+
+  // Evento "Clash of Cards" — collezione carte, matching, room 1-a-1/self, chat
+  cardsHandlers = cardsUi.setup(bot, {
+    sb,
+    tauth,
+    safeAnswerCb,
+    isLinkedChatContext,
+    replyTransient,
+    isCoCboardAdminUser,
   });
 
   bot.action('nav_search', async (ctx) => {
@@ -6035,6 +6057,7 @@ async function main() {
   notifExt.runExtendedWarAlerts(bot, sb).catch(() => {});
   notifExt.runExtendedRaidAlerts(bot, sb).catch(() => {});
   notifExt.runClanActivityAlerts(bot, sb).catch(() => {});
+  cardsNotify.runCardEventNotifications(bot, sb).catch(() => {});
   setInterval(() => {
     runCommunityMaintenance(bot).catch(() => {});
     notifExt.runExtendedWarAlerts(bot, sb).catch(() => {});
@@ -6045,6 +6068,10 @@ async function main() {
   setInterval(() => {
     notifExt.runPendingCustomAlerts(bot, sb).catch(() => {});
   }, 10_000);
+  // Evento Clash of Cards: notifiche match/messaggi/proposte/scambi (outbox)
+  setInterval(() => {
+    cardsNotify.runCardEventNotifications(bot, sb).catch(() => {});
+  }, 45_000);
 
   // Self-ping ogni 12 minuti per evitare spin-down Render free tier.
   // Usa l'URL esterno del servizio (RENDER_EXTERNAL_URL) — i self-ping localhost non evitano il suspend.
@@ -6146,6 +6173,7 @@ async function mountOnApp(externalApp) {
   notifExt.runExtendedWarAlerts(bot, sb).catch((e) => console.warn('[notif] war init:', e.message));
   notifExt.runExtendedRaidAlerts(bot, sb).catch((e) => console.warn('[notif] raid init:', e.message));
   notifExt.runClanActivityAlerts(bot, sb).catch((e) => console.warn('[notif] activity init:', e.message));
+  cardsNotify.runCardEventNotifications(bot, sb).catch((e) => console.warn('[notif] cards init:', e.message));
   setInterval(() => {
     runCommunityMaintenance(bot).catch((e) => console.warn('[notif] community:', e.message));
     notifExt.runExtendedWarAlerts(bot, sb).catch((e) => console.warn('[notif] war:', e.message));
@@ -6155,6 +6183,9 @@ async function mountOnApp(externalApp) {
   setInterval(() => {
     notifExt.runPendingCustomAlerts(bot, sb).catch((e) => console.warn('[notif] pending-custom:', e.message));
   }, 10_000);
+  setInterval(() => {
+    cardsNotify.runCardEventNotifications(bot, sb).catch((e) => console.warn('[notif] cards:', e.message));
+  }, 45_000);
 
   const webhookSecretPath = pickWebhookPath();
   const hookUrl = webhookPublicUrl();

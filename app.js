@@ -1730,17 +1730,12 @@ function renderCardEventContent() {
   const grid = cardsInCat.map(c => {
     const qty = coll[c.key] || 0;
     const stateCls = qty === 2 ? 'state-2' : qty === 1 ? 'state-1' : 'state-0';
-    const dupeBtn = (qty === 2 && !readOnly)
-      ? `<span class="carte-card-dupe-btn" title="Rimuovi doppione"
-           onclick="event.stopPropagation();_onCardEventRemoveDupe('${c.key}')">✕</span>`
-      : '';
     return `<button type="button" class="carte-card ${stateCls}" ${readOnly ? 'disabled' : ''}
         onclick="_onCardEventClick('${c.key}')" title="${escH(c.name_it)}">
       <img src="${escH(c.icon_url)}" alt="${escH(c.name_it)}" loading="lazy"
            onerror="this.style.visibility='hidden'">
       <span class="carte-card-name">${escH(c.name_it)}</span>
       ${qty === 2 ? '<span class="carte-card-badge">x2</span>' : ''}
-      ${dupeBtn}
     </button>`;
   }).join('');
 
@@ -1776,7 +1771,7 @@ async function _toggleCardEventEnabled(nextEnabled) {
   }
 }
 
-async function _onCardEventClick(cardKey) {
+function _onCardEventClick(cardKey) {
   const cat = window._cardEventCatalog;
   const tag = window._cardEventActiveTag;
   if (!cat || !tag) return;
@@ -1785,40 +1780,56 @@ async function _onCardEventClick(cardKey) {
   if (!card) return;
   const coll = (window._cardEventData?.collections && window._cardEventData.collections[tag]) || {};
   const qty = coll[cardKey] || 0;
-  const next = (qty + 1) % 3;
-  const msg = next === 1
-    ? `Confermi: possiedi la carta «${card.name_it}»?`
-    : next === 2
-      ? `Hai un doppione di «${card.name_it}» (2 o più copie)?`
-      : `Rimuovere «${card.name_it}» dalla tua collezione (torna a 0 copie)?`;
-  if (!confirm(msg)) return;
-
-  try {
-    await profilesApi('cards-save', { method: 'POST', body: { coc_tag: tag, card_key: cardKey, qty_state: next } });
-    if (!window._cardEventData.collections[tag]) window._cardEventData.collections[tag] = {};
-    window._cardEventData.collections[tag][cardKey] = next;
-    renderCardEventContent();
-  } catch (e) {
-    alert(e.message || 'Errore salvataggio carta.');
-  }
+  _openCardQtyModal(card, qty);
 }
 
-async function _onCardEventRemoveDupe(cardKey) {
+function _openCardQtyModal(card, qty) {
+  document.getElementById('carte-qty-modal')?.remove();
+  const opts = [
+    { v: 0, icon: '✕', label: 'Non la possiedo', hint: 'Rimuovi dalla collezione' },
+    { v: 1, icon: '1', label: 'La possiedo', hint: '1 sola copia' },
+    { v: 2, icon: '2+', label: 'Ho un doppione', hint: '2 o più copie — scambiabile' },
+  ];
+  const modal = document.createElement('div');
+  modal.id = 'carte-qty-modal';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'display:flex;z-index:1000';
+  modal.innerHTML = `
+    <div class="modal-box carte-qty-modal-box" style="max-width:340px;width:100%">
+      <div class="modal-header">
+        <h2 style="font-size:1rem">${escH(card.name_it)}</h2>
+        <button class="modal-close" onclick="document.getElementById('carte-qty-modal').remove()">✕</button>
+      </div>
+      <div class="carte-qty-modal-body">
+        <img src="${escH(card.icon_url)}" alt="" class="carte-qty-modal-img" onerror="this.style.visibility='hidden'">
+        <p class="carte-qty-modal-hint">Quante copie possiedi di questa carta?</p>
+        <div class="carte-qty-modal-opts">
+          ${opts.map(o => `
+            <button type="button" class="carte-qty-opt ${qty === o.v ? 'active' : ''}"
+                onclick="_onCardEventSetQty('${escH(card.key)}', ${o.v})">
+              <span class="carte-qty-opt-icon">${o.icon}</span>
+              <span class="carte-qty-opt-text">
+                <strong>${o.label}</strong>
+                <small>${o.hint}</small>
+              </span>
+              ${qty === o.v ? '<span class="carte-qty-opt-check">✓</span>' : ''}
+            </button>`).join('')}
+        </div>
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+async function _onCardEventSetQty(cardKey, qtyState) {
   const cat = window._cardEventCatalog;
   const tag = window._cardEventActiveTag;
   if (!cat || !tag) return;
-  if (!cat.settings?.live) { alert('Evento non attivo: sezione in sola lettura.'); return; }
-  const card = cat.cards.find(c => c.key === cardKey);
-  if (!card) return;
-  const coll = (window._cardEventData?.collections && window._cardEventData.collections[tag]) || {};
-  const qty = coll[cardKey] || 0;
-  if (qty !== 2) return;
-  if (!confirm(`Rimuovere il doppione di «${card.name_it}»? Rimarrà 1 copia.`)) return;
-
+  document.getElementById('carte-qty-modal')?.remove();
   try {
-    await profilesApi('cards-save', { method: 'POST', body: { coc_tag: tag, card_key: cardKey, qty_state: 1 } });
+    await profilesApi('cards-save', { method: 'POST', body: { coc_tag: tag, card_key: cardKey, qty_state: qtyState } });
     if (!window._cardEventData.collections[tag]) window._cardEventData.collections[tag] = {};
-    window._cardEventData.collections[tag][cardKey] = 1;
+    window._cardEventData.collections[tag][cardKey] = qtyState;
     renderCardEventContent();
   } catch (e) {
     alert(e.message || 'Errore salvataggio carta.');

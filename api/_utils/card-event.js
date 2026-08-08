@@ -139,6 +139,13 @@ async function saveCardState(admin, user, { cocTag, cardKey, qtyState }) {
     .single();
   if (error) throw error;
 
+  // Best-effort, non blocca la risposta se fallisce: require lazy per evitare un
+  // ciclo di dipendenza (card-trades.js richiede questo file per CARD_BY_KEY).
+  try {
+    const cardTrades = require('./card-trades');
+    await cardTrades.notifyMatchesForTag(admin, cocTag);
+  } catch (_) {}
+
   return { ok: true, saved: data };
 }
 
