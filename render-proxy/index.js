@@ -1,6 +1,7 @@
 const express = require('express');
 const { createClient } = require('@supabase/supabase-js');
 const WebSocket = require('ws');
+const { accumulateCwlGroupStandings, normClanTag: normClanTagShared } = require('../shared/cwl-group-standings');
 
 const app = express();
 app.use(express.json());
@@ -17,9 +18,7 @@ function encodeTag(tag) { return encodeURIComponent(tag); }
 
 /** Tag clan confrontabili (# + maiuscolo) — API a volte omette # */
 function normClanTag(t) {
-    if (!t) return t;
-    const s = String(t).trim().toUpperCase();
-    return s.startsWith('#') ? s : '#' + s;
+    return normClanTagShared(t) || t;
 }
 
 /**
@@ -324,16 +323,6 @@ async function getCwlStats(clanTagRaw) {
         };
     });
 
-    // Inizializza classifica gruppo (tutti e 8 i clan)
-    const groupMap = {};
-    (lg.clans || []).forEach(c => {
-        const t = normClanTag(c.tag);
-        groupMap[t] = {
-            tag: t, name: c.name, badgeUrls: c.badgeUrls ?? null,
-            stars: 0, totalDestr: 0, warCount: 0, wins: 0, teamSize: 0
-        };
-    });
-
     // 3. Fetch tutte le guerre in parallelo
     // Mappa warTag → roundNumber (1-7)
     const warTagToRound = {};
@@ -353,6 +342,24 @@ async function getCwlStats(clanTagRaw) {
         return w.state === 'notInWar' ? null : w;
     }));
 
+    // Classifica gruppo in-game: stelle attacco + 10 per vittoria turno (0 su sconfitta/pareggio)
+    const groupStandings = accumulateCwlGroupStandings(lg.clans || [], warResults);
+    // Arricchisci badge se disponibili nelle guerre
+    for (const war of warResults) {
+        if (!war) continue;
+        for (const side of [war.clan, war.opponent]) {
+            if (!side?.tag || !side.badgeUrls) continue;
+            const row = groupStandings.find(c => normClanTag(c.tag) === normClanTag(side.tag));
+            if (!row) continue;
+            const cur = row.badgeUrls;
+            const hasSmall = !!(cur && cur.small);
+            if (!hasSmall) row.badgeUrls = { ...(cur || {}), ...side.badgeUrls };
+        }
+    }
+    const ourIdx = groupStandings.findIndex(c => normClanTag(c.tag) === COC_CLAN_TAG_NORM);
+    const ourPosition = ourIdx >= 0 ? ourIdx + 1 : null;
+    const ourGroup = groupStandings.find(c => normClanTag(c.tag) === COC_CLAN_TAG_NORM) || null;
+
     const roundsData = [];
 
     for (let i = 0; i < warTags.length; i++) {
@@ -360,33 +367,6 @@ async function getCwlStats(clanTagRaw) {
         const war = warResults[i];
         if (!war) continue;
         const isEnded = war.state === 'warEnded' || war.state === 'ended';
-
-        // Classifica gruppo: stelle e distruzione anche per guerre in corso (non solo ended)
-        for (const side of [war.clan, war.opponent]) {
-            if (!side?.tag) continue;
-            const tg = normClanTag(side.tag);
-            if (!groupMap[tg]) continue;
-            groupMap[tg].stars += side.stars || 0;
-            groupMap[tg].totalDestr += side.destructionPercentage || 0;
-            groupMap[tg].teamSize = groupMap[tg].teamSize || war.teamSize || 15;
-            if (isEnded || war.state === 'inWar') {
-                groupMap[tg].warCount++;
-            }
-        }
-        if (isEnded && war.clan?.tag && war.opponent?.tag) {
-            const a = war.clan;
-            const b = war.opponent;
-            const aTag = normClanTag(a.tag);
-            const bTag = normClanTag(b.tag);
-            const as = a.stars || 0, bs = b.stars || 0;
-            let aWins = false, bWins = false;
-            if (as > bs) aWins = true;
-            else if (as < bs) bWins = true;
-            else if ((a.destructionPercentage || 0) > (b.destructionPercentage || 0)) aWins = true;
-            else if ((a.destructionPercentage || 0) < (b.destructionPercentage || 0)) bWins = true;
-            if (aWins && groupMap[aTag]) groupMap[aTag].wins++;
-            if (bWins && groupMap[bTag]) groupMap[bTag].wins++;
-        }
 
         // Aggiorna stats giocatori nostro clan
         const ourSide = war.clan?.tag && normClanTag(war.clan.tag) === COC_CLAN_TAG_NORM ? war.clan
@@ -476,28 +456,6 @@ async function getCwlStats(clanTagRaw) {
     }
     roundsData.sort((a, b) => (a.roundNumber || 0) - (b.roundNumber || 0));
 
-    // Stemmi da ogni guerra (league group spesso non badgeUrls completi)
-    for (const rd of roundsData) {
-        for (const side of [rd.clan, rd.opponent]) {
-            if (!side?.tag) continue;
-            const tg = normClanTag(side.tag);
-            if (!groupMap[tg] || !side.badgeUrls) continue;
-            const cur = groupMap[tg].badgeUrls;
-            const hasSmall = !!(cur && cur.small);
-            if (!hasSmall) {
-                groupMap[tg].badgeUrls = { ...(cur || {}), ...side.badgeUrls };
-            }
-        }
-    }
-
-    // 4. Calcola classifica finale (stelle desc → distruzione desc)
-    const groupStandings = Object.values(groupMap).sort((a, b) =>
-        b.stars !== a.stars ? b.stars - a.stars : b.totalDestr - a.totalDestr
-    );
-    const ourIdx = groupStandings.findIndex(c => normClanTag(c.tag) === COC_CLAN_TAG_NORM);
-    const ourPosition = ourIdx >= 0 ? ourIdx + 1 : null;
-    const ourGroup = groupMap[COC_CLAN_TAG_NORM];
-
     const players = Object.values(stats).sort((a, b) =>
         b.stars !== a.stars ? b.stars - a.stars : b.destruction - a.destruction
     );
@@ -508,7 +466,7 @@ async function getCwlStats(clanTagRaw) {
         leagueNameEn,
         leagueNameIt,
         ourPosition,
-        teamSize:      (groupMap[COC_CLAN_TAG_NORM]?.teamSize) || 15,
+        teamSize:      ourGroup?.teamSize || 15,
         groupStandings,
         players,
         roundsData

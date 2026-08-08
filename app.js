@@ -6381,7 +6381,7 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
             <span class="cwl-group-rank">${rankMedal}</span>
             ${badge}
             <span class="cwl-group-name">${isMyClan ? `<strong>${c.name}</strong>` : c.name}</span>
-            <span class="cwl-group-stars">⭐ ${c.stars}</span>
+            <span class="cwl-group-stars">⭐ ${c.stars}${c.bonusStars ? ` <small class="cwl-group-bonus">(+${c.bonusStars})</small>` : ''}</span>
             <span class="cwl-group-destr">💥 ${c.warCount ? (c.totalDestr/c.warCount).toFixed(0) : 0}%</span>
           </div>`;
         }).join('');
@@ -6559,7 +6559,7 @@ function _renderCwlDetailModal(season, rounds, groupStandings, seasonObj, modalC
           <span class="cdm-rank">${medal}</span>
           ${clBadge}
           <span class="cdm-clan-name${isUs ? ' cdm-clan-name--us' : ''}">${c.name}</span>
-          <span class="cdm-clan-stars">⭐ ${c.stars ?? 0}</span>
+          <span class="cdm-clan-stars">⭐ ${c.stars ?? 0}${c.bonusStars ? ` <small>(+${c.bonusStars})</small>` : ''}</span>
           <span class="cdm-clan-destr">💥 ${avgD}</span>
         </div>`;
       }).join('')}

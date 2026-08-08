@@ -352,13 +352,15 @@ function buildCwlStandingsMsg(cwl, war) {
     const name = fmt.escapeHtml(c?.name || '—');
     const stars = Number(c?.stars || 0);
     const wins = c?.wins != null ? Number(c.wins) : null;
-    const winPart = wins != null && Number.isFinite(wins) ? ` (${wins}W)` : '';
-    return `${i + 1}. <b>${name}</b> — ${stars}⭐${winPart}`;
+    const bonus = Number(c?.bonusStars || 0);
+    const winPart = wins != null && Number.isFinite(wins) ? ` · ${wins}W` : '';
+    const bonusPart = bonus > 0 ? ` · +${bonus} bonus` : '';
+    return `${i + 1}. <b>${name}</b> — ${stars}⭐${winPart}${bonusPart}`;
   });
   if (!lines.length) {
     return `📊 <b>CWL · Classifica gruppo${turn}</b>\n<i>Dati classifica non disponibili.</i>`;
   }
-  return `📊 <b>CWL · Classifica gruppo${turn}</b>\n${lines.join('\n')}`;
+  return `📊 <b>CWL · Classifica gruppo${turn}</b>\n<i>Stelle attacco + 10⭐ per vittoria di turno (0 su sconfitta/pareggio).</i>\n${lines.join('\n')}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

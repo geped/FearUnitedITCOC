@@ -410,14 +410,17 @@ function formatCwlGroup(data) {
     `🏅 <b>Classifica gruppo CWL</b>`,
     `📅 <code>${escapeHtml(data.season || '—')}</code> · ${escapeHtml(data.leagueNameIt || data.leagueNameEn || '')}`,
     `${DIV}`,
-    `<i>Ordine: stelle, poi distruzione media sui turni giocati.</i>`,
+    `<i>Stelle attacco + 10⭐ per vittoria di turno · poi distruzione.</i>`,
     '',
   ];
   gs.forEach((c, i) => {
     const us = data.ourPosition === i + 1 ? ' ⭐' : '';
     const nm = escapeHtml(c.name || c.tag || '—');
+    const bonus = Number(c.bonusStars || 0);
+    const bonusTxt = bonus > 0 ? ` · +${bonus} bonus vittorie` : '';
+    const wins = Number(c.wins || 0);
     lines.push(
-      `${i + 1}. ${nm}${us}\n   ${c.stars ?? 0}★ · media ${cwlGroupAvgDest(c)} distruzione`
+      `${i + 1}. ${nm}${us}\n   ${c.stars ?? 0}★ (${wins}W${bonusTxt}) · media ${cwlGroupAvgDest(c)} distruzione`
     );
   });
   return lines.join('\n');
