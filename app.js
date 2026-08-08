@@ -2090,7 +2090,7 @@ function _switchCarteMainTab(tab, btn) {
 }
 
 window._carteTradeSub = null; // 'self' | 'public'
-window._cartePublicWin = 'hub'; // 'hub' | 'suggested' | 'albums' | 'rooms'
+window._cartePublicWin = 'hub'; // 'hub' | 'suggested' | 'albums-hub' | 'albums-mine' | 'albums-others' | 'rooms'
 window._carteAlbumFilter = 'all'; // 'all' | category key
 window._carteAlbumCollapsed = window._carteAlbumCollapsed || {}; // id -> true se ridotto
 
@@ -2237,9 +2237,9 @@ function renderCardTradeContent() {
   if (sub === 'public') _renderCartePublicWindow();
 }
 
-function _cartePublicWinHeader(title) {
+function _cartePublicWinHeader(title, backWin = 'hub') {
   return `<div class="carte-win-header">
-    <button type="button" class="btn-secondary btn-sm carte-win-back" onclick="_openCartePublicWin('hub')">« Indietro</button>
+    <button type="button" class="btn-secondary btn-sm carte-win-back" onclick="_openCartePublicWin('${escH(backWin)}')">« Indietro</button>
     <h3 class="carte-win-title">${escH(title)}</h3>
   </div>`;
 }
@@ -2250,10 +2250,11 @@ function _renderCartePublicWindow() {
   const data = window._cardTradeData;
   const live = window._cardEventCatalog?.settings?.live === true;
   const win = window._cartePublicWin || 'hub';
+  const myProfiles = window._cardEventData?.profiles || [];
+  const nDecks = window._cardPublicData?.decks?.length || 0;
 
   if (win === 'hub') {
     const nMatch = data?.matches?.length || 0;
-    const nDecks = window._cardPublicData?.decks?.length || 0;
     const nRooms = data?.rooms?.length || 0;
     const nPending = (data?.rooms || []).reduce((s, r) => s + (r.pending_proposals || 0), 0);
     box.innerHTML = `
@@ -2266,11 +2267,11 @@ function _renderCartePublicWindow() {
             <small>${nMatch ? `${nMatch} scambio${nMatch === 1 ? '' : 'i'} automatico${nMatch === 1 ? '' : 'i'}` : 'Nessun match al momento'}</small>
           </span>
         </button>
-        <button type="button" class="carte-win-card" onclick="_openCartePublicWin('albums')">
+        <button type="button" class="carte-win-card" onclick="_openCartePublicWin('albums-hub')">
           <span class="carte-win-card-icon">📚</span>
           <span class="carte-win-card-body">
             <strong>Mazzi pubblici</strong>
-            <small>Album fotografici · ${nDecks} mazzo${nDecks === 1 ? '' : 'i'} altrui</small>
+            <small>I tuoi mazzi · Mazzi di altri (${nDecks})</small>
           </span>
         </button>
         <button type="button" class="carte-win-card" onclick="_openCartePublicWin('rooms')">
@@ -2278,6 +2279,28 @@ function _renderCartePublicWindow() {
           <span class="carte-win-card-body">
             <strong>Le tue conversazioni</strong>
             <small>${nRooms ? `${nRooms} chat${nPending ? ` · ${nPending} proposte` : ''}` : 'Nessuna conversazione ancora'}</small>
+          </span>
+        </button>
+      </div>`;
+    return;
+  }
+
+  if (win === 'albums-hub') {
+    box.innerHTML = `
+      ${_cartePublicWinHeader('Mazzi pubblici', 'hub')}
+      <div class="carte-win-hub">
+        <button type="button" class="carte-win-card" onclick="_openCartePublicWin('albums-mine')">
+          <span class="carte-win-card-icon">👤</span>
+          <span class="carte-win-card-body">
+            <strong>I tuoi mazzi</strong>
+            <small>${myProfiles.length} profilo${myProfiles.length === 1 ? '' : 'i'} · toggle pubblico/privato</small>
+          </span>
+        </button>
+        <button type="button" class="carte-win-card" onclick="_openCartePublicWin('albums-others')">
+          <span class="carte-win-card-icon">🌐</span>
+          <span class="carte-win-card-body">
+            <strong>Mazzi di altri giocatori</strong>
+            <small>${nDecks ? `${nDecks} mazzo${nDecks === 1 ? '' : 'i'} pubblico${nDecks === 1 ? '' : 'i'}` : 'Nessun mazzo altrui per ora'}</small>
           </span>
         </button>
       </div>`;
@@ -2319,8 +2342,18 @@ function _renderCartePublicWindow() {
     return;
   }
 
-  // win === 'albums'
-  box.innerHTML = `${_cartePublicWinHeader('Mazzi pubblici')}${_renderAlbumsWindow(live)}`;
+  if (win === 'albums-mine') {
+    box.innerHTML = `${_cartePublicWinHeader('I tuoi mazzi', 'albums-hub')}${_renderAlbumsWindow(live, 'mine')}`;
+    return;
+  }
+  if (win === 'albums-others') {
+    box.innerHTML = `${_cartePublicWinHeader('Mazzi di altri giocatori', 'albums-hub')}${_renderAlbumsWindow(live, 'others')}`;
+    return;
+  }
+
+  // Compat: vecchio 'albums' → hub album
+  window._cartePublicWin = 'albums-hub';
+  _renderCartePublicWindow();
 }
 
 const CARTE_CAT_BORDER = {
@@ -2361,8 +2394,8 @@ function _renderFullAlbumGrid(collection, albumId) {
 function _isAlbumCollapsed(albumId) {
   const map = window._carteAlbumCollapsed || {};
   if (Object.prototype.hasOwnProperty.call(map, albumId)) return !!map[albumId];
-  // Default: album altrui ridotti, i tuoi espansi
-  return String(albumId).startsWith('other:');
+  // Default: tutti i mazzi in vista ridotta
+  return true;
 }
 
 function _toggleAlbumCollapsed(albumId) {
@@ -2376,7 +2409,7 @@ function _setCarteAlbumFilter(catKey) {
   _renderCartePublicWindow();
 }
 
-function _renderAlbumsWindow(live) {
+function _renderAlbumsWindow(live, which = 'mine') {
   const cat = window._cardEventCatalog;
   const myProfiles = window._cardEventData?.profiles || [];
   const myCollections = window._cardEventData?.collections || {};
@@ -2396,6 +2429,41 @@ function _renderAlbumsWindow(live) {
       <span><i class="carte-album-cat-dot cat-border-builder"></i> Builder</span>
       <span><i class="carte-album-cat-dot cat-border-super"></i> Super truppe</span>
     </div>`;
+
+  if (which === 'others') {
+    const otherAlbums = (pub.decks || []).length
+      ? pub.decks.map((d, i) => {
+          const albumId = `other:${i}`;
+          const isCollapsed = _isAlbumCollapsed(albumId);
+          const p = d.profile;
+          const coll = d.collection || {};
+          const found = cat ? cat.cards.filter(c => (coll[c.key] || 0) >= 1).length : 0;
+          const total = cat?.total_cards || 0;
+          const n = d.matches?.length || 0;
+          return `<div class="carte-album-card">
+            <div class="carte-album-card-head">
+              <div class="carte-album-card-title">
+                <strong>${escH(p.username || p.coc_tag)}</strong>
+                <span class="carte-album-card-meta">${found}/${total}${p.coc_clan_name ? ` · ${escH(p.coc_clan_name)}` : ''}${n ? ` · 🔄 ${n}` : ''}</span>
+              </div>
+              <button type="button" class="btn-secondary btn-sm" onclick="_toggleAlbumCollapsed('${escH(albumId)}')">${isCollapsed ? 'Espandi' : 'Riduci'}</button>
+              ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_openPublicDeck(${i})">💬 Chat</button>` : ''}
+            </div>
+            <div class="carte-album-card-body ${isCollapsed ? 'is-collapsed' : ''}">
+              ${_renderFullAlbumGrid(coll, albumId)}
+            </div>
+          </div>`;
+        }).join('')
+      : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessun altro utente ha reso pubblico il proprio mazzo per ora.</p></div>`;
+    return `
+      <div class="carte-trade-section">
+        ${filterBar}
+        <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.7rem">
+          Album fotografici pubblici. Di default sono ridotti — espandi per vedere il catalogo completo.
+        </p>
+        ${otherAlbums}
+      </div>`;
+  }
 
   const myAlbums = myProfiles.map((p) => {
     const albumId = `mine:${p.coc_tag}`;
@@ -2423,41 +2491,13 @@ function _renderAlbumsWindow(live) {
     </div>`;
   }).join('') || `<div class="profilo-empty"><p style="color:var(--text-3)">Nessun profilo CoC collegato.</p></div>`;
 
-  const otherAlbums = (pub.decks || []).length
-    ? pub.decks.map((d, i) => {
-        const albumId = `other:${i}`;
-        const isCollapsed = _isAlbumCollapsed(albumId);
-        const p = d.profile;
-        const coll = d.collection || {};
-        const found = cat ? cat.cards.filter(c => (coll[c.key] || 0) >= 1).length : 0;
-        const total = cat?.total_cards || 0;
-        const n = d.matches?.length || 0;
-        return `<div class="carte-album-card">
-          <div class="carte-album-card-head">
-            <div class="carte-album-card-title">
-              <strong>${escH(p.username || p.coc_tag)}</strong>
-              <span class="carte-album-card-meta">${found}/${total}${p.coc_clan_name ? ` · ${escH(p.coc_clan_name)}` : ''}${n ? ` · 🔄 ${n}` : ''}</span>
-            </div>
-            <button type="button" class="btn-secondary btn-sm" onclick="_toggleAlbumCollapsed('${escH(albumId)}')">${isCollapsed ? 'Espandi' : 'Riduci'}</button>
-            ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_openPublicDeck(${i})">💬 Chat</button>` : ''}
-          </div>
-          <div class="carte-album-card-body ${isCollapsed ? 'is-collapsed' : ''}">
-            ${_renderFullAlbumGrid(coll, albumId)}
-          </div>
-        </div>`;
-      }).join('')
-    : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessun altro utente ha reso pubblico il proprio mazzo per ora.</p></div>`;
-
   return `
     <div class="carte-trade-section">
       ${filterBar}
-      <h3 class="profilo-section-title">I tuoi mazzi</h3>
       <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.7rem">
-        Scegli quali profili CoC rendere pubblici. L’album mostra tutto il catalogo: mancanti, possedute e doppioni.
+        Scegli quali profili CoC rendere pubblici. L’album mostra tutto il catalogo: mancanti, possedute e doppioni. Di default ridotto.
       </p>
       ${myAlbums}
-      <h3 class="profilo-section-title" style="margin-top:1.2rem">Mazzi di altri giocatori</h3>
-      ${otherAlbums}
     </div>`;
 }
 
@@ -2471,11 +2511,11 @@ async function _toggleProfileDeckPublic(profileId, isPublic) {
       window._cardPublicData.myPublic = isPublic === true;
     }
     // Ricarica lista altrui non serve; aggiorna solo lo stato locale e ri-render
-    window._cartePublicWin = 'albums';
+    window._cartePublicWin = 'albums-mine';
     _renderCartePublicWindow();
   } catch (e) {
     alert(e.message || 'Errore aggiornamento visibilità mazzo.');
-    window._cartePublicWin = 'albums';
+    window._cartePublicWin = 'albums-mine';
     await loadCardTradeTab();
   }
 }
@@ -2664,18 +2704,41 @@ function renderCardRoomModal(data) {
   const myColl = (window._cardEventData?.collections && window._cardEventData.collections[myTag]) || {};
   const myDupes = (cat?.cards || []).filter(c => (myColl[c.key] || 0) >= 2);
   const myMissing = (cat?.cards || []).filter(c => (myColl[c.key] || 0) === 0);
+  const catLabel = (k) => escH(cat?.category_label_it?.[k] || k);
+  const optHtml = (cards) => cards.map(c =>
+    `<option value="${escH(c.key)}" data-cat="${escH(c.category)}">${escH(c.name_it)} · ${catLabel(c.category)}</option>`
+  ).join('');
   const proposeForm = live ? `
     <div class="carte-propose-form">
-      <select id="carte-propose-give">
-        <option value="">Cedi…</option>
-        ${myDupes.map(c => `<option value="${escH(c.key)}" data-cat="${escH(c.category)}">${escH(c.name_it)}</option>`).join('')}
-      </select>
-      <select id="carte-propose-get">
-        <option value="">Ricevi…</option>
-        ${myMissing.map(c => `<option value="${escH(c.key)}" data-cat="${escH(c.category)}">${escH(c.name_it)}</option>`).join('')}
-      </select>
-      <button type="button" class="btn-primary btn-sm" onclick="_cardRoomPropose()">Proponi</button>
+      <p class="carte-propose-rule">Solo carte della <strong>stessa tipologia</strong>: elisir↔elisir, elisir nero↔elisir nero, builder↔builder, super truppe↔super truppe. Non si possono mischiare categorie.</p>
+      <div class="carte-propose-sides">
+        <div class="carte-propose-side">
+          <label class="carte-propose-label">Cedi (doppione)</label>
+          <div class="carte-propose-preview" id="carte-propose-give-preview">
+            <div class="carte-propose-preview-empty">Scegli una carta</div>
+          </div>
+          <select id="carte-propose-give" onchange="_syncCarteProposeForm('give')">
+            <option value="">Cedi…</option>
+            ${optHtml(myDupes)}
+          </select>
+        </div>
+        <div class="carte-propose-arrow" aria-hidden="true">⇄</div>
+        <div class="carte-propose-side">
+          <label class="carte-propose-label">Ricevi (mancante)</label>
+          <div class="carte-propose-preview" id="carte-propose-get-preview">
+            <div class="carte-propose-preview-empty">Scegli una carta</div>
+          </div>
+          <select id="carte-propose-get" onchange="_syncCarteProposeForm('get')">
+            <option value="">Ricevi…</option>
+            ${optHtml(myMissing)}
+          </select>
+        </div>
+      </div>
+      <button type="button" class="btn-primary btn-sm carte-propose-submit" onclick="_cardRoomPropose()">Proponi scambio</button>
     </div>` : '';
+
+  // Store option lists for category filtering after mount
+  window._carteProposeLists = { dupes: myDupes, missing: myMissing };
 
   const modal = document.createElement('div');
   modal.id = 'carte-room-modal';
@@ -2725,6 +2788,13 @@ async function _cardRoomPropose() {
   const give = document.getElementById('carte-propose-give')?.value;
   const get = document.getElementById('carte-propose-get')?.value;
   if (!give || !get || !window._cardRoomState) { alert('Seleziona entrambe le carte.'); return; }
+  const cat = window._cardEventCatalog;
+  const giveMeta = cat?.cards?.find(c => c.key === give);
+  const getMeta = cat?.cards?.find(c => c.key === get);
+  if (giveMeta && getMeta && giveMeta.category !== getMeta.category) {
+    alert('Puoi scambiare solo carte della stessa tipologia (es. elisir con elisir, non elisir con elisir nero).');
+    return;
+  }
   try {
     await cardsApi('cards-propose', {
       method: 'POST',
@@ -2735,6 +2805,66 @@ async function _cardRoomPropose() {
   } catch (e) {
     alert(e.message || 'Errore nella proposta.');
   }
+}
+
+function _carteProposePreviewHtml(card) {
+  if (!card) return `<div class="carte-propose-preview-empty">Scegli una carta</div>`;
+  const cat = window._cardEventCatalog;
+  const border = CARTE_CAT_BORDER[card.category] || '';
+  const lab = cat?.category_label_it?.[card.category] || card.category;
+  return `<div class="carte-propose-preview-card ${border}">
+    <img src="${escH(card.icon_url)}" alt="${escH(card.name_it)}" loading="lazy" onerror="this.style.visibility='hidden'">
+    <div class="carte-propose-preview-meta">
+      <strong>${escH(card.name_it)}</strong>
+      <span>${escH(lab)}</span>
+    </div>
+  </div>`;
+}
+
+function _fillProposeSelect(sel, cards, selectedKey, placeholder) {
+  if (!sel) return;
+  const cat = window._cardEventCatalog;
+  const catLabel = (k) => cat?.category_label_it?.[k] || k;
+  const keep = selectedKey && cards.some(c => c.key === selectedKey) ? selectedKey : '';
+  sel.innerHTML = `<option value="">${placeholder}</option>` + cards.map(c =>
+    `<option value="${escH(c.key)}" data-cat="${escH(c.category)}"${c.key === keep ? ' selected' : ''}>${escH(c.name_it)} · ${escH(catLabel(c.category))}</option>`
+  ).join('');
+  return keep;
+}
+
+function _syncCarteProposeForm(changed) {
+  const lists = window._carteProposeLists || { dupes: [], missing: [] };
+  const cat = window._cardEventCatalog;
+  const giveSel = document.getElementById('carte-propose-give');
+  const getSel = document.getElementById('carte-propose-get');
+  const givePrev = document.getElementById('carte-propose-give-preview');
+  const getPrev = document.getElementById('carte-propose-get-preview');
+  if (!giveSel || !getSel) return;
+
+  let giveKey = giveSel.value || '';
+  let getKey = getSel.value || '';
+  const giveCard = cat?.cards?.find(c => c.key === giveKey);
+  const getCard = cat?.cards?.find(c => c.key === getKey);
+  const lockCat = (changed === 'give' ? giveCard?.category : null)
+    || (changed === 'get' ? getCard?.category : null)
+    || giveCard?.category
+    || getCard?.category
+    || null;
+
+  const dupes = lockCat ? lists.dupes.filter(c => c.category === lockCat) : lists.dupes;
+  const missing = lockCat ? lists.missing.filter(c => c.category === lockCat) : lists.missing;
+
+  if (changed === 'give') {
+    getKey = _fillProposeSelect(getSel, missing, getKey, 'Ricevi…') || '';
+  } else if (changed === 'get') {
+    giveKey = _fillProposeSelect(giveSel, dupes, giveKey, 'Cedi…') || '';
+  } else {
+    giveKey = _fillProposeSelect(giveSel, dupes, giveKey, 'Cedi…') || '';
+    getKey = _fillProposeSelect(getSel, missing, getKey, 'Ricevi…') || '';
+  }
+
+  if (givePrev) givePrev.innerHTML = _carteProposePreviewHtml(cat?.cards?.find(c => c.key === (giveSel.value || '')));
+  if (getPrev) getPrev.innerHTML = _carteProposePreviewHtml(cat?.cards?.find(c => c.key === (getSel.value || '')));
 }
 
 async function _cardRoomRespond(proposalId, action) {

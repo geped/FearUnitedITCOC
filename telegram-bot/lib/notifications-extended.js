@@ -340,13 +340,20 @@ function buildWarFinalMsg(war, isCwl, streakInfo) {
 }
 
 function buildCwlStandingsMsg(cwl, war) {
-  const rows = Array.isArray(cwl?.groupStandings) ? cwl.groupStandings : [];
+  const rows = Array.isArray(cwl?.groupStandings) ? [...cwl.groupStandings] : [];
+  rows.sort((a, b) => {
+    const as = Number(a?.stars || 0);
+    const bs = Number(b?.stars || 0);
+    if (bs !== as) return bs - as;
+    return Number(b?.totalDestr || 0) - Number(a?.totalDestr || 0);
+  });
   const turn = cwlTurnLabel(war);
   const lines = rows.slice(0, 8).map((c, i) => {
     const name = fmt.escapeHtml(c?.name || '—');
     const stars = Number(c?.stars || 0);
-    const wars = Number(c?.warCount || 0);
-    return `${i + 1}. <b>${name}</b> — ${stars}⭐ (${wars}W)`;
+    const wins = c?.wins != null ? Number(c.wins) : null;
+    const winPart = wins != null && Number.isFinite(wins) ? ` (${wins}W)` : '';
+    return `${i + 1}. <b>${name}</b> — ${stars}⭐${winPart}`;
   });
   if (!lines.length) {
     return `📊 <b>CWL · Classifica gruppo${turn}</b>\n<i>Dati classifica non disponibili.</i>`;
@@ -789,10 +796,9 @@ async function _processSingleWarAlerts({
         const sk = `standings:${war.endTime}`;
         if (!sent.has(sk)) {
           sent.add(sk);
-          let stats = cwl;
-          if (!stats?.groupStandings?.length) {
-            stats = await getCachedCwlStats(clanTag).catch(() => null);
-          }
+          // Ricarica fresco: la cache del ciclo potrebbe avere standings a zero o pre-fine round
+          cwlStatsCache.delete(String(clanTag || ''));
+          const stats = await getCachedCwlStats(clanTag).catch(() => cwl);
           await send(buildCwlStandingsMsg(stats, war));
         }
       }

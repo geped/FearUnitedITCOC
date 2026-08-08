@@ -121,7 +121,7 @@ async function fetchCocApi(path, timeoutMs = 20000) {
 }
 
 /**
- * Guerre CWL attive del clan via API CoC diretta (leaguegroup + solo war del clan).
+ * Guerre CWL attive del clan via API CoC diretta (leaguegroup + guerre del gruppo).
  * Molto più affidabile di /api/cwl-stats via Vercel per le notifiche.
  */
 async function cwlActiveWarsDirect(clanTag) {
@@ -151,10 +151,53 @@ async function cwlActiveWarsDirect(clanTag) {
     }),
   );
 
+  // Classifica gruppo: accumula stelle/distruzione/vittorie da TUTTE le guerre del gruppo
+  const groupMap = {};
+  (lg.clans || []).forEach((c) => {
+    const t = normTag(c.tag);
+    groupMap[t] = {
+      tag: c.tag,
+      name: c.name,
+      stars: 0,
+      totalDestr: 0,
+      warCount: 0,
+      wins: 0,
+      teamSize: 0,
+    };
+  });
+
+  const cwlSideWon = (a, b) => {
+    const as = Number(a?.stars || 0);
+    const bs = Number(b?.stars || 0);
+    if (as !== bs) return as > bs;
+    return Number(a?.destructionPercentage || 0) > Number(b?.destructionPercentage || 0);
+  };
+
   const roundsData = [];
   for (let i = 0; i < warTags.length; i++) {
     const war = warResults[i];
     if (!war) continue;
+    const isEnded = war.state === 'warEnded' || war.state === 'ended';
+
+    for (const side of [war.clan, war.opponent]) {
+      if (!side?.tag) continue;
+      const tg = normTag(side.tag);
+      if (!groupMap[tg]) continue;
+      groupMap[tg].stars += Number(side.stars || 0);
+      groupMap[tg].totalDestr += Number(side.destructionPercentage || 0);
+      groupMap[tg].teamSize = groupMap[tg].teamSize || war.teamSize || 15;
+      if (isEnded || war.state === 'inWar') {
+        groupMap[tg].warCount++;
+      }
+    }
+    if (isEnded && war.clan?.tag && war.opponent?.tag) {
+      const aTag = normTag(war.clan.tag);
+      const bTag = normTag(war.opponent.tag);
+      if (cwlSideWon(war.clan, war.opponent) && groupMap[aTag]) groupMap[aTag].wins++;
+      else if (cwlSideWon(war.opponent, war.clan) && groupMap[bTag]) groupMap[bTag].wins++;
+      // pareggio: nessuno riceve win
+    }
+
     const ourSide =
       normTag(war.clan?.tag) === norm ? war.clan
         : normTag(war.opponent?.tag) === norm ? war.opponent
@@ -200,18 +243,17 @@ async function cwlActiveWarsDirect(clanTag) {
   }
   roundsData.sort((a, b) => (a.roundNumber || 0) - (b.roundNumber || 0));
 
-  const groupStandings = (lg.clans || []).map((c) => ({
-    tag: c.tag,
-    name: c.name,
-    stars: 0,
-    warCount: 0,
-  }));
+  const groupStandings = Object.values(groupMap).sort((a, b) =>
+    b.stars !== a.stars ? b.stars - a.stars : b.totalDestr - a.totalDestr,
+  );
+  const ourIdx = groupStandings.findIndex((c) => normTag(c.tag) === norm);
 
   return {
     state: lg.state,
     season: lg.season || null,
     leagueNameEn: null,
     leagueNameIt: null,
+    ourPosition: ourIdx >= 0 ? ourIdx + 1 : null,
     teamSize: roundsData[0]?.teamSize || 15,
     groupStandings,
     roundsData,

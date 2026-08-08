@@ -330,7 +330,7 @@ async function getCwlStats(clanTagRaw) {
         const t = normClanTag(c.tag);
         groupMap[t] = {
             tag: t, name: c.name, badgeUrls: c.badgeUrls ?? null,
-            stars: 0, totalDestr: 0, warCount: 0, teamSize: 0
+            stars: 0, totalDestr: 0, warCount: 0, wins: 0, teamSize: 0
         };
     });
 
@@ -372,6 +372,20 @@ async function getCwlStats(clanTagRaw) {
             if (isEnded || war.state === 'inWar') {
                 groupMap[tg].warCount++;
             }
+        }
+        if (isEnded && war.clan?.tag && war.opponent?.tag) {
+            const a = war.clan;
+            const b = war.opponent;
+            const aTag = normClanTag(a.tag);
+            const bTag = normClanTag(b.tag);
+            const as = a.stars || 0, bs = b.stars || 0;
+            let aWins = false, bWins = false;
+            if (as > bs) aWins = true;
+            else if (as < bs) bWins = true;
+            else if ((a.destructionPercentage || 0) > (b.destructionPercentage || 0)) aWins = true;
+            else if ((a.destructionPercentage || 0) < (b.destructionPercentage || 0)) bWins = true;
+            if (aWins && groupMap[aTag]) groupMap[aTag].wins++;
+            if (bWins && groupMap[bTag]) groupMap[bTag].wins++;
         }
 
         // Aggiorna stats giocatori nostro clan

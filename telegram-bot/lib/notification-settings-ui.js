@@ -209,10 +209,10 @@ const FLAG_EXAMPLES = {
     '✅ Tutti hanno completato gli attacchi.',
   cwl_standings:
     '📊 <b>CWL · Classifica gruppo · Turno 3/7</b>\n' +
-    '1. <b>Fear United IT</b> — 6⭐ (3W)\n' +
-    '2. <b>GOLDEN MYA</b> — 4⭐ (2W)\n' +
-    '3. <b>Enemy Clan X</b> — 4⭐ (2W)\n' +
-    '4. <b>Other Clan</b> — 2⭐ (1W)',
+    '1. <b>Fear United IT</b> — 142⭐ (3W)\n' +
+    '2. <b>GOLDEN MYA</b> — 128⭐ (2W)\n' +
+    '3. <b>Enemy Clan X</b> — 120⭐ (2W)\n' +
+    '4. <b>Other Clan</b> — 95⭐ (1W)',
   cwl_end:
     '🏁 <b>Stagione CWL terminata</b>\n' +
     'Stagione: <b>2026-08-02</b>',
