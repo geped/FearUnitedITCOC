@@ -512,7 +512,7 @@ function setup(bot, deps) {
       fmt.DIV,
       '',
       `Il tuo mazzo (${escapeHtml(profileLabel(p))}) è: <b>${data.my_public ? 'pubblico ✅' : 'privato 🔒'}</b>`,
-      'Se pubblico, tutti gli utenti CoCBoard lo vedono qui e possono proporti scambi.',
+      'Se pubblico, il tuo mazzo completo appare qui come "annuncio" a tutti gli utenti CoCBoard, che potranno proporti scambi.',
       '',
     ];
     const rows = [];
@@ -525,7 +525,7 @@ function setup(bot, deps) {
       st.lastPublicDecks.forEach((d, i) => {
         const n = d.matches.length;
         lines.push(`${i + 1}. <b>${escapeHtml(d.profile.username || d.profile.coc_tag)}</b>${n ? ` — 🔄 ${n} scambio${n === 1 ? '' : 'i'} possibile${n === 1 ? '' : 'i'}` : ' — nessuno scambio automatico'}`);
-        rows.push([Markup.button.callback(`💬 Apri ${d.profile.username || d.profile.coc_tag}`.slice(0, 60), `cards:pubopen:${i}`)]);
+        rows.push([Markup.button.callback(`📋 Vedi mazzo di ${d.profile.username || d.profile.coc_tag}`.slice(0, 60), `cards:pubview:${i}`)]);
       });
     }
     rows.push([Markup.button.callback('« Scambi', 'cards:tr')]);
@@ -551,6 +551,58 @@ function setup(bot, deps) {
       const data = await cardsApi.publicList(st.token, p.id);
       await cardsApi.publicToggle(st.token, p.id, !data.my_public);
       await renderPublicDecksView(ctx, st);
+    });
+  });
+
+  // "Post" completo di un mazzo pubblico: collezione intera per categoria + scambi suggeriti.
+  function formatPublicDeckCards(catalog, collection) {
+    const blocks = [];
+    for (const catKey of catalog.category_order) {
+      const cardsInCat = catalog.cards.filter((c) => c.category === catKey);
+      const owned = cardsInCat.filter((c) => (collection[c.key] || 0) >= 1);
+      if (!owned.length) continue;
+      const label = catalog.category_label_it[catKey] || catKey;
+      const list = owned
+        .map((c) => `${escapeHtml(c.name_it)}${(collection[c.key] || 0) >= 2 ? ` x${collection[c.key]}` : ''}`)
+        .join(', ');
+      blocks.push(`<b>${CAT_EMOJI[catKey] || ''} ${escapeHtml(label)}</b> (${owned.length}/${cardsInCat.length}): ${list}`);
+    }
+    return blocks.length ? blocks.join('\n\n') : 'Nessuna carta segnata ancora.';
+  }
+
+  async function renderPublicDeckPost(ctx, st, idx) {
+    const d = (st.lastPublicDecks || [])[idx];
+    if (!d) return renderPublicDecksView(ctx, st);
+    const live = st.catalog.settings?.live === true;
+    const lines = [
+      `${fmt.DIV}`,
+      `🌐 <b>${escapeHtml(d.profile.username || d.profile.coc_tag)}</b>${d.profile.coc_clan_name ? ` · ${escapeHtml(d.profile.coc_clan_name)}` : ''}`,
+      fmt.DIV,
+      '',
+      formatPublicDeckCards(st.catalog, d.collection || {}),
+      '',
+    ];
+    const n = d.matches.length;
+    if (n) {
+      lines.push(`<b>🔄 ${n} scambio${n === 1 ? '' : 'i'} possibile${n === 1 ? '' : 'i'} con te:</b>`);
+      d.matches.forEach((m) =>
+        lines.push(`• Cedi ${escapeHtml(m.card_give_meta?.name_it || m.card_give)} → ricevi ${escapeHtml(m.card_get_meta?.name_it || m.card_get)}`),
+      );
+    } else {
+      lines.push('Nessuno scambio automatico con te al momento.');
+    }
+    const rows = [];
+    if (live) rows.push([Markup.button.callback('💬 Apri chat e proponi', `cards:pubopen:${idx}`)]);
+    rows.push([Markup.button.callback('« Mazzi pubblici', 'cards:tr:pub')]);
+    await renderView(ctx, lines.join('\n'), Markup.inlineKeyboard(rows));
+  }
+
+  bot.action(/^cards:pubview:(\d+)$/, async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      await renderPublicDeckPost(ctx, st, Number(ctx.match[1]));
     });
   });
 

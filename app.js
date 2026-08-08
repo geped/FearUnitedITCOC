@@ -2021,20 +2021,66 @@ function renderCardTradeContent() {
   `;
 }
 
+function _renderPublicDeckMiniGrid(collection) {
+  const cat = window._cardEventCatalog;
+  if (!cat) return '';
+  return cat.category_order.map(catKey => {
+    const cardsInCat = cat.cards.filter(c => c.category === catKey);
+    const found = cardsInCat.filter(c => (collection[c.key] || 0) >= 1);
+    if (!found.length) return '';
+    const tiles = found.map(c => {
+      const qty = collection[c.key] || 0;
+      const stateCls = qty >= 2 ? 'state-2' : 'state-1';
+      return `<div class="carte-card carte-card-mini ${stateCls}" title="${escH(c.name_it)}${qty >= 2 ? ` x${qty}` : ''}">
+        <img src="${escH(c.icon_url)}" alt="${escH(c.name_it)}" loading="lazy" onerror="this.style.visibility='hidden'">
+        ${qty >= 2 ? `<span class="carte-card-badge">x${qty}</span>` : ''}
+      </div>`;
+    }).join('');
+    return `<div class="carte-public-post-cat">
+      <div class="carte-public-post-cat-label">${escH(cat.category_label_it[catKey] || catKey)} <span class="carte-cat-count">${found.length}/${cardsInCat.length}</span></div>
+      <div class="carte-grid carte-grid-mini">${tiles}</div>
+    </div>`;
+  }).join('');
+}
+
 function renderPublicDecksSection(live) {
   const pub = window._cardPublicData;
   if (!pub) return '';
+  const cat = window._cardEventCatalog;
   const decksHtml = pub.decks.length
     ? pub.decks.map((d, i) => {
         const p = d.profile;
         const n = d.matches.length;
-        return `<div class="carte-match-card">
-          <div class="carte-match-info">
-            <div class="carte-match-names">${escH(p.username || p.coc_tag)}${p.coc_clan_name ? ` · ${escH(p.coc_clan_name)}` : ''}</div>
-            <div class="carte-match-opponent">${n > 0 ? `🔄 ${n} scambio${n === 1 ? '' : 'i'} possibile${n === 1 ? '' : 'i'}` : 'Nessuno scambio automatico al momento'}</div>
+        const coll = d.collection || {};
+        const found = cat ? cat.cards.filter(c => (coll[c.key] || 0) >= 1).length : 0;
+        const total = cat?.total_cards || 0;
+        const matchesPreview = n
+          ? `<div class="carte-suggested-list">
+              <div class="carte-suggested-title">🔄 ${n} scambio${n === 1 ? '' : 'i'} possibile${n === 1 ? '' : 'i'} con te:</div>
+              ${d.matches.map(m => `
+                <div class="carte-match-card">
+                  <div class="carte-match-cards">
+                    ${_cardMiniImg(m.card_give_meta)}
+                    <span class="carte-match-arrow">⇄</span>
+                    ${_cardMiniImg(m.card_get_meta)}
+                  </div>
+                  <div class="carte-match-info">
+                    <div class="carte-match-names">Cedi <strong>${escH(m.card_give_meta?.name_it || m.card_give)}</strong> → ricevi <strong>${escH(m.card_get_meta?.name_it || m.card_get)}</strong></div>
+                  </div>
+                </div>`).join('')}
+            </div>`
+          : `<p style="color:var(--text-3);font-size:0.82rem;margin:0.5rem 0 0">Nessuno scambio automatico con te al momento.</p>`;
+        return `<details class="carte-public-post" open>
+          <summary class="carte-public-post-header">
+            <span class="carte-public-post-title">${escH(p.username || p.coc_tag)}${p.coc_clan_name ? ` · ${escH(p.coc_clan_name)}` : ''}</span>
+            <span class="carte-public-post-count">${found}/${total} carte</span>
+          </summary>
+          <div class="carte-public-post-body">
+            ${_renderPublicDeckMiniGrid(coll) || '<p style="color:var(--text-3);font-size:0.82rem">Nessuna carta segnata ancora.</p>'}
+            ${matchesPreview}
+            <button type="button" class="btn-primary btn-sm" style="margin-top:0.7rem" onclick="_openPublicDeck(${i})">💬 Apri chat e proponi</button>
           </div>
-          <button type="button" class="btn-primary btn-sm" onclick="_openPublicDeck(${i})">Vedi scambi e chat</button>
-        </div>`;
+        </details>`;
       }).join('')
     : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessun altro utente ha reso pubblico il proprio mazzo per ora.</p></div>`;
 
@@ -2047,7 +2093,7 @@ function renderPublicDecksSection(live) {
         Rendi pubblico il mazzo di questo profilo
       </label>
       <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.8rem">
-        Se pubblico, tutti gli utenti CoCBoard vedranno questo mazzo qui sotto e potranno proporti scambi. Puoi oscurarlo in ogni momento.
+        Se pubblico, il tuo mazzo completo apparirà qui sotto come un "annuncio" visibile a tutti gli utenti CoCBoard, con le carte che possiedi e le proposte di scambio suggerite automaticamente. Puoi oscurarlo in ogni momento.
       </p>
       ${decksHtml}
     </div>`;

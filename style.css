@@ -4277,6 +4277,38 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .carte-suggested-title { font-size: 0.8rem; color: var(--text-3); margin-bottom: 0.5rem; }
 
+/* ── "Post" mazzo pubblico (collezione completa + scambi suggeriti) ─────── */
+.carte-public-post {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-2);
+    margin-bottom: 0.9rem;
+    overflow: hidden;
+}
+.carte-public-post-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.7rem 0.9rem;
+    cursor: pointer;
+    list-style: none;
+    font-weight: 600;
+}
+.carte-public-post-header::-webkit-details-marker { display: none; }
+.carte-public-post-title { font-size: 0.9rem; }
+.carte-public-post-count { font-size: 0.78rem; color: var(--gold); font-weight: 700; white-space: nowrap; }
+.carte-public-post-body { padding: 0 0.9rem 0.9rem; border-top: 1px solid var(--border); }
+.carte-public-post-cat { margin-top: 0.7rem; }
+.carte-public-post-cat-label { font-size: 0.78rem; color: var(--text-3); margin-bottom: 0.35rem; display: flex; justify-content: space-between; }
+.carte-grid-mini { grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 0.4rem; }
+.carte-card-mini {
+    padding: 0.25rem;
+    pointer-events: none;
+}
+.carte-card-mini img { width: 100%; height: 34px; object-fit: contain; }
+.carte-card-mini .carte-card-name { display: none; }
+
 /* ── Modale scelta quantità carta ────────────────────────────────────── */
 .carte-qty-modal-body { padding: 0.5rem 1.2rem 1.3rem; text-align: center; }
 .carte-qty-modal-img { width: 64px; height: 64px; object-fit: contain; margin-bottom: 0.5rem; }

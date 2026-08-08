@@ -209,6 +209,20 @@ describe('card-trades: applySelfTrade', () => {
     const get = (tag, key) => coll.find((c) => c.coc_tag === tag && c.card_key === key).qty_state;
     assert.equal(get('#AAA1', 'elx_barbarian'), 3, 'Alice1 aveva 4 copie: dopo la cessione ne restano 3 (ancora doppione)');
   });
+
+  it('regola invariata: con una sola copia (non doppione) non si può mai cedere una carta, nemmeno in self-trade', async () => {
+    const admin = seedBase();
+    // Alice1 ha solo 1x Barbarian (non un doppione): lo scambio deve essere rifiutato,
+    // altrimenti Alice1 resterebbe senza la carta che aveva già sbloccato.
+    admin.db.tables.card_event_collections.find((c) => c.coc_tag === '#AAA1' && c.card_key === 'elx_barbarian').qty_state = 1;
+    await assert.rejects(
+      () => cardTrades.applySelfTrade(admin, fakeUser(USER_A), 'p-a1', 'p-a2', 'elx_barbarian', 'elx_goblin'),
+      /doppione/,
+    );
+    const coll = admin.db.tables.card_event_collections;
+    const get = (tag, key) => coll.find((c) => c.coc_tag === tag && c.card_key === key).qty_state;
+    assert.equal(get('#AAA1', 'elx_barbarian'), 1, 'Nessuna modifica: Alice1 mantiene la sua unica copia');
+  });
 });
 
 describe('card-trades: mazzi pubblici', () => {
@@ -242,6 +256,15 @@ describe('card-trades: mazzi pubblici', () => {
     const res = await cardTrades.listPublicDecks(admin, fakeUser(USER_A), 'p-a1');
     assert.equal(res.decks[0].matches.length, 1);
     assert.equal(res.decks[0].matches[0].card_give, 'elx_barbarian');
+  });
+
+  it('listPublicDecks include il "post" con la collezione completa del mazzo pubblicato', async () => {
+    const admin = seedBase();
+    await cardTrades.setProfilePublic(admin, fakeUser(USER_B), 'p-b1', true);
+    const res = await cardTrades.listPublicDecks(admin, fakeUser(USER_A), 'p-a1');
+    assert.equal(res.decks.length, 1);
+    // Bob (#BBB1) nel seed ha: elx_archer qty=2, elx_barbarian qty=0 → il post mostra solo le carte possedute.
+    assert.deepEqual(res.decks[0].collection, { elx_archer: 2 });
   });
 
   it('my_public riflette lo stato del profilo attivo', async () => {
