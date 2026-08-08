@@ -8,7 +8,7 @@
     <meta name="theme-color" content="#0D0B08">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -146,6 +146,10 @@
             <button class="tab-btn" data-tab="rankings" onclick="closeNav()">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M7 21h2v-2H7v2zm0-4h2v-2H7v2zm0-4h2v-2H7v2zm4 8h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2V7h-2v2zm4 12h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2V7h-2v2zm0-4h2V3h-2v2z"/></svg>
                 Classifiche
+            </button>
+            <button class="tab-btn carte-event-tab" data-tab="carte" style="display:none" onclick="closeNav()">
+                <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M4 3h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm0 2v10h12V5H4zm14.5 1.32L22 7.24v9.29a2 2 0 0 1-2 2H8.83l2-2H20V8.62l-1.5-.72V6.32zM7 8h6v2H7V8zm0 4h4v2H7v-2z"/></svg>
+                Carte Evento <span class="event-badge-mini">Temp.</span>
             </button>
             <button class="tab-btn admin-only" data-tab="admin" style="display:none" onclick="closeNav()">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
@@ -742,9 +746,24 @@
             </section>
 
 
+            <!-- ── TAB: EVENTO CARTE (temporaneo) ────────────────────── -->
+            <section id="tab-carte" class="tab-content" style="display:none">
+                <div class="page-header">
+                    <div>
+                        <h2>🎴 Clash of Cards <span class="event-badge-mini">Evento temporaneo</span></h2>
+                        <p class="page-sub" id="carte-event-sub">Segna manualmente le carte che possiedi per trovare scambi con altri giocatori.</p>
+                    </div>
+                </div>
+                <div id="carte-profile-picker" class="carte-profile-picker" style="display:none"></div>
+                <div id="carte-content">
+                    <div class="profilo-empty"><p style="color:var(--text-3)">Caricamento…</p></div>
+                </div>
+            </section>
+
+
         </main>
 
-    </div><!-- /.app-body -->
+        </div><!-- /.app-body -->
 
     <!-- BOTTOM NAV (mobile only) -->
     <nav class="bottom-nav" id="bottom-nav">
@@ -772,6 +791,10 @@
         <button class="bnav-btn" data-tab="rankings">
             <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M7 21h2v-2H7v2zm0-4h2v-2H7v2zm0-4h2v-2H7v2zm4 8h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2V7h-2v2zm4 12h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2V7h-2v2zm0-4h2V3h-2v2z"/></svg>
             <span class="bnav-label">Classifiche</span>
+        </button>
+        <button class="bnav-btn carte-event-tab" data-tab="carte" style="display:none">
+            <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M4 3h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm0 2v10h12V5H4zm14.5 1.32L22 7.24v9.29a2 2 0 0 1-2 2H8.83l2-2H20V8.62l-1.5-.72V6.32zM7 8h6v2H7V8zm0 4h4v2H7v-2z"/></svg>
+            <span class="bnav-label">Carte</span>
         </button>
         <button class="bnav-btn admin-only" data-tab="admin" style="display:none">
             <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>

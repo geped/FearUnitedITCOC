@@ -1405,6 +1405,9 @@ async function showApp(sessionUser) {
       : 'none';
   });
 
+  // Evento Clash of Cards: mostra la tab solo se attivo (o se admin, per gestirlo)
+  initCardEventTabVisibility(isAdmin).catch(() => {});
+
   // Imposta stagione bonus al mese corrente
   const seasonInput = document.getElementById('bonus-season');
   if (seasonInput) seasonInput.value = new Date().toISOString().slice(0, 7);
@@ -1548,6 +1551,7 @@ const TAB_TITLES = {
   profilo:   'Il mio Profilo',
   cerca:     'Cerca',
   admin:     'Pannello Admin',
+  carte:     'Clash of Cards',
 };
 
 function activateTab(tabId) {
@@ -1573,6 +1577,7 @@ function activateTab(tabId) {
   if (tabId === 'profilo') setTimeout(loadProfile, 80);
   if (tabId === 'rankings') { setTimeout(loadRankings, 80); setTimeout(renderFavoriti, 80); _detectUserCountry(); }
   if (tabId === 'cerca') setTimeout(renderFavoriti, 80);
+  if (tabId === 'carte') setTimeout(loadCardEventTab, 80);
 }
 
 function switchAdminPanel(panel, btn) {
@@ -1599,6 +1604,191 @@ function switchAdminPanel(panel, btn) {
 document.querySelectorAll('.tab-btn, .bnav-btn').forEach(btn => {
   btn.addEventListener('click', () => activateTab(btn.dataset.tab));
 });
+
+// ── Evento "Clash of Cards" (temporaneo) ──────────────────────────────────────
+window._cardEventCatalog = null;   // { cards, category_order, category_label_it, category_totals, total_cards, settings }
+window._cardEventData    = null;   // { profiles, collections, settings } (per-utente, da cards-get)
+window._cardEventActiveTag = null;
+window._cardEventActiveCat = null;
+
+async function initCardEventTabVisibility(isAdmin) {
+  try {
+    const headers = await authBearerHeaders().catch(() => ({ Accept: 'application/json' }));
+    const r = await fetch('/api/lookup?type=cards-catalog', { headers });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) return;
+    window._cardEventCatalog = j;
+    const show = j.settings?.live === true || isAdmin === true;
+    document.querySelectorAll('.carte-event-tab').forEach(el => {
+      el.style.display = show ? (el.classList.contains('bnav-btn') ? 'flex' : 'inline-block') : 'none';
+    });
+  } catch (_) {}
+}
+
+async function loadCardEventTab() {
+  const box = document.getElementById('carte-content');
+  if (!box) return;
+  box.innerHTML = '<div class="profilo-empty"><p style="color:var(--text-3)">Caricamento…</p></div>';
+  try {
+    if (!window._cardEventCatalog) {
+      const headers = await authBearerHeaders().catch(() => ({ Accept: 'application/json' }));
+      const rc = await fetch('/api/lookup?type=cards-catalog', { headers });
+      window._cardEventCatalog = await rc.json();
+    }
+    window._cardEventData = await profilesApi('cards-get');
+  } catch (e) {
+    box.innerHTML = `<div class="profilo-empty"><p style="color:var(--red)">Errore caricamento evento: ${escH(e.message || '')}</p></div>`;
+    return;
+  }
+  const profiles = window._cardEventData?.profiles || [];
+  if (!window._cardEventActiveTag || !profiles.some(p => p.coc_tag === window._cardEventActiveTag)) {
+    const activeId = window._profilesState?.active?.id;
+    window._cardEventActiveTag = (profiles.find(p => p.id === activeId) || profiles[0])?.coc_tag || null;
+  }
+  if (!window._cardEventActiveCat) {
+    window._cardEventActiveCat = window._cardEventCatalog?.category_order?.[0] || 'elixir';
+  }
+  renderCardEventProfilePicker();
+  renderCardEventContent();
+}
+
+function renderCardEventProfilePicker() {
+  const el = document.getElementById('carte-profile-picker');
+  if (!el) return;
+  const profiles = window._cardEventData?.profiles || [];
+  if (profiles.length < 2) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.style.display = 'flex';
+  el.innerHTML = profiles.map(p => {
+    const th = Number(p.town_hall_level) || 0;
+    const thN = String(Math.min(Math.max(th || 1, 1), 18)).padStart(2, '0');
+    const thImg = th > 0
+      ? `<img src="th/level_${thN}.webp" class="carte-profile-th" alt="" onerror="this.onerror=null;this.src='th/level_${thN}.png'">`
+      : '';
+    return `
+    <button type="button" class="carte-profile-chip ${p.coc_tag === window._cardEventActiveTag ? 'active' : ''}"
+      onclick="_switchCarteProfile('${escH(p.coc_tag)}')">
+      ${thImg}
+      ${escH(p.username || p.coc_tag)}
+    </button>`;
+  }).join('');
+}
+
+function _switchCarteProfile(cocTag) {
+  window._cardEventActiveTag = cocTag;
+  renderCardEventProfilePicker();
+  renderCardEventContent();
+}
+
+function _switchCarteCategory(cat) {
+  window._cardEventActiveCat = cat;
+  renderCardEventContent();
+}
+
+function renderCardEventContent() {
+  const box = document.getElementById('carte-content');
+  if (!box) return;
+  const cat = window._cardEventCatalog;
+  const data = window._cardEventData;
+  if (!cat || !data) return;
+
+  const subEl = document.getElementById('carte-event-sub');
+  if (subEl) {
+    if (!cat.settings?.live) {
+      subEl.innerHTML = `⚠️ Evento terminato o disattivato: la sezione è in sola lettura.`;
+    } else {
+      const endsAt = cat.settings?.ends_at ? new Date(cat.settings.ends_at) : null;
+      subEl.textContent = endsAt
+        ? `Segna le carte che possiedi. Scambi con gli altri giocatori entro il ${endsAt.toLocaleDateString('it-IT')}.`
+        : 'Segna manualmente le carte che possiedi per trovare scambi con altri giocatori.';
+    }
+  }
+
+  const tag = window._cardEventActiveTag;
+  const coll = (data.collections && tag && data.collections[tag]) || {};
+  const cardsInCat = cat.cards.filter(c => c.category === window._cardEventActiveCat);
+  const totalFound = cat.cards.filter(c => (coll[c.key] || 0) >= 1).length;
+
+  const catBar = cat.category_order.map(c => {
+    const total = cat.category_totals[c] || 0;
+    const found = cat.cards.filter(x => x.category === c && (coll[x.key] || 0) >= 1).length;
+    return `<button type="button" class="subtab-btn carte-cat-btn ${c === window._cardEventActiveCat ? 'active' : ''}"
+        onclick="_switchCarteCategory('${c}')">
+        ${escH(cat.category_label_it[c] || c)}
+        <span class="carte-cat-count">${found}/${total}</span>
+      </button>`;
+  }).join('');
+
+  const readOnly = !cat.settings?.live;
+  const grid = cardsInCat.map(c => {
+    const qty = coll[c.key] || 0;
+    const stateCls = qty === 2 ? 'state-2' : qty === 1 ? 'state-1' : 'state-0';
+    return `<button type="button" class="carte-card ${stateCls}" ${readOnly ? 'disabled' : ''}
+        onclick="_onCardEventClick('${c.key}')" title="${escH(c.name_it)}">
+      <img src="${escH(c.icon_url)}" alt="${escH(c.name_it)}" loading="lazy"
+           onerror="this.style.visibility='hidden'">
+      <span class="carte-card-name">${escH(c.name_it)}</span>
+      ${qty === 2 ? '<span class="carte-card-badge">x2</span>' : ''}
+    </button>`;
+  }).join('');
+
+  const noProfile = !tag ? `<div class="profilo-empty"><p style="color:var(--text-3)">Nessun profilo CoC collegato al tuo account: collega un villaggio da "Profili" per usare questa sezione.</p></div>` : '';
+
+  box.innerHTML = `
+    <div class="carte-total-counter">Carte trovate: <strong>${totalFound}/${cat.total_cards}</strong></div>
+    <div class="subtab-bar carte-cat-bar">${catBar}</div>
+    ${noProfile}
+    ${tag ? `<div class="carte-grid">${grid}</div>` : ''}
+    ${window._userRole === 'admin' ? renderCardEventAdminToggle(cat.settings) : ''}
+  `;
+}
+
+function renderCardEventAdminToggle(settings) {
+  const live = settings?.enabled === true;
+  return `
+    <div class="carte-admin-toggle">
+      <span>Evento attivo globalmente:</span>
+      <button type="button" class="btn-secondary btn-sm" onclick="_toggleCardEventEnabled(${!live})">
+        ${live ? 'Disattiva' : 'Riattiva'}
+      </button>
+    </div>`;
+}
+
+async function _toggleCardEventEnabled(nextEnabled) {
+  try {
+    await profilesApi('cards-admin-toggle', { method: 'POST', body: { enabled: nextEnabled } });
+    window._cardEventCatalog = null;
+    await loadCardEventTab();
+  } catch (e) {
+    alert(e.message || 'Errore aggiornamento evento.');
+  }
+}
+
+async function _onCardEventClick(cardKey) {
+  const cat = window._cardEventCatalog;
+  const tag = window._cardEventActiveTag;
+  if (!cat || !tag) return;
+  if (!cat.settings?.live) { alert('Evento non attivo: sezione in sola lettura.'); return; }
+  const card = cat.cards.find(c => c.key === cardKey);
+  if (!card) return;
+  const coll = (window._cardEventData?.collections && window._cardEventData.collections[tag]) || {};
+  const qty = coll[cardKey] || 0;
+  const next = (qty + 1) % 3;
+  const msg = next === 1
+    ? `Confermi: possiedi la carta «${card.name_it}»?`
+    : next === 2
+      ? `Hai un doppione di «${card.name_it}» (2 o più copie)?`
+      : `Rimuovere «${card.name_it}» dalla tua collezione (torna a 0 copie)?`;
+  if (!confirm(msg)) return;
+
+  try {
+    await profilesApi('cards-save', { method: 'POST', body: { coc_tag: tag, card_key: cardKey, qty_state: next } });
+    if (!window._cardEventData.collections[tag]) window._cardEventData.collections[tag] = {};
+    window._cardEventData.collections[tag][cardKey] = next;
+    renderCardEventContent();
+  } catch (e) {
+    alert(e.message || 'Errore salvataggio carta.');
+  }
+}
 
 // Hamburger
 function openNav() {

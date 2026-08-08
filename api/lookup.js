@@ -647,10 +647,76 @@ module.exports = async (req, res) => {
                 });
             }
             return res.status(400).json({ error: 'type profili non gestito.' });
+        } else if (
+          type === 'cards-catalog' ||
+          type === 'cards-get' ||
+          type === 'cards-save' ||
+          type === 'cards-admin-toggle'
+        ) {
+            const cardEvent = require('./_utils/card-event');
+            const profilesUtil = require('./_utils/user-profiles');
+            const admin = profilesUtil.adminClient();
+
+            if (type === 'cards-catalog') {
+                if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
+                try {
+                    const settings = await cardEvent.getSettings(admin);
+                    return res.status(200).json(cardEvent.catalogPayload(settings));
+                } catch (e) {
+                    return res.status(500).json({ error: e.message });
+                }
+            }
+
+            const token = profilesUtil.bearerFromReq(req);
+            if (!token) return res.status(401).json({ error: 'Autenticazione richiesta.' });
+            let user;
+            try {
+                user = await profilesUtil.getUserFromJwt(token);
+            } catch (e) {
+                return res.status(e.status || 401).json({ error: e.message });
+            }
+
+            try {
+                if (type === 'cards-get') {
+                    if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const settings = await cardEvent.getSettings(admin);
+                    const data = await cardEvent.getCollectionsForUser(admin, user.id);
+                    return res.status(200).json({
+                        ok: true,
+                        ...data,
+                        settings: { enabled: settings.enabled === true, ends_at: settings.ends_at, live: cardEvent.isEventLive(settings) },
+                    });
+                }
+
+                if (type === 'cards-save') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const cocTag = body.coc_tag || body.cocTag;
+                    const cardKey = body.card_key || body.cardKey;
+                    const qtyState = body.qty_state ?? body.qtyState;
+                    if (!cocTag || !cardKey || qtyState == null) {
+                        return res.status(400).json({ error: 'coc_tag, card_key e qty_state sono obbligatori.' });
+                    }
+                    const data = await cardEvent.saveCardState(admin, user, { cocTag, cardKey, qtyState });
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-admin-toggle') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const isAdmin = profilesUtil.isAccountAdminFromUser(user, await profilesUtil.getPrefs(admin, user.id));
+                    if (!isAdmin) return res.status(403).json({ error: 'Solo admin.' });
+                    const body = req.body || {};
+                    const data = await cardEvent.setEnabled(admin, body.enabled === true);
+                    return res.status(200).json({ ok: true, settings: data });
+                }
+            } catch (e) {
+                return res.status(e.status || 500).json({ error: e.message || 'Errore evento carte.', code: e.code || undefined });
+            }
+            return res.status(400).json({ error: 'type cards non gestito.' });
         } else {
             return res.status(400).json({
                 error:
-                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login',
+                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, cards-catalog, cards-get, cards-save',
             });
         }
         const r = await fetch(`${proxyUrl}${proxyPath}`, {
