@@ -465,11 +465,15 @@ function setup(bot, deps) {
       if (!st.lastSelfMatches.length) {
         lines.push('Nessuno scambio disponibile tra i tuoi profili collegati.');
       } else {
+        lines.push('🟢 = sblocca una carta nuova · 🟡 = possibile ma non necessario (la possiedi già)', '');
         st.lastSelfMatches.forEach((m, i) => {
+          const aIsNew = m.a_is_new !== false;
+          const bIsNew = m.b_is_new !== false;
+          const nameA = escapeHtml(m.profile_a.username || m.profile_a.coc_tag);
+          const nameB = escapeHtml(m.profile_b.username || m.profile_b.coc_tag);
           lines.push(
-            `${i + 1}. <b>${escapeHtml(m.profile_a.username || m.profile_a.coc_tag)}</b> cede ` +
-              `${escapeHtml(m.card_a_to_b_meta?.name_it || m.card_a_to_b)} ⇄ <b>${escapeHtml(m.profile_b.username || m.profile_b.coc_tag)}</b> cede ` +
-              `${escapeHtml(m.card_b_to_a_meta?.name_it || m.card_b_to_a)}`,
+            `${i + 1}. <b>${nameA}</b> cede ${escapeHtml(m.card_a_to_b_meta?.name_it || m.card_a_to_b)} → riceve ${escapeHtml(m.card_b_to_a_meta?.name_it || m.card_b_to_a)} ${aIsNew ? '🟢' : '🟡'}\n` +
+              `   <b>${nameB}</b> cede ${escapeHtml(m.card_b_to_a_meta?.name_it || m.card_b_to_a)} → riceve ${escapeHtml(m.card_a_to_b_meta?.name_it || m.card_a_to_b)} ${bIsNew ? '🟢' : '🟡'}`,
           );
           if (live) rows.push([Markup.button.callback(`Applica subito #${i + 1}`, `cards:mself:${i}`)]);
         });

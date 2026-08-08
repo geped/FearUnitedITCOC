@@ -357,4 +357,38 @@ describe('card-trades: matching (enrichment su risultati RPC)', () => {
     assert.equal(data.matches[0].profile_a.coc_tag, '#AAA1');
     assert.equal(data.matches[0].profile_b.coc_tag, '#AAA2');
   });
+
+  it('getSelfMatches marca "semaforo verde" quando nessuno dei due possiede già la carta ricevuta', async () => {
+    const admin = seedBase();
+    admin.db.rpcStubs = {
+      find_self_card_matches: [
+        {
+          profile_a: 'p-a1', coc_tag_a: '#AAA1', profile_b: 'p-a2', coc_tag_b: '#AAA2',
+          card_a_to_b: 'elx_barbarian', card_b_to_a: 'elx_goblin', category: 'elixir',
+          a_already_has_target: false, b_already_has_target: false,
+        },
+      ],
+    };
+    const data = await cardTrades.getSelfMatches(admin, fakeUser(USER_A));
+    assert.equal(data.matches[0].a_is_new, true);
+    assert.equal(data.matches[0].b_is_new, true);
+  });
+
+  it('getSelfMatches marca "semaforo giallo" per il lato che possiede già la carta che riceverebbe', async () => {
+    const admin = seedBase();
+    // Caso segnalato: Geped2 cede Drago Elettro ma ha già Golem Meteorite; Geped4 cede
+    // Golem Meteorite ma ha già Drago Elettro → scambio possibile ma "non necessario" per entrambi.
+    admin.db.rpcStubs = {
+      find_self_card_matches: [
+        {
+          profile_a: 'p-a1', coc_tag_a: '#AAA1', profile_b: 'p-a2', coc_tag_b: '#AAA2',
+          card_a_to_b: 'elx_dragon', card_b_to_a: 'elx_golem', category: 'elixir',
+          a_already_has_target: true, b_already_has_target: true,
+        },
+      ],
+    };
+    const data = await cardTrades.getSelfMatches(admin, fakeUser(USER_A));
+    assert.equal(data.matches[0].a_is_new, false, 'A possiede già Golem Meteorite: giallo, non verde');
+    assert.equal(data.matches[0].b_is_new, false, 'B possiede già Drago Elettro: giallo, non verde');
+  });
 });

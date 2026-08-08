@@ -1975,18 +1975,51 @@ function renderCardTradeContent() {
     : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio disponibile al momento con altri giocatori. Segna più carte nella tua collezione per trovare match.</p></div>`;
 
   const selfHtml = data.selfMatches.length
-    ? data.selfMatches.map((m, i) => `
-      <div class="carte-match-card">
-        <div class="carte-match-cards">
-          ${_cardMiniImg(m.card_a_to_b_meta)}
-          <span class="carte-match-arrow">⇄</span>
-          ${_cardMiniImg(m.card_b_to_a_meta)}
+    ? data.selfMatches.map((m, i) => {
+        const nameA = escH(m.profile_a.username || m.profile_a.coc_tag);
+        const nameB = escH(m.profile_b.username || m.profile_b.coc_tag);
+        const cardAB = escH(m.card_a_to_b_meta?.name_it || m.card_a_to_b);
+        const cardBA = escH(m.card_b_to_a_meta?.name_it || m.card_b_to_a);
+        const aIsNew = m.a_is_new !== false;
+        const bIsNew = m.b_is_new !== false;
+        const bothNew = aIsNew && bIsNew;
+        const dot = bothNew ? '🟢' : '🟡';
+        const dotTitle = bothNew
+          ? 'Scambio utile: entrambi sbloccano una carta nuova'
+          : 'Scambio possibile ma non necessario: uno o entrambi possiedono già la carta che riceverebbero';
+        return `
+      <div class="carte-self-row ${bothNew ? 'semaforo-green' : 'semaforo-yellow'}">
+        <div class="carte-self-row-header">
+          <span class="carte-self-row-players">${nameA} <span class="carte-match-arrow">⇄</span> ${nameB}</span>
+          <span class="carte-self-row-dot" title="${escH(dotTitle)}">${dot}</span>
         </div>
-        <div class="carte-match-info">
-          <div class="carte-match-names"><strong>${escH(m.profile_a.username || m.profile_a.coc_tag)}</strong> cede ${escH(m.card_a_to_b_meta?.name_it || m.card_a_to_b)} ↔ <strong>${escH(m.profile_b.username || m.profile_b.coc_tag)}</strong> cede ${escH(m.card_b_to_a_meta?.name_it || m.card_b_to_a)}</div>
+        <div class="carte-self-row-cols">
+          <div class="carte-self-row-col">
+            <div class="carte-self-row-col-label">📤 Da offrire</div>
+            <div class="carte-self-row-item">
+              ${_cardMiniImg(m.card_a_to_b_meta)}
+              <div><div class="carte-self-row-card-name">${cardAB}</div><div class="carte-self-row-sub">${nameA} cede</div></div>
+            </div>
+            <div class="carte-self-row-item">
+              ${_cardMiniImg(m.card_b_to_a_meta)}
+              <div><div class="carte-self-row-card-name">${cardBA}</div><div class="carte-self-row-sub">${nameB} cede</div></div>
+            </div>
+          </div>
+          <div class="carte-self-row-col">
+            <div class="carte-self-row-col-label">📥 Da ricevere</div>
+            <div class="carte-self-row-item">
+              ${_cardMiniImg(m.card_b_to_a_meta)}
+              <div><div class="carte-self-row-card-name">${cardBA} ${aIsNew ? '🟢' : '🟡'}</div><div class="carte-self-row-sub">${nameA} riceve${aIsNew ? '' : ' (già posseduta)'}</div></div>
+            </div>
+            <div class="carte-self-row-item">
+              ${_cardMiniImg(m.card_a_to_b_meta)}
+              <div><div class="carte-self-row-card-name">${cardAB} ${bIsNew ? '🟢' : '🟡'}</div><div class="carte-self-row-sub">${nameB} riceve${bIsNew ? '' : ' (già posseduta)'}</div></div>
+            </div>
+          </div>
         </div>
         ${live ? `<button type="button" class="btn-secondary btn-sm" onclick="_openSelfTradeConfirmModal(${i})">Applica subito</button>` : ''}
-      </div>`).join('')
+      </div>`;
+      }).join('')
     : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio disponibile tra i tuoi profili collegati.</p></div>`;
 
   const roomsHtml = data.rooms.length

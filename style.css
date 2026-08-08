@@ -4309,6 +4309,44 @@ tbody tr:last-child td { border-bottom: none; }
 .carte-card-mini img { width: 100%; height: 34px; object-fit: contain; }
 .carte-card-mini .carte-card-name { display: none; }
 
+/* ── Righe scambio "Tra i tuoi profili" (self-trade) ──────────────────── */
+.carte-self-row {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-2);
+    padding: 0.6rem 0.7rem;
+    margin-bottom: 0.6rem;
+}
+.carte-self-row.semaforo-green { border-left: 3px solid var(--green, #2ecc71); }
+.carte-self-row.semaforo-yellow { border-left: 3px solid #e2b93b; }
+.carte-self-row-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+.carte-self-row-players { font-size: 0.8rem; font-weight: 600; }
+.carte-self-row-dot { font-size: 0.9rem; cursor: help; }
+.carte-self-row-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.6rem;
+}
+.carte-self-row-col-label { font-size: 0.68rem; color: var(--text-3); margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.02em; }
+.carte-self-row-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.35rem;
+}
+.carte-self-row-item .carte-trade-card-icon { width: 26px; height: 26px; flex-shrink: 0; }
+.carte-self-row-card-name { font-size: 0.72rem; font-weight: 600; line-height: 1.1; }
+.carte-self-row-sub { font-size: 0.64rem; color: var(--text-3); line-height: 1.1; }
+.carte-self-row .btn-sm { margin-top: 0.3rem; width: 100%; }
+@media (max-width: 420px) {
+    .carte-self-row-cols { grid-template-columns: 1fr; }
+}
+
 /* ── Modale conferma scambio self (tra i propri profili) ─────────────── */
 .carte-self-confirm-row {
     display: flex;

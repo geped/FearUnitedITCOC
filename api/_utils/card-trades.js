@@ -192,6 +192,10 @@ async function getSelfMatches(admin, user) {
           card_a_to_b: m.card_a_to_b,
           card_b_to_a: m.card_b_to_a,
           category: m.category,
+          // "Semaforo": verde = lo scambio sblocca davvero una carta nuova per quel lato,
+          // giallo = il lato la possiede già (non necessario ma comunque possibile).
+          a_is_new: m.a_already_has_target !== true,
+          b_is_new: m.b_already_has_target !== true,
         },
         ['card_a_to_b', 'card_b_to_a'],
       ),
