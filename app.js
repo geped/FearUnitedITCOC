@@ -2090,15 +2090,25 @@ function _switchCarteMainTab(tab, btn) {
 }
 
 window._carteTradeSub = null; // 'self' | 'public'
+window._cartePublicWin = 'hub'; // 'hub' | 'suggested' | 'albums' | 'rooms'
+window._carteAlbumFilter = 'all'; // 'all' | category key
+window._carteAlbumCollapsed = window._carteAlbumCollapsed || {}; // id -> true se ridotto
 
 function _switchCarteTradeSub(sub, btn) {
   window._carteTradeSub = sub;
+  if (sub === 'public') window._cartePublicWin = 'hub';
   const selfBox = document.getElementById('carte-trade-self');
   const pubBox = document.getElementById('carte-trade-public');
   if (selfBox) selfBox.style.display = sub === 'self' ? 'block' : 'none';
   if (pubBox) pubBox.style.display = sub === 'public' ? 'block' : 'none';
   document.querySelectorAll('#carte-trade-subtabs .subtab-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
+  if (sub === 'public') _renderCartePublicWindow();
+}
+
+function _openCartePublicWin(win) {
+  window._cartePublicWin = win || 'hub';
+  _renderCartePublicWindow();
 }
 
 function _activeCardProfileId() {
@@ -2115,6 +2125,8 @@ async function loadCardTradeTab() {
     box.innerHTML = `<div class="profilo-empty"><p style="color:var(--text-3)">Collega un villaggio da "Profili" per usare gli scambi.</p></div>`;
     return;
   }
+  const keepWin = window._cartePublicWin;
+  const keepSub = window._carteTradeSub;
   box.innerHTML = '<div class="profilo-empty"><p style="color:var(--text-3)">Caricamento…</p></div>';
   try {
     const profiles = window._cardEventData?.profiles || [];
@@ -2130,6 +2142,8 @@ async function loadCardTradeTab() {
     box.innerHTML = `<div class="profilo-empty"><p style="color:var(--red)">Errore caricamento scambi: ${escH(e.message || '')}</p></div>`;
     return;
   }
+  if (keepSub) window._carteTradeSub = keepSub;
+  if (keepWin) window._cartePublicWin = keepWin;
   renderCardTradeContent();
 }
 
@@ -2146,22 +2160,6 @@ function renderCardTradeContent() {
   if (!box || !data || !cat) return;
   const live = cat.settings?.live === true;
   const multiProfiles = (window._cardEventData?.profiles?.length || 0) > 1;
-
-  const matchesHtml = data.matches.length
-    ? data.matches.map((m, i) => `
-      <div class="carte-match-card">
-        <div class="carte-match-cards">
-          ${_cardMiniImg(m.card_give_meta)}
-          <span class="carte-match-arrow">⇄</span>
-          ${_cardMiniImg(m.card_get_meta)}
-        </div>
-        <div class="carte-match-info">
-          <div class="carte-match-names">Cedi <strong>${escH(m.card_give_meta?.name_it || m.card_give)}</strong> → ricevi <strong>${escH(m.card_get_meta?.name_it || m.card_get)}</strong></div>
-          <div class="carte-match-opponent">con ${escH(m.other_profile.username || m.other_profile.coc_tag)}</div>
-        </div>
-        ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">Proponi scambio</button>` : ''}
-      </div>`).join('')
-    : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio automatico con altri giocatori al momento.</p></div>`;
 
   const selfHtml = data.selfMatches.length
     ? data.selfMatches.map((m, i) => {
@@ -2211,21 +2209,10 @@ function renderCardTradeContent() {
       }).join('')
     : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio disponibile tra i tuoi profili collegati.</p></div>`;
 
-  const roomsHtml = data.rooms.length
-    ? data.rooms.map(r => {
-        const preview = r.last_message ? escH((r.last_message.body || '').slice(0, 60)) : 'Nessun messaggio ancora';
-        const pending = r.pending_proposals > 0 ? `<span class="carte-room-badge">${r.pending_proposals}</span>` : '';
-        return `<button type="button" class="carte-room-item" onclick="_openCardRoom('${r.id}')">
-          <div class="carte-room-name">${escH(r.other_profile?.username || r.other_profile?.coc_tag || '—')} ${pending}</div>
-          <div class="carte-room-preview">${preview}</div>
-        </button>`;
-      }).join('')
-    : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuna conversazione ancora.</p></div>`;
-
-  // Macro-tab: default = self se multi-profilo, altrimenti public
   if (!window._carteTradeSub || (!multiProfiles && window._carteTradeSub === 'self')) {
     window._carteTradeSub = multiProfiles ? 'self' : 'public';
   }
+  if (!window._cartePublicWin) window._cartePublicWin = 'hub';
   const sub = window._carteTradeSub;
 
   const subtabs = `
@@ -2245,109 +2232,257 @@ function renderCardTradeContent() {
         ${selfHtml}
       </div>
     </div>
-    <div id="carte-trade-public" style="display:${sub === 'public' ? 'block' : 'none'}">
-      <div class="carte-trade-section">
-        <h3 class="profilo-section-title">Scambi suggeriti con altri</h3>
-        ${matchesHtml}
-      </div>
-      ${renderPublicDecksSection(live)}
-      <div class="carte-trade-section">
-        <h3 class="profilo-section-title">Le tue conversazioni</h3>
-        ${roomsHtml}
-      </div>
-    </div>
+    <div id="carte-trade-public" style="display:${sub === 'public' ? 'block' : 'none'}"></div>
   `;
+  if (sub === 'public') _renderCartePublicWindow();
 }
 
-function _renderPublicDeckMiniGrid(collection) {
+function _cartePublicWinHeader(title) {
+  return `<div class="carte-win-header">
+    <button type="button" class="btn-secondary btn-sm carte-win-back" onclick="_openCartePublicWin('hub')">« Indietro</button>
+    <h3 class="carte-win-title">${escH(title)}</h3>
+  </div>`;
+}
+
+function _renderCartePublicWindow() {
+  const box = document.getElementById('carte-trade-public');
+  if (!box) return;
+  const data = window._cardTradeData;
+  const live = window._cardEventCatalog?.settings?.live === true;
+  const win = window._cartePublicWin || 'hub';
+
+  if (win === 'hub') {
+    const nMatch = data?.matches?.length || 0;
+    const nDecks = window._cardPublicData?.decks?.length || 0;
+    const nRooms = data?.rooms?.length || 0;
+    const nPending = (data?.rooms || []).reduce((s, r) => s + (r.pending_proposals || 0), 0);
+    box.innerHTML = `
+      <div class="carte-win-hub">
+        <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.8rem">Scegli una sezione. Puoi tornare indietro in ogni momento.</p>
+        <button type="button" class="carte-win-card" onclick="_openCartePublicWin('suggested')">
+          <span class="carte-win-card-icon">🔄</span>
+          <span class="carte-win-card-body">
+            <strong>Scambi suggeriti con altri</strong>
+            <small>${nMatch ? `${nMatch} scambio${nMatch === 1 ? '' : 'i'} automatico${nMatch === 1 ? '' : 'i'}` : 'Nessun match al momento'}</small>
+          </span>
+        </button>
+        <button type="button" class="carte-win-card" onclick="_openCartePublicWin('albums')">
+          <span class="carte-win-card-icon">📚</span>
+          <span class="carte-win-card-body">
+            <strong>Mazzi pubblici</strong>
+            <small>Album fotografici · ${nDecks} mazzo${nDecks === 1 ? '' : 'i'} altrui</small>
+          </span>
+        </button>
+        <button type="button" class="carte-win-card" onclick="_openCartePublicWin('rooms')">
+          <span class="carte-win-card-icon">💬</span>
+          <span class="carte-win-card-body">
+            <strong>Le tue conversazioni</strong>
+            <small>${nRooms ? `${nRooms} chat${nPending ? ` · ${nPending} proposte` : ''}` : 'Nessuna conversazione ancora'}</small>
+          </span>
+        </button>
+      </div>`;
+    return;
+  }
+
+  if (win === 'suggested') {
+    const matchesHtml = (data?.matches || []).length
+      ? data.matches.map((m, i) => `
+        <div class="carte-match-card">
+          <div class="carte-match-cards">
+            ${_cardMiniImg(m.card_give_meta)}
+            <span class="carte-match-arrow">⇄</span>
+            ${_cardMiniImg(m.card_get_meta)}
+          </div>
+          <div class="carte-match-info">
+            <div class="carte-match-names">Cedi <strong>${escH(m.card_give_meta?.name_it || m.card_give)}</strong> → ricevi <strong>${escH(m.card_get_meta?.name_it || m.card_get)}</strong></div>
+            <div class="carte-match-opponent">con ${escH(m.other_profile.username || m.other_profile.coc_tag)}</div>
+          </div>
+          ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">Proponi scambio</button>` : ''}
+        </div>`).join('')
+      : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio automatico con altri giocatori al momento.</p></div>`;
+    box.innerHTML = `${_cartePublicWinHeader('Scambi suggeriti con altri')}<div class="carte-trade-section">${matchesHtml}</div>`;
+    return;
+  }
+
+  if (win === 'rooms') {
+    const roomsHtml = (data?.rooms || []).length
+      ? data.rooms.map(r => {
+          const preview = r.last_message ? escH((r.last_message.body || '').slice(0, 60)) : 'Nessun messaggio ancora';
+          const pending = r.pending_proposals > 0 ? `<span class="carte-room-badge">${r.pending_proposals}</span>` : '';
+          return `<button type="button" class="carte-room-item" onclick="_openCardRoom('${r.id}')">
+            <div class="carte-room-name">${escH(r.other_profile?.username || r.other_profile?.coc_tag || '—')} ${pending}</div>
+            <div class="carte-room-preview">${preview}</div>
+          </button>`;
+        }).join('')
+      : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuna conversazione ancora.</p></div>`;
+    box.innerHTML = `${_cartePublicWinHeader('Le tue conversazioni')}<div class="carte-trade-section">${roomsHtml}</div>`;
+    return;
+  }
+
+  // win === 'albums'
+  box.innerHTML = `${_cartePublicWinHeader('Mazzi pubblici')}${_renderAlbumsWindow(live)}`;
+}
+
+const CARTE_CAT_BORDER = {
+  elixir: 'cat-border-elixir',
+  dark_elixir: 'cat-border-dark',
+  builder_base: 'cat-border-builder',
+  super_troop: 'cat-border-super',
+};
+
+function _renderFullAlbumGrid(collection, albumId) {
   const cat = window._cardEventCatalog;
   if (!cat) return '';
-  return cat.category_order.map(catKey => {
+  const filter = window._carteAlbumFilter || 'all';
+  const cats = filter === 'all' ? cat.category_order : cat.category_order.filter(c => c === filter);
+  return cats.map(catKey => {
     const cardsInCat = cat.cards.filter(c => c.category === catKey);
-    const found = cardsInCat.filter(c => (collection[c.key] || 0) >= 1);
-    if (!found.length) return '';
-    const tiles = found.map(c => {
+    const found = cardsInCat.filter(c => (collection[c.key] || 0) >= 1).length;
+    const tiles = cardsInCat.map(c => {
       const qty = collection[c.key] || 0;
-      const stateCls = qty >= 2 ? 'state-2' : 'state-1';
-      return `<div class="carte-card carte-card-mini ${stateCls}" title="${escH(c.name_it)}${qty >= 2 ? ` x${qty}` : ''}">
+      const stateCls = qty >= 2 ? 'state-2' : qty === 1 ? 'state-1' : 'state-0';
+      const borderCls = CARTE_CAT_BORDER[c.category] || '';
+      return `<div class="carte-album-tile ${stateCls} ${borderCls}" title="${escH(c.name_it)}${qty >= 2 ? ` ×${qty}` : qty === 1 ? ' (posseduta)' : ' (mancante)'}">
         <img src="${escH(c.icon_url)}" alt="${escH(c.name_it)}" loading="lazy" onerror="this.style.visibility='hidden'">
         ${qty >= 2 ? `<span class="carte-card-badge">x${qty}</span>` : ''}
       </div>`;
     }).join('');
-    return `<div class="carte-public-post-cat">
-      <div class="carte-public-post-cat-label">${escH(cat.category_label_it[catKey] || catKey)} <span class="carte-cat-count">${found.length}/${cardsInCat.length}</span></div>
-      <div class="carte-grid carte-grid-mini">${tiles}</div>
+    return `<div class="carte-album-cat">
+      <div class="carte-album-cat-label">
+        <span class="carte-album-cat-dot ${CARTE_CAT_BORDER[catKey] || ''}"></span>
+        ${escH(cat.category_label_it[catKey] || catKey)}
+        <span class="carte-cat-count">${found}/${cardsInCat.length}</span>
+      </div>
+      <div class="carte-album-grid">${tiles}</div>
     </div>`;
   }).join('');
 }
 
-function renderPublicDecksSection(live) {
-  const pub = window._cardPublicData;
-  if (!pub) return '';
+function _isAlbumCollapsed(albumId) {
+  const map = window._carteAlbumCollapsed || {};
+  if (Object.prototype.hasOwnProperty.call(map, albumId)) return !!map[albumId];
+  // Default: album altrui ridotti, i tuoi espansi
+  return String(albumId).startsWith('other:');
+}
+
+function _toggleAlbumCollapsed(albumId) {
+  const map = window._carteAlbumCollapsed || (window._carteAlbumCollapsed = {});
+  map[albumId] = !_isAlbumCollapsed(albumId);
+  _renderCartePublicWindow();
+}
+
+function _setCarteAlbumFilter(catKey) {
+  window._carteAlbumFilter = catKey || 'all';
+  _renderCartePublicWindow();
+}
+
+function _renderAlbumsWindow(live) {
   const cat = window._cardEventCatalog;
-  const decksHtml = pub.decks.length
+  const myProfiles = window._cardEventData?.profiles || [];
+  const myCollections = window._cardEventData?.collections || {};
+  const pub = window._cardPublicData || { decks: [] };
+  const filter = window._carteAlbumFilter || 'all';
+
+  const filterBar = `
+    <div class="carte-album-filters">
+      <button type="button" class="carte-album-filter-btn ${filter === 'all' ? 'active' : ''}" onclick="_setCarteAlbumFilter('all')">Tutte</button>
+      ${(cat?.category_order || []).map(c => `
+        <button type="button" class="carte-album-filter-btn ${filter === c ? 'active' : ''} ${CARTE_CAT_BORDER[c] || ''}"
+          onclick="_setCarteAlbumFilter('${c}')">${escH(cat.category_label_it[c] || c)}</button>`).join('')}
+    </div>
+    <div class="carte-album-legend">
+      <span><i class="carte-album-cat-dot cat-border-elixir"></i> Elisir</span>
+      <span><i class="carte-album-cat-dot cat-border-dark"></i> Elisir nero</span>
+      <span><i class="carte-album-cat-dot cat-border-builder"></i> Builder</span>
+      <span><i class="carte-album-cat-dot cat-border-super"></i> Super truppe</span>
+    </div>`;
+
+  const myAlbums = myProfiles.map((p) => {
+    const albumId = `mine:${p.coc_tag}`;
+    const isCollapsed = _isAlbumCollapsed(albumId);
+    const coll = myCollections[p.coc_tag] || {};
+    const found = cat ? cat.cards.filter(c => (coll[c.key] || 0) >= 1).length : 0;
+    const total = cat?.total_cards || 0;
+    const isPub = p.card_deck_public === true;
+    return `<div class="carte-album-card">
+      <div class="carte-album-card-head">
+        <div class="carte-album-card-title">
+          <strong>${escH(p.username || p.coc_tag)}</strong>
+          <span class="carte-album-card-meta">${found}/${total} · ${isPub ? '🌐 Pubblico' : '🔒 Privato'}</span>
+        </div>
+        <label class="carte-public-toggle-label carte-album-toggle">
+          <input type="checkbox" ${isPub ? 'checked' : ''} ${live ? '' : 'disabled'}
+            onchange="_toggleProfileDeckPublic('${escH(p.id)}', this.checked)">
+          Pubblico
+        </label>
+        <button type="button" class="btn-secondary btn-sm" onclick="_toggleAlbumCollapsed('${escH(albumId)}')">${isCollapsed ? 'Espandi' : 'Riduci'}</button>
+      </div>
+      <div class="carte-album-card-body ${isCollapsed ? 'is-collapsed' : ''}">
+        ${_renderFullAlbumGrid(coll, albumId)}
+      </div>
+    </div>`;
+  }).join('') || `<div class="profilo-empty"><p style="color:var(--text-3)">Nessun profilo CoC collegato.</p></div>`;
+
+  const otherAlbums = (pub.decks || []).length
     ? pub.decks.map((d, i) => {
+        const albumId = `other:${i}`;
+        const isCollapsed = _isAlbumCollapsed(albumId);
         const p = d.profile;
-        const n = d.matches.length;
         const coll = d.collection || {};
         const found = cat ? cat.cards.filter(c => (coll[c.key] || 0) >= 1).length : 0;
         const total = cat?.total_cards || 0;
-        const matchesPreview = n
-          ? `<div class="carte-suggested-list">
-              <div class="carte-suggested-title">🔄 ${n} scambio${n === 1 ? '' : 'i'} possibile${n === 1 ? '' : 'i'} con te:</div>
-              ${d.matches.map(m => `
-                <div class="carte-match-card">
-                  <div class="carte-match-cards">
-                    ${_cardMiniImg(m.card_give_meta)}
-                    <span class="carte-match-arrow">⇄</span>
-                    ${_cardMiniImg(m.card_get_meta)}
-                  </div>
-                  <div class="carte-match-info">
-                    <div class="carte-match-names">Cedi <strong>${escH(m.card_give_meta?.name_it || m.card_give)}</strong> → ricevi <strong>${escH(m.card_get_meta?.name_it || m.card_get)}</strong></div>
-                  </div>
-                </div>`).join('')}
-            </div>`
-          : `<p style="color:var(--text-3);font-size:0.82rem;margin:0.5rem 0 0">Nessuno scambio automatico con te al momento.</p>`;
-        return `<details class="carte-public-post" open>
-          <summary class="carte-public-post-header">
-            <span class="carte-public-post-title">${escH(p.username || p.coc_tag)}${p.coc_clan_name ? ` · ${escH(p.coc_clan_name)}` : ''}</span>
-            <span class="carte-public-post-count">${found}/${total} carte</span>
-          </summary>
-          <div class="carte-public-post-body">
-            ${_renderPublicDeckMiniGrid(coll) || '<p style="color:var(--text-3);font-size:0.82rem">Nessuna carta segnata ancora.</p>'}
-            ${matchesPreview}
-            <button type="button" class="btn-primary btn-sm" style="margin-top:0.7rem" onclick="_openPublicDeck(${i})">💬 Apri chat e proponi</button>
+        const n = d.matches?.length || 0;
+        return `<div class="carte-album-card">
+          <div class="carte-album-card-head">
+            <div class="carte-album-card-title">
+              <strong>${escH(p.username || p.coc_tag)}</strong>
+              <span class="carte-album-card-meta">${found}/${total}${p.coc_clan_name ? ` · ${escH(p.coc_clan_name)}` : ''}${n ? ` · 🔄 ${n}` : ''}</span>
+            </div>
+            <button type="button" class="btn-secondary btn-sm" onclick="_toggleAlbumCollapsed('${escH(albumId)}')">${isCollapsed ? 'Espandi' : 'Riduci'}</button>
+            ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_openPublicDeck(${i})">💬 Chat</button>` : ''}
           </div>
-        </details>`;
+          <div class="carte-album-card-body ${isCollapsed ? 'is-collapsed' : ''}">
+            ${_renderFullAlbumGrid(coll, albumId)}
+          </div>
+        </div>`;
       }).join('')
     : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessun altro utente ha reso pubblico il proprio mazzo per ora.</p></div>`;
 
   return `
     <div class="carte-trade-section">
-      <h3 class="profilo-section-title">Mazzi pubblici</h3>
-      <label class="carte-public-toggle-label">
-        <input type="checkbox" id="carte-public-toggle-cb" ${pub.myPublic ? 'checked' : ''} ${live ? '' : 'disabled'}
-          onchange="_toggleMyDeckPublic(this.checked)">
-        Rendi pubblico il mazzo di questo profilo
-      </label>
-      <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.8rem">
-        Se pubblico, il tuo mazzo completo apparirà qui sotto come un "annuncio" visibile a tutti gli utenti CoCBoard, con le carte che possiedi e le proposte di scambio suggerite automaticamente. Puoi oscurarlo in ogni momento.
+      ${filterBar}
+      <h3 class="profilo-section-title">I tuoi mazzi</h3>
+      <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.7rem">
+        Scegli quali profili CoC rendere pubblici. L’album mostra tutto il catalogo: mancanti, possedute e doppioni.
       </p>
-      ${decksHtml}
+      ${myAlbums}
+      <h3 class="profilo-section-title" style="margin-top:1.2rem">Mazzi di altri giocatori</h3>
+      ${otherAlbums}
     </div>`;
 }
 
-async function _toggleMyDeckPublic(isPublic) {
-  const profileId = _activeCardProfileId();
+async function _toggleProfileDeckPublic(profileId, isPublic) {
   if (!profileId) return;
   try {
     await cardsApi('cards-public-toggle', { method: 'POST', body: { profile_id: profileId, is_public: isPublic } });
-    await loadCardTradeTab();
+    const p = (window._cardEventData?.profiles || []).find(x => x.id === profileId);
+    if (p) p.card_deck_public = isPublic === true;
+    if (profileId === _activeCardProfileId() && window._cardPublicData) {
+      window._cardPublicData.myPublic = isPublic === true;
+    }
+    // Ricarica lista altrui non serve; aggiorna solo lo stato locale e ri-render
+    window._cartePublicWin = 'albums';
+    _renderCartePublicWindow();
   } catch (e) {
     alert(e.message || 'Errore aggiornamento visibilità mazzo.');
-    const cb = document.getElementById('carte-public-toggle-cb');
-    if (cb) cb.checked = !isPublic;
+    window._cartePublicWin = 'albums';
+    await loadCardTradeTab();
   }
+}
+
+async function _toggleMyDeckPublic(isPublic) {
+  // Compat: toggle sul profilo attivo
+  return _toggleProfileDeckPublic(_activeCardProfileId(), isPublic);
 }
 
 async function _openPublicDeck(idx) {
