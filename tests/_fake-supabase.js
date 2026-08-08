@@ -29,6 +29,7 @@ class QueryBuilder {
   }
   select() { return this; }
   eq(col, val) { this.filters.push({ op: 'eq', col, val }); return this; }
+  neq(col, val) { this.filters.push({ op: 'neq', col, val }); return this; }
   in(col, vals) { this.filters.push({ op: 'in', col, vals: vals.map(String) }); return this; }
   or(expr) { this.filters.push({ op: 'or', expr }); return this; }
   order() { return this; }
@@ -48,6 +49,7 @@ class QueryBuilder {
   _rowMatches(row) {
     return this.filters.every((f) => {
       if (f.op === 'eq') return String(row[f.col]) === String(f.val);
+      if (f.op === 'neq') return String(row[f.col]) !== String(f.val);
       if (f.op === 'in') return f.vals.includes(String(row[f.col]));
       if (f.op === 'or') {
         const re = /(\w+)\.in\.\(([^)]*)\)/g;
@@ -146,28 +148,43 @@ function rpcApplyCardTrade(db, params) {
   if (!a || !b) return { data: null, error: { message: 'Profilo non trovato per lo scambio' } };
 
   const findColl = (tag, key) => collections.find((c) => c.coc_tag === tag && c.card_key === key);
+  const upsertColl = (tag, key, category, delta) => {
+    const row = findColl(tag, key);
+    if (row) { row.qty_state += delta; return row; }
+    const created = { coc_tag: tag, card_key: key, category, qty_state: Math.max(0, delta) };
+    collections.push(created);
+    db.tables.card_event_collections = collections;
+    return created;
+  };
 
   const aGave = findColl(a.coc_tag, params.p_card_a_gave);
-  if (!aGave || aGave.qty_state !== 2) {
+  if (!aGave || aGave.qty_state < 2) {
     return { data: null, error: { message: `Il profilo A non ha più il doppione richiesto (${params.p_card_a_gave}).` } };
   }
   const bGave = findColl(b.coc_tag, params.p_card_b_gave);
-  if (!bGave || bGave.qty_state !== 2) {
+  if (!bGave || bGave.qty_state < 2) {
     return { data: null, error: { message: `Il profilo B non ha più il doppione richiesto (${params.p_card_b_gave}).` } };
   }
-  const aGet = findColl(a.coc_tag, params.p_card_b_gave);
-  if (!aGet || aGet.qty_state !== 0) {
-    return { data: null, error: { message: `Il profilo A ha già sbloccato la carta richiesta (${params.p_card_b_gave}).` } };
-  }
-  const bGet = findColl(b.coc_tag, params.p_card_a_gave);
-  if (!bGet || bGet.qty_state !== 0) {
-    return { data: null, error: { message: `Il profilo B ha già sbloccato la carta richiesta (${params.p_card_a_gave}).` } };
-  }
 
-  aGave.qty_state = 1;
-  bGave.qty_state = 1;
-  aGet.qty_state = 1;
-  bGet.qty_state = 1;
+  if (params.p_kind === 'self') {
+    aGave.qty_state -= 1;
+    bGave.qty_state -= 1;
+    upsertColl(a.coc_tag, params.p_card_b_gave, bGave.category, 1);
+    upsertColl(b.coc_tag, params.p_card_a_gave, aGave.category, 1);
+  } else {
+    const aGet = findColl(a.coc_tag, params.p_card_b_gave);
+    if (!aGet || aGet.qty_state !== 0) {
+      return { data: null, error: { message: `Il profilo A ha già sbloccato la carta richiesta (${params.p_card_b_gave}).` } };
+    }
+    const bGet = findColl(b.coc_tag, params.p_card_a_gave);
+    if (!bGet || bGet.qty_state !== 0) {
+      return { data: null, error: { message: `Il profilo B ha già sbloccato la carta richiesta (${params.p_card_a_gave}).` } };
+    }
+    aGave.qty_state -= 1;
+    bGave.qty_state -= 1;
+    aGet.qty_state = 1;
+    bGet.qty_state = 1;
+  }
 
   (db.tables.card_event_trade_log = db.tables.card_event_trade_log || []).push({
     id: nextId('log'),

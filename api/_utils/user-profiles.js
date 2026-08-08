@@ -58,6 +58,7 @@ function profileToPublic(row) {
     town_hall_level: row.town_hall_level != null ? Number(row.town_hall_level) : null,
     label: row.label || null,
     created_at: row.created_at,
+    card_deck_public: row.card_deck_public === true,
   };
 }
 

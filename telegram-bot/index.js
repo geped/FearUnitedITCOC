@@ -787,7 +787,15 @@ async function handlePendingMessage(ctx) {
         if (loadingMsg?.message_id) {
           await ctx.telegram.deleteMessage(uid, loadingMsg.message_id).catch(() => {});
         }
-        await replyTransient(ctx, '✅ <b>Accesso effettuato.</b>', { parse_mode: 'HTML' });
+        if (data.user?.user_metadata?.must_change_password === true) {
+          await replyTransient(
+            ctx,
+            '✅ <b>Accesso effettuato.</b>\n\n⚠️ Questa è una password <b>temporanea</b> assegnata da un amministratore: accedi al sito CoCBoard per impostarne subito una nuova definitiva.',
+            { parse_mode: 'HTML' },
+          );
+        } else {
+          await replyTransient(ctx, '✅ <b>Accesso effettuato.</b>', { parse_mode: 'HTML' });
+        }
         ctx.cocboardUser = data.user;
         if (uid != null) profileGateDone.delete(uid);
         const gated = await (profilesHandlers?.afterLoginMaybeGate?.(ctx, data.session.access_token));

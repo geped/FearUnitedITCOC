@@ -72,14 +72,11 @@
         <!-- ── RECUPERO PASSWORD ── -->
         <div id="recovery-section" style="display:none">
             <div class="login-section-title">🔑 Recupero Password</div>
-            <p class="login-hint-text">Inserisci l'email associata al tuo account per ricevere il link di recupero.</p>
-            <form id="recovery-form">
-                <div class="input-wrap">
-                    <span class="input-icon">📧</span>
-                    <input type="email" id="recovery-email" placeholder="La tua email" required autocomplete="email">
-                </div>
-                <button type="submit" class="btn-primary btn-full">📨 Invia link di recupero</button>
-            </form>
+            <p class="login-hint-text">
+                Gli account CoCBoard non usano un'email reale, quindi il recupero automatico non è disponibile:
+                un amministratore deve reimpostare la password per te.
+            </p>
+            <p class="login-hint-text">Contatta un amministratore tramite il bot Telegram di CoCBoard (menù «Contatta amministratore») indicando il tuo nome utente: riceverai una password temporanea, con cui ti verrà chiesto di sceglierne subito una nuova.</p>
         </div>
 
         <button id="show-login" class="link-btn" style="display:none">← Torna al login</button>
@@ -104,6 +101,28 @@
             </div>
         </div>
         <button onclick="window.sb.auth.signOut()" class="btn-primary" style="margin-top:1.5rem">Esci</button>
+    </div>
+</div>
+
+<!-- ─── CAMBIO PASSWORD OBBLIGATORIO (dopo reset admin) ──────────────────────── -->
+<div id="force-password-screen" style="display:none">
+    <div class="no-clan-box">
+        <div class="no-clan-icon">🔑</div>
+        <h2>Imposta una nuova password</h2>
+        <p>Un amministratore ha reimpostato la tua password. Per motivi di sicurezza, scegline una nuova prima di continuare.</p>
+        <form id="force-password-form" style="margin-top:1.2rem;display:flex;flex-direction:column;gap:0.7rem;text-align:left">
+            <div class="input-wrap">
+                <span class="input-icon">🔒</span>
+                <input type="password" id="force-password-new" placeholder="Nuova password (min 6 caratteri)" autocomplete="new-password" required minlength="6">
+            </div>
+            <div class="input-wrap">
+                <span class="input-icon">🔒</span>
+                <input type="password" id="force-password-confirm" placeholder="Conferma nuova password" autocomplete="new-password" required minlength="6">
+            </div>
+            <p id="force-password-error" style="color:var(--red,#ef5350);font-size:0.85rem;display:none;margin:0"></p>
+            <button type="submit" class="btn-primary" style="margin-top:0.3rem">Salva e continua</button>
+        </form>
+        <button onclick="window.sb.auth.signOut()" class="link-btn" style="margin-top:1rem">Esci</button>
     </div>
 </div>
 

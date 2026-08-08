@@ -20,3 +20,5 @@ screenshot/
 chat-session-export-*.jsonl
 PIANO_*.md
 .claude/settings.local.json
+
+.env*.local

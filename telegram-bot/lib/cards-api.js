@@ -112,6 +112,17 @@ async function tradeLog(accessToken) {
   return callCards('cards-trade-log', accessToken, { method: 'GET' });
 }
 
+async function publicList(accessToken, profileId) {
+  return callCards('cards-public-list', accessToken, { method: 'GET', params: { profile_id: profileId } });
+}
+
+async function publicToggle(accessToken, profileId, isPublic) {
+  return callCards('cards-public-toggle', accessToken, {
+    method: 'POST',
+    body: { profile_id: profileId, is_public: isPublic === true },
+  });
+}
+
 module.exports = {
   catalog,
   getCollection,
@@ -127,4 +138,6 @@ module.exports = {
   respond,
   selfApply,
   tradeLog,
+  publicList,
+  publicToggle,
 };

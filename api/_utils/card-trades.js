@@ -199,6 +199,57 @@ async function getSelfMatches(admin, user) {
   };
 }
 
+// ── MAZZI PUBBLICI (vetrina) ──────────────────────────────────────────────
+
+async function setProfilePublic(admin, user, profileId, isPublic) {
+  const me = await myProfileOr403(admin, user, profileId);
+  const { data, error } = await admin
+    .from('user_coc_profiles')
+    .update({ card_deck_public: isPublic === true })
+    .eq('id', me.id)
+    .select('*')
+    .single();
+  if (error) throw error;
+  return { ok: true, profile: profilesUtil.profileToPublic(data) };
+}
+
+/**
+ * Elenco dei mazzi pubblici di ALTRI account CoCBoard, con i possibili scambi
+ * verso il profilo attivo (riusa find_card_matches, già globale, filtrando
+ * solo le controparti che hanno scelto di pubblicare il proprio mazzo).
+ */
+async function listPublicDecks(admin, user, myProfileId) {
+  const me = await myProfileOr403(admin, user, myProfileId);
+
+  const { data: publicProfiles, error: e1 } = await admin
+    .from('user_coc_profiles')
+    .select('id, coc_tag, username, coc_clan_name, coc_clan_badge_url, town_hall_level, user_id')
+    .eq('card_deck_public', true)
+    .neq('user_id', user.id);
+  if (e1) throw e1;
+
+  const { data: matches, error: e2 } = await admin.rpc('find_card_matches', { p_coc_tag: me.coc_tag });
+  if (e2) throw e2;
+  const matchesByTag = {};
+  for (const m of matches || []) {
+    (matchesByTag[m.other_coc_tag] = matchesByTag[m.other_coc_tag] || []).push(
+      enrichCardKeys({ card_give: m.card_give, card_get: m.card_get, category: m.category }, ['card_give', 'card_get']),
+    );
+  }
+
+  return {
+    ok: true,
+    my_public: me.card_deck_public === true,
+    decks: (publicProfiles || [])
+      .filter((p) => p.coc_tag !== me.coc_tag)
+      .map((p) => ({
+        profile: profilesUtil.profileToPublic(p),
+        matches: matchesByTag[p.coc_tag] || [],
+      }))
+      .sort((a, b) => (b.matches.length || 0) - (a.matches.length || 0)),
+  };
+}
+
 // ── ROOM 1-A-1 ──────────────────────────────────────────────────────────
 
 function sortPair(a, b) {
@@ -420,10 +471,10 @@ async function proposeTrade(admin, user, roomId, myProfileId, cardGive, cardGet)
   if (eColl) throw eColl;
   const state = (tag, key) => rows.find((r) => r.coc_tag === tag && r.card_key === key)?.qty_state ?? 0;
 
-  if (state(me.coc_tag, cardGive) !== 2) throw err(400, 'Non hai un doppione di questa carta.');
+  if (state(me.coc_tag, cardGive) < 2) throw err(400, 'Non hai un doppione di questa carta.');
   if (state(me.coc_tag, cardGet) !== 0) throw err(400, 'Hai già sbloccato la carta richiesta.');
   if (state(other.coc_tag, cardGive) !== 0) throw err(400, "L'altro giocatore ha già sbloccato questa carta.");
-  if (state(other.coc_tag, cardGet) !== 2) throw err(400, "L'altro giocatore non ha un doppione di quella carta.");
+  if (state(other.coc_tag, cardGet) < 2) throw err(400, "L'altro giocatore non ha un doppione di quella carta.");
 
   const { data: proposal, error } = await admin
     .from('card_event_proposals')
@@ -593,6 +644,8 @@ async function getTradeLog(admin, user) {
 module.exports = {
   getMatchesForProfile,
   getSelfMatches,
+  setProfilePublic,
+  listPublicDecks,
   getOrCreateRoom,
   getRoomDetail,
   listRoomsForUser,

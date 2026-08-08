@@ -661,7 +661,9 @@ module.exports = async (req, res) => {
           type === 'cards-propose' ||
           type === 'cards-respond' ||
           type === 'cards-self-apply' ||
-          type === 'cards-trade-log'
+          type === 'cards-trade-log' ||
+          type === 'cards-public-list' ||
+          type === 'cards-public-toggle'
         ) {
             const cardEvent = require('./_utils/card-event');
             const cardTrades = require('./_utils/card-trades');
@@ -819,6 +821,23 @@ module.exports = async (req, res) => {
                     const data = await cardTrades.getTradeLog(admin, user);
                     return res.status(200).json(data);
                 }
+
+                if (type === 'cards-public-list') {
+                    if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const profileId = req.query.profile_id || req.query.profileId;
+                    if (!profileId) return res.status(400).json({ error: 'profile_id obbligatorio.' });
+                    const data = await cardTrades.listPublicDecks(admin, user, profileId);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-public-toggle') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const profileId = body.profile_id || body.profileId;
+                    if (!profileId) return res.status(400).json({ error: 'profile_id obbligatorio.' });
+                    const data = await cardTrades.setProfilePublic(admin, user, profileId, body.is_public === true || body.isPublic === true);
+                    return res.status(200).json(data);
+                }
             } catch (e) {
                 return res.status(e.status || 500).json({ error: e.message || 'Errore evento carte.', code: e.code || undefined });
             }
@@ -826,7 +845,7 @@ module.exports = async (req, res) => {
         } else {
             return res.status(400).json({
                 error:
-                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, cards-catalog, cards-get, cards-save, cards-matches, cards-self-matches, cards-rooms, cards-room-open, cards-room-detail, cards-room-send, cards-propose, cards-respond, cards-self-apply, cards-trade-log',
+                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, cards-catalog, cards-get, cards-save, cards-matches, cards-self-matches, cards-rooms, cards-room-open, cards-room-detail, cards-room-send, cards-propose, cards-respond, cards-self-apply, cards-trade-log, cards-public-list, cards-public-toggle',
             });
         }
         const r = await fetch(`${proxyUrl}${proxyPath}`, {

@@ -186,6 +186,72 @@ describe('card-trades: applySelfTrade', () => {
     assert.equal(get('#AAA2', 'elx_barbarian'), 1);
     assert.equal(admin.db.tables.card_event_trade_log[0].kind, 'self');
   });
+
+  it('lo scambio self funziona anche se il ricevente possiede già la carta: la quantità si somma', async () => {
+    const admin = seedBase();
+    // Alice2 possiede già 1x Barbarian (non 0): con lo scambio self deve sommarsi a 2, non essere rifiutato.
+    admin.db.tables.card_event_collections.push({ coc_tag: '#AAA2', card_key: 'elx_barbarian', category: 'elixir', qty_state: 1 });
+    const res = await cardTrades.applySelfTrade(admin, fakeUser(USER_A), 'p-a1', 'p-a2', 'elx_barbarian', 'elx_goblin');
+    assert.equal(res.ok, true);
+    const coll = admin.db.tables.card_event_collections;
+    const get = (tag, key) => coll.find((c) => c.coc_tag === tag && c.card_key === key).qty_state;
+    assert.equal(get('#AAA2', 'elx_barbarian'), 2, 'Alice2 aveva già 1 copia: ora ne ha 2 (sommata)');
+    assert.equal(get('#AAA1', 'elx_barbarian'), 1, 'Alice1 ha ceduto il doppione');
+  });
+
+  it('lo scambio self funziona anche con più di 2 copie sul lato che cede (resta doppione dopo la cessione)', async () => {
+    const admin = seedBase();
+    admin.db.tables.card_event_collections.find((c) => c.coc_tag === '#AAA1' && c.card_key === 'elx_barbarian').qty_state = 4;
+    admin.db.tables.card_event_collections.push({ coc_tag: '#AAA2', card_key: 'elx_barbarian', category: 'elixir', qty_state: 0 });
+    const res = await cardTrades.applySelfTrade(admin, fakeUser(USER_A), 'p-a1', 'p-a2', 'elx_barbarian', 'elx_goblin');
+    assert.equal(res.ok, true);
+    const coll = admin.db.tables.card_event_collections;
+    const get = (tag, key) => coll.find((c) => c.coc_tag === tag && c.card_key === key).qty_state;
+    assert.equal(get('#AAA1', 'elx_barbarian'), 3, 'Alice1 aveva 4 copie: dopo la cessione ne restano 3 (ancora doppione)');
+  });
+});
+
+describe('card-trades: mazzi pubblici', () => {
+  it('setProfilePublic aggiorna il flag card_deck_public del profilo', async () => {
+    const admin = seedBase();
+    const res = await cardTrades.setProfilePublic(admin, fakeUser(USER_A), 'p-a1', true);
+    assert.equal(res.ok, true);
+    assert.equal(res.profile.card_deck_public, true);
+    const row = admin.db.tables.user_coc_profiles.find((p) => p.id === 'p-a1');
+    assert.equal(row.card_deck_public, true);
+  });
+
+  it('listPublicDecks esclude i profili del proprio account e quelli non pubblici', async () => {
+    const admin = seedBase();
+    await cardTrades.setProfilePublic(admin, fakeUser(USER_A), 'p-a2', true); // proprio account: va escluso
+    await cardTrades.setProfilePublic(admin, fakeUser(USER_B), 'p-b1', true); // altro account: deve comparire
+    const res = await cardTrades.listPublicDecks(admin, fakeUser(USER_A), 'p-a1');
+    assert.equal(res.ok, true);
+    assert.equal(res.decks.length, 1);
+    assert.equal(res.decks[0].profile.coc_tag, '#BBB1');
+  });
+
+  it('listPublicDecks include i possibili scambi con quel profilo (riusa find_card_matches)', async () => {
+    const admin = seedBase();
+    await cardTrades.setProfilePublic(admin, fakeUser(USER_B), 'p-b1', true);
+    admin.db.rpcStubs = {
+      find_card_matches: [
+        { other_coc_tag: '#BBB1', other_user_id: USER_B, card_give: 'elx_barbarian', card_get: 'elx_archer', category: 'elixir' },
+      ],
+    };
+    const res = await cardTrades.listPublicDecks(admin, fakeUser(USER_A), 'p-a1');
+    assert.equal(res.decks[0].matches.length, 1);
+    assert.equal(res.decks[0].matches[0].card_give, 'elx_barbarian');
+  });
+
+  it('my_public riflette lo stato del profilo attivo', async () => {
+    const admin = seedBase();
+    const before = await cardTrades.listPublicDecks(admin, fakeUser(USER_A), 'p-a1');
+    assert.equal(before.my_public, false);
+    await cardTrades.setProfilePublic(admin, fakeUser(USER_A), 'p-a1', true);
+    const after = await cardTrades.listPublicDecks(admin, fakeUser(USER_A), 'p-a1');
+    assert.equal(after.my_public, true);
+  });
 });
 
 describe('card-trades: notifiche outbox (bot Telegram)', () => {

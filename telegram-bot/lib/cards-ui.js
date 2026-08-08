@@ -36,7 +36,7 @@ const CAT_EMOJI = {
 };
 
 function qtyIcon(qty) {
-  if (qty === 2) return '✅';
+  if (qty >= 2) return '✅';
   if (qty === 1) return '🔹';
   return '▫️';
 }
@@ -253,7 +253,7 @@ function setup(bot, deps) {
       const row = [];
       for (const card of pageCards.slice(i, i + 2)) {
         const qty = coll[card.key] || 0;
-        const label = `${qtyIcon(qty)} ${card.name_it}${qty === 2 ? ' (x2)' : ''}`.slice(0, 40);
+        const label = `${qtyIcon(qty)} ${card.name_it}${qty >= 2 ? ` (x${qty})` : ''}`.slice(0, 40);
         row.push(Markup.button.callback(label, `cards:pick:${card.key}`));
       }
       rows.push(row);
@@ -304,7 +304,37 @@ function setup(bot, deps) {
     });
   });
 
-  // ── Modale scelta quantità (0 / 1 / 2+) ─────────────────────────────────
+  // ── Modale scelta quantità con pulsanti +/- (quantità libera, non solo 0/1/2) ──
+  function qtyNote(qty) {
+    if (qty === 0) return 'Non la possiedi — verrà rimossa dalla collezione.';
+    if (qty === 1) return 'La possiedi: 1 sola copia (non scambiabile).';
+    return `Hai ${qty} copie: doppioni scambiabili con altri giocatori.`;
+  }
+
+  function renderQtyPicker(ctx, st) {
+    const pending = st.pendingQty;
+    const card = st.catalog.cards.find((c) => c.key === pending?.cardKey);
+    if (!card) return renderCollectionView(ctx, st);
+    const live = st.catalog.settings?.live === true;
+    const text =
+      `${fmt.DIV}\n${escapeHtml(card.name_it)}\n${fmt.DIV}\n\n` +
+      (live
+        ? `Quante copie possiedi di questa carta?\n\n<b>${pending.qty}</b> — ${escapeHtml(qtyNote(pending.qty))}`
+        : '⚠️ Evento in sola lettura: non puoi modificare la collezione.');
+    const rows = live
+      ? [
+          [
+            Markup.button.callback('－', 'cards:qadj:-1'),
+            Markup.button.callback(String(pending.qty), 'noop'),
+            Markup.button.callback('＋', 'cards:qadj:1'),
+          ],
+          [Markup.button.callback('💾 Salva', 'cards:qsave')],
+          [Markup.button.callback('« Annulla', 'cards:coll')],
+        ]
+      : [[Markup.button.callback('« Indietro', 'cards:coll')]];
+    return renderView(ctx, text, Markup.inlineKeyboard(rows));
+  }
+
   bot.action(/^cards:pick:(.+)$/, async (ctx) => {
     if (guard(ctx)) return;
     safeAnswerCb(ctx);
@@ -313,35 +343,35 @@ function setup(bot, deps) {
       const cardKey = ctx.match[1];
       const card = st.catalog.cards.find((c) => c.key === cardKey);
       if (!card) return;
-      const qty = activeColl(st)[cardKey] || 0;
-      const live = st.catalog.settings?.live === true;
-      const opt = (v, icon, label) =>
-        Markup.button.callback(`${qty === v ? '✅ ' : `${icon} `}${label}`, live ? `cards:sv:${cardKey}:${v}` : 'noop');
-      const text =
-        `${fmt.DIV}\n${escapeHtml(card.name_it)}\n${fmt.DIV}\n\n` +
-        (live ? 'Quante copie possiedi di questa carta?' : '⚠️ Evento in sola lettura: non puoi modificare la collezione.');
-      const rows = [
-        [opt(0, '✕', 'Non la possiedo')],
-        [opt(1, '1️⃣', 'La possiedo (1 copia)')],
-        [opt(2, '2️⃣', 'Ho un doppione (2+, scambiabile)')],
-        [Markup.button.callback('« Indietro', 'cards:coll')],
-      ];
-      await renderView(ctx, text, Markup.inlineKeyboard(rows));
+      st.pendingQty = { cardKey, qty: activeColl(st)[cardKey] || 0 };
+      await renderQtyPicker(ctx, st);
     });
   });
 
-  bot.action(/^cards:sv:(.+):([012])$/, async (ctx) => {
+  bot.action(/^cards:qadj:(-?\d+)$/, async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      if (!st.pendingQty) return;
+      const delta = Number(ctx.match[1]);
+      st.pendingQty.qty = Math.max(0, Math.min(99, st.pendingQty.qty + delta));
+      await renderQtyPicker(ctx, st);
+    });
+  });
+
+  bot.action('cards:qsave', async (ctx) => {
     if (guard(ctx)) return;
     safeAnswerCb(ctx);
     await withErrors(ctx, async () => {
       const st = await ensureState(sb, tauth, ctx.from.id);
       const p = activeProfile(st);
-      if (!p) return;
-      const cardKey = ctx.match[1];
-      const qty = Number(ctx.match[2]);
+      if (!p || !st.pendingQty) return;
+      const { cardKey, qty } = st.pendingQty;
       await cardsApi.saveCard(st.token, { cocTag: p.coc_tag, cardKey, qtyState: qty });
       if (!st.collections[p.coc_tag]) st.collections[p.coc_tag] = {};
       st.collections[p.coc_tag][cardKey] = qty;
+      st.pendingQty = null;
       await renderCollectionView(ctx, st);
     });
   });
@@ -358,6 +388,7 @@ function setup(bot, deps) {
     if (st.profiles.length > 1) {
       rows.push([Markup.button.callback('🔁 Scambi tra i miei profili', 'cards:tr:self')]);
     }
+    rows.push([Markup.button.callback('🌐 Mazzi pubblici', 'cards:tr:pub')]);
     rows.push([Markup.button.callback('💬 Le mie stanze', 'cards:tr:rooms')]);
     rows.push([Markup.button.callback('« Carte', 'cards:home')]);
     await renderView(ctx, text, Markup.inlineKeyboard(rows));
@@ -408,6 +439,7 @@ function setup(bot, deps) {
       const p = activeProfile(st);
       const m = (st.lastMatches || [])[Number(ctx.match[1])];
       if (!p || !m) return;
+      st.pendingPublicSuggested = null;
       const room = await cardsApi.roomOpen(st.token, { profileId: p.id, otherCocTag: m.other_profile.coc_tag });
       await cardsApi.propose(st.token, {
         roomId: room.room.id,
@@ -467,6 +499,75 @@ function setup(bot, deps) {
     });
   });
 
+  // ── Mazzi pubblici (vetrina) ─────────────────────────────────────────────
+  async function renderPublicDecksView(ctx, st) {
+    const p = activeProfile(st);
+    if (!p) return;
+    const data = await cardsApi.publicList(st.token, p.id);
+    st.lastPublicDecks = data.decks || [];
+    const live = st.catalog.settings?.live === true;
+    const lines = [
+      `${fmt.DIV}`,
+      '🌐 <b>Mazzi pubblici</b>',
+      fmt.DIV,
+      '',
+      `Il tuo mazzo (${escapeHtml(profileLabel(p))}) è: <b>${data.my_public ? 'pubblico ✅' : 'privato 🔒'}</b>`,
+      'Se pubblico, tutti gli utenti CoCBoard lo vedono qui e possono proporti scambi.',
+      '',
+    ];
+    const rows = [];
+    if (live) {
+      rows.push([Markup.button.callback(data.my_public ? '🔒 Rendi privato' : '🌐 Rendi pubblico', 'cards:pubtoggle')]);
+    }
+    if (!st.lastPublicDecks.length) {
+      lines.push('Nessun altro utente ha reso pubblico il proprio mazzo per ora.');
+    } else {
+      st.lastPublicDecks.forEach((d, i) => {
+        const n = d.matches.length;
+        lines.push(`${i + 1}. <b>${escapeHtml(d.profile.username || d.profile.coc_tag)}</b>${n ? ` — 🔄 ${n} scambio${n === 1 ? '' : 'i'} possibile${n === 1 ? '' : 'i'}` : ' — nessuno scambio automatico'}`);
+        rows.push([Markup.button.callback(`💬 Apri ${d.profile.username || d.profile.coc_tag}`.slice(0, 60), `cards:pubopen:${i}`)]);
+      });
+    }
+    rows.push([Markup.button.callback('« Scambi', 'cards:tr')]);
+    await renderView(ctx, lines.join('\n'), Markup.inlineKeyboard(rows));
+  }
+
+  bot.action('cards:tr:pub', async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      await renderPublicDecksView(ctx, st);
+    });
+  });
+
+  bot.action('cards:pubtoggle', async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const p = activeProfile(st);
+      if (!p) return;
+      const data = await cardsApi.publicList(st.token, p.id);
+      await cardsApi.publicToggle(st.token, p.id, !data.my_public);
+      await renderPublicDecksView(ctx, st);
+    });
+  });
+
+  bot.action(/^cards:pubopen:(\d+)$/, async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const p = activeProfile(st);
+      const d = (st.lastPublicDecks || [])[Number(ctx.match[1])];
+      if (!p || !d) return;
+      const room = await cardsApi.roomOpen(st.token, { profileId: p.id, otherCocTag: d.profile.coc_tag });
+      st.pendingPublicSuggested = d.matches || [];
+      await openRoom(ctx, st, room.room.id);
+    });
+  });
+
   // ── Stanze 1-a-1 (chat + proposte) ──────────────────────────────────────
   bot.action('cards:tr:rooms', async (ctx) => {
     if (guard(ctx)) return;
@@ -496,15 +597,28 @@ function setup(bot, deps) {
     });
   });
 
-  async function openRoom(ctx, st, roomId) {
+  async function openRoom(ctx, st, roomId, { keepSuggested = false } = {}) {
     const data = await cardsApi.roomDetail(st.token, roomId);
     roomByUid.set(ctx.from.id, { roomId, myProfileId: data.room.my_profile_id, proposeGive: null });
+    if (!keepSuggested) {
+      st.roomSuggested = st.pendingPublicSuggested || null;
+      st.pendingPublicSuggested = null;
+    }
     const live = st.catalog.settings?.live === true;
     const otherName = escapeHtml(data.other.username || data.other.coc_tag);
 
     const lines = [`${fmt.DIV}`, `🔁 ${otherName}`, fmt.DIV, ''];
-    const pending = data.proposals.filter((p) => p.status === 'pending');
+    const suggested = st.roomSuggested || [];
     const rows = [];
+    if (suggested.length && live) {
+      lines.push('<b>🔄 Scambi suggeriti (mazzo pubblico):</b>');
+      suggested.forEach((m, i) => {
+        lines.push(`• Cedi ${escapeHtml(m.card_give_meta?.name_it || m.card_give)} → ricevi ${escapeHtml(m.card_get_meta?.name_it || m.card_get)}`);
+        rows.push([Markup.button.callback(`Proponi suggerito #${i + 1}`, `cards:pubprop:${i}`)]);
+      });
+      lines.push('');
+    }
+    const pending = data.proposals.filter((p) => p.status === 'pending');
     if (pending.length) {
       lines.push('<b>Proposte in corso:</b>');
       for (const p of pending) {
@@ -553,7 +667,28 @@ function setup(bot, deps) {
     safeAnswerCb(ctx);
     await withErrors(ctx, async () => {
       const st = await ensureState(sb, tauth, ctx.from.id);
+      st.pendingPublicSuggested = null;
       await openRoom(ctx, st, ctx.match[1]);
+    });
+  });
+
+  bot.action(/^cards:pubprop:(\d+)$/, async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const rs = roomByUid.get(ctx.from.id);
+      const m = (st.roomSuggested || [])[Number(ctx.match[1])];
+      if (!rs || !m) return;
+      await cardsApi.propose(st.token, {
+        roomId: rs.roomId,
+        profileId: rs.myProfileId,
+        cardGive: m.card_give,
+        cardGet: m.card_get,
+      });
+      st.roomSuggested = (st.roomSuggested || []).filter((_, i) => i !== Number(ctx.match[1]));
+      await replyTransient(ctx, '✅ Proposta inviata!', { parse_mode: 'HTML' }, 4000);
+      await openRoom(ctx, st, rs.roomId, { keepSuggested: true });
     });
   });
 
@@ -577,7 +712,7 @@ function setup(bot, deps) {
       if (!rs) return;
       const p = activeProfile(st);
       const coll = activeColl(st);
-      const dupes = st.catalog.cards.filter((c) => (coll[c.key] || 0) === 2);
+      const dupes = st.catalog.cards.filter((c) => (coll[c.key] || 0) >= 2);
       const text =
         `${fmt.DIV}\n🔁 Proponi scambio\n${fmt.DIV}\n\n` +
         `Profilo: <b>${escapeHtml(profileLabel(p))}</b>\n\nScegli la carta che <b>cedi</b> (doppione):`;

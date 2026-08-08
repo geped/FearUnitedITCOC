@@ -101,8 +101,8 @@ async function saveCardState(admin, user, { cocTag, cardKey, qtyState }) {
     throw err;
   }
   const qty = Number(qtyState);
-  if (![0, 1, 2].includes(qty)) {
-    const err = new Error('Stato carta non valido (0, 1 o 2).');
+  if (!Number.isInteger(qty) || qty < 0 || qty > 99) {
+    const err = new Error('Quantità non valida (0-99).');
     err.status = 400;
     throw err;
   }

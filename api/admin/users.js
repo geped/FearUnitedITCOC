@@ -1,5 +1,15 @@
+const crypto = require('crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { requireRole } = require('../_utils/require-role');
+
+// Password temporanea leggibile: esclude caratteri ambigui (0/O, 1/l/I).
+function makeTempPassword() {
+    const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    const bytes = crypto.randomBytes(10);
+    let out = '';
+    for (let i = 0; i < bytes.length; i++) out += chars[bytes[i] % chars.length];
+    return out;
+}
 
 module.exports = async (req, res) => {
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -45,11 +55,43 @@ module.exports = async (req, res) => {
 
     // PUT — aggiorna ruolo, username, flag moderatore Telegram, password
     if (req.method === 'PUT') {
-        const { userId, role, username, newPassword, telegram_moderator } = req.body;
+        const { userId, role, username, newPassword, telegram_moderator, generateTempPassword } = req.body;
         if (!userId) return res.status(400).json({ error: 'userId obbligatorio.' });
 
         const { data: cur, error: ge } = await supabase.auth.admin.getUserById(userId);
         if (ge || !cur?.user) return res.status(404).json({ error: 'Utente non trovato.' });
+
+        // Reset password guidato: genera una password temporanea, obbliga il cambio al
+        // primo accesso e la invia via bot Telegram se l'utente ha collegato l'account.
+        if (generateTempPassword === true) {
+            const tempPassword = makeTempPassword();
+            const merged = { ...(cur.user.user_metadata || {}), must_change_password: true };
+            const { error: upErr } = await supabase.auth.admin.updateUserById(userId, {
+                password: tempPassword,
+                user_metadata: merged,
+            });
+            if (upErr) return res.status(500).json({ error: upErr.message });
+
+            let sentViaTelegram = false;
+            try {
+                const { data: link } = await supabase
+                    .from('telegram_links')
+                    .select('telegram_user_id')
+                    .eq('supabase_user_id', userId)
+                    .maybeSingle();
+                if (link?.telegram_user_id != null) {
+                    await notifyTelegram(
+                        link.telegram_user_id,
+                        `🔑 La tua password CoCBoard è stata reimpostata da un amministratore.\n\n` +
+                        `Password temporanea: ${tempPassword}\n\n` +
+                        `Accedi al sito con questa password: al primo accesso ti verrà chiesto di sceglierne subito una nuova.`,
+                    );
+                    sentViaTelegram = true;
+                }
+            } catch (_) {}
+
+            return res.status(200).json({ ok: true, tempPassword, sentViaTelegram });
+        }
 
         if (
             role === undefined &&

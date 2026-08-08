@@ -529,29 +529,6 @@ document.getElementById("signup-coc-form").addEventListener("submit", async (e) 
 
 // ── Recupero password ─────────────────────────────────────────────────────────
 
-document.getElementById("recovery-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const email = document.getElementById("recovery-email").value.trim();
-  if (!email) return;
-
-  const submitBtn = e.target.querySelector('button[type="submit"]');
-  submitBtn.disabled = true;
-  submitBtn.textContent = "Invio in corso…";
-
-  const { error } = await db.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin,
-  });
-
-  submitBtn.disabled = false;
-  submitBtn.textContent = "📨 Invia link di recupero";
-
-  if (error) {
-    showLoginError(error.message);
-  } else {
-    showLoginError("📨 Email inviata! Controlla la tua casella di posta.", "info");
-  }
-});
-
 document
   .getElementById("logout-btn")
   .addEventListener("click", () => db.auth.signOut());
@@ -780,6 +757,49 @@ function showNoClanScreen(username) {
   const nameEl = document.getElementById("no-clan-username");
   if (nameEl) nameEl.textContent = username ? `, ${username}` : '';
 }
+
+// ── Cambio password obbligatorio (dopo reset da pannello admin) ─────────────
+function showForcePasswordChangeScreen(user) {
+  document.getElementById("login-screen").style.display = "none";
+  document.getElementById("app").style.display = "none";
+  document.getElementById("no-clan-screen").style.display = "none";
+  document.getElementById("force-password-screen").style.display = "flex";
+  window._forcePasswordUser = user;
+  const errEl = document.getElementById('force-password-error');
+  if (errEl) errEl.style.display = 'none';
+  const f1 = document.getElementById('force-password-new');
+  const f2 = document.getElementById('force-password-confirm');
+  if (f1) f1.value = '';
+  if (f2) f2.value = '';
+}
+
+document.getElementById('force-password-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById('force-password-error');
+  const newPw = document.getElementById('force-password-new').value;
+  const confirmPw = document.getElementById('force-password-confirm').value;
+  const showErr = (msg) => { if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; } };
+  if (newPw.length < 6) return showErr('La password deve avere almeno 6 caratteri.');
+  if (newPw !== confirmPw) return showErr('Le due password non coincidono.');
+
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Salvataggio…';
+  try {
+    const { data, error } = await db.auth.updateUser({
+      password: newPw,
+      data: { must_change_password: false },
+    });
+    if (error) { showErr(error.message || 'Errore durante il salvataggio.'); return; }
+    document.getElementById('force-password-screen').style.display = 'none';
+    await showApp(data?.user || window._forcePasswordUser);
+  } catch (err) {
+    showErr('Errore di connessione. Riprova.');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Salva e continua';
+  }
+});
 
 // Costanti ruoli (ordine crescente di privilegio)
 const ROLES = [
@@ -1323,6 +1343,11 @@ async function showApp(sessionUser) {
     if (data?.user) user = data.user;
   } catch (_) {}
 
+  if (user.user_metadata?.must_change_password === true && !user.is_anonymous) {
+    showForcePasswordChangeScreen(user);
+    return;
+  }
+
   const okProfiles = await ensureProfilesBeforeApp(user);
   if (!okProfiles) {
     // Gate profili: resta in app shell ma aspetta scelta
@@ -1729,13 +1754,13 @@ function renderCardEventContent() {
   const readOnly = !cat.settings?.live;
   const grid = cardsInCat.map(c => {
     const qty = coll[c.key] || 0;
-    const stateCls = qty === 2 ? 'state-2' : qty === 1 ? 'state-1' : 'state-0';
+    const stateCls = qty >= 2 ? 'state-2' : qty === 1 ? 'state-1' : 'state-0';
     return `<button type="button" class="carte-card ${stateCls}" ${readOnly ? 'disabled' : ''}
         onclick="_onCardEventClick('${c.key}')" title="${escH(c.name_it)}">
       <img src="${escH(c.icon_url)}" alt="${escH(c.name_it)}" loading="lazy"
            onerror="this.style.visibility='hidden'">
       <span class="carte-card-name">${escH(c.name_it)}</span>
-      ${qty === 2 ? '<span class="carte-card-badge">x2</span>' : ''}
+      ${qty >= 2 ? `<span class="carte-card-badge">x${qty}</span>` : ''}
     </button>`;
   }).join('');
 
@@ -1783,13 +1808,11 @@ function _onCardEventClick(cardKey) {
   _openCardQtyModal(card, qty);
 }
 
+window._carteQtyModalState = null; // { card, qty (pendente, non ancora salvata) }
+
 function _openCardQtyModal(card, qty) {
   document.getElementById('carte-qty-modal')?.remove();
-  const opts = [
-    { v: 0, icon: '✕', label: 'Non la possiedo', hint: 'Rimuovi dalla collezione' },
-    { v: 1, icon: '1', label: 'La possiedo', hint: '1 sola copia' },
-    { v: 2, icon: '2+', label: 'Ho un doppione', hint: '2 o più copie — scambiabile' },
-  ];
+  window._carteQtyModalState = { card, qty: Number(qty) || 0 };
   const modal = document.createElement('div');
   modal.id = 'carte-qty-modal';
   modal.className = 'modal-overlay';
@@ -1803,33 +1826,56 @@ function _openCardQtyModal(card, qty) {
       <div class="carte-qty-modal-body">
         <img src="${escH(card.icon_url)}" alt="" class="carte-qty-modal-img" onerror="this.style.visibility='hidden'">
         <p class="carte-qty-modal-hint">Quante copie possiedi di questa carta?</p>
-        <div class="carte-qty-modal-opts">
-          ${opts.map(o => `
-            <button type="button" class="carte-qty-opt ${qty === o.v ? 'active' : ''}"
-                onclick="_onCardEventSetQty('${escH(card.key)}', ${o.v})">
-              <span class="carte-qty-opt-icon">${o.icon}</span>
-              <span class="carte-qty-opt-text">
-                <strong>${o.label}</strong>
-                <small>${o.hint}</small>
-              </span>
-              ${qty === o.v ? '<span class="carte-qty-opt-check">✓</span>' : ''}
-            </button>`).join('')}
+        <div class="carte-qty-stepper">
+          <button type="button" class="carte-qty-step-btn" onclick="_adjustCardQtyModal(-1)">−</button>
+          <div class="carte-qty-stepper-value" id="carte-qty-value">0</div>
+          <button type="button" class="carte-qty-step-btn" onclick="_adjustCardQtyModal(1)">+</button>
+        </div>
+        <p class="carte-qty-modal-note" id="carte-qty-note"></p>
+        <div class="carte-qty-modal-actions">
+          <button type="button" class="btn-secondary" onclick="document.getElementById('carte-qty-modal').remove()">Annulla</button>
+          <button type="button" class="btn-primary" onclick="_onCardEventSetQty()">Salva</button>
         </div>
       </div>
     </div>`;
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
+  _renderCardQtyModalValue();
 }
 
-async function _onCardEventSetQty(cardKey, qtyState) {
+function _adjustCardQtyModal(delta) {
+  const st = window._carteQtyModalState;
+  if (!st) return;
+  st.qty = Math.max(0, Math.min(99, st.qty + delta));
+  _renderCardQtyModalValue();
+}
+
+function _renderCardQtyModalValue() {
+  const st = window._carteQtyModalState;
+  if (!st) return;
+  const valEl = document.getElementById('carte-qty-value');
+  const noteEl = document.getElementById('carte-qty-note');
+  if (valEl) valEl.textContent = String(st.qty);
+  if (noteEl) {
+    noteEl.textContent = st.qty === 0
+      ? 'Non la possiedi — verrà rimossa dalla collezione.'
+      : st.qty === 1
+        ? 'La possiedi: 1 sola copia (non scambiabile).'
+        : `Hai ${st.qty} copie: doppioni scambiabili con altri giocatori.`;
+  }
+}
+
+async function _onCardEventSetQty() {
+  const st = window._carteQtyModalState;
   const cat = window._cardEventCatalog;
   const tag = window._cardEventActiveTag;
-  if (!cat || !tag) return;
+  if (!st || !cat || !tag) return;
+  const { card, qty } = st;
   document.getElementById('carte-qty-modal')?.remove();
   try {
-    await profilesApi('cards-save', { method: 'POST', body: { coc_tag: tag, card_key: cardKey, qty_state: qtyState } });
+    await profilesApi('cards-save', { method: 'POST', body: { coc_tag: tag, card_key: card.key, qty_state: qty } });
     if (!window._cardEventData.collections[tag]) window._cardEventData.collections[tag] = {};
-    window._cardEventData.collections[tag][cardKey] = qtyState;
+    window._cardEventData.collections[tag][card.key] = qty;
     renderCardEventContent();
   } catch (e) {
     alert(e.message || 'Errore salvataggio carta.');
@@ -1884,12 +1930,14 @@ async function loadCardTradeTab() {
   box.innerHTML = '<div class="profilo-empty"><p style="color:var(--text-3)">Caricamento…</p></div>';
   try {
     const profiles = window._cardEventData?.profiles || [];
-    const [matches, selfMatches, rooms] = await Promise.all([
+    const [matches, selfMatches, rooms, publicDecks] = await Promise.all([
       cardsApi('cards-matches', { params: { profile_id: profileId } }),
       profiles.length > 1 ? cardsApi('cards-self-matches') : Promise.resolve({ matches: [] }),
       cardsApi('cards-rooms'),
+      cardsApi('cards-public-list', { params: { profile_id: profileId } }),
     ]);
     window._cardTradeData = { matches: matches.matches || [], selfMatches: selfMatches.matches || [], rooms: rooms.rooms || [] };
+    window._cardPublicData = { myPublic: publicDecks.my_public === true, decks: publicDecks.decks || [] };
   } catch (e) {
     box.innerHTML = `<div class="profilo-empty"><p style="color:var(--red)">Errore caricamento scambi: ${escH(e.message || '')}</p></div>`;
     return;
@@ -1965,11 +2013,88 @@ function renderCardTradeContent() {
       ${matchesHtml}
     </div>
     ${selfSection}
+    ${renderPublicDecksSection(live)}
     <div class="carte-trade-section">
       <h3 class="profilo-section-title">Le tue conversazioni</h3>
       ${roomsHtml}
     </div>
   `;
+}
+
+function renderPublicDecksSection(live) {
+  const pub = window._cardPublicData;
+  if (!pub) return '';
+  const decksHtml = pub.decks.length
+    ? pub.decks.map((d, i) => {
+        const p = d.profile;
+        const n = d.matches.length;
+        return `<div class="carte-match-card">
+          <div class="carte-match-info">
+            <div class="carte-match-names">${escH(p.username || p.coc_tag)}${p.coc_clan_name ? ` · ${escH(p.coc_clan_name)}` : ''}</div>
+            <div class="carte-match-opponent">${n > 0 ? `🔄 ${n} scambio${n === 1 ? '' : 'i'} possibile${n === 1 ? '' : 'i'}` : 'Nessuno scambio automatico al momento'}</div>
+          </div>
+          <button type="button" class="btn-primary btn-sm" onclick="_openPublicDeck(${i})">Vedi scambi e chat</button>
+        </div>`;
+      }).join('')
+    : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessun altro utente ha reso pubblico il proprio mazzo per ora.</p></div>`;
+
+  return `
+    <div class="carte-trade-section">
+      <h3 class="profilo-section-title">Mazzi pubblici</h3>
+      <label class="carte-public-toggle-label">
+        <input type="checkbox" id="carte-public-toggle-cb" ${pub.myPublic ? 'checked' : ''} ${live ? '' : 'disabled'}
+          onchange="_toggleMyDeckPublic(this.checked)">
+        Rendi pubblico il mazzo di questo profilo
+      </label>
+      <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.8rem">
+        Se pubblico, tutti gli utenti CoCBoard vedranno questo mazzo qui sotto e potranno proporti scambi. Puoi oscurarlo in ogni momento.
+      </p>
+      ${decksHtml}
+    </div>`;
+}
+
+async function _toggleMyDeckPublic(isPublic) {
+  const profileId = _activeCardProfileId();
+  if (!profileId) return;
+  try {
+    await cardsApi('cards-public-toggle', { method: 'POST', body: { profile_id: profileId, is_public: isPublic } });
+    await loadCardTradeTab();
+  } catch (e) {
+    alert(e.message || 'Errore aggiornamento visibilità mazzo.');
+    const cb = document.getElementById('carte-public-toggle-cb');
+    if (cb) cb.checked = !isPublic;
+  }
+}
+
+async function _openPublicDeck(idx) {
+  const deck = window._cardPublicData?.decks?.[idx];
+  const profileId = _activeCardProfileId();
+  if (!deck || !profileId) return;
+  try {
+    const room = await cardsApi('cards-room-open', { method: 'POST', body: { profile_id: profileId, other_coc_tag: deck.profile.coc_tag } });
+    await _openCardRoom(room.room.id, deck.matches || []);
+  } catch (e) {
+    alert(e.message || 'Errore apertura stanza.');
+  }
+}
+
+async function _proposeSuggested(idx) {
+  const m = (window._cardRoomSuggested || [])[idx];
+  const roomState = window._cardRoomState;
+  if (!m || !roomState) return;
+  if (!confirm(`Proporre: cedi ${m.card_give_meta?.name_it || m.card_give} → ricevi ${m.card_get_meta?.name_it || m.card_get}?`)) return;
+  try {
+    await cardsApi('cards-propose', {
+      method: 'POST',
+      body: { room_id: roomState.room.id, profile_id: roomState.room.my_profile_id, card_give: m.card_give, card_get: m.card_get },
+    });
+    const roomId = roomState.room.id;
+    const remaining = (window._cardRoomSuggested || []).filter((_, i) => i !== idx);
+    await _openCardRoom(roomId, remaining);
+    await loadCardTradeTab();
+  } catch (e) {
+    alert(e.message || 'Errore nella proposta di scambio.');
+  }
 }
 
 async function _proposeFromMatch(idx) {
@@ -2009,11 +2134,13 @@ async function _applySelfMatch(idx) {
 }
 
 window._cardRoomState = null; // { room, me, other } dell'ultima stanza aperta
+window._cardRoomSuggested = null; // match suggeriti da "Mazzi pubblici" per la stanza corrente
 
-async function _openCardRoom(roomId) {
+async function _openCardRoom(roomId, suggested = null) {
   try {
     const data = await cardsApi('cards-room-detail', { params: { room_id: roomId } });
     window._cardRoomState = data;
+    window._cardRoomSuggested = suggested;
     renderCardRoomModal(data);
   } catch (e) {
     alert(e.message || 'Errore apertura stanza.');
@@ -2051,9 +2178,27 @@ function renderCardRoomModal(data) {
     </div>`;
   }).join('');
 
+  const suggested = window._cardRoomSuggested || [];
+  const suggestedHtml = suggested.length && live ? `
+    <div class="carte-suggested-list">
+      <div class="carte-suggested-title">🔄 Scambi suggeriti con questo mazzo pubblico:</div>
+      ${suggested.map((m, i) => `
+        <div class="carte-match-card">
+          <div class="carte-match-cards">
+            ${_cardMiniImg(m.card_give_meta)}
+            <span class="carte-match-arrow">⇄</span>
+            ${_cardMiniImg(m.card_get_meta)}
+          </div>
+          <div class="carte-match-info">
+            <div class="carte-match-names">Cedi <strong>${escH(m.card_give_meta?.name_it || m.card_give)}</strong> → ricevi <strong>${escH(m.card_get_meta?.name_it || m.card_get)}</strong></div>
+          </div>
+          <button type="button" class="btn-primary btn-sm" onclick="_proposeSuggested(${i})">Proponi</button>
+        </div>`).join('')}
+    </div>` : '';
+
   const myTag = data.me.coc_tag;
   const myColl = (window._cardEventData?.collections && window._cardEventData.collections[myTag]) || {};
-  const myDupes = (cat?.cards || []).filter(c => (myColl[c.key] || 0) === 2);
+  const myDupes = (cat?.cards || []).filter(c => (myColl[c.key] || 0) >= 2);
   const myMissing = (cat?.cards || []).filter(c => (myColl[c.key] || 0) === 0);
   const proposeForm = live ? `
     <div class="carte-propose-form">
@@ -2080,6 +2225,7 @@ function renderCardRoomModal(data) {
       </div>
       <div style="padding:1rem">
         ${proposalsHtml ? `<div class="carte-proposals-list">${proposalsHtml}</div>` : ''}
+        ${suggestedHtml}
         ${proposeForm}
         <div class="carte-chat-box" id="carte-chat-box">${messagesHtml}</div>
         ${live ? `
@@ -4017,7 +4163,7 @@ async function loadUsers() {
       <td class="admin-actions-cell">
         ${!isMe ? `
           <button class="admin-save-btn" onclick="saveRole('${u.id}', this)">💾 Salva</button>
-          <button class="btn-secondary btn-sm" onclick="resetUserPassword('${u.id}', '${(username || loginId).replace(/'/g,"\\'")}')">🔑 Password</button>
+          <button class="btn-secondary btn-sm" onclick="_openAdminPwdModal('${u.id}', '${(username || loginId).replace(/'/g,"\\'")}')">🔑 Password</button>
           <button class="btn-danger" onclick="deleteUser('${u.id}', '${(username || loginId).replace(/'/g,"\\'")}')">🗑</button>
         ` : '<span style="font-size:0.75rem;color:#5a7a98">(tu)</span>'}
       </td>`;
@@ -4093,18 +4239,75 @@ async function saveRole(userId, btn) {
   }
 }
 
-async function resetUserPassword(userId, username) {
-  const newPassword = prompt(`Nuova password per "${username}" (min 6 caratteri):`);
-  if (!newPassword) return;
-  if (newPassword.length < 6) { alert('Password troppo corta (min 6 caratteri).'); return; }
+function _openAdminPwdModal(userId, username) {
+  document.getElementById('admin-pwd-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'admin-pwd-modal';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'display:flex;z-index:1000';
+  modal.innerHTML = `
+    <div class="modal-box" style="max-width:380px;width:100%">
+      <div class="modal-header">
+        <h2 style="font-size:1rem">🔑 Password — ${escH(username)}</h2>
+        <button class="modal-close" onclick="document.getElementById('admin-pwd-modal').remove()">✕</button>
+      </div>
+      <div id="admin-pwd-modal-body" style="padding:0.5rem 1.2rem 1.3rem">
+        <p style="color:var(--text-3);font-size:0.88rem;margin:0 0 1rem">
+          Genera una password temporanea per <strong>${escH(username)}</strong>.
+          Se ha collegato Telegram gli verrà inviata automaticamente in privato; altrimenti potrai copiarla e comunicarla tu.
+          Al primo accesso gli verrà chiesto di sceglierne una nuova.
+        </p>
+        <div style="display:flex;gap:0.6rem;justify-content:flex-end">
+          <button type="button" class="btn-secondary" onclick="document.getElementById('admin-pwd-modal').remove()">Annulla</button>
+          <button type="button" class="btn-primary" onclick="_generateAdminTempPassword('${userId}', '${escH(username).replace(/'/g, "\\'")}')">Genera e invia</button>
+        </div>
+      </div>
+    </div>`;
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
 
-  const res = await authFetch('/api/admin/users', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId, newPassword }),
-  });
-  if (res.ok) showAdminMsg(`✅ Password di "${username}" aggiornata.`);
-  else { const e = await res.json().catch(() => ({})); showAdminMsg('✗ ' + (e.error || 'Errore reset.'), 'error'); }
+async function _generateAdminTempPassword(userId, username) {
+  const body = document.getElementById('admin-pwd-modal-body');
+  if (!body) return;
+  body.innerHTML = '<p style="text-align:center;color:var(--text-3)">Generazione in corso…</p>';
+  try {
+    const res = await authFetch('/api/admin/users', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, generateTempPassword: true }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      body.innerHTML = `<p style="color:var(--red,#ef5350)">✗ ${escH(data.error || 'Errore durante la generazione.')}</p>
+        <div style="text-align:right;margin-top:0.8rem"><button type="button" class="btn-secondary" onclick="document.getElementById('admin-pwd-modal').remove()">Chiudi</button></div>`;
+      return;
+    }
+    const statusLine = data.sentViaTelegram
+      ? `✅ Inviata automaticamente su Telegram a <strong>${escH(username)}</strong>.`
+      : `⚠️ <strong>${escH(username)}</strong> non ha collegato Telegram: copiala e comunicala tu (es. WhatsApp, chat di gioco).`;
+    body.innerHTML = `
+      <p style="margin:0 0 0.6rem">${statusLine}</p>
+      <div style="display:flex;align-items:center;gap:0.5rem;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.6rem 0.8rem;margin-bottom:1rem">
+        <code id="admin-pwd-value" style="flex:1;font-size:1rem;letter-spacing:0.03em">${escH(data.tempPassword)}</code>
+        <button type="button" class="btn-secondary btn-sm" onclick="_copyAdminTempPassword(this)">📋 Copia</button>
+      </div>
+      <div style="text-align:right"><button type="button" class="btn-primary" onclick="document.getElementById('admin-pwd-modal').remove()">Fatto</button></div>`;
+    showAdminMsg(`✅ Password temporanea generata per "${username}".`);
+  } catch (err) {
+    body.innerHTML = `<p style="color:var(--red,#ef5350)">Errore di connessione. Riprova.</p>
+      <div style="text-align:right;margin-top:0.8rem"><button type="button" class="btn-secondary" onclick="document.getElementById('admin-pwd-modal').remove()">Chiudi</button></div>`;
+  }
+}
+
+function _copyAdminTempPassword(btn) {
+  const el = document.getElementById('admin-pwd-value');
+  if (!el) return;
+  navigator.clipboard?.writeText(el.textContent || '').then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✅ Copiata';
+    setTimeout(() => { btn.textContent = orig; }, 1500);
+  }).catch(() => {});
 }
 
 async function deleteUser(userId, username) {
