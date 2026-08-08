@@ -1985,7 +1985,7 @@ function renderCardTradeContent() {
         <div class="carte-match-info">
           <div class="carte-match-names"><strong>${escH(m.profile_a.username || m.profile_a.coc_tag)}</strong> cede ${escH(m.card_a_to_b_meta?.name_it || m.card_a_to_b)} ↔ <strong>${escH(m.profile_b.username || m.profile_b.coc_tag)}</strong> cede ${escH(m.card_b_to_a_meta?.name_it || m.card_b_to_a)}</div>
         </div>
-        ${live ? `<button type="button" class="btn-secondary btn-sm" onclick="_applySelfMatch(${i})">Applica subito</button>` : ''}
+        ${live ? `<button type="button" class="btn-secondary btn-sm" onclick="_openSelfTradeConfirmModal(${i})">Applica subito</button>` : ''}
       </div>`).join('')
     : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio disponibile tra i tuoi profili collegati.</p></div>`;
 
@@ -2162,10 +2162,55 @@ async function _proposeFromMatch(idx) {
   }
 }
 
+function _openSelfTradeConfirmModal(idx) {
+  const m = window._cardTradeData?.selfMatches?.[idx];
+  if (!m) return;
+  document.getElementById('carte-self-confirm-modal')?.remove();
+  const nameA = escH(m.profile_a.username || m.profile_a.coc_tag);
+  const nameB = escH(m.profile_b.username || m.profile_b.coc_tag);
+  const cardAB = escH(m.card_a_to_b_meta?.name_it || m.card_a_to_b);
+  const cardBA = escH(m.card_b_to_a_meta?.name_it || m.card_b_to_a);
+  const modal = document.createElement('div');
+  modal.id = 'carte-self-confirm-modal';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'display:flex;z-index:1000';
+  modal.innerHTML = `
+    <div class="modal-box" style="max-width:380px;width:100%">
+      <div class="modal-header">
+        <h2 style="font-size:1rem">🔁 Conferma scambio</h2>
+        <button class="modal-close" onclick="document.getElementById('carte-self-confirm-modal').remove()">✕</button>
+      </div>
+      <div style="padding:1rem">
+        <div class="carte-self-confirm-row">
+          <div class="carte-self-confirm-side">
+            ${_cardMiniImg(m.card_a_to_b_meta)}
+            <div class="carte-self-confirm-name">${cardAB}</div>
+          </div>
+          <span class="carte-match-arrow">⇄</span>
+          <div class="carte-self-confirm-side">
+            ${_cardMiniImg(m.card_b_to_a_meta)}
+            <div class="carte-self-confirm-name">${cardBA}</div>
+          </div>
+        </div>
+        <ul class="carte-self-confirm-list">
+          <li><strong>${nameA}</strong> cede <strong>${cardAB}</strong> e riceve <strong>${cardBA}</strong></li>
+          <li><strong>${nameB}</strong> cede <strong>${cardBA}</strong> e riceve <strong>${cardAB}</strong></li>
+        </ul>
+        <p class="carte-qty-modal-note">Le collezioni di entrambi i profili verranno aggiornate subito, senza bisogno di conferma dall'altra parte (sono tuoi profili).</p>
+        <div class="carte-qty-modal-actions">
+          <button type="button" class="btn-secondary" onclick="document.getElementById('carte-self-confirm-modal').remove()">Annulla</button>
+          <button type="button" class="btn-primary" onclick="_applySelfMatch(${idx})">Conferma scambio</button>
+        </div>
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
 async function _applySelfMatch(idx) {
   const m = window._cardTradeData?.selfMatches?.[idx];
   if (!m) return;
-  if (!confirm(`Applicare subito lo scambio tra ${m.profile_a.username || m.profile_a.coc_tag} e ${m.profile_b.username || m.profile_b.coc_tag}?`)) return;
+  document.getElementById('carte-self-confirm-modal')?.remove();
   try {
     await cardsApi('cards-self-apply', {
       method: 'POST',

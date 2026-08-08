@@ -4309,6 +4309,33 @@ tbody tr:last-child td { border-bottom: none; }
 .carte-card-mini img { width: 100%; height: 34px; object-fit: contain; }
 .carte-card-mini .carte-card-name { display: none; }
 
+/* ── Modale conferma scambio self (tra i propri profili) ─────────────── */
+.carte-self-confirm-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+.carte-self-confirm-side { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; text-align: center; }
+.carte-self-confirm-side .carte-trade-card-icon { width: 48px; height: 48px; }
+.carte-self-confirm-name { font-size: 0.78rem; font-weight: 600; max-width: 100px; }
+.carte-self-confirm-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.carte-self-confirm-list li {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.5rem 0.7rem;
+    font-size: 0.82rem;
+}
+
 /* ── Modale scelta quantità carta ────────────────────────────────────── */
 .carte-qty-modal-body { padding: 0.5rem 1.2rem 1.3rem; text-align: center; }
 .carte-qty-modal-img { width: 64px; height: 64px; object-fit: contain; margin-bottom: 0.5rem; }
