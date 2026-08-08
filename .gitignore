@@ -1,3 +1,10 @@
+# Segreti: non committare variabili d’ambiente con token/chiavi
+.env
+telegram-bot/.env
+render-proxy/.env
+api/.env
+!**/.env.example
+
 .vercel
 .firebase
 .history
