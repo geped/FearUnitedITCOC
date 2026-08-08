@@ -971,20 +971,38 @@ function setProfilesModalBusy(busy, msg) {
   const modal = document.getElementById('profiles-modal');
   if (!modal) return;
   let overlay = document.getElementById('profiles-busy-overlay');
+  const closeBtn = document.getElementById('profiles-modal-close');
   if (busy) {
     if (!overlay) {
       overlay = document.createElement('div');
       overlay.id = 'profiles-busy-overlay';
       overlay.className = 'profiles-busy-overlay';
-      modal.querySelector('.modal-box')?.appendChild(overlay);
+      // Appendi al body della modale, NON sopra l'header: la X resta sempre cliccabile.
+      (modal.querySelector('.profiles-modal-body') || modal.querySelector('.modal-box'))?.appendChild(overlay);
     }
     overlay.textContent = msg || 'Caricamento…';
     overlay.style.display = 'flex';
-    modal.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+    modal.querySelectorAll('button').forEach((b) => {
+      if (b.id === 'profiles-modal-close') {
+        b.disabled = false;
+        return;
+      }
+      b.disabled = true;
+    });
   } else if (overlay) {
     overlay.style.display = 'none';
     modal.querySelectorAll('button').forEach((b) => { b.disabled = false; });
   }
+  // La X non deve mai restare disabilitata (bug mobile: overlay busy bloccava la chiusura).
+  if (closeBtn) closeBtn.disabled = false;
+}
+
+function closeProfilesModal({ force = false } = {}) {
+  if (!force && window._profilesGateMode) return;
+  const modal = document.getElementById('profiles-modal');
+  if (!modal) return;
+  setProfilesModalBusy(false);
+  modal.style.display = 'none';
 }
 
 function renderProfilesModal(state, { gate = false } = {}) {
@@ -1002,7 +1020,13 @@ function renderProfilesModal(state, { gate = false } = {}) {
   hint.textContent = gate
     ? 'Hai più villaggi collegati. Seleziona quello da usare ora, oppure aggiungine uno.'
     : '● attivo · ⭐ predefinito · 📱 Mini App. Max 10 profili.';
-  closeBtn.style.display = gate ? 'none' : 'block';
+  // In gate mode nascondi solo se c'è almeno un profilo da scegliere; altrimenti
+  // lascia sempre la X visibile (evita modale "intrappolata" su mobile).
+  if (closeBtn) {
+    const hasProfiles = (state.profiles || []).length > 0;
+    closeBtn.style.display = (gate && hasProfiles) ? 'none' : 'flex';
+    closeBtn.disabled = false;
+  }
 
   const prefs = state.prefs || {};
   list.innerHTML = '';
@@ -1135,7 +1159,7 @@ async function switchProfileAndReload(profileId, { setDefault = false } = {}) {
       body: { profile_id: profileId, set_default: setDefault === true },
     });
     await db.auth.refreshSession().catch(() => {});
-    document.getElementById('profiles-modal').style.display = 'none';
+    closeProfilesModal({ force: true });
     const { data } = await db.auth.getUser();
     if (data?.user) await showApp(data.user);
     else location.reload();
@@ -1206,9 +1230,18 @@ function wireProfilesUiOnce() {
         if (btn) { btn.disabled = false; btn.textContent = prev || 'Profili'; }
       });
   });
-  document.getElementById('profiles-modal-close')?.addEventListener('click', () => {
-    if (window._profilesGateMode) return;
-    document.getElementById('profiles-modal').style.display = 'none';
+  document.getElementById('profiles-modal-close')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeProfilesModal();
+  });
+  document.getElementById('profiles-modal')?.addEventListener('click', (e) => {
+    if (e.target?.id === 'profiles-modal') closeProfilesModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const modal = document.getElementById('profiles-modal');
+    if (modal && modal.style.display !== 'none') closeProfilesModal();
   });
   document.getElementById('prof-add-cancel')?.addEventListener('click', () => {
     document.getElementById('profiles-add-form').style.display = 'none';
@@ -1424,7 +1457,7 @@ async function showApp(sessionUser) {
   // Solo admin vede "Gestione Utenti"; CoCBoardBot per admin o moderatori Telegram
   document.querySelectorAll('[data-tab="admin"]').forEach(el => {
     el.style.display = isAdmin
-      ? (el.classList.contains('bnav-btn') ? 'flex' : 'inline-block')
+      ? (el.classList.contains('bnav-btn') || el.classList.contains('bnav-altro-item') ? 'flex' : 'inline-block')
       : 'none';
   });
   document.querySelectorAll('[data-tab="botadmin"]').forEach(el => {
@@ -1579,17 +1612,74 @@ const TAB_TITLES = {
   cwl:       'Bonus CWL',
   profilo:   'Il mio Profilo',
   cerca:     'Cerca',
+  rankings:  'Classifiche',
   admin:     'Pannello Admin',
   carte:     'Clash of Cards',
 };
 
+const BNAV_ALTRO_TABS = new Set(['cerca', 'rankings', 'admin']);
+
+function closeBnavAltro() {
+  const sheet = document.getElementById('bnav-altro-sheet');
+  const btn = document.getElementById('bnav-altro-btn');
+  if (sheet) {
+    sheet.style.display = 'none';
+    sheet.classList.remove('open');
+    sheet.setAttribute('aria-hidden', 'true');
+  }
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+function openBnavAltro() {
+  const sheet = document.getElementById('bnav-altro-sheet');
+  const btn = document.getElementById('bnav-altro-btn');
+  if (!sheet) return;
+  sheet.style.display = 'block';
+  sheet.classList.add('open');
+  sheet.setAttribute('aria-hidden', 'false');
+  if (btn) btn.setAttribute('aria-expanded', 'true');
+}
+
+function toggleBnavAltro() {
+  const sheet = document.getElementById('bnav-altro-sheet');
+  if (sheet && (sheet.classList.contains('open') || sheet.style.display === 'block')) closeBnavAltro();
+  else openBnavAltro();
+}
+
+function wireBnavAltroOnce() {
+  if (window.__bnavAltroWired) return;
+  window.__bnavAltroWired = true;
+  document.getElementById('bnav-altro-btn')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleBnavAltro();
+  });
+  document.getElementById('bnav-altro-backdrop')?.addEventListener('click', () => closeBnavAltro());
+  document.querySelectorAll('#bnav-altro-sheet .bnav-altro-item[data-tab]').forEach((item) => {
+    item.addEventListener('click', () => {
+      const tab = item.dataset.tab;
+      closeBnavAltro();
+      if (tab) activateTab(tab);
+    });
+  });
+}
+
 function activateTab(tabId) {
   // botadmin deep-links redirect to unified admin tab (bot panel)
   if (tabId === 'botadmin') { tabId = 'admin'; window._adminOpenPanel = 'bot'; }
+  if (!tabId) return;
+  closeBnavAltro();
 
-  document.querySelectorAll('.tab-btn, .bnav-btn').forEach(b => {
+  document.querySelectorAll('.tab-btn, .bnav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === tabId);
   });
+  // Evidenzia "Altro" se la tab attiva è una voce secondaria
+  const altroBtn = document.getElementById('bnav-altro-btn');
+  if (altroBtn) altroBtn.classList.toggle('active', BNAV_ALTRO_TABS.has(tabId));
+  document.querySelectorAll('#bnav-altro-sheet .bnav-altro-item[data-tab]').forEach((item) => {
+    item.classList.toggle('active', item.dataset.tab === tabId);
+  });
+
   document.querySelectorAll('.tab-content').forEach(s => (s.style.display = 'none'));
   const sec = document.getElementById('tab-' + tabId);
   if (sec) sec.style.display = 'block';
@@ -1630,9 +1720,10 @@ function switchAdminPanel(panel, btn) {
   }
 }
 
-document.querySelectorAll('.tab-btn, .bnav-btn').forEach(btn => {
+document.querySelectorAll('.tab-btn, .bnav-btn[data-tab]').forEach(btn => {
   btn.addEventListener('click', () => activateTab(btn.dataset.tab));
 });
+wireBnavAltroOnce();
 
 // ── Evento "Clash of Cards" (temporaneo) ──────────────────────────────────────
 window._cardEventCatalog = null;   // { cards, category_order, category_label_it, category_totals, total_cards, settings }
@@ -1681,6 +1772,91 @@ async function loadCardEventTab() {
   renderCardEventContent();
   const tradeBox = document.getElementById('carte-trade-content');
   if (tradeBox && tradeBox.style.display !== 'none') loadCardTradeTab();
+  maybeShowCarteTutorial();
+}
+
+const CARTE_TUTORIAL_KEY = 'cocboard_carte_tutorial_v1';
+const CARTE_TUTORIAL_STEPS = [
+  {
+    title: 'Benvenuto in Clash of Cards',
+    body: 'Qui segni manualmente le carte dell\'evento Supercell che hai trovato, trovi scambi con altri utenti CoCBoard e tra i tuoi profili CoC.',
+  },
+  {
+    title: 'La mia collezione',
+    body: 'Tocca una carta e usa + / − per indicare quante copie hai (0 = non ce l\'hai, 1 = ce l\'hai, 2+ = doppioni scambiabili). Non puoi mai scendere a 0 su una carta già trovata dopo uno scambio: si cedono solo i doppioni.',
+  },
+  {
+    title: 'Scambi tra i tuoi profili',
+    body: 'Se hai collegato più villaggi, nella tab Scambi → "Tra i tuoi profili" vedi le proposte automatiche. 🟢 = sblocchi una carta nuova · 🟡 = possibile ma già la possiedi.',
+  },
+  {
+    title: 'Mazzi pubblici e chat',
+    body: 'In "Mazzi pubblici" puoi rendere pubblico un tuo mazzo, vedere quelli degli altri con gli scambi suggeriti e aprire una chat privata per proporre/accettare lo scambio.',
+  },
+];
+
+function maybeShowCarteTutorial() {
+  try {
+    if (localStorage.getItem(CARTE_TUTORIAL_KEY) === '1') return;
+  } catch (_) { return; }
+  _openCarteTutorial(false);
+}
+
+function _markCarteTutorialSeen() {
+  try { localStorage.setItem(CARTE_TUTORIAL_KEY, '1'); } catch (_) {}
+}
+
+function _openCarteTutorial(fromButton = false) {
+  document.getElementById('carte-tutorial-modal')?.remove();
+  window._carteTutorialStep = 0;
+  window._carteTutorialManual = !!fromButton;
+  const modal = document.createElement('div');
+  modal.id = 'carte-tutorial-modal';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'display:flex;z-index:1100';
+  modal.innerHTML = `<div class="modal-box carte-tutorial-box" style="max-width:400px;width:100%"></div>`;
+  modal.addEventListener('click', (e) => { if (e.target === modal) _closeCarteTutorial(true); });
+  document.body.appendChild(modal);
+  _renderCarteTutorialStep();
+}
+
+function _closeCarteTutorial(markSeen) {
+  if (markSeen) _markCarteTutorialSeen();
+  document.getElementById('carte-tutorial-modal')?.remove();
+}
+
+function _renderCarteTutorialStep() {
+  const box = document.querySelector('#carte-tutorial-modal .carte-tutorial-box');
+  if (!box) return;
+  const i = window._carteTutorialStep || 0;
+  const step = CARTE_TUTORIAL_STEPS[i];
+  const last = i >= CARTE_TUTORIAL_STEPS.length - 1;
+  const dots = CARTE_TUTORIAL_STEPS.map((_, di) =>
+    `<span class="carte-tutorial-dot ${di === i ? 'active' : ''}"></span>`
+  ).join('');
+  box.innerHTML = `
+    <div class="modal-header">
+      <h2 style="font-size:1rem">${escH(step.title)}</h2>
+      <button type="button" class="modal-close" onclick="_closeCarteTutorial(true)" aria-label="Chiudi">✕</button>
+    </div>
+    <div class="carte-tutorial-body">
+      <p class="carte-tutorial-text">${escH(step.body)}</p>
+      <div class="carte-tutorial-dots">${dots}</div>
+      <div class="carte-qty-modal-actions">
+        <button type="button" class="btn-secondary" onclick="_closeCarteTutorial(true)">Salta</button>
+        ${i > 0 ? `<button type="button" class="btn-secondary" onclick="_carteTutorialPrev()">Indietro</button>` : ''}
+        <button type="button" class="btn-primary" onclick="${last ? '_closeCarteTutorial(true)' : '_carteTutorialNext()'}">${last ? 'Ho capito' : 'Avanti'}</button>
+      </div>
+    </div>`;
+}
+
+function _carteTutorialNext() {
+  window._carteTutorialStep = Math.min(CARTE_TUTORIAL_STEPS.length - 1, (window._carteTutorialStep || 0) + 1);
+  _renderCarteTutorialStep();
+}
+function _carteTutorialPrev() {
+  window._carteTutorialStep = Math.max(0, (window._carteTutorialStep || 0) - 1);
+  _renderCarteTutorialStep();
 }
 
 function renderCardEventProfilePicker() {
@@ -1913,6 +2089,18 @@ function _switchCarteMainTab(tab, btn) {
   if (tab === 'scambi') loadCardTradeTab();
 }
 
+window._carteTradeSub = null; // 'self' | 'public'
+
+function _switchCarteTradeSub(sub, btn) {
+  window._carteTradeSub = sub;
+  const selfBox = document.getElementById('carte-trade-self');
+  const pubBox = document.getElementById('carte-trade-public');
+  if (selfBox) selfBox.style.display = sub === 'self' ? 'block' : 'none';
+  if (pubBox) pubBox.style.display = sub === 'public' ? 'block' : 'none';
+  document.querySelectorAll('#carte-trade-subtabs .subtab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
 function _activeCardProfileId() {
   const tag = window._cardEventActiveTag;
   const profiles = window._cardEventData?.profiles || [];
@@ -1957,6 +2145,7 @@ function renderCardTradeContent() {
   const cat = window._cardEventCatalog;
   if (!box || !data || !cat) return;
   const live = cat.settings?.live === true;
+  const multiProfiles = (window._cardEventData?.profiles?.length || 0) > 1;
 
   const matchesHtml = data.matches.length
     ? data.matches.map((m, i) => `
@@ -1972,7 +2161,7 @@ function renderCardTradeContent() {
         </div>
         ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">Proponi scambio</button>` : ''}
       </div>`).join('')
-    : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio disponibile al momento con altri giocatori. Segna più carte nella tua collezione per trovare match.</p></div>`;
+    : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio automatico con altri giocatori al momento.</p></div>`;
 
   const selfHtml = data.selfMatches.length
     ? data.selfMatches.map((m, i) => {
@@ -2033,23 +2222,39 @@ function renderCardTradeContent() {
       }).join('')
     : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuna conversazione ancora.</p></div>`;
 
-  const selfSection = (window._cardEventData?.profiles?.length || 0) > 1 ? `
-    <div class="carte-trade-section">
-      <h3 class="profilo-section-title">Tra i tuoi profili</h3>
-      ${selfHtml}
-    </div>` : '';
+  // Macro-tab: default = self se multi-profilo, altrimenti public
+  if (!window._carteTradeSub || (!multiProfiles && window._carteTradeSub === 'self')) {
+    window._carteTradeSub = multiProfiles ? 'self' : 'public';
+  }
+  const sub = window._carteTradeSub;
+
+  const subtabs = `
+    <div class="subtab-bar" id="carte-trade-subtabs">
+      ${multiProfiles ? `<button type="button" class="subtab-btn ${sub === 'self' ? 'active' : ''}" onclick="_switchCarteTradeSub('self',this)">Tra i tuoi profili</button>` : ''}
+      <button type="button" class="subtab-btn ${sub === 'public' ? 'active' : ''}" onclick="_switchCarteTradeSub('public',this)">Mazzi pubblici</button>
+    </div>`;
 
   box.innerHTML = `
     ${!live ? `<div class="profilo-empty" style="margin-bottom:1rem"><p style="color:var(--text-3)">⚠️ Evento in sola lettura: non è più possibile proporre o applicare nuovi scambi.</p></div>` : ''}
-    <div class="carte-trade-section">
-      <h3 class="profilo-section-title">Scambi disponibili con altri giocatori</h3>
-      ${matchesHtml}
+    ${subtabs}
+    <div id="carte-trade-self" style="display:${sub === 'self' && multiProfiles ? 'block' : 'none'}">
+      <div class="carte-trade-section">
+        <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.7rem">
+          🟢 sblocca una carta nuova · 🟡 possibile ma non necessario (già posseduta). Solo se hai 2+ profili CoC collegati.
+        </p>
+        ${selfHtml}
+      </div>
     </div>
-    ${selfSection}
-    ${renderPublicDecksSection(live)}
-    <div class="carte-trade-section">
-      <h3 class="profilo-section-title">Le tue conversazioni</h3>
-      ${roomsHtml}
+    <div id="carte-trade-public" style="display:${sub === 'public' ? 'block' : 'none'}">
+      <div class="carte-trade-section">
+        <h3 class="profilo-section-title">Scambi suggeriti con altri</h3>
+        ${matchesHtml}
+      </div>
+      ${renderPublicDecksSection(live)}
+      <div class="carte-trade-section">
+        <h3 class="profilo-section-title">Le tue conversazioni</h3>
+        ${roomsHtml}
+      </div>
     </div>
   `;
 }

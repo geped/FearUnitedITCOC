@@ -774,6 +774,7 @@
                         <h2>🎴 Clash of Cards <span class="event-badge-mini">Evento temporaneo</span></h2>
                         <p class="page-sub" id="carte-event-sub">Segna manualmente le carte che possiedi per trovare scambi con altri giocatori.</p>
                     </div>
+                    <button type="button" class="btn-secondary btn-sm carte-tutorial-btn" onclick="_openCarteTutorial(true)" title="Guida evento">?</button>
                 </div>
                 <div id="carte-profile-picker" class="carte-profile-picker" style="display:none"></div>
                 <div class="subtab-bar">
@@ -793,7 +794,7 @@
 
         </div><!-- /.app-body -->
 
-    <!-- BOTTOM NAV (mobile only) -->
+    <!-- BOTTOM NAV (mobile only) — voci principali + "Altro" -->
     <nav class="bottom-nav" id="bottom-nav">
         <button class="bnav-btn active" data-tab="members">
             <img id="bnav-clan-badge" class="tab-clan-badge" src="" alt="" style="display:none">
@@ -812,30 +813,42 @@
             <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
             <span class="bnav-label">Profilo</span>
         </button>
-        <button class="bnav-btn" data-tab="cerca">
-            <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-            <span class="bnav-label">Cerca</span>
-        </button>
-        <button class="bnav-btn" data-tab="rankings">
-            <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M7 21h2v-2H7v2zm0-4h2v-2H7v2zm0-4h2v-2H7v2zm4 8h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2V7h-2v2zm4 12h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2v-2h-2v2zm0-4h2V7h-2v2zm0-4h2V3h-2v2z"/></svg>
-            <span class="bnav-label">Classifiche</span>
-        </button>
         <button class="bnav-btn carte-event-tab" data-tab="carte" style="display:none">
             <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M4 3h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm0 2v10h12V5H4zm14.5 1.32L22 7.24v9.29a2 2 0 0 1-2 2H8.83l2-2H20V8.62l-1.5-.72V6.32zM7 8h6v2H7V8zm0 4h4v2H7v-2z"/></svg>
             <span class="bnav-label">Carte</span>
         </button>
-        <button class="bnav-btn admin-only" data-tab="admin" style="display:none">
-            <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
-            <span class="bnav-label">Admin</span>
+        <button type="button" class="bnav-btn" id="bnav-altro-btn" data-bnav-altro aria-haspopup="true" aria-expanded="false">
+            <svg class="bnav-icon" viewBox="0 0 24 24" fill="currentColor" width="22" height="22"><path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z"/></svg>
+            <span class="bnav-label">Altro</span>
         </button>
     </nav>
+
+    <!-- Menu "Altro" (mobile): voci secondarie -->
+    <div id="bnav-altro-sheet" class="bnav-altro-sheet" style="display:none" aria-hidden="true">
+        <button type="button" class="bnav-altro-backdrop" id="bnav-altro-backdrop" aria-label="Chiudi menu"></button>
+        <div class="bnav-altro-panel" role="menu">
+            <div class="bnav-altro-title">Altro</div>
+            <button type="button" class="bnav-altro-item" data-tab="cerca" role="menuitem">
+                <span class="bnav-altro-item-icon">🔍</span>
+                <span>Cerca</span>
+            </button>
+            <button type="button" class="bnav-altro-item" data-tab="rankings" role="menuitem">
+                <span class="bnav-altro-item-icon">🏆</span>
+                <span>Classifiche</span>
+            </button>
+            <button type="button" class="bnav-altro-item admin-only" data-tab="admin" role="menuitem" style="display:none">
+                <span class="bnav-altro-item-icon">🛡</span>
+                <span>Admin</span>
+            </button>
+        </div>
+    </div>
 
 </div><!-- /#app -->
 
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="supabase-config.js"></script>
-<script src="app.js?v=20260405a"></script>
+<script src="app.js?v=20260808b"></script>
 
 <!-- ─── MODAL BONUS ───────────────────────────────────────────────────────── -->
 <div id="bonus-modal-overlay" class="modal-overlay" style="display:none" onclick="closeBonusModalIfOutside(event)">
@@ -924,12 +937,12 @@
 
 <!-- Multi-profilo CoC -->
 <div id="profiles-modal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true">
-  <div class="modal-box" style="max-width:520px">
-    <div class="modal-header">
+  <div class="modal-box profiles-modal-box" style="max-width:520px">
+    <div class="modal-header profiles-modal-header">
       <h2 id="profiles-modal-title">Profili CoC</h2>
-      <button type="button" class="modal-close" id="profiles-modal-close" aria-label="Chiudi">&times;</button>
+      <button type="button" class="modal-close profiles-modal-close" id="profiles-modal-close" aria-label="Chiudi">&times;</button>
     </div>
-    <div class="modal-tab-content">
+    <div class="modal-tab-content profiles-modal-body">
       <p id="profiles-modal-hint" style="font-size:0.85rem;color:var(--text-2);margin-bottom:0.75rem"></p>
       <div id="profiles-list"></div>
       <div id="profiles-actions" style="margin-top:1rem;display:flex;flex-wrap:wrap;gap:0.5rem"></div>
