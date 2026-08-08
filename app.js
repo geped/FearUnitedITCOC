@@ -2583,37 +2583,59 @@ async function _proposeFromPublicDeck(deckIdx, matchIdx) {
   if (!deck || !m) return;
   const profileId = _activeCardProfileId();
   if (!profileId) return;
-  if (!confirm(`Proporre a ${deck.profile.username || deck.profile.coc_tag}: cedi ${m.card_give_meta?.name_it || m.card_give} → ricevi ${m.card_get_meta?.name_it || m.card_get}?`)) return;
-  try {
-    const room = await cardsApi('cards-room-open', { method: 'POST', body: { profile_id: profileId, other_coc_tag: deck.profile.coc_tag } });
-    await cardsApi('cards-propose', {
-      method: 'POST',
-      body: { room_id: room.room.id, profile_id: profileId, card_give: m.card_give, card_get: m.card_get },
-    });
-    await _openCardRoom(room.room.id, (deck.matches || []).filter((_, i) => i !== matchIdx));
-    await loadCardTradeTab();
-  } catch (e) {
-    alert(e.message || 'Errore nella proposta di scambio.');
-  }
+  const me = (window._cardEventData?.profiles || []).find(p => p.id === profileId);
+  const myTag = me?.coc_tag || window._cardEventActiveTag;
+  const sem = _carteP2pSemaforo(myTag, deck.profile.coc_tag, m.card_give, m.card_get);
+  _openCarteTradeConfirmModal({
+    title: 'Proponi scambio',
+    nameA: me?.username || myTag || 'Tu',
+    nameB: deck.profile.username || deck.profile.coc_tag,
+    cardAMeta: m.card_give_meta,
+    cardBMeta: m.card_get_meta,
+    aIsNew: sem.aIsNew,
+    bIsNew: sem.bIsNew,
+    note: 'La proposta verrà inviata in chat. L’altro giocatore dovrà accettarla. Solo carte della stessa tipologia; ciascuno cede un doppione e riceve una carta mancante.',
+    confirmLabel: 'Proponi scambio delle carte',
+    onConfirm: async () => {
+      const room = await cardsApi('cards-room-open', { method: 'POST', body: { profile_id: profileId, other_coc_tag: deck.profile.coc_tag } });
+      await cardsApi('cards-propose', {
+        method: 'POST',
+        body: { room_id: room.room.id, profile_id: profileId, card_give: m.card_give, card_get: m.card_get },
+      });
+      await _openCardRoom(room.room.id, (deck.matches || []).filter((_, i) => i !== matchIdx));
+      await loadCardTradeTab();
+    },
+  });
 }
 
 async function _proposeSuggested(idx) {
   const m = (window._cardRoomSuggested || [])[idx];
   const roomState = window._cardRoomState;
   if (!m || !roomState) return;
-  if (!confirm(`Proporre: cedi ${m.card_give_meta?.name_it || m.card_give} → ricevi ${m.card_get_meta?.name_it || m.card_get}?`)) return;
-  try {
-    await cardsApi('cards-propose', {
-      method: 'POST',
-      body: { room_id: roomState.room.id, profile_id: roomState.room.my_profile_id, card_give: m.card_give, card_get: m.card_get },
-    });
-    const roomId = roomState.room.id;
-    const remaining = (window._cardRoomSuggested || []).filter((_, i) => i !== idx);
-    await _openCardRoom(roomId, remaining);
-    await loadCardTradeTab();
-  } catch (e) {
-    alert(e.message || 'Errore nella proposta di scambio.');
-  }
+  const me = roomState.me || {};
+  const other = roomState.other || {};
+  const sem = _carteP2pSemaforo(me.coc_tag, other.coc_tag, m.card_give, m.card_get);
+  _openCarteTradeConfirmModal({
+    title: 'Proponi scambio',
+    nameA: me.username || me.coc_tag || 'Tu',
+    nameB: other.username || other.coc_tag || 'Altro',
+    cardAMeta: m.card_give_meta,
+    cardBMeta: m.card_get_meta,
+    aIsNew: sem.aIsNew,
+    bIsNew: sem.bIsNew,
+    note: 'La proposta verrà inviata in questa chat. L’altro giocatore dovrà accettarla.',
+    confirmLabel: 'Proponi scambio delle carte',
+    onConfirm: async () => {
+      await cardsApi('cards-propose', {
+        method: 'POST',
+        body: { room_id: roomState.room.id, profile_id: roomState.room.my_profile_id, card_give: m.card_give, card_get: m.card_get },
+      });
+      const roomId = roomState.room.id;
+      const remaining = (window._cardRoomSuggested || []).filter((_, i) => i !== idx);
+      await _openCardRoom(roomId, remaining);
+      await loadCardTradeTab();
+    },
+  });
 }
 
 async function _proposeFromMatch(idx) {
@@ -2621,69 +2643,182 @@ async function _proposeFromMatch(idx) {
   if (!m) return;
   const profileId = _activeCardProfileId();
   if (!profileId) return;
-  if (!confirm(`Proporre a ${m.other_profile.username || m.other_profile.coc_tag}: cedi ${m.card_give_meta?.name_it || m.card_give} → ricevi ${m.card_get_meta?.name_it || m.card_get}?`)) return;
-  try {
-    const room = await cardsApi('cards-room-open', { method: 'POST', body: { profile_id: profileId, other_coc_tag: m.other_profile.coc_tag } });
-    await cardsApi('cards-propose', {
-      method: 'POST',
-      body: { room_id: room.room.id, profile_id: profileId, card_give: m.card_give, card_get: m.card_get },
-    });
-    await _openCardRoom(room.room.id);
-    await loadCardTradeTab();
-  } catch (e) {
-    alert(e.message || 'Errore nella proposta di scambio.');
+  const me = (window._cardEventData?.profiles || []).find(p => p.id === profileId);
+  const myTag = me?.coc_tag || window._cardEventActiveTag;
+  const sem = _carteP2pSemaforo(myTag, m.other_profile?.coc_tag, m.card_give, m.card_get);
+  _openCarteTradeConfirmModal({
+    title: 'Proponi scambio',
+    nameA: me?.username || myTag || 'Tu',
+    nameB: m.other_profile?.username || m.other_profile?.coc_tag || 'Altro',
+    cardAMeta: m.card_give_meta,
+    cardBMeta: m.card_get_meta,
+    aIsNew: sem.aIsNew,
+    bIsNew: sem.bIsNew,
+    note: 'La proposta verrà inviata in chat. L’altro giocatore dovrà accettarla. Stesse regole semaforo: 🟢 sblocca carta nuova · 🟡 già posseduta (negli scambi tra i tuoi profili).',
+    confirmLabel: 'Proponi scambio delle carte',
+    onConfirm: async () => {
+      const room = await cardsApi('cards-room-open', { method: 'POST', body: { profile_id: profileId, other_coc_tag: m.other_profile.coc_tag } });
+      await cardsApi('cards-propose', {
+        method: 'POST',
+        body: { room_id: room.room.id, profile_id: profileId, card_give: m.card_give, card_get: m.card_get },
+      });
+      await _openCardRoom(room.room.id);
+      await loadCardTradeTab();
+    },
+  });
+}
+
+/** Semaforo P2P: verde = ricevente sblocca carta nuova (qty&lt;1). */
+function _carteP2pSemaforo(myTag, otherTag, cardGive, cardGet) {
+  const myColl = (window._cardEventData?.collections && window._cardEventData.collections[myTag]) || {};
+  const otherDeck = (window._cardPublicData?.decks || []).find(d => d.profile?.coc_tag === otherTag);
+  const otherColl = otherDeck?.collection || {};
+  return {
+    aIsNew: (myColl[cardGet] || 0) < 1,
+    bIsNew: (otherColl[cardGive] || 0) < 1,
+  };
+}
+
+function _closeCarteTradeConfirmModal() {
+  document.getElementById('carte-trade-confirm-modal')?.remove();
+  window._carteTradeConfirmAction = null;
+}
+
+async function _confirmCarteTradeModal() {
+  const fn = window._carteTradeConfirmAction;
+  const btn = document.querySelector('#carte-trade-confirm-modal .carte-trade-confirm-go');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '…';
   }
+  try {
+    if (typeof fn === 'function') await fn();
+    _closeCarteTradeConfirmModal();
+  } catch (e) {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = btn.dataset.label || 'Conferma';
+    }
+    alert(e.message || 'Errore nello scambio.');
+  }
+}
+
+/**
+ * Modale conferma scambio (self o p2p) con animazione trasferimento e semaforo.
+ * A cede cardAMeta → B; B cede cardBMeta → A.
+ */
+function _openCarteTradeConfirmModal({
+  title = 'Conferma scambio',
+  nameA,
+  nameB,
+  cardAMeta,
+  cardBMeta,
+  aIsNew = true,
+  bIsNew = true,
+  note = '',
+  confirmLabel = 'Conferma',
+  onConfirm,
+}) {
+  _closeCarteTradeConfirmModal();
+  window._carteTradeConfirmAction = onConfirm;
+  const bothNew = aIsNew !== false && bIsNew !== false;
+  const cardA = escH(cardAMeta?.name_it || '—');
+  const cardB = escH(cardBMeta?.name_it || '—');
+  const nA = escH(nameA || 'Profilo 1');
+  const nB = escH(nameB || 'Profilo 2');
+  const modal = document.createElement('div');
+  modal.id = 'carte-trade-confirm-modal';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'display:flex;z-index:1000';
+  modal.innerHTML = `
+    <div class="modal-box carte-trade-confirm-box">
+      <div class="modal-header">
+        <h2 style="font-size:1rem">${escH(title)}</h2>
+        <button type="button" class="modal-close" onclick="_closeCarteTradeConfirmModal()">✕</button>
+      </div>
+      <div class="carte-trade-confirm-body">
+        <div class="carte-trade-stage ${bothNew ? 'is-green' : 'is-yellow'}">
+          <div class="carte-trade-stage-heads">
+            <div class="carte-trade-stage-profile">
+              <span class="carte-trade-stage-badge">${escH(String(nameA || '?').slice(0, 1).toUpperCase())}</span>
+              <strong>${nA}</strong>
+              <span class="carte-trade-stage-sem" title="${aIsNew ? 'Sblocca una carta nuova' : 'Possiede già la carta ricevuta'}">${aIsNew ? '🟢 nuova' : '🟡 già sua'}</span>
+            </div>
+            <div class="carte-trade-stage-profile">
+              <span class="carte-trade-stage-badge">${escH(String(nameB || '?').slice(0, 1).toUpperCase())}</span>
+              <strong>${nB}</strong>
+              <span class="carte-trade-stage-sem" title="${bIsNew ? 'Sblocca una carta nuova' : 'Possiede già la carta ricevuta'}">${bIsNew ? '🟢 nuova' : '🟡 già sua'}</span>
+            </div>
+          </div>
+          <div class="carte-trade-stage-fly" aria-hidden="true">
+            <div class="carte-trade-fly-card fly-ab">
+              ${_cardMiniImg(cardAMeta)}
+              <span>${cardA}</span>
+            </div>
+            <div class="carte-trade-fly-card fly-ba">
+              ${_cardMiniImg(cardBMeta)}
+              <span>${cardB}</span>
+            </div>
+          </div>
+          <div class="carte-trade-stage-legend">
+            <span>🟢 sblocca carta nuova</span>
+            <span>🟡 già posseduta (self)</span>
+          </div>
+        </div>
+        <ul class="carte-self-confirm-list">
+          <li><strong>${nA}</strong> cede <strong>${cardA}</strong> → riceve <strong>${cardB}</strong> ${aIsNew ? '🟢' : '🟡'}</li>
+          <li><strong>${nB}</strong> cede <strong>${cardB}</strong> → riceve <strong>${cardA}</strong> ${bIsNew ? '🟢' : '🟡'}</li>
+        </ul>
+        ${note ? `<p class="carte-qty-modal-note">${escH(note)}</p>` : ''}
+        <div class="carte-qty-modal-actions">
+          <button type="button" class="btn-secondary" onclick="_closeCarteTradeConfirmModal()">Annulla</button>
+          <button type="button" class="btn-primary carte-trade-confirm-go" data-label="${escH(confirmLabel)}" onclick="_confirmCarteTradeModal()">${escH(confirmLabel)}</button>
+        </div>
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) _closeCarteTradeConfirmModal(); });
+  document.body.appendChild(modal);
 }
 
 function _openSelfTradeConfirmModal(idx) {
   const m = window._cardTradeData?.selfMatches?.[idx];
   if (!m) return;
-  document.getElementById('carte-self-confirm-modal')?.remove();
-  const nameA = escH(m.profile_a.username || m.profile_a.coc_tag);
-  const nameB = escH(m.profile_b.username || m.profile_b.coc_tag);
-  const cardAB = escH(m.card_a_to_b_meta?.name_it || m.card_a_to_b);
-  const cardBA = escH(m.card_b_to_a_meta?.name_it || m.card_b_to_a);
-  const modal = document.createElement('div');
-  modal.id = 'carte-self-confirm-modal';
-  modal.className = 'modal-overlay';
-  modal.style.cssText = 'display:flex;z-index:1000';
-  modal.innerHTML = `
-    <div class="modal-box" style="max-width:380px;width:100%">
-      <div class="modal-header">
-        <h2 style="font-size:1rem">🔁 Conferma scambio</h2>
-        <button class="modal-close" onclick="document.getElementById('carte-self-confirm-modal').remove()">✕</button>
-      </div>
-      <div style="padding:1rem">
-        <div class="carte-self-confirm-row">
-          <div class="carte-self-confirm-side">
-            ${_cardMiniImg(m.card_a_to_b_meta)}
-            <div class="carte-self-confirm-name">${cardAB}</div>
-          </div>
-          <span class="carte-match-arrow">⇄</span>
-          <div class="carte-self-confirm-side">
-            ${_cardMiniImg(m.card_b_to_a_meta)}
-            <div class="carte-self-confirm-name">${cardBA}</div>
-          </div>
-        </div>
-        <ul class="carte-self-confirm-list">
-          <li><strong>${nameA}</strong> cede <strong>${cardAB}</strong> e riceve <strong>${cardBA}</strong></li>
-          <li><strong>${nameB}</strong> cede <strong>${cardBA}</strong> e riceve <strong>${cardAB}</strong></li>
-        </ul>
-        <p class="carte-qty-modal-note">Le collezioni di entrambi i profili verranno aggiornate subito, senza bisogno di conferma dall'altra parte (sono tuoi profili).</p>
-        <div class="carte-qty-modal-actions">
-          <button type="button" class="btn-secondary" onclick="document.getElementById('carte-self-confirm-modal').remove()">Annulla</button>
-          <button type="button" class="btn-primary" onclick="_applySelfMatch(${idx})">Conferma scambio</button>
-        </div>
-      </div>
-    </div>`;
-  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-  document.body.appendChild(modal);
+  const aIsNew = m.a_is_new !== false;
+  const bIsNew = m.b_is_new !== false;
+  _openCarteTradeConfirmModal({
+    title: 'Conferma scambio tra i tuoi profili',
+    nameA: m.profile_a.username || m.profile_a.coc_tag,
+    nameB: m.profile_b.username || m.profile_b.coc_tag,
+    cardAMeta: m.card_a_to_b_meta,
+    cardBMeta: m.card_b_to_a_meta,
+    aIsNew,
+    bIsNew,
+    note: bothNewNote(aIsNew, bIsNew),
+    confirmLabel: 'Applica subito',
+    onConfirm: async () => {
+      await cardsApi('cards-self-apply', {
+        method: 'POST',
+        body: { profile_a: m.profile_a.id, profile_b: m.profile_b.id, card_a_to_b: m.card_a_to_b, card_b_to_a: m.card_b_to_a },
+      });
+      window._cardEventData = await profilesApi('cards-get');
+      renderCardEventContent();
+      await loadCardTradeTab();
+    },
+  });
+
+  function bothNewNote(aNew, bNew) {
+    if (aNew && bNew) {
+      return '🟢 Entrambi i profili sbloccano una carta nuova. Le collezioni si aggiornano subito (sono i tuoi profili).';
+    }
+    return '🟡 Scambio possibile ma non necessario: uno o entrambi possiedono già la carta ricevuta. Le quantità si sommano comunque. Aggiornamento immediato.';
+  }
 }
 
 async function _applySelfMatch(idx) {
+  // Compat: conferma diretta senza riaprire la modale
   const m = window._cardTradeData?.selfMatches?.[idx];
   if (!m) return;
-  document.getElementById('carte-self-confirm-modal')?.remove();
+  _closeCarteTradeConfirmModal();
   try {
     await cardsApi('cards-self-apply', {
       method: 'POST',
@@ -2855,16 +2990,29 @@ async function _cardRoomPropose() {
     alert('Puoi scambiare solo carte della stessa tipologia (es. elisir con elisir, non elisir con elisir nero).');
     return;
   }
-  try {
-    await cardsApi('cards-propose', {
-      method: 'POST',
-      body: { room_id: window._cardRoomState.room.id, profile_id: window._cardRoomState.room.my_profile_id, card_give: give, card_get: get },
-    });
-    await _openCardRoom(window._cardRoomState.room.id);
-    await loadCardTradeTab();
-  } catch (e) {
-    alert(e.message || 'Errore nella proposta.');
-  }
+  const roomState = window._cardRoomState;
+  const me = roomState.me || {};
+  const other = roomState.other || {};
+  const sem = _carteP2pSemaforo(me.coc_tag, other.coc_tag, give, get);
+  _openCarteTradeConfirmModal({
+    title: 'Proponi scambio',
+    nameA: me.username || me.coc_tag || 'Tu',
+    nameB: other.username || other.coc_tag || 'Altro',
+    cardAMeta: giveMeta,
+    cardBMeta: getMeta,
+    aIsNew: sem.aIsNew,
+    bIsNew: sem.bIsNew,
+    note: 'La proposta verrà inviata in questa chat. L’altro giocatore dovrà accettarla.',
+    confirmLabel: 'Proponi scambio delle carte',
+    onConfirm: async () => {
+      await cardsApi('cards-propose', {
+        method: 'POST',
+        body: { room_id: roomState.room.id, profile_id: roomState.room.my_profile_id, card_give: give, card_get: get },
+      });
+      await _openCardRoom(roomState.room.id);
+      await loadCardTradeTab();
+    },
+  });
 }
 
 function _carteProposePreviewHtml(card) {

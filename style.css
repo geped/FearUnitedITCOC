@@ -4760,7 +4760,114 @@ tbody tr:last-child td { border-bottom: none; }
     .carte-self-row-cols { grid-template-columns: 1fr; }
 }
 
-/* ── Modale conferma scambio self (tra i propri profili) ─────────────── */
+/* ── Modale conferma scambio (self + p2p) con animazione ─────────────── */
+.carte-trade-confirm-box { max-width: 420px; width: 100%; }
+.carte-trade-confirm-body { padding: 0.85rem 1rem 1.1rem; }
+.carte-trade-stage {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.75rem;
+    margin-bottom: 0.85rem;
+    background: var(--bg-1);
+    overflow: hidden;
+}
+.carte-trade-stage.is-green { border-left: 3px solid var(--green, #2ecc71); }
+.carte-trade-stage.is-yellow { border-left: 3px solid #e2b93b; }
+.carte-trade-stage-heads {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    margin-bottom: 0.55rem;
+}
+.carte-trade-stage-profile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    text-align: center;
+}
+.carte-trade-stage-badge {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.95rem;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    color: var(--gold);
+}
+.carte-trade-stage-profile strong {
+    font-size: 0.78rem;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.carte-trade-stage-sem { font-size: 0.68rem; color: var(--text-3); }
+.carte-trade-stage-fly {
+    position: relative;
+    height: 78px;
+    margin: 0.2rem 0 0.5rem;
+}
+.carte-trade-fly-card {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    width: 72px;
+    margin-left: -36px;
+    margin-top: -32px;
+    font-size: 0.62rem;
+    font-weight: 600;
+    text-align: center;
+    line-height: 1.1;
+    pointer-events: none;
+}
+.carte-trade-fly-card .carte-trade-card-icon {
+    width: 40px;
+    height: 40px;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+}
+.carte-trade-fly-card.fly-ab {
+    animation: carte-fly-ab 1.65s ease-in-out infinite;
+}
+.carte-trade-fly-card.fly-ba {
+    animation: carte-fly-ba 1.65s ease-in-out infinite;
+}
+@keyframes carte-fly-ab {
+    0%   { transform: translateX(-95px) scale(0.92); opacity: 0.55; }
+    35%  { transform: translateX(-20px) scale(1.08); opacity: 1; }
+    70%  { transform: translateX(70px) scale(1); opacity: 1; }
+    100% { transform: translateX(95px) scale(0.9); opacity: 0.45; }
+}
+@keyframes carte-fly-ba {
+    0%   { transform: translateX(95px) translateY(18px) scale(0.92); opacity: 0.55; }
+    35%  { transform: translateX(20px) translateY(18px) scale(1.08); opacity: 1; }
+    70%  { transform: translateX(-70px) translateY(18px) scale(1); opacity: 1; }
+    100% { transform: translateX(-95px) translateY(18px) scale(0.9); opacity: 0.45; }
+}
+.carte-trade-stage-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    justify-content: center;
+    font-size: 0.68rem;
+    color: var(--text-3);
+}
+@media (prefers-reduced-motion: reduce) {
+    .carte-trade-fly-card.fly-ab,
+    .carte-trade-fly-card.fly-ba { animation: none; }
+    .carte-trade-fly-card.fly-ab { transform: translateX(-40px); }
+    .carte-trade-fly-card.fly-ba { transform: translateX(40px) translateY(18px); }
+}
+
+/* ── Modale conferma scambio self (legacy helpers) ─────────────── */
 .carte-self-confirm-row {
     display: flex;
     align-items: center;
