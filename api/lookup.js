@@ -651,9 +651,20 @@ module.exports = async (req, res) => {
           type === 'cards-catalog' ||
           type === 'cards-get' ||
           type === 'cards-save' ||
-          type === 'cards-admin-toggle'
+          type === 'cards-admin-toggle' ||
+          type === 'cards-matches' ||
+          type === 'cards-self-matches' ||
+          type === 'cards-rooms' ||
+          type === 'cards-room-open' ||
+          type === 'cards-room-detail' ||
+          type === 'cards-room-send' ||
+          type === 'cards-propose' ||
+          type === 'cards-respond' ||
+          type === 'cards-self-apply' ||
+          type === 'cards-trade-log'
         ) {
             const cardEvent = require('./_utils/card-event');
+            const cardTrades = require('./_utils/card-trades');
             const profilesUtil = require('./_utils/user-profiles');
             const admin = profilesUtil.adminClient();
 
@@ -709,6 +720,105 @@ module.exports = async (req, res) => {
                     const data = await cardEvent.setEnabled(admin, body.enabled === true);
                     return res.status(200).json({ ok: true, settings: data });
                 }
+
+                if (type === 'cards-matches') {
+                    if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const profileId = req.query.profile_id || req.query.profileId;
+                    if (!profileId) return res.status(400).json({ error: 'profile_id obbligatorio.' });
+                    const data = await cardTrades.getMatchesForProfile(admin, user, profileId);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-self-matches') {
+                    if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const data = await cardTrades.getSelfMatches(admin, user);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-rooms') {
+                    if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const data = await cardTrades.listRoomsForUser(admin, user);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-room-open') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const profileId = body.profile_id || body.profileId;
+                    const otherCocTag = body.other_coc_tag || body.otherCocTag;
+                    if (!profileId || !otherCocTag) {
+                        return res.status(400).json({ error: 'profile_id e other_coc_tag sono obbligatori.' });
+                    }
+                    const data = await cardTrades.getOrCreateRoom(admin, user, profileId, otherCocTag);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-room-detail') {
+                    if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const roomId = req.query.room_id || req.query.roomId;
+                    if (!roomId) return res.status(400).json({ error: 'room_id obbligatorio.' });
+                    const data = await cardTrades.getRoomDetail(admin, user, roomId);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-room-send') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const roomId = body.room_id || body.roomId;
+                    const profileId = body.profile_id || body.profileId;
+                    if (!roomId || !profileId || !body.body) {
+                        return res.status(400).json({ error: 'room_id, profile_id e body sono obbligatori.' });
+                    }
+                    const data = await cardTrades.sendRoomMessage(admin, user, roomId, profileId, body.body);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-propose') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const roomId = body.room_id || body.roomId;
+                    const profileId = body.profile_id || body.profileId;
+                    const cardGive = body.card_give || body.cardGive;
+                    const cardGet = body.card_get || body.cardGet;
+                    if (!roomId || !profileId || !cardGive || !cardGet) {
+                        return res.status(400).json({ error: 'room_id, profile_id, card_give e card_get sono obbligatori.' });
+                    }
+                    const data = await cardTrades.proposeTrade(admin, user, roomId, profileId, cardGive, cardGet);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-respond') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const proposalId = body.proposal_id || body.proposalId;
+                    const profileId = body.profile_id || body.profileId;
+                    const action = body.action;
+                    if (!proposalId || !profileId || !['accept', 'reject', 'cancel'].includes(action)) {
+                        return res.status(400).json({ error: 'proposal_id, profile_id e action (accept|reject|cancel) sono obbligatori.' });
+                    }
+                    const data = await cardTrades.respondProposal(admin, user, proposalId, profileId, action);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-self-apply') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const profileA = body.profile_a || body.profileA;
+                    const profileB = body.profile_b || body.profileB;
+                    const cardAToB = body.card_a_to_b || body.cardAToB;
+                    const cardBToA = body.card_b_to_a || body.cardBToA;
+                    if (!profileA || !profileB || !cardAToB || !cardBToA) {
+                        return res.status(400).json({ error: 'profile_a, profile_b, card_a_to_b e card_b_to_a sono obbligatori.' });
+                    }
+                    const data = await cardTrades.applySelfTrade(admin, user, profileA, profileB, cardAToB, cardBToA);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-trade-log') {
+                    if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const data = await cardTrades.getTradeLog(admin, user);
+                    return res.status(200).json(data);
+                }
             } catch (e) {
                 return res.status(e.status || 500).json({ error: e.message || 'Errore evento carte.', code: e.code || undefined });
             }
@@ -716,7 +826,7 @@ module.exports = async (req, res) => {
         } else {
             return res.status(400).json({
                 error:
-                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, cards-catalog, cards-get, cards-save',
+                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, cards-catalog, cards-get, cards-save, cards-matches, cards-self-matches, cards-rooms, cards-room-open, cards-room-detail, cards-room-send, cards-propose, cards-respond, cards-self-apply, cards-trade-log',
             });
         }
         const r = await fetch(`${proxyUrl}${proxyPath}`, {

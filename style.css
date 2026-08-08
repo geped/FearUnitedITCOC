@@ -4177,3 +4177,101 @@ tbody tr:last-child td { border-bottom: none; }
     font-size: 0.85rem;
     color: var(--text-3);
 }
+
+/* ── Evento carte — Fase 2: scambi, room, chat ───────────────────────── */
+.carte-trade-section { margin-bottom: 1.5rem; }
+.carte-match-card {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.7rem 0.9rem;
+    margin-bottom: 0.6rem;
+    flex-wrap: wrap;
+}
+.carte-match-cards { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
+.carte-trade-card-icon { width: 34px; height: 34px; object-fit: contain; }
+.carte-match-arrow { color: var(--gold); font-weight: 700; }
+.carte-match-info { flex: 1; min-width: 180px; }
+.carte-match-names { font-size: 0.85rem; color: var(--text); }
+.carte-match-opponent { font-size: 0.78rem; color: var(--text-3); margin-top: 0.15rem; }
+
+.carte-room-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.6rem 0.9rem;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    color: inherit;
+}
+.carte-room-item:hover { border-color: var(--gold); }
+.carte-room-name { font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 0.4rem; }
+.carte-room-preview { font-size: 0.78rem; color: var(--text-3); margin-top: 0.15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.carte-room-badge {
+    background: var(--gold);
+    color: var(--bg);
+    font-size: 0.65rem;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 0.05rem 0.4rem;
+}
+
+.carte-proposals-list { margin-bottom: 0.8rem; }
+.carte-proposal-card {
+    background: var(--bg-2, var(--bg-1));
+    border: 1px solid var(--gold);
+    border-radius: var(--radius);
+    padding: 0.6rem 0.8rem;
+    margin-bottom: 0.5rem;
+}
+.carte-proposal-actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+
+.carte-propose-form { display: flex; gap: 0.5rem; margin-bottom: 0.8rem; flex-wrap: wrap; align-items: center; }
+.carte-propose-form select {
+    flex: 1;
+    min-width: 120px;
+    padding: 0.4rem 0.5rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-1);
+    color: var(--text);
+}
+
+.carte-chat-box {
+    max-height: 240px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.5rem;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 0.6rem;
+}
+.carte-chat-msg {
+    align-self: flex-start;
+    background: var(--bg-2, #2a2a2a);
+    color: var(--text);
+    padding: 0.4rem 0.6rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    max-width: 80%;
+}
+.carte-chat-msg.mine { align-self: flex-end; background: var(--gold); color: var(--bg); }
+.carte-chat-system { align-self: center; font-size: 0.75rem; color: var(--text-3); font-style: italic; }
+.carte-chat-input-row { display: flex; gap: 0.5rem; }
+.carte-chat-input-row input {
+    flex: 1;
+    padding: 0.5rem 0.7rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-1);
+    color: var(--text);
+}

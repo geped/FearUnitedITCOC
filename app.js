@@ -1654,6 +1654,8 @@ async function loadCardEventTab() {
   }
   renderCardEventProfilePicker();
   renderCardEventContent();
+  const tradeBox = document.getElementById('carte-trade-content');
+  if (tradeBox && tradeBox.style.display !== 'none') loadCardTradeTab();
 }
 
 function renderCardEventProfilePicker() {
@@ -1681,6 +1683,8 @@ function _switchCarteProfile(cocTag) {
   window._cardEventActiveTag = cocTag;
   renderCardEventProfilePicker();
   renderCardEventContent();
+  const tradeBox = document.getElementById('carte-trade-content');
+  if (tradeBox && tradeBox.style.display !== 'none') loadCardTradeTab();
 }
 
 function _switchCarteCategory(cat) {
@@ -1818,6 +1822,321 @@ async function _onCardEventRemoveDupe(cardKey) {
     renderCardEventContent();
   } catch (e) {
     alert(e.message || 'Errore salvataggio carta.');
+  }
+}
+
+// ── Evento "Clash of Cards" — Fase 2: scambio, room, chat ─────────────────────
+window._cardTradeData = null; // { matches, selfMatches, rooms }
+
+async function cardsApi(type, { method = 'GET', body = null, params = null } = {}) {
+  const headers = await authBearerHeaders();
+  let url = `/api/lookup?type=${encodeURIComponent(type)}`;
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      if (v != null) url += `&${encodeURIComponent(k)}=${encodeURIComponent(v)}`;
+    }
+  }
+  const opts = { method, headers };
+  if (body != null) opts.body = JSON.stringify(body);
+  const r = await fetch(url, opts);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const err = new Error(j.error || `HTTP ${r.status}`);
+    err.code = j.code;
+    throw err;
+  }
+  return j;
+}
+
+function _switchCarteMainTab(tab, btn) {
+  document.getElementById('carte-content').style.display = tab === 'collezione' ? 'block' : 'none';
+  document.getElementById('carte-trade-content').style.display = tab === 'scambi' ? 'block' : 'none';
+  document.querySelectorAll('#tab-carte > .subtab-bar .subtab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  if (tab === 'scambi') loadCardTradeTab();
+}
+
+function _activeCardProfileId() {
+  const tag = window._cardEventActiveTag;
+  const profiles = window._cardEventData?.profiles || [];
+  return profiles.find(p => p.coc_tag === tag)?.id || null;
+}
+
+async function loadCardTradeTab() {
+  const box = document.getElementById('carte-trade-content');
+  if (!box) return;
+  const profileId = _activeCardProfileId();
+  if (!profileId) {
+    box.innerHTML = `<div class="profilo-empty"><p style="color:var(--text-3)">Collega un villaggio da "Profili" per usare gli scambi.</p></div>`;
+    return;
+  }
+  box.innerHTML = '<div class="profilo-empty"><p style="color:var(--text-3)">Caricamento…</p></div>';
+  try {
+    const profiles = window._cardEventData?.profiles || [];
+    const [matches, selfMatches, rooms] = await Promise.all([
+      cardsApi('cards-matches', { params: { profile_id: profileId } }),
+      profiles.length > 1 ? cardsApi('cards-self-matches') : Promise.resolve({ matches: [] }),
+      cardsApi('cards-rooms'),
+    ]);
+    window._cardTradeData = { matches: matches.matches || [], selfMatches: selfMatches.matches || [], rooms: rooms.rooms || [] };
+  } catch (e) {
+    box.innerHTML = `<div class="profilo-empty"><p style="color:var(--red)">Errore caricamento scambi: ${escH(e.message || '')}</p></div>`;
+    return;
+  }
+  renderCardTradeContent();
+}
+
+function _cardMiniImg(meta) {
+  if (!meta) return '';
+  return `<img src="${escH(meta.icon_url)}" alt="${escH(meta.name_it)}" class="carte-trade-card-icon" loading="lazy" onerror="this.style.visibility='hidden'">`;
+}
+
+function renderCardTradeContent() {
+  const box = document.getElementById('carte-trade-content');
+  if (!box) return;
+  const data = window._cardTradeData;
+  const cat = window._cardEventCatalog;
+  if (!box || !data || !cat) return;
+  const live = cat.settings?.live === true;
+
+  const matchesHtml = data.matches.length
+    ? data.matches.map((m, i) => `
+      <div class="carte-match-card">
+        <div class="carte-match-cards">
+          ${_cardMiniImg(m.card_give_meta)}
+          <span class="carte-match-arrow">⇄</span>
+          ${_cardMiniImg(m.card_get_meta)}
+        </div>
+        <div class="carte-match-info">
+          <div class="carte-match-names">Cedi <strong>${escH(m.card_give_meta?.name_it || m.card_give)}</strong> → ricevi <strong>${escH(m.card_get_meta?.name_it || m.card_get)}</strong></div>
+          <div class="carte-match-opponent">con ${escH(m.other_profile.username || m.other_profile.coc_tag)}</div>
+        </div>
+        ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">Proponi scambio</button>` : ''}
+      </div>`).join('')
+    : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio disponibile al momento con altri giocatori. Segna più carte nella tua collezione per trovare match.</p></div>`;
+
+  const selfHtml = data.selfMatches.length
+    ? data.selfMatches.map((m, i) => `
+      <div class="carte-match-card">
+        <div class="carte-match-cards">
+          ${_cardMiniImg(m.card_a_to_b_meta)}
+          <span class="carte-match-arrow">⇄</span>
+          ${_cardMiniImg(m.card_b_to_a_meta)}
+        </div>
+        <div class="carte-match-info">
+          <div class="carte-match-names"><strong>${escH(m.profile_a.username || m.profile_a.coc_tag)}</strong> cede ${escH(m.card_a_to_b_meta?.name_it || m.card_a_to_b)} ↔ <strong>${escH(m.profile_b.username || m.profile_b.coc_tag)}</strong> cede ${escH(m.card_b_to_a_meta?.name_it || m.card_b_to_a)}</div>
+        </div>
+        ${live ? `<button type="button" class="btn-secondary btn-sm" onclick="_applySelfMatch(${i})">Applica subito</button>` : ''}
+      </div>`).join('')
+    : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio disponibile tra i tuoi profili collegati.</p></div>`;
+
+  const roomsHtml = data.rooms.length
+    ? data.rooms.map(r => {
+        const preview = r.last_message ? escH((r.last_message.body || '').slice(0, 60)) : 'Nessun messaggio ancora';
+        const pending = r.pending_proposals > 0 ? `<span class="carte-room-badge">${r.pending_proposals}</span>` : '';
+        return `<button type="button" class="carte-room-item" onclick="_openCardRoom('${r.id}')">
+          <div class="carte-room-name">${escH(r.other_profile?.username || r.other_profile?.coc_tag || '—')} ${pending}</div>
+          <div class="carte-room-preview">${preview}</div>
+        </button>`;
+      }).join('')
+    : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuna conversazione ancora.</p></div>`;
+
+  const selfSection = (window._cardEventData?.profiles?.length || 0) > 1 ? `
+    <div class="carte-trade-section">
+      <h3 class="profilo-section-title">Tra i tuoi profili</h3>
+      ${selfHtml}
+    </div>` : '';
+
+  box.innerHTML = `
+    ${!live ? `<div class="profilo-empty" style="margin-bottom:1rem"><p style="color:var(--text-3)">⚠️ Evento in sola lettura: non è più possibile proporre o applicare nuovi scambi.</p></div>` : ''}
+    <div class="carte-trade-section">
+      <h3 class="profilo-section-title">Scambi disponibili con altri giocatori</h3>
+      ${matchesHtml}
+    </div>
+    ${selfSection}
+    <div class="carte-trade-section">
+      <h3 class="profilo-section-title">Le tue conversazioni</h3>
+      ${roomsHtml}
+    </div>
+  `;
+}
+
+async function _proposeFromMatch(idx) {
+  const m = window._cardTradeData?.matches?.[idx];
+  if (!m) return;
+  const profileId = _activeCardProfileId();
+  if (!profileId) return;
+  if (!confirm(`Proporre a ${m.other_profile.username || m.other_profile.coc_tag}: cedi ${m.card_give_meta?.name_it || m.card_give} → ricevi ${m.card_get_meta?.name_it || m.card_get}?`)) return;
+  try {
+    const room = await cardsApi('cards-room-open', { method: 'POST', body: { profile_id: profileId, other_coc_tag: m.other_profile.coc_tag } });
+    await cardsApi('cards-propose', {
+      method: 'POST',
+      body: { room_id: room.room.id, profile_id: profileId, card_give: m.card_give, card_get: m.card_get },
+    });
+    await _openCardRoom(room.room.id);
+    await loadCardTradeTab();
+  } catch (e) {
+    alert(e.message || 'Errore nella proposta di scambio.');
+  }
+}
+
+async function _applySelfMatch(idx) {
+  const m = window._cardTradeData?.selfMatches?.[idx];
+  if (!m) return;
+  if (!confirm(`Applicare subito lo scambio tra ${m.profile_a.username || m.profile_a.coc_tag} e ${m.profile_b.username || m.profile_b.coc_tag}?`)) return;
+  try {
+    await cardsApi('cards-self-apply', {
+      method: 'POST',
+      body: { profile_a: m.profile_a.id, profile_b: m.profile_b.id, card_a_to_b: m.card_a_to_b, card_b_to_a: m.card_b_to_a },
+    });
+    window._cardEventData = await profilesApi('cards-get');
+    renderCardEventContent();
+    await loadCardTradeTab();
+  } catch (e) {
+    alert(e.message || 'Errore applicazione scambio.');
+  }
+}
+
+window._cardRoomState = null; // { room, me, other } dell'ultima stanza aperta
+
+async function _openCardRoom(roomId) {
+  try {
+    const data = await cardsApi('cards-room-detail', { params: { room_id: roomId } });
+    window._cardRoomState = data;
+    renderCardRoomModal(data);
+  } catch (e) {
+    alert(e.message || 'Errore apertura stanza.');
+  }
+}
+
+function renderCardRoomModal(data) {
+  document.getElementById('carte-room-modal')?.remove();
+  const cat = window._cardEventCatalog;
+  const live = cat?.settings?.live === true;
+  const myId = data.room.my_profile_id;
+
+  const messagesHtml = data.messages.map(m => {
+    if (m.kind === 'system') return `<div class="carte-chat-system">${escH(m.body || '')}</div>`;
+    const mine = m.sender_profile === myId;
+    return `<div class="carte-chat-msg ${mine ? 'mine' : ''}">${escH(m.body || '')}</div>`;
+  }).join('') || `<div class="carte-chat-system">Nessun messaggio. Scrivi per iniziare la trattativa.</div>`;
+
+  const proposalsHtml = data.proposals.filter(p => p.status === 'pending').map(p => {
+    const isProposer = p.proposer_profile === myId;
+    return `<div class="carte-proposal-card">
+      <div class="carte-match-cards">
+        ${_cardMiniImg(p.card_give_meta)}
+        <span class="carte-match-arrow">→</span>
+        ${_cardMiniImg(p.card_get_meta)}
+      </div>
+      <div class="carte-match-info">
+        <div class="carte-match-names">${isProposer ? 'Hai proposto' : `${escH(data.other.username || data.other.coc_tag)} propone`}: cede ${escH(p.card_give_meta?.name_it || p.card_give)} → riceve ${escH(p.card_get_meta?.name_it || p.card_get)}</div>
+      </div>
+      <div class="carte-proposal-actions">
+        ${!isProposer && live ? `<button type="button" class="btn-primary btn-sm" onclick="_cardRoomRespond('${p.id}','accept')">✓ Accetta</button>` : ''}
+        ${!isProposer && live ? `<button type="button" class="btn-secondary btn-sm" onclick="_cardRoomRespond('${p.id}','reject')">✕ Rifiuta</button>` : ''}
+        ${isProposer && live ? `<button type="button" class="btn-secondary btn-sm" onclick="_cardRoomRespond('${p.id}','cancel')">Annulla</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  const myTag = data.me.coc_tag;
+  const myColl = (window._cardEventData?.collections && window._cardEventData.collections[myTag]) || {};
+  const myDupes = (cat?.cards || []).filter(c => (myColl[c.key] || 0) === 2);
+  const myMissing = (cat?.cards || []).filter(c => (myColl[c.key] || 0) === 0);
+  const proposeForm = live ? `
+    <div class="carte-propose-form">
+      <select id="carte-propose-give">
+        <option value="">Cedi…</option>
+        ${myDupes.map(c => `<option value="${escH(c.key)}" data-cat="${escH(c.category)}">${escH(c.name_it)}</option>`).join('')}
+      </select>
+      <select id="carte-propose-get">
+        <option value="">Ricevi…</option>
+        ${myMissing.map(c => `<option value="${escH(c.key)}" data-cat="${escH(c.category)}">${escH(c.name_it)}</option>`).join('')}
+      </select>
+      <button type="button" class="btn-primary btn-sm" onclick="_cardRoomPropose()">Proponi</button>
+    </div>` : '';
+
+  const modal = document.createElement('div');
+  modal.id = 'carte-room-modal';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'display:flex;z-index:1000';
+  modal.innerHTML = `
+    <div class="modal-box" style="max-width:480px;width:100%">
+      <div class="modal-header">
+        <h2 style="font-size:1rem">🔁 ${escH(data.other.username || data.other.coc_tag)}</h2>
+        <button class="modal-close" onclick="document.getElementById('carte-room-modal').remove()">✕</button>
+      </div>
+      <div style="padding:1rem">
+        ${proposalsHtml ? `<div class="carte-proposals-list">${proposalsHtml}</div>` : ''}
+        ${proposeForm}
+        <div class="carte-chat-box" id="carte-chat-box">${messagesHtml}</div>
+        ${live ? `
+        <div class="carte-chat-input-row">
+          <input type="text" id="carte-chat-input" placeholder="Scrivi un messaggio…" maxlength="500" onkeydown="if(event.key==='Enter')_cardRoomSendMessage()">
+          <button type="button" class="btn-primary btn-sm" onclick="_cardRoomSendMessage()">Invia</button>
+        </div>` : ''}
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  const chatBox = document.getElementById('carte-chat-box');
+  if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+async function _cardRoomSendMessage() {
+  const input = document.getElementById('carte-chat-input');
+  const text = (input?.value || '').trim();
+  if (!text || !window._cardRoomState) return;
+  try {
+    await cardsApi('cards-room-send', {
+      method: 'POST',
+      body: { room_id: window._cardRoomState.room.id, profile_id: window._cardRoomState.room.my_profile_id, body: text },
+    });
+    if (input) input.value = '';
+    await _openCardRoom(window._cardRoomState.room.id);
+  } catch (e) {
+    alert(e.message || 'Errore invio messaggio.');
+  }
+}
+
+async function _cardRoomPropose() {
+  const give = document.getElementById('carte-propose-give')?.value;
+  const get = document.getElementById('carte-propose-get')?.value;
+  if (!give || !get || !window._cardRoomState) { alert('Seleziona entrambe le carte.'); return; }
+  try {
+    await cardsApi('cards-propose', {
+      method: 'POST',
+      body: { room_id: window._cardRoomState.room.id, profile_id: window._cardRoomState.room.my_profile_id, card_give: give, card_get: get },
+    });
+    await _openCardRoom(window._cardRoomState.room.id);
+    await loadCardTradeTab();
+  } catch (e) {
+    alert(e.message || 'Errore nella proposta.');
+  }
+}
+
+async function _cardRoomRespond(proposalId, action) {
+  if (!window._cardRoomState) return;
+  const msg = action === 'accept'
+    ? 'Confermi di accettare questo scambio? Le collezioni verranno aggiornate subito.'
+    : action === 'reject'
+      ? 'Rifiutare questa proposta?'
+      : 'Annullare questa proposta?';
+  if (!confirm(msg)) return;
+  try {
+    await cardsApi('cards-respond', {
+      method: 'POST',
+      body: { proposal_id: proposalId, profile_id: window._cardRoomState.room.my_profile_id, action },
+    });
+    if (action === 'accept') {
+      window._cardEventData = await profilesApi('cards-get');
+      renderCardEventContent();
+    }
+    await _openCardRoom(window._cardRoomState.room.id);
+    await loadCardTradeTab();
+  } catch (e) {
+    alert(e.message || 'Errore risposta proposta.');
   }
 }
 
