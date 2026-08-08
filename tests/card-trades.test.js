@@ -245,17 +245,44 @@ describe('card-trades: mazzi pubblici', () => {
     assert.equal(res.decks[0].profile.coc_tag, '#BBB1');
   });
 
-  it('listPublicDecks include i possibili scambi con quel profilo (riusa find_card_matches)', async () => {
+  it('listPublicDecks include i possibili scambi con quel profilo (calcolo da collezioni)', async () => {
     const admin = seedBase();
     await cardTrades.setProfilePublic(admin, fakeUser(USER_B), 'p-b1', true);
-    admin.db.rpcStubs = {
-      find_card_matches: [
-        { other_coc_tag: '#BBB1', other_user_id: USER_B, card_give: 'elx_barbarian', card_get: 'elx_archer', category: 'elixir' },
-      ],
-    };
     const res = await cardTrades.listPublicDecks(admin, fakeUser(USER_A), 'p-a1');
     assert.equal(res.decks[0].matches.length, 1);
     assert.equal(res.decks[0].matches[0].card_give, 'elx_barbarian');
+    assert.equal(res.decks[0].matches[0].card_get, 'elx_archer');
+  });
+
+  it('listPublicDecks trova match anche se le carte mancanti non hanno riga qty=0', async () => {
+    const admin = seedBase();
+    // Rimuovi le righe "mancante" (qty=0): in produzione spesso non esistono
+    admin.db.tables.card_event_collections = admin.db.tables.card_event_collections.filter(
+      (r) => r.qty_state !== 0,
+    );
+    await cardTrades.setProfilePublic(admin, fakeUser(USER_B), 'p-b1', true);
+    const res = await cardTrades.listPublicDecks(admin, fakeUser(USER_A), 'p-a1');
+    assert.equal(res.decks[0].matches.length, 1);
+    assert.equal(res.decks[0].matches[0].card_give, 'elx_barbarian');
+  });
+
+  it('getMatchesForProfile restituisce solo match con mazzi pubblici', async () => {
+    const admin = seedBase();
+    // Senza mazzo pubblico: nessun match suggerito
+    let res = await cardTrades.getMatchesForProfile(admin, fakeUser(USER_A), 'p-a1');
+    assert.equal(res.matches.length, 0);
+    await cardTrades.setProfilePublic(admin, fakeUser(USER_B), 'p-b1', true);
+    res = await cardTrades.getMatchesForProfile(admin, fakeUser(USER_A), 'p-a1');
+    assert.equal(res.matches.length, 1);
+    assert.equal(res.matches[0].other_profile.coc_tag, '#BBB1');
+  });
+
+  it('computeP2pMatches: stessa categoria, doppione vs mancante', () => {
+    const matches = cardTrades.computeP2pMatches(
+      { elx_barbarian: 2 },
+      { elx_archer: 2 },
+    );
+    assert.ok(matches.some((m) => m.card_give === 'elx_barbarian' && m.card_get === 'elx_archer'));
   });
 
   it('listPublicDecks include il "post" con la collezione completa del mazzo pubblicato', async () => {
@@ -328,14 +355,10 @@ describe('card-trades: notifiche outbox (bot Telegram)', () => {
   });
 });
 
-describe('card-trades: matching (enrichment su risultati RPC)', () => {
+describe('card-trades: matching (enrichment su collezioni)', () => {
   it('getMatchesForProfile arricchisce i risultati con profilo e metadati carta', async () => {
     const admin = seedBase();
-    admin.db.rpcStubs = {
-      find_card_matches: [
-        { other_coc_tag: '#BBB1', other_user_id: USER_B, card_give: 'elx_barbarian', card_get: 'elx_archer', category: 'elixir' },
-      ],
-    };
+    await cardTrades.setProfilePublic(admin, fakeUser(USER_B), 'p-b1', true);
     const data = await cardTrades.getMatchesForProfile(admin, fakeUser(USER_A), 'p-a1');
     assert.equal(data.ok, true);
     assert.equal(data.matches.length, 1);

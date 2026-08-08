@@ -4553,6 +4553,54 @@ tbody tr:last-child td { border-bottom: none; }
 .carte-album-card-title { flex: 1; min-width: 140px; display: flex; flex-direction: column; gap: 0.1rem; }
 .carte-album-card-title strong { font-size: 0.88rem; }
 .carte-album-card-meta { font-size: 0.7rem; color: var(--text-3); }
+.carte-album-matches {
+    padding: 0.55rem 0.75rem 0.35rem;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--bg-1) 70%, transparent);
+}
+.carte-album-matches-empty {
+    font-size: 0.72rem;
+    color: var(--text-3);
+    padding: 0.45rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+.carte-album-matches-title {
+    font-size: 0.72rem;
+    font-weight: 600;
+    margin-bottom: 0.4rem;
+    color: var(--text-2);
+}
+.carte-album-match-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.4rem 0;
+    border-top: 1px dashed var(--border);
+}
+.carte-album-match-row:first-of-type { border-top: none; }
+.carte-album-match-pair {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 0.35rem;
+    align-items: center;
+}
+.carte-album-match-side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    text-align: center;
+    font-size: 0.68rem;
+    min-width: 0;
+}
+.carte-album-match-side .carte-trade-card-icon { width: 36px; height: 36px; }
+.carte-album-match-lbl {
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-3);
+}
+.carte-album-match-row .btn-sm { width: 100%; }
 .carte-album-toggle { margin: 0; font-size: 0.78rem; }
 .carte-album-card-body { padding: 0.65rem 0.75rem 0.85rem; }
 .carte-album-card-body.is-collapsed {

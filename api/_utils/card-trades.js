@@ -9,13 +9,43 @@
 
 const profilesUtil = require('./user-profiles');
 const cardEvent = require('./card-event');
-const { CARD_BY_KEY } = require('./card-event-catalog');
+const { CARD_BY_KEY, CARD_EVENT_CATALOG } = require('./card-event-catalog');
 
 function err(status, message, code) {
   const e = new Error(message);
   e.status = status;
   if (code) e.code = code;
   return e;
+}
+
+/**
+ * Matching P2P (account diversi), stesse regole di find_card_matches:
+ * - cedi solo doppioni (qty >= 2)
+ * - ricevi solo carte mancanti (qty === 0 oppure riga assente)
+ * - stessa categoria, carte diverse
+ * Usa le mappe card_key → qty (assenza = 0). Non dipende da righe qty=0 in DB.
+ */
+function computeP2pMatches(myColl, otherColl) {
+  const mine = myColl || {};
+  const other = otherColl || {};
+  const qty = (map, key) => Number(map[key] || 0);
+  const out = [];
+  for (const give of CARD_EVENT_CATALOG) {
+    if (qty(mine, give.key) < 2) continue;
+    if (qty(other, give.key) >= 1) continue; // l'altro la possiede già
+    for (const get of CARD_EVENT_CATALOG) {
+      if (get.category !== give.category) continue;
+      if (get.key === give.key) continue;
+      if (qty(other, get.key) < 2) continue;
+      if (qty(mine, get.key) >= 1) continue; // io la possiedo già
+      out.push({
+        card_give: give.key,
+        card_get: get.key,
+        category: give.category,
+      });
+    }
+  }
+  return out;
 }
 
 async function requireEventLive(admin) {
@@ -144,33 +174,54 @@ async function notifyMatchesForTag(admin, cocTag) {
 
 async function getMatchesForProfile(admin, user, profileId) {
   const me = await myProfileOr403(admin, user, profileId);
-  const { data, error } = await admin.rpc('find_card_matches', { p_coc_tag: me.coc_tag });
-  if (error) throw error;
-  // find_card_matches non restituisce l'id profilo (solo coc_tag), risolviamolo in batch
-  const tags = [...new Set((data || []).map((m) => m.other_coc_tag))];
-  let profileByTag = {};
-  if (tags.length) {
-    const { data: rows, error: e2 } = await admin
-      .from('user_coc_profiles')
-      .select('id, coc_tag, username, coc_clan_name, coc_clan_badge_url, town_hall_level')
-      .in('coc_tag', tags);
-    if (e2) throw e2;
-    profileByTag = Object.fromEntries((rows || []).map((r) => [r.coc_tag, r]));
+
+  // Preferisci calcolo da collezioni (assenza riga = mancante). Filtra alle sole
+  // controparti con mazzo pubblico: è la stessa platea di "Mazzi pubblici".
+  const { data: publicProfiles, error: ePub } = await admin
+    .from('user_coc_profiles')
+    .select('id, coc_tag, username, coc_clan_name, coc_clan_badge_url, town_hall_level, user_id')
+    .eq('card_deck_public', true)
+    .neq('user_id', user.id);
+  if (ePub) throw ePub;
+
+  const otherTags = (publicProfiles || []).map((p) => p.coc_tag).filter((t) => t && t !== me.coc_tag);
+  const tagsToLoad = [me.coc_tag, ...otherTags];
+  const { data: collRows, error: eColl } = await admin
+    .from('card_event_collections')
+    .select('coc_tag, card_key, qty_state')
+    .in('coc_tag', tagsToLoad);
+  if (eColl) throw eColl;
+
+  const collByTag = {};
+  for (const tag of tagsToLoad) collByTag[tag] = {};
+  for (const row of collRows || []) {
+    if (!collByTag[row.coc_tag]) collByTag[row.coc_tag] = {};
+    collByTag[row.coc_tag][row.card_key] = row.qty_state;
   }
+
+  const profileByTag = Object.fromEntries((publicProfiles || []).map((r) => [r.coc_tag, r]));
+  const matches = [];
+  for (const tag of otherTags) {
+    const pair = computeP2pMatches(collByTag[me.coc_tag], collByTag[tag]);
+    for (const m of pair) {
+      matches.push(
+        enrichCardKeys(
+          {
+            other_profile: profileByTag[tag] || { coc_tag: tag },
+            card_give: m.card_give,
+            card_get: m.card_get,
+            category: m.category,
+          },
+          ['card_give', 'card_get'],
+        ),
+      );
+    }
+  }
+
   return {
     ok: true,
     profile: profilesUtil.profileToPublic(me),
-    matches: (data || []).map((m) =>
-      enrichCardKeys(
-        {
-          other_profile: profileByTag[m.other_coc_tag] || { coc_tag: m.other_coc_tag },
-          card_give: m.card_give,
-          card_get: m.card_get,
-          category: m.category,
-        },
-        ['card_give', 'card_get'],
-      ),
-    ),
+    matches,
   };
 }
 
@@ -219,12 +270,10 @@ async function setProfilePublic(admin, user, profileId, isPublic) {
 
 /**
  * Elenco dei mazzi pubblici di ALTRI account CoCBoard, con i possibili scambi
- * verso il profilo attivo (riusa find_card_matches, già globale, filtrando
- * solo le controparti che hanno scelto di pubblicare il proprio mazzo).
+ * verso il profilo attivo (stesse regole P2P: doppione↔mancante, stessa categoria).
+ * Matching calcolato sulle collezioni: carta assente = mancante (non serve riga qty=0).
  *
- * Ogni voce è un "post" completo: include l'intera collezione (card_key → qty)
- * del mazzo pubblicato, così chi lo consulta vede subito tutte le carte
- * possedute dall'altro utente, oltre alle combinazioni di scambio automatiche.
+ * Ogni voce include la collezione posseduta (qty>=1) e le combinazioni di scambio.
  */
 async function listPublicDecks(admin, user, myProfileId) {
   const me = await myProfileOr403(admin, user, myProfileId);
@@ -237,39 +286,46 @@ async function listPublicDecks(admin, user, myProfileId) {
   if (e1) throw e1;
 
   const otherTags = (publicProfiles || []).map((p) => p.coc_tag).filter((t) => t !== me.coc_tag);
-
-  const [{ data: matches, error: e2 }, { data: collRows, error: e3 }] = await Promise.all([
-    admin.rpc('find_card_matches', { p_coc_tag: me.coc_tag }),
-    otherTags.length
-      ? admin.from('card_event_collections').select('coc_tag, card_key, qty_state').in('coc_tag', otherTags)
-      : Promise.resolve({ data: [], error: null }),
-  ]);
-  if (e2) throw e2;
+  const tagsToLoad = [me.coc_tag, ...otherTags];
+  const { data: collRows, error: e3 } = tagsToLoad.length
+    ? await admin.from('card_event_collections').select('coc_tag, card_key, qty_state').in('coc_tag', tagsToLoad)
+    : { data: [], error: null };
   if (e3) throw e3;
 
-  const matchesByTag = {};
-  for (const m of matches || []) {
-    (matchesByTag[m.other_coc_tag] = matchesByTag[m.other_coc_tag] || []).push(
-      enrichCardKeys({ card_give: m.card_give, card_get: m.card_get, category: m.category }, ['card_give', 'card_get']),
-    );
+  const collectionByTag = {};
+  for (const tag of tagsToLoad) collectionByTag[tag] = {};
+  for (const row of collRows || []) {
+    if (!collectionByTag[row.coc_tag]) collectionByTag[row.coc_tag] = {};
+    collectionByTag[row.coc_tag][row.card_key] = row.qty_state;
   }
 
-  const collectionByTag = {};
-  for (const row of collRows || []) {
-    if (!row.qty_state) continue; // esponi solo le carte effettivamente possedute (0 = non trovata)
-    (collectionByTag[row.coc_tag] = collectionByTag[row.coc_tag] || {})[row.card_key] = row.qty_state;
-  }
+  const ownedOnly = (full) => {
+    const out = {};
+    for (const [k, v] of Object.entries(full || {})) {
+      if (Number(v) >= 1) out[k] = v;
+    }
+    return out;
+  };
 
   return {
     ok: true,
     my_public: me.card_deck_public === true,
     decks: (publicProfiles || [])
       .filter((p) => p.coc_tag !== me.coc_tag)
-      .map((p) => ({
-        profile: profilesUtil.profileToPublic(p),
-        matches: matchesByTag[p.coc_tag] || [],
-        collection: collectionByTag[p.coc_tag] || {},
-      }))
+      .map((p) => {
+        const fullColl = collectionByTag[p.coc_tag] || {};
+        const matches = computeP2pMatches(collectionByTag[me.coc_tag], fullColl).map((m) =>
+          enrichCardKeys({ card_give: m.card_give, card_get: m.card_get, category: m.category }, [
+            'card_give',
+            'card_get',
+          ]),
+        );
+        return {
+          profile: profilesUtil.profileToPublic(p),
+          matches,
+          collection: ownedOnly(fullColl),
+        };
+      })
       .sort((a, b) => (b.matches.length || 0) - (a.matches.length || 0)),
   };
 }
@@ -666,6 +722,7 @@ async function getTradeLog(admin, user) {
 }
 
 module.exports = {
+  computeP2pMatches,
   getMatchesForProfile,
   getSelfMatches,
   setProfilePublic,

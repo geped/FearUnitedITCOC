@@ -2310,20 +2310,36 @@ function _renderCartePublicWindow() {
   if (win === 'suggested') {
     const matchesHtml = (data?.matches || []).length
       ? data.matches.map((m, i) => `
-        <div class="carte-match-card">
-          <div class="carte-match-cards">
-            ${_cardMiniImg(m.card_give_meta)}
-            <span class="carte-match-arrow">⇄</span>
-            ${_cardMiniImg(m.card_get_meta)}
+        <div class="carte-self-row semaforo-green">
+          <div class="carte-self-row-header">
+            <span class="carte-self-row-players">con ${escH(m.other_profile?.username || m.other_profile?.coc_tag || '—')}</span>
+            <span class="carte-self-row-dot" title="Scambio utile: entrambi sbloccano una carta nuova">🟢</span>
           </div>
-          <div class="carte-match-info">
-            <div class="carte-match-names">Cedi <strong>${escH(m.card_give_meta?.name_it || m.card_give)}</strong> → ricevi <strong>${escH(m.card_get_meta?.name_it || m.card_get)}</strong></div>
-            <div class="carte-match-opponent">con ${escH(m.other_profile.username || m.other_profile.coc_tag)}</div>
+          <div class="carte-self-row-cols">
+            <div class="carte-self-row-col">
+              <div class="carte-self-row-col-label">📤 Cedi</div>
+              <div class="carte-self-row-item">
+                ${_cardMiniImg(m.card_give_meta)}
+                <div><div class="carte-self-row-card-name">${escH(m.card_give_meta?.name_it || m.card_give)}</div><div class="carte-self-row-sub">il tuo doppione</div></div>
+              </div>
+            </div>
+            <div class="carte-self-row-col">
+              <div class="carte-self-row-col-label">📥 Ricevi</div>
+              <div class="carte-self-row-item">
+                ${_cardMiniImg(m.card_get_meta)}
+                <div><div class="carte-self-row-card-name">${escH(m.card_get_meta?.name_it || m.card_get)} 🟢</div><div class="carte-self-row-sub">carta nuova per te</div></div>
+              </div>
+            </div>
           </div>
-          ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">Proponi scambio</button>` : ''}
+          ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">Proponi scambio delle carte</button>` : ''}
         </div>`).join('')
-      : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio automatico con altri giocatori al momento.</p></div>`;
-    box.innerHTML = `${_cartePublicWinHeader('Scambi suggeriti con altri')}<div class="carte-trade-section">${matchesHtml}</div>`;
+      : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio automatico con mazzi pubblici al momento. Serve: tu hai un doppione che all’altro manca, e lui ha un doppione (stessa tipologia) che manca a te.</p></div>`;
+    box.innerHTML = `${_cartePublicWinHeader('Scambi suggeriti con altri')}<div class="carte-trade-section">
+      <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.7rem">
+        Stesse regole di «Tra i tuoi profili», ma tra account diversi: solo doppione ↔ carta mancante, stessa tipologia (elisir↔elisir, ecc.).
+      </p>
+      ${matchesHtml}
+    </div>`;
     return;
   }
 
@@ -2440,6 +2456,29 @@ function _renderAlbumsWindow(live, which = 'mine') {
           const found = cat ? cat.cards.filter(c => (coll[c.key] || 0) >= 1).length : 0;
           const total = cat?.total_cards || 0;
           const n = d.matches?.length || 0;
+          const matchesPreview = n
+            ? `<div class="carte-album-matches">
+                <div class="carte-album-matches-title">Possibili carte da scambiare · ${n}</div>
+                ${d.matches.slice(0, 6).map((m, mi) => `
+                  <div class="carte-album-match-row">
+                    <div class="carte-album-match-pair">
+                      <div class="carte-album-match-side">
+                        <span class="carte-album-match-lbl">Cedi</span>
+                        ${_cardMiniImg(m.card_give_meta)}
+                        <span>${escH(m.card_give_meta?.name_it || m.card_give)}</span>
+                      </div>
+                      <span class="carte-match-arrow">⇄</span>
+                      <div class="carte-album-match-side">
+                        <span class="carte-album-match-lbl">Ricevi</span>
+                        ${_cardMiniImg(m.card_get_meta)}
+                        <span>${escH(m.card_get_meta?.name_it || m.card_get)}</span>
+                      </div>
+                    </div>
+                    ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_proposeFromPublicDeck(${i},${mi})">Proponi scambio delle carte</button>` : ''}
+                  </div>`).join('')}
+                ${n > 6 ? `<div class="carte-qty-modal-note" style="text-align:left;margin:0.35rem 0 0">+${n - 6} altri — apri chat o «Scambi suggeriti».</div>` : ''}
+              </div>`
+            : `<div class="carte-album-matches carte-album-matches-empty">Nessuno scambio automatico con questo mazzo (serve doppione↔mancante, stessa tipologia).</div>`;
           return `<div class="carte-album-card">
             <div class="carte-album-card-head">
               <div class="carte-album-card-title">
@@ -2449,6 +2488,7 @@ function _renderAlbumsWindow(live, which = 'mine') {
               <button type="button" class="btn-secondary btn-sm" onclick="_toggleAlbumCollapsed('${escH(albumId)}')">${isCollapsed ? 'Espandi' : 'Riduci'}</button>
               ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_openPublicDeck(${i})">💬 Chat</button>` : ''}
             </div>
+            ${matchesPreview}
             <div class="carte-album-card-body ${isCollapsed ? 'is-collapsed' : ''}">
               ${_renderFullAlbumGrid(coll, albumId)}
             </div>
@@ -2459,7 +2499,7 @@ function _renderAlbumsWindow(live, which = 'mine') {
       <div class="carte-trade-section">
         ${filterBar}
         <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.7rem">
-          Album fotografici pubblici. Di default sono ridotti — espandi per vedere il catalogo completo.
+          Album pubblici con anteprima scambi (doppione ↔ mancante, stessa tipologia). Di default ridotti — espandi per il catalogo completo.
         </p>
         ${otherAlbums}
       </div>`;
@@ -2534,6 +2574,26 @@ async function _openPublicDeck(idx) {
     await _openCardRoom(room.room.id, deck.matches || []);
   } catch (e) {
     alert(e.message || 'Errore apertura stanza.');
+  }
+}
+
+async function _proposeFromPublicDeck(deckIdx, matchIdx) {
+  const deck = window._cardPublicData?.decks?.[deckIdx];
+  const m = deck?.matches?.[matchIdx];
+  if (!deck || !m) return;
+  const profileId = _activeCardProfileId();
+  if (!profileId) return;
+  if (!confirm(`Proporre a ${deck.profile.username || deck.profile.coc_tag}: cedi ${m.card_give_meta?.name_it || m.card_give} → ricevi ${m.card_get_meta?.name_it || m.card_get}?`)) return;
+  try {
+    const room = await cardsApi('cards-room-open', { method: 'POST', body: { profile_id: profileId, other_coc_tag: deck.profile.coc_tag } });
+    await cardsApi('cards-propose', {
+      method: 'POST',
+      body: { room_id: room.room.id, profile_id: profileId, card_give: m.card_give, card_get: m.card_get },
+    });
+    await _openCardRoom(room.room.id, (deck.matches || []).filter((_, i) => i !== matchIdx));
+    await loadCardTradeTab();
+  } catch (e) {
+    alert(e.message || 'Errore nella proposta di scambio.');
   }
 }
 

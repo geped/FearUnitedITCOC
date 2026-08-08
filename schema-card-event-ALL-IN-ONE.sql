@@ -26,7 +26,7 @@ COMMENT ON COLUMN public.card_event_collections.qty_state IS
 COMMENT ON TABLE public.card_event_collections IS
   'Evento Clash of Cards: quantità reale posseduta per carta/profilo (0=non posseduta, 1=posseduta, 2+=doppioni). Accesso solo SERVICE_ROLE.';
 
--- Matching P2P (tra account diversi): solo qty>=2 per cedere, qty=0 per ricevere.
+-- Matching P2P (tra account diversi): solo qty>=2 per cedere; mancante = qty=0 o riga assente.
 CREATE OR REPLACE FUNCTION public.find_card_matches(p_coc_tag TEXT)
 RETURNS TABLE (
     other_coc_tag TEXT,
@@ -45,32 +45,37 @@ AS $$
     SELECT card_key, category FROM public.card_event_collections
     WHERE coc_tag = p_coc_tag AND qty_state >= 2
   ),
-  my_missing AS (
-    SELECT card_key, category FROM public.card_event_collections
-    WHERE coc_tag = p_coc_tag AND qty_state = 0
-  ),
   others AS (
     SELECT p.coc_tag, p.user_id
     FROM public.user_coc_profiles p
     WHERE p.user_id <> (SELECT user_id FROM me) AND p.coc_tag <> p_coc_tag
+  ),
+  other_dupes AS (
+    SELECT o.coc_tag AS other_coc_tag, o.user_id AS other_user_id, c.card_key, c.category
+    FROM others o
+    JOIN public.card_event_collections c
+      ON c.coc_tag = o.coc_tag AND c.qty_state >= 2
   )
   SELECT DISTINCT
-    o.coc_tag  AS other_coc_tag,
-    o.user_id  AS other_user_id,
+    od.other_coc_tag,
+    od.other_user_id,
     md.card_key AS card_give,
-    mg.card_key AS card_get,
+    od.card_key AS card_get,
     md.category AS category
   FROM my_dupes md
-  JOIN my_missing mg ON mg.category = md.category
-  JOIN others o ON TRUE
-  JOIN public.card_event_collections other_missing
-    ON other_missing.coc_tag = o.coc_tag
-   AND other_missing.qty_state = 0
-   AND other_missing.card_key = md.card_key
-  JOIN public.card_event_collections other_dupe
-    ON other_dupe.coc_tag = o.coc_tag
-   AND other_dupe.qty_state >= 2
-   AND other_dupe.card_key = mg.card_key;
+  JOIN other_dupes od
+    ON od.category = md.category
+   AND od.card_key <> md.card_key
+  WHERE COALESCE(
+    (SELECT qty_state FROM public.card_event_collections
+      WHERE coc_tag = p_coc_tag AND card_key = od.card_key),
+    0
+  ) = 0
+  AND COALESCE(
+    (SELECT qty_state FROM public.card_event_collections
+      WHERE coc_tag = od.other_coc_tag AND card_key = md.card_key),
+    0
+  ) = 0;
 $$;
 
 -- Applicazione scambio: p2p richiede ricevente a 0, self somma sempre la quantità ricevuta.
@@ -92,6 +97,7 @@ DECLARE
   v_tag_b TEXT;
   v_cat_a TEXT;
   v_cat_b TEXT;
+  v_qty   INT;
 BEGIN
   SELECT coc_tag INTO v_tag_a FROM public.user_coc_profiles WHERE id = p_profile_a;
   SELECT coc_tag INTO v_tag_b FROM public.user_coc_profiles WHERE id = p_profile_b;
@@ -129,20 +135,28 @@ BEGIN
     ON CONFLICT (coc_tag, card_key)
     DO UPDATE SET qty_state = card_event_collections.qty_state + 1, updated_at = NOW();
   ELSE
-    -- P2P (account diversi): si riceve solo se non si possiede già (sblocco carta nuova).
-    UPDATE public.card_event_collections
-       SET qty_state = 1, updated_at = NOW()
-     WHERE coc_tag = v_tag_a AND card_key = p_card_b_gave AND qty_state = 0;
-    IF NOT FOUND THEN
+    -- P2P: ricevente non deve già possedere (qty>=1). Assenza riga = OK (mancante).
+    SELECT qty_state INTO v_qty FROM public.card_event_collections
+     WHERE coc_tag = v_tag_a AND card_key = p_card_b_gave;
+    IF COALESCE(v_qty, 0) >= 1 THEN
       RAISE EXCEPTION 'Il profilo A ha già sbloccato la carta richiesta (%).', p_card_b_gave;
     END IF;
+    INSERT INTO public.card_event_collections (coc_tag, card_key, category, qty_state)
+    VALUES (v_tag_a, p_card_b_gave, v_cat_b, 1)
+    ON CONFLICT (coc_tag, card_key)
+    DO UPDATE SET qty_state = 1, updated_at = NOW()
+    WHERE card_event_collections.qty_state = 0;
 
-    UPDATE public.card_event_collections
-       SET qty_state = 1, updated_at = NOW()
-     WHERE coc_tag = v_tag_b AND card_key = p_card_a_gave AND qty_state = 0;
-    IF NOT FOUND THEN
+    SELECT qty_state INTO v_qty FROM public.card_event_collections
+     WHERE coc_tag = v_tag_b AND card_key = p_card_a_gave;
+    IF COALESCE(v_qty, 0) >= 1 THEN
       RAISE EXCEPTION 'Il profilo B ha già sbloccato la carta richiesta (%).', p_card_a_gave;
     END IF;
+    INSERT INTO public.card_event_collections (coc_tag, card_key, category, qty_state)
+    VALUES (v_tag_b, p_card_a_gave, v_cat_a, 1)
+    ON CONFLICT (coc_tag, card_key)
+    DO UPDATE SET qty_state = 1, updated_at = NOW()
+    WHERE card_event_collections.qty_state = 0;
   END IF;
 
   INSERT INTO public.card_event_trade_log
