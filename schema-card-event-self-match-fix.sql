@@ -9,13 +9,11 @@
 -- (Sostituisce la versione precedente di questo file, che invece filtrava/nascondeva
 --  del tutto gli scambi "già posseduti": ora vengono mostrati ma marcati come gialli.)
 --
--- NB: la firma della funzione cambia (nuove colonne di output), quindi Postgres non
--- permette un semplice CREATE OR REPLACE ("cannot change return type of existing
--- function") — va prima droppata la versione precedente.
-
+-- NB: la firma della funzione cambia (nuove colonne in output), quindi Postgres non
+-- permette un semplice CREATE OR REPLACE: va prima eliminata la versione precedente.
 DROP FUNCTION IF EXISTS public.find_self_card_matches(UUID);
 
-CREATE FUNCTION public.find_self_card_matches(p_user_id UUID)
+CREATE OR REPLACE FUNCTION public.find_self_card_matches(p_user_id UUID)
 RETURNS TABLE (
     profile_a          UUID,
     coc_tag_a          TEXT,
