@@ -2172,7 +2172,9 @@ function renderCardEventContent() {
 
   const totalFound = cat.cards.filter((c) => (coll[c.key] || 0) >= 1).length;
   const readOnly = !cat.settings?.live;
-  // Evidenzia (outline) solo quando c'è ricerca testuale attiva
+  // Filtraggio attivo se c'è ricerca testuale O filtri qty/direction
+  const hasActiveFilters = !!(f.q || f.qty !== 'all' || f.direction !== 'any' || f.onlyTradable);
+  // Evidenzia solo quando c'è ricerca testuale
   const searching = !!(f.q);
   const catsToShow = f.category === 'all' ? cat.category_order : [f.category];
 
@@ -2184,7 +2186,17 @@ function renderCardEventContent() {
   }
 
   const gridsHtml = catsToShow.map((catKey) => {
-    const cardsInCat = cat.cards.filter((c) => c.category === catKey);
+    let cardsInCat = cat.cards.filter((c) => c.category === catKey);
+    // Se ci sono filtri attivi, mostra solo le carte che passano
+    if (hasActiveFilters) {
+      cardsInCat = cardsInCat.filter((c) => {
+        const qty = coll[c.key] || 0;
+        if (!_cartePassesDirection(qty, f.direction)) return false;
+        if (!_cartePassesQtyFilter(qty, f)) return false;
+        if (!_carteCardTextMatch(c, f.q)) return false;
+        return true;
+      });
+    }
     const found = cardsInCat.filter((c) => (coll[c.key] || 0) >= 1).length;
     const grid = _renderCollectionCatGrid(cardsInCat, coll, hitKeys, searching, hits.length, readOnly);
     return `
@@ -2200,10 +2212,10 @@ function renderCardEventContent() {
 
   const dirLabel = f.direction === 'give' ? 'da cedere (doppioni)' : f.direction === 'get' ? 'da ricevere (mancanti)' : 'trovate';
   let statusHtml = '';
-  if (tag && searching) {
-    if (!hits.length) {
+  if (tag && (searching || hasActiveFilters)) {
+    if (!hits.length && hasActiveFilters) {
       statusHtml = `<div class="carte-search-status is-empty">Nessuna carta ${escH(dirLabel)} corrisponde ai filtri su questo profilo.</div>`;
-    } else {
+    } else if (searching && hits.length) {
       const jump = Object.keys(otherCatHits).map((ck) =>
         `<button type="button" class="carte-search-jump" onclick="_carteSetFilter('category','${escH(ck)}')">${escH(cat.category_label_it[ck] || ck)} (${otherCatHits[ck]})</button>`
       ).join('');
@@ -3028,8 +3040,20 @@ function _renderFullAlbumGrid(collection, albumId, highlightKeys = null) {
   const cats = filter === 'all' ? cat.category_order : cat.category_order.filter((c) => c === filter);
   // Evidenzia solo se c'è effettivamente una ricerca testuale
   const searching = !!(highlightKeys && highlightKeys.size);
+  // Filtraggio attivo se ci sono filtri qty/direction
+  const hasActiveFilters = !!(f.qty !== 'all' || f.direction !== 'any' || f.onlyTradable);
+  
   return cats.map((catKey) => {
-    const cardsInCat = cat.cards.filter((c) => c.category === catKey);
+    let cardsInCat = cat.cards.filter((c) => c.category === catKey);
+    // Se ci sono filtri attivi, mostra solo le carte che passano
+    if (hasActiveFilters) {
+      cardsInCat = cardsInCat.filter((c) => {
+        const qty = collection[c.key] || 0;
+        if (!_cartePassesDirection(qty, f.direction)) return false;
+        if (!_cartePassesQtyFilter(qty, f)) return false;
+        return true;
+      });
+    }
     const found = cardsInCat.filter((c) => (collection[c.key] || 0) >= 1).length;
     const tiles = cardsInCat.map((c) => {
       const qty = collection[c.key] || 0;
@@ -3525,6 +3549,8 @@ window._cardRoomState = null; // { room, me, other } dell'ultima stanza aperta
 window._cardRoomSuggested = null; // match suggeriti da "Mazzi pubblici" per la stanza corrente
 
 async function _openCardRoom(roomId, suggested = null) {
+  // Mostra indicatore caricamento immediato
+  _carteInlineNotice('⏳ Caricamento chat...', 500);
   try {
     const data = await cardsApi('cards-room-detail', { params: { room_id: roomId } });
     const sameRoom = window._cardRoomState?.room?.id === roomId;
@@ -3533,7 +3559,7 @@ async function _openCardRoom(roomId, suggested = null) {
     if (!sameRoom) window._cartePropose = { give: null, get: null };
     renderCardRoomModal(data);
   } catch (e) {
-    alert(e.message || 'Errore apertura stanza.');
+    _carteInlineNotice('❌ ' + (e.message || 'Errore apertura stanza.'), 3000);
   }
 }
 
