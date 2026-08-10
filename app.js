@@ -544,6 +544,10 @@ function showLogin() {
   document.getElementById("login-screen").style.display = "flex";
   document.getElementById("app").style.display = "none";
   document.getElementById("no-clan-screen").style.display = "none";
+  // Reset flag di sessione multi-profilo: un nuovo login (anche senza reload pagina)
+  // non deve ereditare la scelta profilo dell'utente precedente.
+  window.__cocboardManualProfilePick = false;
+  window.__cocboardDefaultApplied = false;
   _prefillLoginSaved();
 }
 
@@ -1332,7 +1336,16 @@ async function ensureProfilesBeforeApp(user) {
     updateActiveProfileChip(state);
     // Metadata Auth aggiornati dal refresh live → rinnova JWT locale
     await db.auth.refreshSession().catch(() => {});
-    if (state.needs_selection && !window.__cocboardFromMiniAppProfile && !window.__cocboardForcedClanTag) {
+    // Non riaprire la gate se l'utente ha già scelto manualmente un profilo in questa
+    // sessione (tasto "Usa"): senza "mantieni predefinito" il server non salva un
+    // default_profile_id, quindi needs_selection resterebbe true e la modale si
+    // richiuderebbe/riaprirebbe all'infinito (con la X nascosta, sembra "bloccata").
+    if (
+      state.needs_selection &&
+      !window.__cocboardManualProfilePick &&
+      !window.__cocboardFromMiniAppProfile &&
+      !window.__cocboardForcedClanTag
+    ) {
       renderProfilesModal(state, { gate: true });
       return false;
     }
