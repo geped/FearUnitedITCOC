@@ -135,7 +135,16 @@ COMMENT ON FUNCTION public.refund_card_trade_offer(UUID) IS
 -- 3) apply_card_trade: nuovo parametro p_skip_a_debit (default false, retro-compatibile)
 --    Quando true, salta il primo débito (A ha già ceduto in escrow) e applica solo
 --    il resto: B cede, entrambi ricevono, storicizza.
+--
+--    IMPORTANTE: CREATE OR REPLACE non sostituisce una funzione se cambia il numero
+--    di parametri — crea un secondo overload invece di sostituire quello esistente.
+--    Va quindi droppata esplicitamente la vecchia firma a 7 parametri (senza
+--    p_skip_a_debit), altrimenti Postgres non riesce a scegliere tra le due versioni
+--    quando la funzione viene chiamata con soli 7 argomenti (es. scambio "self"),
+--    con errore "Could not choose the best candidate function".
 -- ───────────────────────────────────────────────────────────────────────
+
+DROP FUNCTION IF EXISTS public.apply_card_trade(TEXT, UUID, UUID, TEXT, TEXT, UUID, UUID);
 
 CREATE OR REPLACE FUNCTION public.apply_card_trade(
     p_kind         TEXT,          -- 'p2p' | 'self'
