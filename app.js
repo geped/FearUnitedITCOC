@@ -1744,6 +1744,13 @@ window._cardEventData    = null;   // { profiles, collections, settings } (per-u
 window._cardEventActiveTag = null;
 window._cardEventActiveCat = null;
 
+const CARTE_CAT_BORDER = {
+  elixir: 'cat-border-elixir',
+  dark_elixir: 'cat-border-dark',
+  builder_base: 'cat-border-builder',
+  super_troop: 'cat-border-super',
+};
+
 async function initCardEventTabVisibility(isAdmin) {
   try {
     const headers = await authBearerHeaders().catch(() => ({ Accept: 'application/json' }));
@@ -1903,7 +1910,195 @@ function _switchCarteProfile(cocTag) {
 
 function _switchCarteCategory(cat) {
   window._cardEventActiveCat = cat;
+  const f = _carteGetFilters();
+  // Se l'utente sceglie una tipologia dalla barra categorie, allinea anche il filtro
+  // "Tipologia" della ricerca (senza toccare testo/verso).
+  if (f.category !== 'all' && f.category !== cat) f.category = cat;
   renderCardEventContent();
+}
+
+function _carteGetFilters() {
+  if (!window._carteSearchFilters) {
+    window._carteSearchFilters = {
+      q: '',
+      direction: 'any', // 'give' | 'get' | 'any'
+      category: 'all',
+      qty: 'all', // 'all' | '0' | '1' | '2'
+      onlyTradable: false,
+      onlyMatches: false,
+      playerQ: '',
+    };
+  }
+  return window._carteSearchFilters;
+}
+
+function _carteNormSearch(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+function _carteCardTextMatch(card, qRaw) {
+  const q = _carteNormSearch(qRaw);
+  if (!q) return true;
+  const hay = _carteNormSearch([card.name_it, card.name_en, card.key].filter(Boolean).join(' '));
+  return hay.includes(q);
+}
+
+function _cartePassesDirection(qty, direction) {
+  if (direction === 'give') return qty >= 2;
+  if (direction === 'get') return qty === 0;
+  return true;
+}
+
+function _cartePassesQtyFilter(qty, f) {
+  if (f.onlyTradable) return qty >= 2;
+  if (f.qty === '0') return qty === 0;
+  if (f.qty === '1') return qty === 1;
+  if (f.qty === '2') return qty >= 2;
+  return true;
+}
+
+/** Carte del profilo attivo che passano testo + verso + qty (+ categoria se non "all"). */
+function _carteFindHitsForActiveProfile() {
+  const cat = window._cardEventCatalog;
+  const data = window._cardEventData;
+  const tag = window._cardEventActiveTag;
+  const f = _carteGetFilters();
+  if (!cat || !data || !tag) return [];
+  const coll = data.collections?.[tag] || {};
+  return cat.cards.filter((c) => {
+    if (f.category !== 'all' && c.category !== f.category) return false;
+    if (!_carteCardTextMatch(c, f.q)) return false;
+    const qty = coll[c.key] || 0;
+    if (!_cartePassesDirection(qty, f.direction)) return false;
+    if (!_cartePassesQtyFilter(qty, f)) return false;
+    return true;
+  });
+}
+
+function _carteFiltersActive() {
+  const f = _carteGetFilters();
+  return !!(
+    f.q ||
+    f.direction !== 'any' ||
+    f.category !== 'all' ||
+    f.qty !== 'all' ||
+    f.onlyTradable ||
+    f.onlyMatches ||
+    f.playerQ
+  );
+}
+
+function _carteResetFilters() {
+  window._carteSearchFilters = {
+    q: '',
+    direction: 'any',
+    category: 'all',
+    qty: 'all',
+    onlyTradable: false,
+    onlyMatches: false,
+    playerQ: '',
+  };
+  _carteApplyFiltersUi();
+}
+
+function _carteSetFilter(key, value) {
+  const f = _carteGetFilters();
+  f[key] = value;
+  if (key === 'onlyTradable' && value) f.qty = 'all';
+  if (key === 'qty' && value !== 'all') f.onlyTradable = false;
+  _carteApplyFiltersUi();
+}
+
+function _carteOnSearchInput(el, which) {
+  const f = _carteGetFilters();
+  if (which === 'player') f.playerQ = el.value;
+  else f.q = el.value;
+  window._carteSearchCaret = { which, start: el.selectionStart, end: el.selectionEnd };
+  _carteApplyFiltersUi();
+}
+
+function _carteApplyFiltersUi() {
+  const tradeBox = document.getElementById('carte-trade-content');
+  const inTrade = tradeBox && tradeBox.style.display !== 'none';
+  if (inTrade) {
+    // In Scambi: aggiorna le viste pubbliche / suggeriti senza rifare il fetch.
+    if (window._cardTradeData) renderCardTradeContent();
+    else void loadCardTradeTab();
+  } else {
+    renderCardEventContent();
+  }
+  const caret = window._carteSearchCaret;
+  if (caret) {
+    const id = caret.which === 'player' ? 'carte-filter-player' : 'carte-filter-q';
+    const el = document.getElementById(id);
+    if (el && typeof el.setSelectionRange === 'function') {
+      try { el.focus(); el.setSelectionRange(caret.start, caret.end); } catch (_) {}
+    }
+    window._carteSearchCaret = null;
+  }
+}
+
+function _carteSearchBarHtml({ showTradeExtras = false } = {}) {
+  const f = _carteGetFilters();
+  const cat = window._cardEventCatalog;
+  const active = _carteFiltersActive();
+  const catOpts = [`<option value="all"${f.category === 'all' ? ' selected' : ''}>Tutte le tipologie</option>`]
+    .concat((cat?.category_order || []).map((c) =>
+      `<option value="${escH(c)}"${f.category === c ? ' selected' : ''}>${escH(cat.category_label_it[c] || c)}</option>`))
+    .join('');
+
+  return `
+    <div class="carte-search-bar">
+      <div class="carte-search-row">
+        <label class="carte-search-field carte-search-grow">
+          <span class="carte-search-label">Cerca carta</span>
+          <input type="search" id="carte-filter-q" class="carte-search-input" placeholder="es. arciere, golem meteorite…"
+            value="${escH(f.q)}" autocomplete="off"
+            oninput="_carteOnSearchInput(this,'q')">
+        </label>
+        ${showTradeExtras ? `
+        <label class="carte-search-field carte-search-grow">
+          <span class="carte-search-label">Giocatore / mazzo</span>
+          <input type="search" id="carte-filter-player" class="carte-search-input" placeholder="username o tag…"
+            value="${escH(f.playerQ)}" autocomplete="off"
+            oninput="_carteOnSearchInput(this,'player')">
+        </label>` : ''}
+      </div>
+      <div class="carte-search-row carte-search-row-wrap">
+        <div class="carte-search-seg" role="group" aria-label="Verso scambio">
+          <button type="button" class="carte-search-seg-btn ${f.direction === 'any' ? 'active' : ''}" onclick="_carteSetFilter('direction','any')">Entrambi</button>
+          <button type="button" class="carte-search-seg-btn ${f.direction === 'give' ? 'active' : ''}" onclick="_carteSetFilter('direction','give')">Cedere</button>
+          <button type="button" class="carte-search-seg-btn ${f.direction === 'get' ? 'active' : ''}" onclick="_carteSetFilter('direction','get')">Ricevere</button>
+        </div>
+        <label class="carte-search-field">
+          <span class="carte-search-label">Tipologia</span>
+          <select class="carte-search-select" onchange="_carteSetFilter('category', this.value)">${catOpts}</select>
+        </label>
+        <label class="carte-search-field">
+          <span class="carte-search-label">Stato</span>
+          <select class="carte-search-select" onchange="_carteSetFilter('qty', this.value)">
+            <option value="all"${f.qty === 'all' ? ' selected' : ''}>Tutte</option>
+            <option value="0"${f.qty === '0' ? ' selected' : ''}>Mancanti</option>
+            <option value="1"${f.qty === '1' ? ' selected' : ''}>Possedute (×1)</option>
+            <option value="2"${f.qty === '2' ? ' selected' : ''}>Doppioni (×2+)</option>
+          </select>
+        </label>
+        <label class="carte-search-check">
+          <input type="checkbox" ${f.onlyTradable ? 'checked' : ''} onchange="_carteSetFilter('onlyTradable', this.checked)">
+          Solo scambiabili
+        </label>
+        ${showTradeExtras ? `
+        <label class="carte-search-check">
+          <input type="checkbox" ${f.onlyMatches ? 'checked' : ''} onchange="_carteSetFilter('onlyMatches', this.checked)">
+          Solo match possibili
+        </label>` : ''}
+        <button type="button" class="btn-secondary btn-sm carte-search-reset" ${active ? '' : 'disabled'} onclick="_carteResetFilters()">✕ Reset</button>
+      </div>
+    </div>`;
 }
 
 function renderCardEventContent() {
@@ -1927,13 +2122,35 @@ function renderCardEventContent() {
 
   const tag = window._cardEventActiveTag;
   const coll = (data.collections && tag && data.collections[tag]) || {};
-  const cardsInCat = cat.cards.filter(c => c.category === window._cardEventActiveCat);
-  const totalFound = cat.cards.filter(c => (coll[c.key] || 0) >= 1).length;
+  const f = _carteGetFilters();
+  const hits = tag ? _carteFindHitsForActiveProfile() : [];
+  const hitKeys = new Set(hits.map((c) => c.key));
 
-  const catBar = cat.category_order.map(c => {
+  // Con ricerca/verso attivi: porta l'album sulla tipologia della prima carta trovata
+  // (se il filtro tipologia è "Tutte"), così vedi subito il contesto completo.
+  if (hits.length && f.category === 'all') {
+    const preferred = hits[0].category;
+    if (preferred && window._cardEventActiveCat !== preferred) {
+      window._cardEventActiveCat = preferred;
+    }
+  } else if (f.category !== 'all') {
+    window._cardEventActiveCat = f.category;
+  }
+
+  const activeCat = window._cardEventActiveCat || cat.category_order[0];
+  const cardsInCat = cat.cards.filter((c) => c.category === activeCat);
+  const totalFound = cat.cards.filter((c) => (coll[c.key] || 0) >= 1).length;
+  const hitsInCat = hits.filter((c) => c.category === activeCat);
+  const otherCatHits = {};
+  for (const h of hits) {
+    if (h.category === activeCat) continue;
+    otherCatHits[h.category] = (otherCatHits[h.category] || 0) + 1;
+  }
+
+  const catBar = cat.category_order.map((c) => {
     const total = cat.category_totals[c] || 0;
-    const found = cat.cards.filter(x => x.category === c && (coll[x.key] || 0) >= 1).length;
-    return `<button type="button" class="subtab-btn carte-cat-btn ${c === window._cardEventActiveCat ? 'active' : ''}"
+    const found = cat.cards.filter((x) => x.category === c && (coll[x.key] || 0) >= 1).length;
+    return `<button type="button" class="subtab-btn carte-cat-btn ${c === activeCat ? 'active' : ''}"
         onclick="_switchCarteCategory('${c}')">
         ${escH(cat.category_label_it[c] || c)}
         <span class="carte-cat-count">${found}/${total}</span>
@@ -1941,11 +2158,15 @@ function renderCardEventContent() {
   }).join('');
 
   const readOnly = !cat.settings?.live;
-  const grid = cardsInCat.map(c => {
+  const searching = !!(f.q || f.direction !== 'any' || f.onlyTradable || f.qty !== 'all');
+  const grid = cardsInCat.map((c) => {
     const qty = coll[c.key] || 0;
     const stateCls = qty >= 2 ? 'state-2' : qty === 1 ? 'state-1' : 'state-0';
     const borderCls = CARTE_CAT_BORDER[c.category] || '';
-    return `<button type="button" class="carte-card ${stateCls} ${borderCls}" ${readOnly ? 'disabled' : ''}
+    const isHit = hitKeys.has(c.key);
+    const dim = searching && hits.length && !isHit ? 'is-search-dim' : '';
+    const hit = isHit ? 'is-search-hit' : '';
+    return `<button type="button" class="carte-card ${stateCls} ${borderCls} ${hit} ${dim}" data-card-key="${escH(c.key)}" ${readOnly ? 'disabled' : ''}
         onclick="_onCardEventClick('${c.key}')" title="${escH(c.name_it)}">
       <img src="${escH(c.icon_url)}" alt="${escH(c.name_it)}" loading="lazy"
            onerror="this.style.visibility='hidden'">
@@ -1953,6 +2174,41 @@ function renderCardEventContent() {
       ${qty >= 2 ? `<span class="carte-card-badge">x${qty}</span>` : ''}
     </button>`;
   }).join('');
+
+  const dirLabel = f.direction === 'give' ? 'da cedere (doppioni)' : f.direction === 'get' ? 'da ricevere (mancanti)' : 'trovate';
+  let statusHtml = '';
+  if (tag && searching) {
+    if (!hits.length) {
+      statusHtml = `<div class="carte-search-status is-empty">Nessuna carta ${escH(dirLabel)} corrisponde ai filtri su questo profilo.</div>`;
+    } else {
+      const jump = Object.keys(otherCatHits).map((ck) =>
+        `<button type="button" class="carte-search-jump" onclick="_carteSetFilter('category','${escH(ck)}')">${escH(cat.category_label_it[ck] || ck)} (${otherCatHits[ck]})</button>`
+      ).join('');
+      statusHtml = `<div class="carte-search-status">
+        <strong>${hits.length}</strong> carta${hits.length === 1 ? '' : 'e'} ${escH(dirLabel)}
+        · album <strong>${escH(cat.category_label_it[activeCat] || activeCat)}</strong>
+        (${hitsInCat.length} in questa tipologia)
+        ${jump ? `<span class="carte-search-jump-wrap">Anche in: ${jump}</span>` : ''}
+      </div>`;
+    }
+  }
+
+  const hitsStrip = (tag && searching && hitsInCat.length)
+    ? `<div class="carte-search-hits">
+        <div class="carte-search-hits-label">Corrispondenze in questa tipologia</div>
+        <div class="carte-search-hits-row">
+          ${hitsInCat.map((c) => {
+            const qty = coll[c.key] || 0;
+            return `<button type="button" class="carte-card state-${qty >= 2 ? '2' : qty} ${CARTE_CAT_BORDER[c.category] || ''} is-search-hit" ${readOnly ? 'disabled' : ''}
+              onclick="_onCardEventClick('${c.key}')" title="${escH(c.name_it)}">
+              <img src="${escH(c.icon_url)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+              <span class="carte-card-name">${escH(c.name_it)}</span>
+              ${qty >= 2 ? `<span class="carte-card-badge">x${qty}</span>` : ''}
+            </button>`;
+          }).join('')}
+        </div>
+      </div>`
+    : '';
 
   const noProfile = !tag ? `<div class="profilo-empty"><p style="color:var(--text-3)">Nessun profilo CoC collegato al tuo account: collega un villaggio da "Profili" per usare questa sezione.</p></div>` : '';
   const hasAnyProfile = (data.profiles || []).length > 0;
@@ -1962,11 +2218,21 @@ function renderCardEventContent() {
       <div class="carte-total-counter">Carte trovate: <strong>${totalFound}/${cat.total_cards}</strong></div>
       ${hasAnyProfile ? `<button type="button" class="btn-secondary btn-sm" onclick="_openCarteShareDupes()">📋 Condividi doppioni</button>` : ''}
     </div>
+    ${_carteSearchBarHtml({ showTradeExtras: false })}
+    ${statusHtml}
+    ${hitsStrip}
     <div class="subtab-bar carte-cat-bar">${catBar}</div>
     ${noProfile}
     ${tag ? `<div class="carte-grid">${grid}</div>` : ''}
     ${window._userRole === 'admin' ? renderCardEventAdminToggle(cat.settings) : ''}
   `;
+
+  if (searching && hitsInCat.length) {
+    requestAnimationFrame(() => {
+      const el = box.querySelector('.carte-card.is-search-hit');
+      el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
+  }
 }
 
 const CARTE_CAT_EMOJI = {
@@ -2082,11 +2348,22 @@ function buildCarteDupesText(format) {
   return buildCarteDupesTextA();
 }
 
+function _carteInlineNotice(msg) {
+  document.getElementById('carte-inline-notice')?.remove();
+  const el = document.createElement('div');
+  el.id = 'carte-inline-notice';
+  el.className = 'carte-inline-notice';
+  el.setAttribute('role', 'status');
+  el.innerHTML = `<span>${escH(msg)}</span><button type="button" class="modal-close" aria-label="Chiudi" onclick="this.parentElement.remove()">✕</button>`;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+
 function _openCarteShareDupes(format) {
   const cat = window._cardEventCatalog;
   const data = window._cardEventData;
   if (!cat || !data || !(data.profiles || []).length) {
-    alert('Nessun profilo CoC con collezione da condividere.');
+    _carteInlineNotice('Nessun profilo CoC con collezione da condividere.');
     return;
   }
   const fmt = ['a', 'b', 'c'].includes(format) ? format : (window._carteShareFormat || 'a');
@@ -2149,7 +2426,7 @@ async function _copyCarteShareDupes() {
   } catch (_) {
     ta.focus();
     ta.select();
-    alert('Seleziona il testo e copialo manualmente (Ctrl+C / Cmd+C).');
+    _carteInlineNotice('Seleziona il testo e copialo con Ctrl+C / Cmd+C.');
   }
 }
 
@@ -2366,8 +2643,37 @@ function renderCardTradeContent() {
   const live = cat.settings?.live === true;
   const multiProfiles = (window._cardEventData?.profiles?.length || 0) > 1;
 
-  const selfHtml = data.selfMatches.length
-    ? data.selfMatches.map((m, i) => {
+  if (!window._carteTradeSub || (!multiProfiles && window._carteTradeSub === 'self')) {
+    window._carteTradeSub = multiProfiles ? 'self' : 'public';
+  }
+  if (!window._cartePublicWin) window._cartePublicWin = 'hub';
+  const sub = window._carteTradeSub;
+  const f = _carteGetFilters();
+
+  const filteredSelf = (data.selfMatches || []).filter((m) => {
+    if (f.category !== 'all' && m.category && m.category !== f.category) {
+      const catGive = m.card_a_to_b_meta?.category || m.category;
+      const catGet = m.card_b_to_a_meta?.category || m.category;
+      if (f.category !== catGive && f.category !== catGet) return false;
+    }
+    if (f.q) {
+      const a = m.card_a_to_b_meta || { name_it: m.card_a_to_b, key: m.card_a_to_b };
+      const b = m.card_b_to_a_meta || { name_it: m.card_b_to_a, key: m.card_b_to_a };
+      if (f.direction === 'give') {
+        // In self non c'è un "mio" lato unico: match se una delle due carte corrisponde
+        if (!_carteCardTextMatch(a, f.q) && !_carteCardTextMatch(b, f.q)) return false;
+      } else if (f.direction === 'get') {
+        if (!_carteCardTextMatch(a, f.q) && !_carteCardTextMatch(b, f.q)) return false;
+      } else if (!_carteCardTextMatch(a, f.q) && !_carteCardTextMatch(b, f.q)) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  const selfHtml = filteredSelf.length
+    ? filteredSelf.map((m) => {
+        const i = data.selfMatches.indexOf(m);
         const nameA = escH(m.profile_a.username || m.profile_a.coc_tag);
         const nameB = escH(m.profile_b.username || m.profile_b.coc_tag);
         const cardAB = escH(m.card_a_to_b_meta?.name_it || m.card_a_to_b);
@@ -2412,13 +2718,7 @@ function renderCardTradeContent() {
         ${live ? `<button type="button" class="btn-secondary btn-sm" onclick="_openSelfTradeConfirmModal(${i})">Applica subito</button>` : ''}
       </div>`;
       }).join('')
-    : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio disponibile tra i tuoi profili collegati.</p></div>`;
-
-  if (!window._carteTradeSub || (!multiProfiles && window._carteTradeSub === 'self')) {
-    window._carteTradeSub = multiProfiles ? 'self' : 'public';
-  }
-  if (!window._cartePublicWin) window._cartePublicWin = 'hub';
-  const sub = window._carteTradeSub;
+    : `<div class="profilo-empty"><p style="color:var(--text-3)">${_carteFiltersActive() ? 'Nessuno scambio tra i tuoi profili con questi filtri.' : 'Nessuno scambio disponibile tra i tuoi profili collegati.'}</p></div>`;
 
   const subtabs = `
     <div class="subtab-bar" id="carte-trade-subtabs">
@@ -2428,6 +2728,7 @@ function renderCardTradeContent() {
 
   box.innerHTML = `
     ${!live ? `<div class="profilo-empty" style="margin-bottom:1rem"><p style="color:var(--text-3)">⚠️ Evento in sola lettura: non è più possibile proporre o applicare nuovi scambi.</p></div>` : ''}
+    ${_carteSearchBarHtml({ showTradeExtras: true })}
     ${subtabs}
     <div id="carte-trade-self" style="display:${sub === 'self' && multiProfiles ? 'block' : 'none'}">
       <div class="carte-trade-section">
@@ -2447,6 +2748,112 @@ function _cartePublicWinHeader(title, backWin = 'hub') {
     <button type="button" class="btn-secondary btn-sm carte-win-back" onclick="_openCartePublicWin('${escH(backWin)}')">« Indietro</button>
     <h3 class="carte-win-title">${escH(title)}</h3>
   </div>`;
+}
+
+/** Filtra un match P2P (tu cedi card_give / ricevi card_get) rispetto ai filtri correnti. */
+function _carteMatchPassesFilters(m, f) {
+  if (f.playerQ) {
+    const hay = _carteNormSearch([m.other_profile?.username, m.other_profile?.coc_tag, m.my_profile?.username, m.my_profile?.coc_tag].filter(Boolean).join(' '));
+    if (!hay.includes(_carteNormSearch(f.playerQ))) return false;
+  }
+  if (f.category !== 'all') {
+    const catKey = m.category || m.card_give_meta?.category || m.card_get_meta?.category;
+    if (catKey && catKey !== f.category) return false;
+  }
+  if (f.q) {
+    const give = m.card_give_meta || { name_it: m.card_give, key: m.card_give, category: m.category };
+    const get = m.card_get_meta || { name_it: m.card_get, key: m.card_get, category: m.category };
+    if (f.direction === 'give') {
+      if (!_carteCardTextMatch(give, f.q)) return false;
+    } else if (f.direction === 'get') {
+      if (!_carteCardTextMatch(get, f.q)) return false;
+    } else if (!_carteCardTextMatch(give, f.q) && !_carteCardTextMatch(get, f.q)) {
+      return false;
+    }
+  } else if (f.direction === 'give' || f.direction === 'get') {
+    // Senza testo: il verso da solo non nasconde i match (sono già scambi bilanciati).
+  }
+  return true;
+}
+
+/** Un mazzo pubblico è rilevante per i filtri (giocatore / carta / match). */
+function _carteDeckPassesFilters(deck, f, cat) {
+  const p = deck.profile || {};
+  if (f.playerQ) {
+    const hay = _carteNormSearch([p.username, p.coc_tag, p.coc_clan_name].filter(Boolean).join(' '));
+    if (!hay.includes(_carteNormSearch(f.playerQ))) return false;
+  }
+  if (f.onlyMatches && !(deck.matches || []).length) return false;
+  const matchesFiltered = (deck.matches || []).filter((m) => _carteMatchPassesFilters({ ...m, other_profile: p }, f));
+  if (f.onlyMatches && !matchesFiltered.length) return false;
+
+  const coll = deck.collection || {};
+  const cardSearch = !!(f.q || f.direction !== 'any' || f.category !== 'all' || f.qty !== 'all' || f.onlyTradable);
+  if (!cardSearch) return true;
+
+  // Carta cercata sul mazzo altrui: Cedere (dal tuo punto di vista) → loro manca la carta
+  // che tu potresti dare; Ricevere → loro hanno doppione della carta che ti manca.
+  const cards = (cat?.cards || []).filter((c) => {
+    if (f.category !== 'all' && c.category !== f.category) return false;
+    if (!_carteCardTextMatch(c, f.q)) return false;
+    return true;
+  });
+  if (!f.q && f.direction === 'any' && f.category === 'all' && !f.onlyTradable && f.qty === 'all') return true;
+
+  if (matchesFiltered.length) return true;
+
+  for (const c of cards) {
+    const qty = coll[c.key] || 0;
+    if (f.direction === 'give') {
+      // Tu cedi: loro devono NON avere la carta (mancante)
+      if (qty === 0) return true;
+    } else if (f.direction === 'get') {
+      // Tu ricevi: loro devono avere doppione
+      if (qty >= 2) return true;
+    } else {
+      if (f.onlyTradable || f.qty === '2') { if (qty >= 2) return true; }
+      else if (f.qty === '0') { if (qty === 0) return true; }
+      else if (f.qty === '1') { if (qty === 1) return true; }
+      else if (qty >= 0) return true;
+    }
+  }
+  // Se c'è solo filtro giocatore già passato sopra
+  if (!f.q && f.direction === 'any' && !f.onlyTradable && f.qty === 'all' && f.category === 'all') return true;
+  return false;
+}
+
+function _carteDeckHighlightKeys(deck, f, cat) {
+  const coll = deck.collection || {};
+  const keys = new Set();
+  const hasCardFilter = !!(f.q || f.direction !== 'any' || f.onlyTradable || f.qty !== 'all' || f.category !== 'all');
+  if (!hasCardFilter) {
+    // Solo player/match: evidenzia comunque le carte dei match filtrati
+    for (const m of deck.matches || []) {
+      if (!_carteMatchPassesFilters({ ...m, other_profile: deck.profile }, f)) continue;
+      if (m.card_give) keys.add(m.card_give);
+      if (m.card_get) keys.add(m.card_get);
+    }
+    return keys;
+  }
+  for (const c of cat?.cards || []) {
+    if (f.category !== 'all' && c.category !== f.category) continue;
+    if (f.q && !_carteCardTextMatch(c, f.q)) continue;
+    const qty = coll[c.key] || 0;
+    let ok = true;
+    if (f.direction === 'give') ok = qty === 0;
+    else if (f.direction === 'get') ok = qty >= 2;
+    else if (f.onlyTradable || f.qty === '2') ok = qty >= 2;
+    else if (f.qty === '0') ok = qty === 0;
+    else if (f.qty === '1') ok = qty === 1;
+    else ok = true; // solo testo/tipologia: evidenzia tutte le carte matchate
+    if (ok) keys.add(c.key);
+  }
+  for (const m of deck.matches || []) {
+    if (!_carteMatchPassesFilters({ ...m, other_profile: deck.profile }, f)) continue;
+    if (m.card_give) keys.add(m.card_give);
+    if (m.card_get) keys.add(m.card_get);
+  }
+  return keys;
 }
 
 function _renderCartePublicWindow() {
@@ -2514,8 +2921,12 @@ function _renderCartePublicWindow() {
 
   if (win === 'suggested') {
     const multiMine = myProfiles.length > 1;
-    const matchesHtml = (data?.matches || []).length
-      ? data.matches.map((m, i) => `
+    const f = _carteGetFilters();
+    const filtered = (data?.matches || [])
+      .map((m, i) => ({ m, i }))
+      .filter(({ m }) => _carteMatchPassesFilters(m, f));
+    const matchesHtml = filtered.length
+      ? filtered.map(({ m, i }) => `
         <div class="carte-self-row semaforo-green">
           <div class="carte-self-row-header">
             <span class="carte-self-row-players">con ${escH(m.other_profile?.username || m.other_profile?.coc_tag || '—')}</span>
@@ -2543,10 +2954,12 @@ function _renderCartePublicWindow() {
             <button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">💬 Proponi scambio</button>
           </div>` : ''}
         </div>`).join('')
-      : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio automatico con mazzi pubblici al momento. Serve: tu hai un doppione che all’altro manca, e lui ha un doppione (stessa tipologia) che manca a te.</p></div>`;
+      : `<div class="profilo-empty"><p style="color:var(--text-3)">${_carteFiltersActive()
+        ? 'Nessuno scambio suggerito con questi filtri.'
+        : 'Nessuno scambio automatico con mazzi pubblici al momento. Serve: tu hai un doppione che all’altro manca, e lui ha un doppione (stessa tipologia) che manca a te.'}</p></div>`;
     box.innerHTML = `${_cartePublicWinHeader('Scambi suggeriti con altri')}<div class="carte-trade-section">
       <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.7rem">
-        Stesse regole di «Tra i tuoi profili», ma tra account diversi: solo doppione ↔ carta mancante, stessa tipologia (elisir↔elisir, ecc.).
+        Stesse regole di «Tra i tuoi profili», ma tra account diversi: solo doppione ↔ carta mancante, stessa tipologia. Usa la barra ricerca sopra per filtrare per carta o giocatore.
       </p>
       ${matchesHtml}
     </div>`;
@@ -2582,26 +2995,31 @@ function _renderCartePublicWindow() {
   _renderCartePublicWindow();
 }
 
-const CARTE_CAT_BORDER = {
-  elixir: 'cat-border-elixir',
-  dark_elixir: 'cat-border-dark',
-  builder_base: 'cat-border-builder',
-  super_troop: 'cat-border-super',
-};
-
-function _renderFullAlbumGrid(collection, albumId) {
+function _renderFullAlbumGrid(collection, albumId, highlightKeys = null) {
   const cat = window._cardEventCatalog;
   if (!cat) return '';
-  const filter = window._carteAlbumFilter || 'all';
-  const cats = filter === 'all' ? cat.category_order : cat.category_order.filter(c => c === filter);
-  return cats.map(catKey => {
-    const cardsInCat = cat.cards.filter(c => c.category === catKey);
-    const found = cardsInCat.filter(c => (collection[c.key] || 0) >= 1).length;
-    const tiles = cardsInCat.map(c => {
+  const f = _carteGetFilters();
+  // Con ricerca attiva e tipologia "Tutte", se ci sono highlight porta l'album sulla categoria della prima hit
+  let filter = window._carteAlbumFilter || 'all';
+  if (highlightKeys && highlightKeys.size && f.category !== 'all') {
+    filter = f.category;
+  } else if (highlightKeys && highlightKeys.size && (f.q || f.direction !== 'any') && filter === 'all') {
+    const first = cat.cards.find((c) => highlightKeys.has(c.key));
+    if (first) filter = first.category;
+  }
+  const cats = filter === 'all' ? cat.category_order : cat.category_order.filter((c) => c === filter);
+  const searching = !!(highlightKeys && highlightKeys.size);
+  return cats.map((catKey) => {
+    const cardsInCat = cat.cards.filter((c) => c.category === catKey);
+    const found = cardsInCat.filter((c) => (collection[c.key] || 0) >= 1).length;
+    const tiles = cardsInCat.map((c) => {
       const qty = collection[c.key] || 0;
       const stateCls = qty >= 2 ? 'state-2' : qty === 1 ? 'state-1' : 'state-0';
       const borderCls = CARTE_CAT_BORDER[c.category] || '';
-      return `<div class="carte-album-tile ${stateCls} ${borderCls}" title="${escH(c.name_it)}${qty >= 2 ? ` ×${qty}` : qty === 1 ? ' (posseduta)' : ' (mancante)'}">
+      const isHit = searching && highlightKeys.has(c.key);
+      const dim = searching && !isHit ? 'is-search-dim' : '';
+      const hit = isHit ? 'is-search-hit' : '';
+      return `<div class="carte-album-tile ${stateCls} ${borderCls} ${hit} ${dim}" title="${escH(c.name_it)}${qty >= 2 ? ` ×${qty}` : qty === 1 ? ' (posseduta)' : ' (mancante)'}">
         <img src="${escH(c.icon_url)}" alt="${escH(c.name_it)}" loading="lazy" onerror="this.style.visibility='hidden'">
         ${qty >= 2 ? `<span class="carte-card-badge">x${qty}</span>` : ''}
       </div>`;
@@ -2640,6 +3058,9 @@ function _renderAlbumsWindow(live, which = 'mine') {
   const myProfiles = window._cardEventData?.profiles || [];
   const myCollections = window._cardEventData?.collections || {};
   const pub = window._cardPublicData || { decks: [] };
+  const f = _carteGetFilters();
+  // Allinea il filtro album (chip Tipologia sotto) al filtro ricerca quando impostato
+  if (f.category !== 'all') window._carteAlbumFilter = f.category;
   const filter = window._carteAlbumFilter || 'all';
 
   const filterBar = `
@@ -2657,20 +3078,29 @@ function _renderAlbumsWindow(live, which = 'mine') {
     </div>`;
 
   if (which === 'others') {
-    const otherAlbums = (pub.decks || []).length
-      ? pub.decks.map((d, i) => {
+    const f = _carteGetFilters();
+    const decks = (pub.decks || [])
+      .map((d, i) => ({ d, i }))
+      .filter(({ d }) => _carteDeckPassesFilters(d, f, cat));
+    const otherAlbums = decks.length
+      ? decks.map(({ d, i }) => {
           const albumId = `other:${i}`;
-          const isCollapsed = _isAlbumCollapsed(albumId);
+          const highlightKeys = _carteDeckHighlightKeys(d, f, cat);
+          const forceExpand = highlightKeys.size > 0 && _carteFiltersActive();
+          const isCollapsed = forceExpand ? false : _isAlbumCollapsed(albumId);
           const p = d.profile;
           const coll = d.collection || {};
-          const found = cat ? cat.cards.filter(c => (coll[c.key] || 0) >= 1).length : 0;
+          const found = cat ? cat.cards.filter((c) => (coll[c.key] || 0) >= 1).length : 0;
           const total = cat?.total_cards || 0;
-          const n = d.matches?.length || 0;
+          const filteredMatches = (d.matches || []).filter((m) => _carteMatchPassesFilters({ ...m, other_profile: p }, f));
+          const n = filteredMatches.length;
           const multiMine = myProfiles.length > 1;
           const matchesPreview = n
             ? `<div class="carte-album-matches">
                 <div class="carte-album-matches-title">Possibili carte da scambiare · ${n}</div>
-                ${d.matches.slice(0, 6).map((m, mi) => `
+                ${filteredMatches.slice(0, 6).map((m) => {
+                  const mi = (d.matches || []).indexOf(m);
+                  return `
                   <div class="carte-album-match-row">
                     ${multiMine ? `<div class="carte-match-my-profile">👤 con il tuo profilo: <strong>${escH(m.my_profile?.username || m.my_profile?.coc_tag || '—')}</strong></div>` : ''}
                     <div class="carte-album-match-pair">
@@ -2690,11 +3120,12 @@ function _renderAlbumsWindow(live, which = 'mine') {
                       <button type="button" class="btn-secondary btn-sm" onclick="_applyFromPublicDeck(${i},${mi})" title="Cedi subito il tuo doppione; l'altro vedrà che hai già confermato">⚡ Applica subito</button>
                       <button type="button" class="btn-primary btn-sm" onclick="_proposeFromPublicDeck(${i},${mi})">💬 Proponi scambio</button>
                     </div>` : ''}
-                  </div>`).join('')}
+                  </div>`;
+                }).join('')}
                 ${n > 6 ? `<div class="carte-qty-modal-note" style="text-align:left;margin:0.35rem 0 0">+${n - 6} altri — apri chat o «Scambi suggeriti».</div>` : ''}
               </div>`
-            : `<div class="carte-album-matches carte-album-matches-empty">Nessuno scambio automatico con questo mazzo (serve doppione↔mancante, stessa tipologia).</div>`;
-          return `<div class="carte-album-card">
+            : `<div class="carte-album-matches carte-album-matches-empty">${_carteFiltersActive() ? 'Nessuno scambio automatico con questi filtri.' : 'Nessuno scambio automatico con questo mazzo (serve doppione↔mancante, stessa tipologia).'}</div>`;
+          return `<div class="carte-album-card ${highlightKeys.size ? 'is-search-relevant' : ''}">
             <div class="carte-album-card-head">
               <div class="carte-album-card-title">
                 <strong>${escH(p.username || p.coc_tag)}</strong>
@@ -2705,16 +3136,20 @@ function _renderAlbumsWindow(live, which = 'mine') {
             </div>
             ${matchesPreview}
             <div class="carte-album-card-body ${isCollapsed ? 'is-collapsed' : ''}">
-              ${_renderFullAlbumGrid(coll, albumId)}
+              ${_renderFullAlbumGrid(coll, albumId, highlightKeys)}
             </div>
           </div>`;
         }).join('')
-      : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessun altro utente ha reso pubblico il proprio mazzo per ora.</p></div>`;
+      : `<div class="profilo-empty"><p style="color:var(--text-3)">${_carteFiltersActive() ? 'Nessun mazzo pubblico corrisponde ai filtri.' : 'Nessun altro utente ha reso pubblico il proprio mazzo per ora.'}</p></div>`;
+    const status = _carteFiltersActive()
+      ? `<div class="carte-search-status">${decks.length} mazzo${decks.length === 1 ? '' : 'i'} con i filtri attivi · album evidenziato sulla tipologia cercata</div>`
+      : '';
     return `
       <div class="carte-trade-section">
         ${filterBar}
+        ${status}
         <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.7rem">
-          Album pubblici con anteprima scambi (doppione ↔ mancante, stessa tipologia). Di default ridotti — espandi per il catalogo completo.
+          Album pubblici con anteprima scambi. Con ricerca «Cedere» vedi chi non ha la carta; con «Ricevere» chi la ha in doppione. Di default ridotti — espansi automaticamente se c’è una corrispondenza.
         </p>
         ${otherAlbums}
       </div>`;
