@@ -5414,7 +5414,7 @@ async function applyBonusCriteria() {
     const thDisplay = critThWeight ? ` <span style="color:var(--text-3);font-size:0.75rem">TH${p.th_level || '?'}</span>` : '';
     return `<tr>
       <td style="width:40px;text-align:center">${pos}</td>
-      <td><label style="cursor:pointer"><input type="checkbox" ${sel} onchange="toggleBonusSelection('${escapeForAttr(p.player_name)}',this.checked)"> <span class="member-name">${escH(p.player_name)}</span>${thDisplay}</label></td>
+      <td><label style="cursor:pointer"><input type="checkbox" ${sel} onchange="toggleBonusSelection('${escH(p.player_name).replace(/'/g, "&#39;")}',this.checked)"> <span class="member-name">${escH(p.player_name)}</span>${thDisplay}</label></td>
       <td style="text-align:center">${p.stars || 0}</td>
       <td style="text-align:center">${p.attacks_made || 0}/${p.attacks_required || 0}</td>
       <td style="text-align:center">${p.avg_destr.toFixed(1)}%</td>
