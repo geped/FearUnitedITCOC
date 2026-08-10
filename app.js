@@ -5278,15 +5278,11 @@ async function applyBonusCriteria() {
   const msg     = document.getElementById('bm-msg');
   const div     = document.getElementById('bm-candidates');
 
+  // Criteri unificati con il bot Telegram (4 flag)
   const critParticipated  = document.getElementById('crit-participated').checked;
-  const critMinStars      = document.getElementById('crit-min-stars').checked;
-  const critMinDestr      = document.getElementById('crit-min-destr').checked;
-  const critMinAtk        = document.getElementById('crit-min-atk').checked;
-  const critNoRecent      = document.getElementById('crit-no-recent').checked;
-  const minStars          = parseInt(document.getElementById('crit-stars-val').value) || 0;
-  const minDestr          = parseFloat(document.getElementById('crit-destr-val').value) || 0;
-  const minAtk            = parseInt(document.getElementById('crit-atk-val').value) || 0;
-  const recentMonths      = parseInt(document.getElementById('crit-recent-months').value) || 1;
+  const critFullAttacks   = document.getElementById('crit-full-attacks').checked;
+  const critNoPrevBonus   = document.getElementById('crit-no-prev-bonus').checked;
+  const critThWeight      = document.getElementById('crit-th-weight').checked;
 
   if (!season) { msg.textContent = '⚠ Seleziona una stagione.'; return; }
 
@@ -5298,50 +5294,38 @@ async function applyBonusCriteria() {
   bmSelections = new Set();
   document.getElementById('bm-footer').style.display = 'none';
 
-  // Carica dati storici per season
-  const qCrit = db.from('cwl_history').select('*').eq('season', season).eq('is_secondary', false);
-  if (window._userClanTag) qCrit.eq('clan_tag', window._userClanTag);
-  const { data: history, error } = await qCrit;
-
-  if (error || !history?.length) {
-    msg.textContent = '⚠ Nessun dato per questa stagione. Prima carica lo storico o i dati live dalla tab CWL.';
-    applyBtn.textContent = '🔍 Applica Criteri';
-    return;
-  }
-
-  // Carica bonus recenti per criterio "no recent"
-  let recentBonusNames = new Set();
-  if (critNoRecent) {
-    const pastDate = new Date();
-    pastDate.setMonth(pastDate.getMonth() - recentMonths);
-    const fromSeason = pastDate.toISOString().slice(0, 7);
-    const qRecent2 = db.from('cwl_history')
-      .select('player_name, season')
-      .eq('bonus_assigned', true)
-      .gte('season', fromSeason)
-      .neq('season', season);
-    if (window._userClanTag) qRecent2.eq('clan_tag', window._userClanTag);
-    const { data: recentData } = await qRecent2;
-    if (recentData) recentData.forEach(r => recentBonusNames.add(r.player_name));
-  }
-
-  // Se ci sono dati live, li usiamo — altrimenti storico DB
+  // Prima prova con dati live, poi con storico DB
   let pool = [];
+  let fromLive = false;
+
   if (cwlLiveData && cwlLiveData.length) {
+    // Usa dati live CWL
+    fromLive = true;
     pool = cwlLiveData.map(p => {
       const req  = Math.max(p.attacks_required, 1);
       const made = p.attacks_made;
       const avgD = made > 0 ? p.destruction / made : 0;
-      // Formula merito CWL: (stelle/req)*40 + avgDestruction*0.2 + (made/req)*20 — allineata con api/generate-bonuses.js
+      // Formula merito CWL: (stelle/req)*40 + avgDestruction*0.2 + (made/req)*20
       const merit = (p.stars / req) * 40 + avgD * 0.2 + (made / req) * 20;
       return {
         player_name: p.name, stars: p.stars, destruction: p.destruction,
         attacks_made: made, attacks_required: req,
         avg_destr: avgD, participated: true, merit: Math.round(merit * 10) / 10,
-        bonus_assigned: false, still_in_clan: true
+        bonus_assigned: false, still_in_clan: true, th_level: p.th_level || 0
       };
     });
   } else {
+    // Carica dati storici per season
+    const qCrit = db.from('cwl_history').select('*').eq('season', season).eq('is_secondary', false);
+    if (window._userClanTag) qCrit.eq('clan_tag', window._userClanTag);
+    const { data: history, error } = await qCrit;
+
+    if (error || !history?.length) {
+      msg.textContent = '⚠ Nessun dato per questa stagione. Prima carica lo storico o i dati live dalla tab CWL.';
+      applyBtn.textContent = '🔍 Applica Criteri';
+      return;
+    }
+
     pool = history.map(h => ({
       player_name: h.player_name,
       stars: h.stars || 0,
@@ -5352,20 +5336,129 @@ async function applyBonusCriteria() {
       participated: h.participated || false,
       merit: h.bonus_score || 0,
       bonus_assigned: h.bonus_assigned || false,
-      still_in_clan: h.still_in_clan
+      still_in_clan: h.still_in_clan,
+      th_level: h.th_level || 0
     }));
   }
 
-  // Applica filtri
+  // Carica bonus stagione precedente per criterio "no prev bonus"
+  let prevSeasonBonusNames = new Set();
+  if (critNoPrevBonus) {
+    const prevSeason = prevSeasonYM(season);
+    if (prevSeason) {
+      const qPrev = db.from('cwl_history')
+        .select('player_name')
+        .eq('season', prevSeason)
+        .eq('bonus_assigned', true);
+      if (window._userClanTag) qPrev.eq('clan_tag', window._userClanTag);
+      const { data: prevData } = await qPrev;
+      if (prevData) prevData.forEach(r => prevSeasonBonusNames.add(r.player_name));
+    }
+  }
+
+  // Calcola mediana TH per peso TH
+  let medianTh = 0;
+  if (critThWeight) {
+    const thValues = pool.map(p => p.th_level || 0).filter(th => th > 0).sort((a, b) => a - b);
+    if (thValues.length) medianTh = thValues[Math.floor(thValues.length / 2)];
+  }
+
+  // Applica filtri (unificati con bot Telegram)
   let filtered = pool.filter(p => {
     if (!p.still_in_clan) return false;
     if (critParticipated && !p.participated) return false;
-    if (critMinStars && p.stars < minStars) return false;
-    if (critMinDestr && p.avg_destr < minDestr) return false;
-    if (critMinAtk && p.attacks_made < minAtk) return false;
-    if (critNoRecent && recentBonusNames.has(p.player_name)) return false;
+    if (critFullAttacks && p.attacks_required > 0) {
+      if (p.attacks_made < p.attacks_required) return false;
+    }
+    if (critNoPrevBonus && prevSeasonBonusNames.has(p.player_name)) return false;
     return true;
   });
+
+  // Applica peso TH al merito (se abilitato)
+  if (critThWeight && medianTh > 0) {
+    filtered = filtered.map(p => {
+      const th = p.th_level || 0;
+      const delta = medianTh - th;
+      const factor = 1 + Math.max(-0.12, Math.min(0.12, delta * 0.012));
+      const meritAdj = Math.round(p.merit * factor * 10) / 10;
+      return { ...p, meritAdj };
+    });
+  } else {
+    filtered = filtered.map(p => ({ ...p, meritAdj: p.merit }));
+  }
+
+  // Ordina per merito (aggiustato se peso TH attivo)
+  filtered.sort((a, b) => (b.meritAdj || 0) - (a.meritAdj || 0) || a.player_name.localeCompare(b.player_name, 'it'));
+
+  if (!filtered.length) {
+    msg.textContent = '⚠ Nessun giocatore idoneo con i criteri selezionati.';
+    applyBtn.textContent = '🔍 Applica Criteri';
+    return;
+  }
+
+  bmCandidates = filtered;
+  const topN = filtered.slice(0, count);
+  topN.forEach(p => bmSelections.add(p.player_name));
+
+  const critInfo = [];
+  if (critParticipated) critInfo.push('solo partecipanti');
+  if (critFullAttacks) critInfo.push('attacchi completi');
+  if (critNoPrevBonus) critInfo.push('no bonus stagione prec.');
+  if (critThWeight) critInfo.push(`peso TH (mediana: ${medianTh})`);
+  const critText = critInfo.length ? critInfo.join(' · ') : 'roster attivo';
+
+  const rows = filtered.map((p, i) => {
+    const sel = bmSelections.has(p.player_name) ? 'checked' : '';
+    const pos = i + 1;
+    const meritDisplay = critThWeight ? `${p.meritAdj.toFixed(1)} (base: ${p.merit.toFixed(1)})` : p.merit.toFixed(1);
+    const thDisplay = critThWeight ? ` <span style="color:var(--text-3);font-size:0.75rem">TH${p.th_level || '?'}</span>` : '';
+    return `<tr>
+      <td style="width:40px;text-align:center">${pos}</td>
+      <td><label style="cursor:pointer"><input type="checkbox" ${sel} onchange="toggleBonusSelection('${escapeForAttr(p.player_name)}',this.checked)"> <span class="member-name">${escH(p.player_name)}</span>${thDisplay}</label></td>
+      <td style="text-align:center">${p.stars || 0}</td>
+      <td style="text-align:center">${p.attacks_made || 0}/${p.attacks_required || 0}</td>
+      <td style="text-align:center">${p.avg_destr.toFixed(1)}%</td>
+      <td style="text-align:center;font-weight:600;color:var(--gold)">${meritDisplay}</td>
+    </tr>`;
+  }).join('');
+
+  div.innerHTML = `
+    <p style="font-size:0.82rem;color:var(--text-3);margin-bottom:0.6rem">
+      ${fromLive ? '🔴 Dati CWL live' : `📊 Storico DB (${season})`} · Criteri: ${critText} · Top ${count} selezionati
+    </p>
+    <div class="table-wrap" style="max-height:320px;overflow-y:auto">
+      <table>
+        <thead><tr>
+          <th style="width:40px">#</th>
+          <th>Giocatore</th>
+          <th style="width:60px">Stelle</th>
+          <th style="width:70px">Attacchi</th>
+          <th style="width:80px">Distr. ø</th>
+          <th style="width:80px">Merito</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  document.getElementById('bm-sel-count').textContent = bmSelections.size;
+  document.getElementById('bm-footer').style.display = 'flex';
+  applyBtn.textContent = '🔍 Applica Criteri';
+  msg.textContent = '';
+}
+
+// Helper: stagione YYYY-MM precedente (allineato con bot Telegram)
+function prevSeasonYM(season) {
+  const base = String(season || '').trim().slice(0, 7);
+  const [ys, ms] = base.split('-');
+  const y = Number(ys);
+  const m = Number(ms);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return null;
+  const d = new Date(Date.UTC(y, m - 1, 1));
+  d.setUTCMonth(d.getUTCMonth() - 1);
+  const yy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  return `${yy}-${mm}`;
+}
 
   filtered.sort((a, b) => b.merit - a.merit);
   bmCandidates = filtered;
