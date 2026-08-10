@@ -4178,9 +4178,75 @@ tbody tr:last-child td { border-bottom: none; }
     font-family: var(--font-mono);
     color: var(--text-2);
     font-size: 0.9rem;
-    margin-bottom: 0.6rem;
+    margin-bottom: 0;
 }
 .carte-total-counter strong { color: var(--gold); }
+
+.carte-total-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 0.75rem;
+    margin-bottom: 0.6rem;
+}
+
+.carte-share-modal-box {
+    max-width: 520px;
+    width: 100%;
+}
+.carte-share-body {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+.carte-share-hint {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-2);
+}
+.carte-share-formats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+.carte-share-fmt-btn {
+    flex: 1 1 auto;
+    min-width: 7.5rem;
+    padding: 0.45rem 0.55rem;
+    font-size: 0.8rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--bg-2);
+    color: var(--text-2);
+    cursor: pointer;
+}
+.carte-share-fmt-btn.active {
+    border-color: var(--gold);
+    color: var(--gold);
+    background: color-mix(in srgb, var(--gold) 12%, var(--bg-2));
+}
+.carte-share-fmt-desc {
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-3);
+}
+.carte-share-preview {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 220px;
+    resize: vertical;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    line-height: 1.4;
+    padding: 0.65rem 0.75rem;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    background: var(--bg-1);
+    color: var(--text-1);
+    white-space: pre-wrap;
+}
 
 .carte-cat-bar { margin-bottom: 1rem; flex-wrap: wrap; }
 .carte-cat-count {

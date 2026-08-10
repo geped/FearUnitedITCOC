@@ -1955,14 +1955,202 @@ function renderCardEventContent() {
   }).join('');
 
   const noProfile = !tag ? `<div class="profilo-empty"><p style="color:var(--text-3)">Nessun profilo CoC collegato al tuo account: collega un villaggio da "Profili" per usare questa sezione.</p></div>` : '';
+  const hasAnyProfile = (data.profiles || []).length > 0;
 
   box.innerHTML = `
-    <div class="carte-total-counter">Carte trovate: <strong>${totalFound}/${cat.total_cards}</strong></div>
+    <div class="carte-total-row">
+      <div class="carte-total-counter">Carte trovate: <strong>${totalFound}/${cat.total_cards}</strong></div>
+      ${hasAnyProfile ? `<button type="button" class="btn-secondary btn-sm" onclick="_openCarteShareDupes()">📋 Condividi doppioni</button>` : ''}
+    </div>
     <div class="subtab-bar carte-cat-bar">${catBar}</div>
     ${noProfile}
     ${tag ? `<div class="carte-grid">${grid}</div>` : ''}
     ${window._userRole === 'admin' ? renderCardEventAdminToggle(cat.settings) : ''}
   `;
+}
+
+const CARTE_CAT_EMOJI = {
+  elixir: '🟣',
+  dark_elixir: '⚫',
+  builder_base: '🔧',
+  super_troop: '⭐',
+};
+
+/** Elenco doppioni (qty >= 2) per profilo, già filtrati e ordinati per categoria/catalogo. */
+function _carteDupesByProfile() {
+  const cat = window._cardEventCatalog;
+  const data = window._cardEventData;
+  if (!cat || !data) return [];
+  return (data.profiles || []).map((p) => {
+    const coll = (data.collections && data.collections[p.coc_tag]) || {};
+    const byCat = {};
+    for (const catKey of cat.category_order) {
+      byCat[catKey] = cat.cards
+        .filter((c) => c.category === catKey && (coll[c.key] || 0) >= 2)
+        .map((c) => ({ key: c.key, name_it: c.name_it, qty: coll[c.key] }));
+    }
+    return {
+      id: p.id,
+      coc_tag: p.coc_tag,
+      label: p.username || p.label || p.coc_tag,
+      byCat,
+    };
+  });
+}
+
+function _carteShareHeader() {
+  return '🎴 I miei doppioni — Clash of Cards\nCoCBoard';
+}
+
+function _carteShareCatLine(cat, catKey) {
+  const emoji = CARTE_CAT_EMOJI[catKey] || '';
+  const label = cat.category_label_it[catKey] || catKey;
+  return `${emoji} ${label}`.trim();
+}
+
+/** Formato A: blocco per ogni profilo CoC, categorie sotto. */
+function buildCarteDupesTextA() {
+  const cat = window._cardEventCatalog;
+  if (!cat) return '';
+  const profiles = _carteDupesByProfile();
+  const lines = [_carteShareHeader(), ''];
+  if (!profiles.length) {
+    lines.push('(Nessun profilo CoC collegato.)');
+    return lines.join('\n');
+  }
+  for (const p of profiles) {
+    lines.push(`—— ${p.label} (${p.coc_tag}) ——`);
+    for (const catKey of cat.category_order) {
+      lines.push(_carteShareCatLine(cat, catKey));
+      const items = p.byCat[catKey] || [];
+      if (!items.length) lines.push('(nessun doppione)');
+      else for (const it of items) lines.push(`• ${it.name_it} x${it.qty}`);
+      lines.push('');
+    }
+  }
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+}
+
+/** Formato B: un elenco per categoria, profilo tra parentesi su ogni voce. */
+function buildCarteDupesTextB() {
+  const cat = window._cardEventCatalog;
+  if (!cat) return '';
+  const profiles = _carteDupesByProfile();
+  const lines = [_carteShareHeader(), ''];
+  for (const catKey of cat.category_order) {
+    lines.push(_carteShareCatLine(cat, catKey));
+    const parts = [];
+    for (const p of profiles) {
+      for (const it of p.byCat[catKey] || []) {
+        parts.push(`${it.name_it} x${it.qty} (${p.label})`);
+      }
+    }
+    if (!parts.length) lines.push('(nessun doppione)');
+    else lines.push(`• ${parts.join(', ')}`);
+    lines.push('');
+  }
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+}
+
+/** Formato C: solo carte per categoria, quantità sommate tra i profili (senza attributo profilo). */
+function buildCarteDupesTextC() {
+  const cat = window._cardEventCatalog;
+  if (!cat) return '';
+  const profiles = _carteDupesByProfile();
+  const lines = [_carteShareHeader(), ''];
+  for (const catKey of cat.category_order) {
+    lines.push(_carteShareCatLine(cat, catKey));
+    const qtyByKey = new Map();
+    for (const p of profiles) {
+      for (const it of p.byCat[catKey] || []) {
+        qtyByKey.set(it.key, (qtyByKey.get(it.key) || 0) + it.qty);
+      }
+    }
+    const items = cat.cards
+      .filter((c) => c.category === catKey && qtyByKey.has(c.key))
+      .map((c) => ({ name_it: c.name_it, qty: qtyByKey.get(c.key) }));
+    if (!items.length) lines.push('(nessun doppione)');
+    else for (const it of items) lines.push(`• ${it.name_it} x${it.qty}`);
+    lines.push('');
+  }
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
+}
+
+function buildCarteDupesText(format) {
+  if (format === 'b') return buildCarteDupesTextB();
+  if (format === 'c') return buildCarteDupesTextC();
+  return buildCarteDupesTextA();
+}
+
+function _openCarteShareDupes(format) {
+  const cat = window._cardEventCatalog;
+  const data = window._cardEventData;
+  if (!cat || !data || !(data.profiles || []).length) {
+    alert('Nessun profilo CoC con collezione da condividere.');
+    return;
+  }
+  const fmt = ['a', 'b', 'c'].includes(format) ? format : (window._carteShareFormat || 'a');
+  window._carteShareFormat = fmt;
+  const text = buildCarteDupesText(fmt);
+  document.getElementById('carte-share-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'carte-share-modal';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'display:flex;z-index:1000';
+  modal.innerHTML = `
+    <div class="modal-box carte-share-modal-box" role="dialog" aria-modal="true" aria-labelledby="carte-share-title">
+      <div class="modal-header">
+        <h2 id="carte-share-title" style="font-size:1rem">📋 Condividi doppioni</h2>
+        <button type="button" class="modal-close" onclick="document.getElementById('carte-share-modal')?.remove()" aria-label="Chiudi">✕</button>
+      </div>
+      <div class="carte-share-body">
+        <p class="carte-share-hint">Scegli il formato, poi copia il testo da incollare su WhatsApp, Telegram o Discord.</p>
+        <div class="carte-share-formats" role="group" aria-label="Formato messaggio">
+          <button type="button" class="carte-share-fmt-btn ${fmt === 'a' ? 'active' : ''}" onclick="_openCarteShareDupes('a')">A · Per profilo</button>
+          <button type="button" class="carte-share-fmt-btn ${fmt === 'b' ? 'active' : ''}" onclick="_openCarteShareDupes('b')">B · Con profilo</button>
+          <button type="button" class="carte-share-fmt-btn ${fmt === 'c' ? 'active' : ''}" onclick="_openCarteShareDupes('c')">C · Solo carte</button>
+        </div>
+        <p class="carte-share-fmt-desc">${
+          fmt === 'a' ? 'Un blocco per ogni villaggio, categorie sotto.'
+            : fmt === 'b' ? 'Elenco unico per categoria; il profilo è tra parentesi.'
+            : 'Solo carte; le quantità dei profili sono sommate.'
+        }</p>
+        <textarea id="carte-share-preview" class="carte-share-preview" readonly rows="14"></textarea>
+        <div class="carte-row-actions">
+          <button type="button" class="btn-primary" id="carte-share-copy-btn" onclick="_copyCarteShareDupes()">Copia negli appunti</button>
+        </div>
+      </div>
+    </div>`;
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  const ta = document.getElementById('carte-share-preview');
+  if (ta) ta.value = text;
+}
+
+async function _copyCarteShareDupes() {
+  const ta = document.getElementById('carte-share-preview');
+  const btn = document.getElementById('carte-share-copy-btn');
+  if (!ta) return;
+  const text = ta.value;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+    }
+    if (btn) {
+      const prev = btn.textContent;
+      btn.textContent = '✓ Copiato';
+      setTimeout(() => { if (btn) btn.textContent = prev; }, 1800);
+    }
+  } catch (_) {
+    ta.focus();
+    ta.select();
+    alert('Seleziona il testo e copialo manualmente (Ctrl+C / Cmd+C).');
+  }
 }
 
 function renderCardEventAdminToggle(settings) {
