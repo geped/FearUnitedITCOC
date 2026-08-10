@@ -4370,7 +4370,8 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .carte-card.is-search-hit,
 .carte-album-tile.is-search-hit {
-    box-shadow: 0 0 0 2px var(--gold);
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
     z-index: 1;
 }
 .carte-card.is-search-dim,
@@ -4379,6 +4380,17 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .carte-album-card.is-search-relevant {
     border-color: color-mix(in srgb, var(--gold) 45%, var(--border));
+}
+.carte-search-chip-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+.carte-search-chip-block .carte-album-filters {
+    margin-bottom: 0;
+}
+.carte-search-chip-block .carte-album-filter-btn i.carte-album-cat-dot {
+    margin-right: 0.15rem;
 }
 
 .carte-inline-notice {
@@ -4438,8 +4450,13 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .carte-card.state-0 img { filter: grayscale(1) brightness(0.55); opacity: 0.6; }
 .carte-card.state-0 .carte-card-name { color: var(--text-3); }
-.carte-card.state-1 { border-color: var(--border-2); }
-.carte-card.state-2 { border-color: var(--gold); background: var(--gold-glow); }
+/* Stato: sfondo/badge — il colore del bordo è solo quello della tipologia (un bordo solo) */
+.carte-card.state-1 { background: var(--bg-2); }
+.carte-card.state-2 { background: var(--gold-glow); }
+.carte-card.cat-border-elixir { border-color: #e879a9; }
+.carte-card.cat-border-dark { border-color: #9b6bff; }
+.carte-card.cat-border-builder { border-color: #5ec8e8; }
+.carte-card.cat-border-super { border-color: #f08a3c; }
 .carte-card-badge {
     position: absolute;
     top: 4px;
@@ -4804,15 +4821,28 @@ tbody tr:last-child td { border-bottom: none; }
   border-radius: 50%;
   border: 2px solid currentColor;
   box-sizing: border-box;
+  vertical-align: -1px;
 }
-.carte-album-cat-dot.cat-border-elixir,
-.cat-border-elixir { border-color: #e879a9 !important; color: #e879a9; }
-.carte-album-cat-dot.cat-border-dark,
-.cat-border-dark { border-color: #9b6bff !important; color: #9b6bff; }
-.carte-album-cat-dot.cat-border-builder,
-.cat-border-builder { border-color: #5ec8e8 !important; color: #5ec8e8; }
-.carte-album-cat-dot.cat-border-super,
-.cat-border-super { border-color: #f08a3c !important; color: #f08a3c; }
+.carte-album-cat-dot.cat-border-elixir { border-color: #e879a9; color: #e879a9; }
+.carte-album-cat-dot.cat-border-dark { border-color: #9b6bff; color: #9b6bff; }
+.carte-album-cat-dot.cat-border-builder { border-color: #5ec8e8; color: #5ec8e8; }
+.carte-album-cat-dot.cat-border-super { border-color: #f08a3c; color: #f08a3c; }
+
+/* Chip tipologia: solo il pallino colorato, non un secondo bordo sul bottone */
+.carte-album-filter-btn.cat-border-elixir,
+.carte-album-filter-btn.cat-border-dark,
+.carte-album-filter-btn.cat-border-builder,
+.carte-album-filter-btn.cat-border-super {
+  border-color: var(--border);
+  color: var(--text);
+}
+.carte-album-filter-btn.cat-border-elixir.active,
+.carte-album-filter-btn.cat-border-dark.active,
+.carte-album-filter-btn.cat-border-builder.active,
+.carte-album-filter-btn.cat-border-super.active {
+  border-color: var(--gold);
+  color: var(--gold);
+}
 
 .carte-album-card {
   border: 1px solid var(--border);
@@ -4923,7 +4953,7 @@ tbody tr:last-child td { border-bottom: none; }
 .carte-album-tile img { width: 100%; height: 100%; object-fit: contain; }
 .carte-album-tile.state-0 { opacity: 0.45; }
 .carte-album-tile.state-0 img { filter: grayscale(1) brightness(0.6); }
-.carte-album-tile.state-2 { box-shadow: inset 0 0 0 1px rgba(201,169,98,0.35); }
+.carte-album-tile.state-2 { background: color-mix(in srgb, var(--gold) 10%, var(--bg-1)); }
 .carte-album-tile.cat-border-elixir { border-color: #e879a9; }
 .carte-album-tile.cat-border-dark { border-color: #9b6bff; }
 .carte-album-tile.cat-border-builder { border-color: #5ec8e8; }

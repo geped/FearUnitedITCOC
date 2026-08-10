@@ -1911,9 +1911,8 @@ function _switchCarteProfile(cocTag) {
 function _switchCarteCategory(cat) {
   window._cardEventActiveCat = cat;
   const f = _carteGetFilters();
-  // Se l'utente sceglie una tipologia dalla barra categorie, allinea anche il filtro
-  // "Tipologia" della ricerca (senza toccare testo/verso).
-  if (f.category !== 'all' && f.category !== cat) f.category = cat;
+  f.category = cat || 'all';
+  window._carteAlbumFilter = cat || 'all';
   renderCardEventContent();
 }
 
@@ -2010,6 +2009,10 @@ function _carteSetFilter(key, value) {
   f[key] = value;
   if (key === 'onlyTradable' && value) f.qty = 'all';
   if (key === 'qty' && value !== 'all') f.onlyTradable = false;
+  if (key === 'category') {
+    window._carteAlbumFilter = value || 'all';
+    if (value && value !== 'all') window._cardEventActiveCat = value;
+  }
   _carteApplyFiltersUi();
 }
 
@@ -2018,6 +2021,8 @@ function _carteOnSearchInput(el, which) {
   if (which === 'player') f.playerQ = el.value;
   else f.q = el.value;
   window._carteSearchCaret = { which, start: el.selectionStart, end: el.selectionEnd };
+  // Solo con testo: se tipologia è "Tutte", salta alla categoria della prima corrispondenza
+  if (which === 'q') window._carteSearchAutoCat = true;
   _carteApplyFiltersUi();
 }
 
@@ -2025,7 +2030,6 @@ function _carteApplyFiltersUi() {
   const tradeBox = document.getElementById('carte-trade-content');
   const inTrade = tradeBox && tradeBox.style.display !== 'none';
   if (inTrade) {
-    // In Scambi: aggiorna le viste pubbliche / suggeriti senza rifare il fetch.
     if (window._cardTradeData) renderCardTradeContent();
     else void loadCardTradeTab();
   } else {
@@ -2046,10 +2050,26 @@ function _carteSearchBarHtml({ showTradeExtras = false } = {}) {
   const f = _carteGetFilters();
   const cat = window._cardEventCatalog;
   const active = _carteFiltersActive();
-  const catOpts = [`<option value="all"${f.category === 'all' ? ' selected' : ''}>Tutte le tipologie</option>`]
-    .concat((cat?.category_order || []).map((c) =>
-      `<option value="${escH(c)}"${f.category === c ? ' selected' : ''}>${escH(cat.category_label_it[c] || c)}</option>`))
-    .join('');
+  const shortLabel = {
+    elixir: 'Elisir',
+    dark_elixir: 'Elisir nero',
+    builder_base: 'Builder',
+    super_troop: 'Super truppe',
+  };
+  const catChips = [
+    `<button type="button" class="carte-album-filter-btn ${f.category === 'all' ? 'active' : ''}" onclick="_carteSetFilter('category','all')">Tutte</button>`,
+    ...(cat?.category_order || []).map((c) =>
+      `<button type="button" class="carte-album-filter-btn ${f.category === c ? 'active' : ''} ${CARTE_CAT_BORDER[c] || ''}"
+        onclick="_carteSetFilter('category','${c}')"><i class="carte-album-cat-dot ${CARTE_CAT_BORDER[c] || ''}"></i> ${escH(shortLabel[c] || cat.category_label_it[c] || c)}</button>`),
+  ].join('');
+  const qtyChips = [
+    ['all', 'Tutte'],
+    ['0', 'Mancanti'],
+    ['1', 'Possedute'],
+    ['2', 'Doppioni'],
+  ].map(([v, lab]) =>
+    `<button type="button" class="carte-album-filter-btn ${f.qty === v && !f.onlyTradable ? 'active' : ''}" onclick="_carteSetFilter('qty','${v}')">${lab}</button>`
+  ).join('');
 
   return `
     <div class="carte-search-bar">
@@ -2067,38 +2087,44 @@ function _carteSearchBarHtml({ showTradeExtras = false } = {}) {
             value="${escH(f.playerQ)}" autocomplete="off"
             oninput="_carteOnSearchInput(this,'player')">
         </label>` : ''}
-      </div>
-      <div class="carte-search-row carte-search-row-wrap">
         <div class="carte-search-seg" role="group" aria-label="Verso scambio">
           <button type="button" class="carte-search-seg-btn ${f.direction === 'any' ? 'active' : ''}" onclick="_carteSetFilter('direction','any')">Entrambi</button>
           <button type="button" class="carte-search-seg-btn ${f.direction === 'give' ? 'active' : ''}" onclick="_carteSetFilter('direction','give')">Cedere</button>
           <button type="button" class="carte-search-seg-btn ${f.direction === 'get' ? 'active' : ''}" onclick="_carteSetFilter('direction','get')">Ricevere</button>
         </div>
-        <label class="carte-search-field">
-          <span class="carte-search-label">Tipologia</span>
-          <select class="carte-search-select" onchange="_carteSetFilter('category', this.value)">${catOpts}</select>
-        </label>
-        <label class="carte-search-field">
-          <span class="carte-search-label">Stato</span>
-          <select class="carte-search-select" onchange="_carteSetFilter('qty', this.value)">
-            <option value="all"${f.qty === 'all' ? ' selected' : ''}>Tutte</option>
-            <option value="0"${f.qty === '0' ? ' selected' : ''}>Mancanti</option>
-            <option value="1"${f.qty === '1' ? ' selected' : ''}>Possedute (×1)</option>
-            <option value="2"${f.qty === '2' ? ' selected' : ''}>Doppioni (×2+)</option>
-          </select>
-        </label>
-        <label class="carte-search-check">
-          <input type="checkbox" ${f.onlyTradable ? 'checked' : ''} onchange="_carteSetFilter('onlyTradable', this.checked)">
-          Solo scambiabili
-        </label>
-        ${showTradeExtras ? `
-        <label class="carte-search-check">
-          <input type="checkbox" ${f.onlyMatches ? 'checked' : ''} onchange="_carteSetFilter('onlyMatches', this.checked)">
-          Solo match possibili
-        </label>` : ''}
         <button type="button" class="btn-secondary btn-sm carte-search-reset" ${active ? '' : 'disabled'} onclick="_carteResetFilters()">✕ Reset</button>
       </div>
+      <div class="carte-search-chip-block">
+        <span class="carte-search-label">Tipologia</span>
+        <div class="carte-album-filters">${catChips}</div>
+      </div>
+      <div class="carte-search-chip-block">
+        <span class="carte-search-label">Stato</span>
+        <div class="carte-album-filters">
+          ${qtyChips}
+          <button type="button" class="carte-album-filter-btn ${f.onlyTradable ? 'active' : ''}" onclick="_carteSetFilter('onlyTradable', ${f.onlyTradable ? 'false' : 'true'})">Solo scambiabili</button>
+          ${showTradeExtras ? `<button type="button" class="carte-album-filter-btn ${f.onlyMatches ? 'active' : ''}" onclick="_carteSetFilter('onlyMatches', ${f.onlyMatches ? 'false' : 'true'})">Solo match</button>` : ''}
+        </div>
+      </div>
     </div>`;
+}
+
+function _renderCollectionCatGrid(cardsInCat, coll, hitKeys, searching, hitsLen, readOnly) {
+  return cardsInCat.map((c) => {
+    const qty = coll[c.key] || 0;
+    const stateCls = qty >= 2 ? 'state-2' : qty === 1 ? 'state-1' : 'state-0';
+    const borderCls = CARTE_CAT_BORDER[c.category] || '';
+    const isHit = hitKeys.has(c.key);
+    const dim = searching && hitsLen && !isHit ? 'is-search-dim' : '';
+    const hit = isHit ? 'is-search-hit' : '';
+    return `<button type="button" class="carte-card ${stateCls} ${borderCls} ${hit} ${dim}" data-card-key="${escH(c.key)}" ${readOnly ? 'disabled' : ''}
+        onclick="_onCardEventClick('${c.key}')" title="${escH(c.name_it)}">
+      <img src="${escH(c.icon_url)}" alt="${escH(c.name_it)}" loading="lazy"
+           onerror="this.style.visibility='hidden'">
+      <span class="carte-card-name">${escH(c.name_it)}</span>
+      ${qty >= 2 ? `<span class="carte-card-badge">x${qty}</span>` : ''}
+    </button>`;
+  }).join('');
 }
 
 function renderCardEventContent() {
@@ -2126,53 +2152,48 @@ function renderCardEventContent() {
   const hits = tag ? _carteFindHitsForActiveProfile() : [];
   const hitKeys = new Set(hits.map((c) => c.key));
 
-  // Con ricerca/verso attivi: porta l'album sulla tipologia della prima carta trovata
-  // (se il filtro tipologia è "Tutte"), così vedi subito il contesto completo.
-  if (hits.length && f.category === 'all') {
+  // Auto-passa alla tipologia solo quando digiti una ricerca (non quando cambi chip a mano)
+  if (window._carteSearchAutoCat && hits.length && f.category === 'all' && f.q) {
     const preferred = hits[0].category;
-    if (preferred && window._cardEventActiveCat !== preferred) {
+    if (preferred) {
       window._cardEventActiveCat = preferred;
+      f.category = preferred;
+      window._carteAlbumFilter = preferred;
     }
-  } else if (f.category !== 'all') {
+  }
+  window._carteSearchAutoCat = false;
+
+  if (f.category !== 'all') {
     window._cardEventActiveCat = f.category;
+  } else if (!window._cardEventActiveCat) {
+    window._cardEventActiveCat = cat.category_order[0];
   }
 
-  const activeCat = window._cardEventActiveCat || cat.category_order[0];
-  const cardsInCat = cat.cards.filter((c) => c.category === activeCat);
   const totalFound = cat.cards.filter((c) => (coll[c.key] || 0) >= 1).length;
-  const hitsInCat = hits.filter((c) => c.category === activeCat);
+  const readOnly = !cat.settings?.live;
+  const searching = !!(f.q || f.direction !== 'any' || f.onlyTradable || f.qty !== 'all');
+  const catsToShow = f.category === 'all' ? cat.category_order : [f.category];
+
   const otherCatHits = {};
   for (const h of hits) {
-    if (h.category === activeCat) continue;
+    if (f.category !== 'all' && h.category === f.category) continue;
+    if (f.category === 'all') continue;
     otherCatHits[h.category] = (otherCatHits[h.category] || 0) + 1;
   }
 
-  const catBar = cat.category_order.map((c) => {
-    const total = cat.category_totals[c] || 0;
-    const found = cat.cards.filter((x) => x.category === c && (coll[x.key] || 0) >= 1).length;
-    return `<button type="button" class="subtab-btn carte-cat-btn ${c === activeCat ? 'active' : ''}"
-        onclick="_switchCarteCategory('${c}')">
-        ${escH(cat.category_label_it[c] || c)}
-        <span class="carte-cat-count">${found}/${total}</span>
-      </button>`;
-  }).join('');
-
-  const readOnly = !cat.settings?.live;
-  const searching = !!(f.q || f.direction !== 'any' || f.onlyTradable || f.qty !== 'all');
-  const grid = cardsInCat.map((c) => {
-    const qty = coll[c.key] || 0;
-    const stateCls = qty >= 2 ? 'state-2' : qty === 1 ? 'state-1' : 'state-0';
-    const borderCls = CARTE_CAT_BORDER[c.category] || '';
-    const isHit = hitKeys.has(c.key);
-    const dim = searching && hits.length && !isHit ? 'is-search-dim' : '';
-    const hit = isHit ? 'is-search-hit' : '';
-    return `<button type="button" class="carte-card ${stateCls} ${borderCls} ${hit} ${dim}" data-card-key="${escH(c.key)}" ${readOnly ? 'disabled' : ''}
-        onclick="_onCardEventClick('${c.key}')" title="${escH(c.name_it)}">
-      <img src="${escH(c.icon_url)}" alt="${escH(c.name_it)}" loading="lazy"
-           onerror="this.style.visibility='hidden'">
-      <span class="carte-card-name">${escH(c.name_it)}</span>
-      ${qty >= 2 ? `<span class="carte-card-badge">x${qty}</span>` : ''}
-    </button>`;
+  const gridsHtml = catsToShow.map((catKey) => {
+    const cardsInCat = cat.cards.filter((c) => c.category === catKey);
+    const found = cardsInCat.filter((c) => (coll[c.key] || 0) >= 1).length;
+    const grid = _renderCollectionCatGrid(cardsInCat, coll, hitKeys, searching, hits.length, readOnly);
+    return `
+      <div class="carte-album-cat">
+        <div class="carte-album-cat-label">
+          <span class="carte-album-cat-dot ${CARTE_CAT_BORDER[catKey] || ''}"></span>
+          ${escH(cat.category_label_it[catKey] || catKey)}
+          <span class="carte-cat-count">${found}/${cardsInCat.length}</span>
+        </div>
+        <div class="carte-grid">${grid}</div>
+      </div>`;
   }).join('');
 
   const dirLabel = f.direction === 'give' ? 'da cedere (doppioni)' : f.direction === 'get' ? 'da ricevere (mancanti)' : 'trovate';
@@ -2186,18 +2207,16 @@ function renderCardEventContent() {
       ).join('');
       statusHtml = `<div class="carte-search-status">
         <strong>${hits.length}</strong> carta${hits.length === 1 ? '' : 'e'} ${escH(dirLabel)}
-        · album <strong>${escH(cat.category_label_it[activeCat] || activeCat)}</strong>
-        (${hitsInCat.length} in questa tipologia)
         ${jump ? `<span class="carte-search-jump-wrap">Anche in: ${jump}</span>` : ''}
       </div>`;
     }
   }
 
-  const hitsStrip = (tag && searching && hitsInCat.length)
+  const hitsStrip = (tag && searching && hits.length)
     ? `<div class="carte-search-hits">
-        <div class="carte-search-hits-label">Corrispondenze in questa tipologia</div>
+        <div class="carte-search-hits-label">Corrispondenze</div>
         <div class="carte-search-hits-row">
-          ${hitsInCat.map((c) => {
+          ${hits.slice(0, 24).map((c) => {
             const qty = coll[c.key] || 0;
             return `<button type="button" class="carte-card state-${qty >= 2 ? '2' : qty} ${CARTE_CAT_BORDER[c.category] || ''} is-search-hit" ${readOnly ? 'disabled' : ''}
               onclick="_onCardEventClick('${c.key}')" title="${escH(c.name_it)}">
@@ -2221,13 +2240,12 @@ function renderCardEventContent() {
     ${_carteSearchBarHtml({ showTradeExtras: false })}
     ${statusHtml}
     ${hitsStrip}
-    <div class="subtab-bar carte-cat-bar">${catBar}</div>
     ${noProfile}
-    ${tag ? `<div class="carte-grid">${grid}</div>` : ''}
+    ${tag ? gridsHtml : ''}
     ${window._userRole === 'admin' ? renderCardEventAdminToggle(cat.settings) : ''}
   `;
 
-  if (searching && hitsInCat.length) {
+  if (searching && hits.length) {
     requestAnimationFrame(() => {
       const el = box.querySelector('.carte-card.is-search-hit');
       el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -2999,11 +3017,9 @@ function _renderFullAlbumGrid(collection, albumId, highlightKeys = null) {
   const cat = window._cardEventCatalog;
   if (!cat) return '';
   const f = _carteGetFilters();
-  // Con ricerca attiva e tipologia "Tutte", se ci sono highlight porta l'album sulla categoria della prima hit
-  let filter = window._carteAlbumFilter || 'all';
-  if (highlightKeys && highlightKeys.size && f.category !== 'all') {
-    filter = f.category;
-  } else if (highlightKeys && highlightKeys.size && (f.q || f.direction !== 'any') && filter === 'all') {
+  let filter = f.category && f.category !== 'all' ? f.category : (window._carteAlbumFilter || 'all');
+  // Con ricerca testuale e tipologia "Tutte", mostra la categoria della prima hit evidenziata
+  if (highlightKeys && highlightKeys.size && filter === 'all' && f.q) {
     const first = cat.cards.find((c) => highlightKeys.has(c.key));
     if (first) filter = first.category;
   }
@@ -3050,6 +3066,8 @@ function _toggleAlbumCollapsed(albumId) {
 
 function _setCarteAlbumFilter(catKey) {
   window._carteAlbumFilter = catKey || 'all';
+  const f = _carteGetFilters();
+  f.category = (catKey && catKey !== 'all') ? catKey : 'all';
   _renderCartePublicWindow();
 }
 
@@ -3059,17 +3077,10 @@ function _renderAlbumsWindow(live, which = 'mine') {
   const myCollections = window._cardEventData?.collections || {};
   const pub = window._cardPublicData || { decks: [] };
   const f = _carteGetFilters();
-  // Allinea il filtro album (chip Tipologia sotto) al filtro ricerca quando impostato
   if (f.category !== 'all') window._carteAlbumFilter = f.category;
-  const filter = window._carteAlbumFilter || 'all';
 
-  const filterBar = `
-    <div class="carte-album-filters">
-      <button type="button" class="carte-album-filter-btn ${filter === 'all' ? 'active' : ''}" onclick="_setCarteAlbumFilter('all')">Tutte</button>
-      ${(cat?.category_order || []).map(c => `
-        <button type="button" class="carte-album-filter-btn ${filter === c ? 'active' : ''} ${CARTE_CAT_BORDER[c] || ''}"
-          onclick="_setCarteAlbumFilter('${c}')">${escH(cat.category_label_it[c] || c)}</button>`).join('')}
-    </div>
+  // Unica barra filtri è quella sopra in Scambi: qui solo legenda colori (senza secondo filtro).
+  const legend = `
     <div class="carte-album-legend">
       <span><i class="carte-album-cat-dot cat-border-elixir"></i> Elisir</span>
       <span><i class="carte-album-cat-dot cat-border-dark"></i> Elisir nero</span>
@@ -3146,10 +3157,10 @@ function _renderAlbumsWindow(live, which = 'mine') {
       : '';
     return `
       <div class="carte-trade-section">
-        ${filterBar}
+        ${legend}
         ${status}
         <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.7rem">
-          Album pubblici con anteprima scambi. Con ricerca «Cedere» vedi chi non ha la carta; con «Ricevere» chi la ha in doppione. Di default ridotti — espansi automaticamente se c’è una corrispondenza.
+          Album pubblici con anteprima scambi. Usa i filtri sopra (tipologia / cedere / ricevere) — un’unica barra per tutta la sezione Scambi.
         </p>
         ${otherAlbums}
       </div>`;
@@ -3183,7 +3194,7 @@ function _renderAlbumsWindow(live, which = 'mine') {
 
   return `
     <div class="carte-trade-section">
-      ${filterBar}
+      ${legend}
       <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.7rem">
         Scegli quali profili CoC rendere pubblici. L’album mostra tutto il catalogo: mancanti, possedute e doppioni. Di default ridotto.
       </p>
