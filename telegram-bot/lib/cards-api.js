@@ -57,8 +57,10 @@ async function adminToggle(accessToken, enabled) {
   return callCards('cards-admin-toggle', accessToken, { method: 'POST', body: { enabled: enabled === true } });
 }
 
-async function matches(accessToken, profileId) {
-  return callCards('cards-matches', accessToken, { method: 'GET', params: { profile_id: profileId } });
+// profileId opzionale: se omesso, il server aggrega gli scambi su TUTTI i profili
+// dell'utente (ogni match indica con quale profilo si applica via my_profile).
+async function matches(accessToken, profileId = null) {
+  return callCards('cards-matches', accessToken, { method: 'GET', params: profileId ? { profile_id: profileId } : null });
 }
 
 async function selfMatches(accessToken) {
@@ -87,10 +89,18 @@ async function roomSend(accessToken, { roomId, profileId, body }) {
   });
 }
 
-async function propose(accessToken, { roomId, profileId, cardGive, cardGet }) {
+async function propose(accessToken, { roomId, profileId, cardGive, cardGet, commit = false }) {
   return callCards('cards-propose', accessToken, {
     method: 'POST',
-    body: { room_id: roomId, profile_id: profileId, card_give: cardGive, card_get: cardGet },
+    body: { room_id: roomId, profile_id: profileId, card_give: cardGive, card_get: cardGet, commit: commit === true },
+  });
+}
+
+/** Tasto "Applica subito": il proponente cede subito il suo doppione (escrow), senza consenso dell'altro. */
+async function commitProposal(accessToken, { proposalId, profileId }) {
+  return callCards('cards-commit', accessToken, {
+    method: 'POST',
+    body: { proposal_id: proposalId, profile_id: profileId },
   });
 }
 
@@ -112,8 +122,10 @@ async function tradeLog(accessToken) {
   return callCards('cards-trade-log', accessToken, { method: 'GET' });
 }
 
-async function publicList(accessToken, profileId) {
-  return callCards('cards-public-list', accessToken, { method: 'GET', params: { profile_id: profileId } });
+// profileId opzionale: se omesso, aggrega i match verso ogni mazzo pubblico su TUTTI
+// i profili dell'utente (ogni match indica con quale profilo si applica).
+async function publicList(accessToken, profileId = null) {
+  return callCards('cards-public-list', accessToken, { method: 'GET', params: profileId ? { profile_id: profileId } : null });
 }
 
 async function publicToggle(accessToken, profileId, isPublic) {
@@ -135,6 +147,7 @@ module.exports = {
   roomDetail,
   roomSend,
   propose,
+  commitProposal,
   respond,
   selfApply,
   tradeLog,

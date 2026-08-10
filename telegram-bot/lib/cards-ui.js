@@ -97,6 +97,19 @@ function activeColl(st) {
   return p ? st.collections[p.coc_tag] || {} : {};
 }
 
+/** Trova uno dei miei profili per id (non necessariamente quello "attivo" nell'hub
+ * carte): serve per mostrare/usare sempre il profilo giusto dentro una stanza di
+ * scambio, che può differere dal profilo attivo se lo scambio riguarda un altro
+ * profilo CoC collegato all'account. */
+function profileById(st, id) {
+  return (st.profiles || []).find((p) => p.id === id) || null;
+}
+
+function collByProfileId(st, id) {
+  const p = profileById(st, id);
+  return p ? st.collections[p.coc_tag] || {} : {};
+}
+
 function profileLabel(p) {
   return p ? `${p.username || 'Villaggio'} (${p.coc_tag})` : '—';
 }
@@ -403,27 +416,37 @@ function setup(bot, deps) {
     });
   });
 
+  // Aggregato su TUTTI i profili CoC dell'utente: ogni match indica con quale
+  // mio profilo (m.my_profile) è applicabile, senza dover scegliere prima un
+  // profilo "attivo".
   bot.action('cards:tr:p2p', async (ctx) => {
     if (guard(ctx)) return;
     safeAnswerCb(ctx);
     await withErrors(ctx, async () => {
       const st = await ensureState(sb, tauth, ctx.from.id);
-      const p = activeProfile(st);
-      if (!p) return;
-      const data = await cardsApi.matches(st.token, p.id);
+      const data = await cardsApi.matches(st.token, null);
       st.lastMatches = data.matches || [];
       const live = st.catalog.settings?.live === true;
+      const multi = st.profiles.length > 1;
       const lines = [`${fmt.DIV}`, '🔍 <b>Scambi con altri giocatori</b>', fmt.DIV, ''];
       const rows = [];
       if (!st.lastMatches.length) {
         lines.push('Nessuno scambio disponibile al momento.\nSegna più carte nella tua collezione per trovare match.');
       } else {
         st.lastMatches.forEach((m, i) => {
+          const withProfile = multi
+            ? ` <i>(con ${escapeHtml(m.my_profile?.username || m.my_profile?.coc_tag || '')})</i>`
+            : '';
           lines.push(
-            `${i + 1}. <b>${escapeHtml(m.other_profile.username || m.other_profile.coc_tag)}</b>: cedi ` +
+            `${i + 1}. <b>${escapeHtml(m.other_profile.username || m.other_profile.coc_tag)}</b>${withProfile}: cedi ` +
               `${escapeHtml(m.card_give_meta?.name_it || m.card_give)} → ricevi ${escapeHtml(m.card_get_meta?.name_it || m.card_get)}`,
           );
-          if (live) rows.push([Markup.button.callback(`Proponi scambio #${i + 1}`, `cards:mprop:${i}`)]);
+          if (live) {
+            rows.push([
+              Markup.button.callback(`⚡ Applica #${i + 1}`, `cards:mapply:${i}`),
+              Markup.button.callback(`💬 Proponi #${i + 1}`, `cards:mprop:${i}`),
+            ]);
+          }
         });
       }
       rows.push([Markup.button.callback('« Scambi', 'cards:tr')]);
@@ -436,18 +459,49 @@ function setup(bot, deps) {
     safeAnswerCb(ctx);
     await withErrors(ctx, async () => {
       const st = await ensureState(sb, tauth, ctx.from.id);
-      const p = activeProfile(st);
       const m = (st.lastMatches || [])[Number(ctx.match[1])];
-      if (!p || !m) return;
+      const profileId = m?.my_profile?.id;
+      if (!m || !profileId) return;
       st.pendingPublicSuggested = null;
-      const room = await cardsApi.roomOpen(st.token, { profileId: p.id, otherCocTag: m.other_profile.coc_tag });
+      const room = await cardsApi.roomOpen(st.token, { profileId, otherCocTag: m.other_profile.coc_tag });
       await cardsApi.propose(st.token, {
         roomId: room.room.id,
-        profileId: p.id,
+        profileId,
         cardGive: m.card_give,
         cardGet: m.card_get,
       });
       await replyTransient(ctx, '✅ Proposta inviata! Apri la stanza per seguirla.', { parse_mode: 'HTML' }, 4000);
+      await openRoom(ctx, st, room.room.id);
+    });
+  });
+
+  // "Applica subito" (solo il mio mazzo): cede subito il doppione in escrow,
+  // senza attendere l'approvazione dell'altro. L'altro riceverà una notifica
+  // "committed" e potrà completare lo scambio a sua volta.
+  bot.action(/^cards:mapply:(\d+)$/, async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const m = (st.lastMatches || [])[Number(ctx.match[1])];
+      const profileId = m?.my_profile?.id;
+      if (!m || !profileId) return;
+      st.pendingPublicSuggested = null;
+      const room = await cardsApi.roomOpen(st.token, { profileId, otherCocTag: m.other_profile.coc_tag });
+      await cardsApi.propose(st.token, {
+        roomId: room.room.id,
+        profileId,
+        cardGive: m.card_give,
+        cardGet: m.card_get,
+        commit: true,
+      });
+      await refreshCollection(sb, tauth, ctx.from.id);
+      await replyTransient(
+        ctx,
+        "⚡ Hai già ceduto il tuo doppione. In attesa che l'altro completi lo scambio dal suo lato.",
+        { parse_mode: 'HTML' },
+        5000,
+      );
       await openRoom(ctx, st, room.room.id);
     });
   });
@@ -504,24 +558,29 @@ function setup(bot, deps) {
   });
 
   // ── Mazzi pubblici (vetrina) ─────────────────────────────────────────────
+  // Aggregato: mostra i mazzi pubblici altrui e, per ognuno, gli scambi possibili
+  // considerando TUTTI i miei profili CoC collegati (non solo quello "attivo").
   async function renderPublicDecksView(ctx, st) {
     const p = activeProfile(st);
     if (!p) return;
-    const data = await cardsApi.publicList(st.token, p.id);
+    const data = await cardsApi.publicList(st.token, null);
     st.lastPublicDecks = data.decks || [];
     const live = st.catalog.settings?.live === true;
-    const lines = [
-      `${fmt.DIV}`,
-      '🌐 <b>Mazzi pubblici</b>',
-      fmt.DIV,
-      '',
-      `Il tuo mazzo (${escapeHtml(profileLabel(p))}) è: <b>${data.my_public ? 'pubblico ✅' : 'privato 🔒'}</b>`,
-      'Se pubblico, il tuo mazzo completo appare qui come "annuncio" a tutti gli utenti CoCBoard, che potranno proporti scambi.',
-      '',
-    ];
+    const myActivePublic = (data.my_profiles || []).find((mp) => mp.id === p.id)?.card_deck_public === true;
+    const lines = [`${fmt.DIV}`, '🌐 <b>Mazzi pubblici</b>', fmt.DIV, ''];
+    if (st.profiles.length > 1) {
+      lines.push('Stato pubblicazione dei tuoi profili:');
+      for (const mp of data.my_profiles || []) {
+        lines.push(`• ${escapeHtml(mp.username || mp.coc_tag)}: <b>${mp.card_deck_public ? 'pubblico ✅' : 'privato 🔒'}</b>`);
+      }
+      lines.push('', `Il tasto sotto agisce sul profilo attivo (${escapeHtml(profileLabel(p))}).`);
+    } else {
+      lines.push(`Il tuo mazzo è: <b>${myActivePublic ? 'pubblico ✅' : 'privato 🔒'}</b>`);
+    }
+    lines.push('Se pubblico, il tuo mazzo completo appare qui come "annuncio" a tutti gli utenti CoCBoard, che potranno proporti scambi.', '');
     const rows = [];
     if (live) {
-      rows.push([Markup.button.callback(data.my_public ? '🔒 Rendi privato' : '🌐 Rendi pubblico', 'cards:pubtoggle')]);
+      rows.push([Markup.button.callback(myActivePublic ? '🔒 Rendi privato' : '🌐 Rendi pubblico', 'cards:pubtoggle')]);
     }
     if (!st.lastPublicDecks.length) {
       lines.push('Nessun altro utente ha reso pubblico il proprio mazzo per ora.');
@@ -552,8 +611,9 @@ function setup(bot, deps) {
       const st = await ensureState(sb, tauth, ctx.from.id);
       const p = activeProfile(st);
       if (!p) return;
-      const data = await cardsApi.publicList(st.token, p.id);
-      await cardsApi.publicToggle(st.token, p.id, !data.my_public);
+      const data = await cardsApi.publicList(st.token, null);
+      const myActivePublic = (data.my_profiles || []).find((mp) => mp.id === p.id)?.card_deck_public === true;
+      await cardsApi.publicToggle(st.token, p.id, !myActivePublic);
       await renderPublicDecksView(ctx, st);
     });
   });
@@ -578,6 +638,7 @@ function setup(bot, deps) {
     const d = (st.lastPublicDecks || [])[idx];
     if (!d) return renderPublicDecksView(ctx, st);
     const live = st.catalog.settings?.live === true;
+    const multi = st.profiles.length > 1;
     const lines = [
       `${fmt.DIV}`,
       `🌐 <b>${escapeHtml(d.profile.username || d.profile.coc_tag)}</b>${d.profile.coc_clan_name ? ` · ${escapeHtml(d.profile.coc_clan_name)}` : ''}`,
@@ -587,16 +648,25 @@ function setup(bot, deps) {
       '',
     ];
     const n = d.matches.length;
+    const rows = [];
     if (n) {
       lines.push(`<b>🔄 ${n} scambio${n === 1 ? '' : 'i'} possibile${n === 1 ? '' : 'i'} con te:</b>`);
-      d.matches.forEach((m) =>
-        lines.push(`• Cedi ${escapeHtml(m.card_give_meta?.name_it || m.card_give)} → ricevi ${escapeHtml(m.card_get_meta?.name_it || m.card_get)}`),
-      );
+      d.matches.forEach((m, j) => {
+        const withProfile = multi
+          ? ` <i>(con ${escapeHtml(m.my_profile?.username || m.my_profile?.coc_tag || '')})</i>`
+          : '';
+        lines.push(`• Cedi ${escapeHtml(m.card_give_meta?.name_it || m.card_give)} → ricevi ${escapeHtml(m.card_get_meta?.name_it || m.card_get)}${withProfile}`);
+        if (live) {
+          rows.push([
+            Markup.button.callback(`⚡ Applica #${j + 1}`, `cards:pubapply:${idx}:${j}`),
+            Markup.button.callback(`💬 Proponi #${j + 1}`, `cards:pubchat:${idx}:${j}`),
+          ]);
+        }
+      });
     } else {
       lines.push('Nessuno scambio automatico con te al momento.');
+      if (live) rows.push([Markup.button.callback('💬 Apri chat', `cards:pubopen:${idx}`)]);
     }
-    const rows = [];
-    if (live) rows.push([Markup.button.callback('💬 Apri chat e proponi', `cards:pubopen:${idx}`)]);
     rows.push([Markup.button.callback('« Mazzi pubblici', 'cards:tr:pub')]);
     await renderView(ctx, lines.join('\n'), Markup.inlineKeyboard(rows));
   }
@@ -610,6 +680,8 @@ function setup(bot, deps) {
     });
   });
 
+  // Apre la chat senza uno scambio specifico (nessun match automatico): usa il
+  // profilo attivo, dato che non c'è un match a indicare quale usare.
   bot.action(/^cards:pubopen:(\d+)$/, async (ctx) => {
     if (guard(ctx)) return;
     safeAnswerCb(ctx);
@@ -620,6 +692,59 @@ function setup(bot, deps) {
       if (!p || !d) return;
       const room = await cardsApi.roomOpen(st.token, { profileId: p.id, otherCocTag: d.profile.coc_tag });
       st.pendingPublicSuggested = d.matches || [];
+      await openRoom(ctx, st, room.room.id);
+    });
+  });
+
+  // "Proponi" da un mazzo pubblico: apre/riusa la stanza con l'esatto profilo
+  // (m.my_profile) coinvolto in quello specifico scambio, poi salva la proposta.
+  bot.action(/^cards:pubchat:(\d+):(\d+)$/, async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const d = (st.lastPublicDecks || [])[Number(ctx.match[1])];
+      const m = d?.matches?.[Number(ctx.match[2])];
+      const profileId = m?.my_profile?.id;
+      if (!d || !m || !profileId) return;
+      const room = await cardsApi.roomOpen(st.token, { profileId, otherCocTag: d.profile.coc_tag });
+      await cardsApi.propose(st.token, {
+        roomId: room.room.id,
+        profileId,
+        cardGive: m.card_give,
+        cardGet: m.card_get,
+      });
+      await replyTransient(ctx, '✅ Proposta inviata! Apri la stanza per seguirla.', { parse_mode: 'HTML' }, 4000);
+      await openRoom(ctx, st, room.room.id);
+    });
+  });
+
+  // "Applica subito" da un mazzo pubblico: escrow immediato con l'esatto profilo
+  // (m.my_profile) coinvolto in quello specifico scambio.
+  bot.action(/^cards:pubapply:(\d+):(\d+)$/, async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const d = (st.lastPublicDecks || [])[Number(ctx.match[1])];
+      const m = d?.matches?.[Number(ctx.match[2])];
+      const profileId = m?.my_profile?.id;
+      if (!d || !m || !profileId) return;
+      const room = await cardsApi.roomOpen(st.token, { profileId, otherCocTag: d.profile.coc_tag });
+      await cardsApi.propose(st.token, {
+        roomId: room.room.id,
+        profileId,
+        cardGive: m.card_give,
+        cardGet: m.card_get,
+        commit: true,
+      });
+      await refreshCollection(sb, tauth, ctx.from.id);
+      await replyTransient(
+        ctx,
+        "⚡ Hai già ceduto il tuo doppione. In attesa che l'altro completi lo scambio dal suo lato.",
+        { parse_mode: 'HTML' },
+        5000,
+      );
       await openRoom(ctx, st, room.room.id);
     });
   });
@@ -655,22 +780,32 @@ function setup(bot, deps) {
 
   async function openRoom(ctx, st, roomId, { keepSuggested = false } = {}) {
     const data = await cardsApi.roomDetail(st.token, roomId);
-    roomByUid.set(ctx.from.id, { roomId, myProfileId: data.room.my_profile_id, proposeGive: null });
+    roomByUid.set(ctx.from.id, {
+      roomId,
+      myProfileId: data.room.my_profile_id,
+      otherCollection: data.other_collection || {},
+      proposeGive: null,
+    });
     if (!keepSuggested) {
       st.roomSuggested = st.pendingPublicSuggested || null;
       st.pendingPublicSuggested = null;
     }
     const live = st.catalog.settings?.live === true;
     const otherName = escapeHtml(data.other.username || data.other.coc_tag);
+    const myName = escapeHtml(data.me.username || data.me.coc_tag);
 
     const lines = [`${fmt.DIV}`, `🔁 ${otherName}`, fmt.DIV, ''];
+    lines.push(`<i>Profilo in uso: ${myName}</i>`, '');
     const suggested = st.roomSuggested || [];
     const rows = [];
     if (suggested.length && live) {
       lines.push('<b>🔄 Scambi suggeriti (mazzo pubblico):</b>');
       suggested.forEach((m, i) => {
         lines.push(`• Cedi ${escapeHtml(m.card_give_meta?.name_it || m.card_give)} → ricevi ${escapeHtml(m.card_get_meta?.name_it || m.card_get)}`);
-        rows.push([Markup.button.callback(`Proponi suggerito #${i + 1}`, `cards:pubprop:${i}`)]);
+        rows.push([
+          Markup.button.callback(`⚡ Applica #${i + 1}`, `cards:pubapplysug:${i}`),
+          Markup.button.callback(`💬 Proponi #${i + 1}`, `cards:pubprop:${i}`),
+        ]);
       });
       lines.push('');
     }
@@ -679,12 +814,29 @@ function setup(bot, deps) {
       lines.push('<b>Proposte in corso:</b>');
       for (const p of pending) {
         const mine = p.proposer_profile === data.room.my_profile_id;
+        const committedTag = p.proposer_committed ? ' ⚡' : '';
         lines.push(
-          `• ${mine ? 'Hai proposto' : `${otherName} propone`}: cede ${escapeHtml(p.card_give_meta?.name_it || p.card_give)} → riceve ${escapeHtml(p.card_get_meta?.name_it || p.card_get)}`,
+          `• ${mine ? 'Hai proposto' : `${otherName} propone`}: cede ${escapeHtml(p.card_give_meta?.name_it || p.card_give)} → riceve ${escapeHtml(p.card_get_meta?.name_it || p.card_get)}${committedTag}`,
         );
+        if (p.proposer_committed) {
+          lines.push(
+            mine
+              ? '  <i>Hai già ceduto il doppione: in attesa che l\'altro completi lo scambio.</i>'
+              : `  <i>${otherName} ha già ceduto il suo doppione: completa tu lo scambio per ricevere entrambi le carte.</i>`,
+          );
+        }
         if (live) {
           if (mine) {
-            rows.push([Markup.button.callback('Annulla proposta', `cards:resp:${p.id}:cancel`)]);
+            const cancelRow = [Markup.button.callback('Annulla proposta', `cards:resp:${p.id}:cancel`)];
+            if (!p.proposer_committed) {
+              cancelRow.unshift(Markup.button.callback('⚡ Applica subito (solo il mio mazzo)', `cards:pcommit:${p.id}`));
+            }
+            rows.push(cancelRow);
+          } else if (p.proposer_committed) {
+            rows.push([
+              Markup.button.callback('⚡ Applica subito (completa)', `cards:resp:${p.id}:accept`),
+              Markup.button.callback('✕ Rifiuta', `cards:resp:${p.id}:reject`),
+            ]);
           } else {
             rows.push([
               Markup.button.callback('✓ Accetta', `cards:resp:${p.id}:accept`),
@@ -748,6 +900,56 @@ function setup(bot, deps) {
     });
   });
 
+  // "Applica subito" su uno scambio suggerito dentro la stanza: come sopra ma
+  // con escrow immediato (cede subito il doppione).
+  bot.action(/^cards:pubapplysug:(\d+)$/, async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const rs = roomByUid.get(ctx.from.id);
+      const m = (st.roomSuggested || [])[Number(ctx.match[1])];
+      if (!rs || !m) return;
+      await cardsApi.propose(st.token, {
+        roomId: rs.roomId,
+        profileId: rs.myProfileId,
+        cardGive: m.card_give,
+        cardGet: m.card_get,
+        commit: true,
+      });
+      st.roomSuggested = (st.roomSuggested || []).filter((_, i) => i !== Number(ctx.match[1]));
+      await refreshCollection(sb, tauth, ctx.from.id);
+      await replyTransient(
+        ctx,
+        "⚡ Hai già ceduto il tuo doppione. In attesa che l'altro completi lo scambio dal suo lato.",
+        { parse_mode: 'HTML' },
+        5000,
+      );
+      await openRoom(ctx, st, rs.roomId, { keepSuggested: true });
+    });
+  });
+
+  // "Applica subito (solo il mio mazzo)" su una proposta già salvata (non ancora
+  // committed): cede il doppione in escrow, l'altro riceve la notifica "committed".
+  bot.action(/^cards:pcommit:(.+)$/, async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const rs = roomByUid.get(ctx.from.id);
+      if (!rs) return;
+      await cardsApi.commitProposal(st.token, { proposalId: ctx.match[1], profileId: rs.myProfileId });
+      await refreshCollection(sb, tauth, ctx.from.id);
+      await replyTransient(
+        ctx,
+        "⚡ Hai già ceduto il tuo doppione. In attesa che l'altro completi lo scambio dal suo lato.",
+        { parse_mode: 'HTML' },
+        5000,
+      );
+      await openRoom(ctx, st, rs.roomId);
+    });
+  });
+
   bot.action('cards:rsend', async (ctx) => {
     if (guard(ctx)) return;
     safeAnswerCb(ctx);
@@ -766,8 +968,8 @@ function setup(bot, deps) {
       const st = await ensureState(sb, tauth, ctx.from.id);
       const rs = roomByUid.get(ctx.from.id);
       if (!rs) return;
-      const p = activeProfile(st);
-      const coll = activeColl(st);
+      const p = profileById(st, rs.myProfileId);
+      const coll = collByProfileId(st, rs.myProfileId);
       const dupes = st.catalog.cards.filter((c) => (coll[c.key] || 0) >= 2);
       const text =
         `${fmt.DIV}\n🔁 Proponi scambio\n${fmt.DIV}\n\n` +
@@ -790,11 +992,16 @@ function setup(bot, deps) {
       const giveCard = st.catalog.cards.find((c) => c.key === giveKey);
       if (!giveCard) return;
       rs.proposeGive = giveKey;
-      const coll = activeColl(st);
-      const missing = st.catalog.cards.filter((c) => c.category === giveCard.category && (coll[c.key] || 0) === 0);
+      const coll = collByProfileId(st, rs.myProfileId);
+      const otherColl = rs.otherCollection || {};
+      // Solo carte che non possiedo E che l'altro ha come doppione (altrimenti la
+      // proposta non sarebbe comunque accettabile): stessa regola dei filtri foto sul sito.
+      const missing = st.catalog.cards.filter(
+        (c) => c.category === giveCard.category && (coll[c.key] || 0) === 0 && (otherColl[c.key] || 0) >= 2,
+      );
       const text =
         `${fmt.DIV}\n🔁 Proponi scambio\n${fmt.DIV}\n\n` +
-        `Cedi: <b>${escapeHtml(giveCard.name_it)}</b>\n\nScegli la carta che vuoi <b>ricevere</b> (stessa categoria):`;
+        `Cedi: <b>${escapeHtml(giveCard.name_it)}</b>\n\nScegli la carta che vuoi <b>ricevere</b> (l'altro deve averla come doppione, stessa categoria):`;
       const rows = missing.map((c) => [Markup.button.callback(c.name_it.slice(0, 60), `cards:rget:${c.key}`)]);
       if (!missing.length) rows.push([Markup.button.callback('Nessuna carta mancante in questa categoria', 'noop')]);
       rows.push([Markup.button.callback('« Annulla', `cards:room:${rs.roomId}`)]);
@@ -834,6 +1041,65 @@ function setup(bot, deps) {
       await cardsApi.respond(st.token, { proposalId, profileId: rs.myProfileId, action });
       if (action === 'accept') await refreshCollection(sb, tauth, ctx.from.id);
       await openRoom(ctx, st, rs.roomId);
+    });
+  });
+
+  // ── Azioni da notifica proattiva (Telegram) ──────────────────────────
+  // Questi bottoni arrivano da card-event-notify.js dentro un messaggio inviato
+  // "a freddo" (nessuno stato di stanza/roomByUid già in memoria): risolvono
+  // tutto da zero (outbox row o response.room_id) e non richiedono navigazione
+  // preventiva del menù "Carte scambio".
+
+  // Notifica "match": applica subito o proponi lo scambio suggerito, aprendo/
+  // riusando la stanza con l'esatto profilo (my_profile_id) salvato nel payload.
+  bot.action(/^cards:nmatch:(\d+):(apply|propose)$/, async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const outboxId = Number(ctx.match[1]);
+      const commitNow = ctx.match[2] === 'apply';
+      const row = await sb.getCardNotificationById(outboxId);
+      const p = row?.payload || {};
+      if (!p.my_profile_id || !p.other_coc_tag || !p.card_give || !p.card_get) {
+        await replyTransient(ctx, '⚠️ Scambio non più disponibile: le collezioni potrebbero essere cambiate.', { parse_mode: 'HTML' });
+        return;
+      }
+      const room = await cardsApi.roomOpen(st.token, { profileId: p.my_profile_id, otherCocTag: p.other_coc_tag });
+      await cardsApi.propose(st.token, {
+        roomId: room.room.id,
+        profileId: p.my_profile_id,
+        cardGive: p.card_give,
+        cardGet: p.card_get,
+        commit: commitNow,
+      });
+      if (commitNow) {
+        await refreshCollection(sb, tauth, ctx.from.id);
+        await replyTransient(
+          ctx,
+          "⚡ Hai già ceduto il tuo doppione. In attesa che l'altro completi lo scambio dal suo lato.",
+          { parse_mode: 'HTML' },
+          5000,
+        );
+      } else {
+        await replyTransient(ctx, '✅ Proposta inviata! Apri la stanza per seguirla.', { parse_mode: 'HTML' }, 4000);
+      }
+      await openRoom(ctx, st, room.room.id);
+    });
+  });
+
+  // Notifica "committed": l'altro ha già ceduto il suo doppione, completa lo
+  // scambio (equivale ad "Accetta"): entrambe le collezioni si aggiornano insieme.
+  bot.action(/^cards:ncommit:(.+)$/, async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const proposalId = ctx.match[1];
+      const res = await cardsApi.respond(st.token, { proposalId, profileId: null, action: 'accept' });
+      await refreshCollection(sb, tauth, ctx.from.id);
+      await replyTransient(ctx, '✅ Scambio completato! Le collezioni sono aggiornate.', { parse_mode: 'HTML' }, 4000);
+      if (res?.room_id) await openRoom(ctx, st, res.room_id);
     });
   });
 

@@ -4,9 +4,15 @@
  * Evento "Clash of Cards" — invio notifiche Telegram proattive.
  * Polling periodico (vedi index.js) su card_event_notify_outbox: righe accodate
  * dal sito (api/_utils/card-trades.js / card-event.js) quando succede qualcosa
- * che riguarda un altro utente (nuovo match, messaggio, proposta, scambio accettato).
+ * che riguarda un altro utente (nuovo match, messaggio, proposta, scambio
+ * accettato, escrow "committed").
+ *
+ * Ogni notifica porta con sé, quando disponibile, il profilo CoC coinvolto
+ * (my_profile_id / coc_tag) e i bottoni azione per intervenire subito senza
+ * dover navigare tutto il menù "Carte scambio".
  */
 
+const { Markup } = require('telegraf');
 const fmt = require('./format');
 
 const BATCH_SIZE = 25;
@@ -15,13 +21,16 @@ function buildMessage(row) {
   const p = row.payload || {};
   const give = fmt.escapeHtml(p.card_give_name || p.card_give || '?');
   const get = fmt.escapeHtml(p.card_get_name || p.card_get || '?');
+  const profileLine = p.my_coc_tag
+    ? `\n<i>Con il profilo: ${fmt.escapeHtml(p.my_coc_tag)}</i>`
+    : '';
 
   if (row.kind === 'match') {
     return (
       `${fmt.DIV}\n🎴 <b>Nuovo scambio possibile!</b>\n${fmt.DIV}\n\n` +
-      `<b>${fmt.escapeHtml(p.other_username || p.other_coc_tag || 'Un giocatore')}</b> ha una carta che ti serve.\n\n` +
+      `<b>${fmt.escapeHtml(p.other_username || p.other_coc_tag || 'Un giocatore')}</b> ha una carta che ti serve.${profileLine}\n\n` +
       `Tu cedi: <b>${give}</b>\nTu ricevi: <b>${get}</b>\n\n` +
-      `Apri "Carte scambio → Scambi" dal menù per proporre lo scambio.`
+      `Usa i bottoni qui sotto per applicare subito o proporre lo scambio in chat.`
     );
   }
   if (row.kind === 'message') {
@@ -29,24 +38,54 @@ function buildMessage(row) {
     return (
       `${fmt.DIV}\n💬 <b>Nuovo messaggio — scambio carte</b>\n${fmt.DIV}\n\n` +
       `<b>${fmt.escapeHtml(p.sender_username || 'Un giocatore')}</b>: “${body}”\n\n` +
-      `Apri "Carte scambio → Scambi → Le mie stanze" per rispondere.`
+      `Apri la chat per rispondere.`
     );
   }
   if (row.kind === 'proposal') {
     return (
       `${fmt.DIV}\n🔁 <b>Nuova proposta di scambio</b>\n${fmt.DIV}\n\n` +
-      `<b>${fmt.escapeHtml(p.proposer_username || 'Un giocatore')}</b> propone: cede <b>${give}</b> → riceve <b>${get}</b>\n\n` +
-      `Apri "Carte scambio → Scambi → Le mie stanze" per accettare o rifiutare.`
+      `<b>${fmt.escapeHtml(p.proposer_username || 'Un giocatore')}</b> propone: cede <b>${give}</b> → riceve <b>${get}</b>.${profileLine}\n\n` +
+      `Apri la chat per accettare o rifiutare.`
+    );
+  }
+  if (row.kind === 'committed') {
+    return (
+      `${fmt.DIV}\n⚡ <b>L'altro ha già ceduto la sua carta!</b>\n${fmt.DIV}\n\n` +
+      `<b>${fmt.escapeHtml(p.proposer_username || 'Un giocatore')}</b> ha già dato <b>${give}</b> in cambio di <b>${get}</b> e aspetta che tu completi lo scambio.${profileLine}\n\n` +
+      `Apri la chat e premi "Applica subito" per completare (riceverete entrambi la carta).`
     );
   }
   if (row.kind === 'trade_done') {
     return (
       `${fmt.DIV}\n✅ <b>Scambio completato</b>\n${fmt.DIV}\n\n` +
-      `<b>${fmt.escapeHtml(p.accepted_by_username || 'L\'altro giocatore')}</b> ha accettato: cedi <b>${give}</b> → ricevi <b>${get}</b>.\n` +
+      `<b>${fmt.escapeHtml(p.accepted_by_username || 'L\'altro giocatore')}</b> ha accettato: cedi <b>${give}</b> → ricevi <b>${get}</b>.${profileLine}\n` +
       `La tua collezione è già stata aggiornata.`
     );
   }
   return '🎴 Aggiornamento evento Clash of Cards.';
+}
+
+function buildKeyboard(row) {
+  const p = row.payload || {};
+  const rows = [];
+  if (row.kind === 'match') {
+    rows.push([
+      Markup.button.callback('⚡ Applica subito', `cards:nmatch:${row.id}:apply`),
+      Markup.button.callback('💬 Proponi', `cards:nmatch:${row.id}:propose`),
+    ]);
+  } else if (row.kind === 'proposal' && p.room_id) {
+    rows.push([Markup.button.callback('💬 Apri chat', `cards:room:${p.room_id}`)]);
+  } else if (row.kind === 'committed' && p.room_id) {
+    rows.push([
+      Markup.button.callback('⚡ Applica subito (completa)', `cards:ncommit:${p.proposal_id}`),
+      Markup.button.callback('💬 Apri chat', `cards:room:${p.room_id}`),
+    ]);
+  } else if (row.kind === 'trade_done' && p.room_id) {
+    rows.push([Markup.button.callback('💬 Apri chat', `cards:room:${p.room_id}`)]);
+  } else if (row.kind === 'message' && p.room_id) {
+    rows.push([Markup.button.callback('💬 Apri chat', `cards:room:${p.room_id}`)]);
+  }
+  return rows.length ? Markup.inlineKeyboard(rows) : undefined;
 }
 
 async function runCardEventNotifications(bot, sb) {
@@ -64,7 +103,11 @@ async function runCardEventNotifications(bot, sb) {
     try {
       const telegramUserId = await sb.getTelegramUserIdForSupabaseUser(row.user_id);
       if (telegramUserId) {
-        await bot.telegram.sendMessage(telegramUserId, buildMessage(row), { parse_mode: 'HTML' });
+        const kb = buildKeyboard(row);
+        await bot.telegram.sendMessage(telegramUserId, buildMessage(row), {
+          parse_mode: 'HTML',
+          ...(kb || {}),
+        });
       }
       sentIds.push(row.id);
     } catch (e) {
@@ -83,4 +126,4 @@ async function runCardEventNotifications(bot, sb) {
   }
 }
 
-module.exports = { runCardEventNotifications };
+module.exports = { runCardEventNotifications, buildMessage, buildKeyboard };

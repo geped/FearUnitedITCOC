@@ -1931,7 +1931,8 @@ function renderCardEventContent() {
   const grid = cardsInCat.map(c => {
     const qty = coll[c.key] || 0;
     const stateCls = qty >= 2 ? 'state-2' : qty === 1 ? 'state-1' : 'state-0';
-    return `<button type="button" class="carte-card ${stateCls}" ${readOnly ? 'disabled' : ''}
+    const borderCls = CARTE_CAT_BORDER[c.category] || '';
+    return `<button type="button" class="carte-card ${stateCls} ${borderCls}" ${readOnly ? 'disabled' : ''}
         onclick="_onCardEventClick('${c.key}')" title="${escH(c.name_it)}">
       <img src="${escH(c.icon_url)}" alt="${escH(c.name_it)}" loading="lazy"
            onerror="this.style.visibility='hidden'">
@@ -2130,11 +2131,14 @@ async function loadCardTradeTab() {
   box.innerHTML = '<div class="profilo-empty"><p style="color:var(--text-3)">Caricamento…</p></div>';
   try {
     const profiles = window._cardEventData?.profiles || [];
+    // Nessun profile_id: aggrega gli scambi suggeriti su TUTTI i profili CoC collegati
+    // (ogni match indica con quale mio profilo si applica), senza dover scegliere un
+    // profilo "attivo" a priori.
     const [matches, selfMatches, rooms, publicDecks] = await Promise.all([
-      cardsApi('cards-matches', { params: { profile_id: profileId } }),
+      cardsApi('cards-matches'),
       profiles.length > 1 ? cardsApi('cards-self-matches') : Promise.resolve({ matches: [] }),
       cardsApi('cards-rooms'),
-      cardsApi('cards-public-list', { params: { profile_id: profileId } }),
+      cardsApi('cards-public-list'),
     ]);
     window._cardTradeData = { matches: matches.matches || [], selfMatches: selfMatches.matches || [], rooms: rooms.rooms || [] };
     window._cardPublicData = { myPublic: publicDecks.my_public === true, decks: publicDecks.decks || [] };
@@ -2308,6 +2312,7 @@ function _renderCartePublicWindow() {
   }
 
   if (win === 'suggested') {
+    const multiMine = myProfiles.length > 1;
     const matchesHtml = (data?.matches || []).length
       ? data.matches.map((m, i) => `
         <div class="carte-self-row semaforo-green">
@@ -2315,6 +2320,7 @@ function _renderCartePublicWindow() {
             <span class="carte-self-row-players">con ${escH(m.other_profile?.username || m.other_profile?.coc_tag || '—')}</span>
             <span class="carte-self-row-dot" title="Scambio utile: entrambi sbloccano una carta nuova">🟢</span>
           </div>
+          ${multiMine ? `<div class="carte-match-my-profile">👤 con il tuo profilo: <strong>${escH(m.my_profile?.username || m.my_profile?.coc_tag || '—')}</strong></div>` : ''}
           <div class="carte-self-row-cols">
             <div class="carte-self-row-col">
               <div class="carte-self-row-col-label">📤 Cedi</div>
@@ -2331,7 +2337,10 @@ function _renderCartePublicWindow() {
               </div>
             </div>
           </div>
-          ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">Proponi scambio delle carte</button>` : ''}
+          ${live ? `<div class="carte-row-actions">
+            <button type="button" class="btn-secondary btn-sm" onclick="_applyFromMatch(${i})" title="Cedi subito il tuo doppione; l'altro vedrà che hai già confermato">⚡ Applica subito</button>
+            <button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">💬 Proponi scambio</button>
+          </div>` : ''}
         </div>`).join('')
       : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio automatico con mazzi pubblici al momento. Serve: tu hai un doppione che all’altro manca, e lui ha un doppione (stessa tipologia) che manca a te.</p></div>`;
     box.innerHTML = `${_cartePublicWinHeader('Scambi suggeriti con altri')}<div class="carte-trade-section">
@@ -2456,11 +2465,13 @@ function _renderAlbumsWindow(live, which = 'mine') {
           const found = cat ? cat.cards.filter(c => (coll[c.key] || 0) >= 1).length : 0;
           const total = cat?.total_cards || 0;
           const n = d.matches?.length || 0;
+          const multiMine = myProfiles.length > 1;
           const matchesPreview = n
             ? `<div class="carte-album-matches">
                 <div class="carte-album-matches-title">Possibili carte da scambiare · ${n}</div>
                 ${d.matches.slice(0, 6).map((m, mi) => `
                   <div class="carte-album-match-row">
+                    ${multiMine ? `<div class="carte-match-my-profile">👤 con il tuo profilo: <strong>${escH(m.my_profile?.username || m.my_profile?.coc_tag || '—')}</strong></div>` : ''}
                     <div class="carte-album-match-pair">
                       <div class="carte-album-match-side">
                         <span class="carte-album-match-lbl">Cedi</span>
@@ -2474,7 +2485,10 @@ function _renderAlbumsWindow(live, which = 'mine') {
                         <span>${escH(m.card_get_meta?.name_it || m.card_get)}</span>
                       </div>
                     </div>
-                    ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_proposeFromPublicDeck(${i},${mi})">Proponi scambio delle carte</button>` : ''}
+                    ${live ? `<div class="carte-row-actions">
+                      <button type="button" class="btn-secondary btn-sm" onclick="_applyFromPublicDeck(${i},${mi})" title="Cedi subito il tuo doppione; l'altro vedrà che hai già confermato">⚡ Applica subito</button>
+                      <button type="button" class="btn-primary btn-sm" onclick="_proposeFromPublicDeck(${i},${mi})">💬 Proponi scambio</button>
+                    </div>` : ''}
                   </div>`).join('')}
                 ${n > 6 ? `<div class="carte-qty-modal-note" style="text-align:left;margin:0.35rem 0 0">+${n - 6} altri — apri chat o «Scambi suggeriti».</div>` : ''}
               </div>`
@@ -2577,38 +2591,46 @@ async function _openPublicDeck(idx) {
   }
 }
 
-async function _proposeFromPublicDeck(deckIdx, matchIdx) {
+async function _proposeFromPublicDeck(deckIdx, matchIdx, commitNow = false) {
   const deck = window._cardPublicData?.decks?.[deckIdx];
   const m = deck?.matches?.[matchIdx];
   if (!deck || !m) return;
-  const profileId = _activeCardProfileId();
+  // Ogni match indica con quale mio profilo si applica (aggregato su tutti i profili collegati).
+  const profileId = m.my_profile?.id || _activeCardProfileId();
   if (!profileId) return;
-  const me = (window._cardEventData?.profiles || []).find(p => p.id === profileId);
-  const myTag = me?.coc_tag || window._cardEventActiveTag;
+  const myTag = m.my_profile?.coc_tag || window._cardEventActiveTag;
+  const myName = m.my_profile?.username || myTag || 'Tu';
   const sem = _carteP2pSemaforo(myTag, deck.profile.coc_tag, m.card_give, m.card_get);
   _openCarteTradeConfirmModal({
-    title: 'Proponi scambio',
-    nameA: me?.username || myTag || 'Tu',
+    title: commitNow ? 'Applica subito (solo il mio mazzo)' : 'Proponi scambio',
+    nameA: myName,
     nameB: deck.profile.username || deck.profile.coc_tag,
     cardAMeta: m.card_give_meta,
     cardBMeta: m.card_get_meta,
     aIsNew: sem.aIsNew,
     bIsNew: sem.bIsNew,
-    note: 'La proposta verrà inviata in chat. L’altro giocatore dovrà accettarla. Solo carte della stessa tipologia; ciascuno cede un doppione e riceve una carta mancante.',
-    confirmLabel: 'Proponi scambio delle carte',
+    note: commitNow
+      ? 'Cedi SUBITO il tuo doppione, senza bisogno del consenso dell’altro giocatore. Riceverai la carta richiesta solo quando anche lui completerà lo scambio (in chat vedrà che hai già confermato la tua parte).'
+      : 'La proposta verrà inviata in chat. L’altro giocatore dovrà accettarla. Solo carte della stessa tipologia; ciascuno cede un doppione e riceve una carta mancante.',
+    confirmLabel: commitNow ? 'Applica subito' : 'Proponi scambio delle carte',
     onConfirm: async () => {
       const room = await cardsApi('cards-room-open', { method: 'POST', body: { profile_id: profileId, other_coc_tag: deck.profile.coc_tag } });
       await cardsApi('cards-propose', {
         method: 'POST',
-        body: { room_id: room.room.id, profile_id: profileId, card_give: m.card_give, card_get: m.card_get },
+        body: { room_id: room.room.id, profile_id: profileId, card_give: m.card_give, card_get: m.card_get, commit: commitNow },
       });
+      if (commitNow) { window._cardEventData = await profilesApi('cards-get'); renderCardEventContent(); }
       await _openCardRoom(room.room.id, (deck.matches || []).filter((_, i) => i !== matchIdx));
       await loadCardTradeTab();
     },
   });
 }
 
-async function _proposeSuggested(idx) {
+function _applyFromPublicDeck(deckIdx, matchIdx) {
+  return _proposeFromPublicDeck(deckIdx, matchIdx, true);
+}
+
+async function _proposeSuggested(idx, commitNow = false) {
   const m = (window._cardRoomSuggested || [])[idx];
   const roomState = window._cardRoomState;
   if (!m || !roomState) return;
@@ -2616,20 +2638,23 @@ async function _proposeSuggested(idx) {
   const other = roomState.other || {};
   const sem = _carteP2pSemaforo(me.coc_tag, other.coc_tag, m.card_give, m.card_get);
   _openCarteTradeConfirmModal({
-    title: 'Proponi scambio',
+    title: commitNow ? 'Applica subito (solo il mio mazzo)' : 'Proponi scambio',
     nameA: me.username || me.coc_tag || 'Tu',
     nameB: other.username || other.coc_tag || 'Altro',
     cardAMeta: m.card_give_meta,
     cardBMeta: m.card_get_meta,
     aIsNew: sem.aIsNew,
     bIsNew: sem.bIsNew,
-    note: 'La proposta verrà inviata in questa chat. L’altro giocatore dovrà accettarla.',
-    confirmLabel: 'Proponi scambio delle carte',
+    note: commitNow
+      ? 'Cedi SUBITO il tuo doppione, senza bisogno del consenso dell’altro giocatore. Riceverai la carta richiesta solo quando anche lui completerà lo scambio.'
+      : 'La proposta verrà inviata in questa chat. L’altro giocatore dovrà accettarla.',
+    confirmLabel: commitNow ? 'Applica subito' : 'Proponi scambio delle carte',
     onConfirm: async () => {
       await cardsApi('cards-propose', {
         method: 'POST',
-        body: { room_id: roomState.room.id, profile_id: roomState.room.my_profile_id, card_give: m.card_give, card_get: m.card_get },
+        body: { room_id: roomState.room.id, profile_id: roomState.room.my_profile_id, card_give: m.card_give, card_get: m.card_get, commit: commitNow },
       });
+      if (commitNow) { window._cardEventData = await profilesApi('cards-get'); renderCardEventContent(); }
       const roomId = roomState.room.id;
       const remaining = (window._cardRoomSuggested || []).filter((_, i) => i !== idx);
       await _openCardRoom(roomId, remaining);
@@ -2638,41 +2663,55 @@ async function _proposeSuggested(idx) {
   });
 }
 
-async function _proposeFromMatch(idx) {
+function _applySuggested(idx) {
+  return _proposeSuggested(idx, true);
+}
+
+async function _proposeFromMatch(idx, commitNow = false) {
   const m = window._cardTradeData?.matches?.[idx];
   if (!m) return;
-  const profileId = _activeCardProfileId();
+  // Ogni match indica con quale mio profilo si applica (aggregato su tutti i profili collegati).
+  const profileId = m.my_profile?.id || _activeCardProfileId();
   if (!profileId) return;
-  const me = (window._cardEventData?.profiles || []).find(p => p.id === profileId);
-  const myTag = me?.coc_tag || window._cardEventActiveTag;
+  const myTag = m.my_profile?.coc_tag || window._cardEventActiveTag;
+  const myName = m.my_profile?.username || myTag || 'Tu';
   const sem = _carteP2pSemaforo(myTag, m.other_profile?.coc_tag, m.card_give, m.card_get);
   _openCarteTradeConfirmModal({
-    title: 'Proponi scambio',
-    nameA: me?.username || myTag || 'Tu',
+    title: commitNow ? 'Applica subito (solo il mio mazzo)' : 'Proponi scambio',
+    nameA: myName,
     nameB: m.other_profile?.username || m.other_profile?.coc_tag || 'Altro',
     cardAMeta: m.card_give_meta,
     cardBMeta: m.card_get_meta,
     aIsNew: sem.aIsNew,
     bIsNew: sem.bIsNew,
-    note: 'La proposta verrà inviata in chat. L’altro giocatore dovrà accettarla. Stesse regole semaforo: 🟢 sblocca carta nuova · 🟡 già posseduta (negli scambi tra i tuoi profili).',
-    confirmLabel: 'Proponi scambio delle carte',
+    note: commitNow
+      ? 'Cedi SUBITO il tuo doppione, senza bisogno del consenso dell’altro giocatore. Riceverai la carta richiesta solo quando anche lui completerà lo scambio.'
+      : 'La proposta verrà inviata in chat. L’altro giocatore dovrà accettarla. Stesse regole semaforo: 🟢 sblocca carta nuova · 🟡 già posseduta (negli scambi tra i tuoi profili).',
+    confirmLabel: commitNow ? 'Applica subito' : 'Proponi scambio delle carte',
     onConfirm: async () => {
       const room = await cardsApi('cards-room-open', { method: 'POST', body: { profile_id: profileId, other_coc_tag: m.other_profile.coc_tag } });
       await cardsApi('cards-propose', {
         method: 'POST',
-        body: { room_id: room.room.id, profile_id: profileId, card_give: m.card_give, card_get: m.card_get },
+        body: { room_id: room.room.id, profile_id: profileId, card_give: m.card_give, card_get: m.card_get, commit: commitNow },
       });
+      if (commitNow) { window._cardEventData = await profilesApi('cards-get'); renderCardEventContent(); }
       await _openCardRoom(room.room.id);
       await loadCardTradeTab();
     },
   });
 }
 
+function _applyFromMatch(idx) {
+  return _proposeFromMatch(idx, true);
+}
+
 /** Semaforo P2P: verde = ricevente sblocca carta nuova (qty&lt;1). */
 function _carteP2pSemaforo(myTag, otherTag, cardGive, cardGet) {
   const myColl = (window._cardEventData?.collections && window._cardEventData.collections[myTag]) || {};
-  const otherDeck = (window._cardPublicData?.decks || []).find(d => d.profile?.coc_tag === otherTag);
-  const otherColl = otherDeck?.collection || {};
+  const roomOther = window._cardRoomState?.other;
+  const otherColl = roomOther?.coc_tag === otherTag
+    ? (window._cardRoomState.other_collection || {})
+    : ((window._cardPublicData?.decks || []).find(d => d.profile?.coc_tag === otherTag)?.collection || {});
   return {
     aIsNew: (myColl[cardGet] || 0) < 1,
     bIsNew: (otherColl[cardGive] || 0) < 1,
@@ -2838,8 +2877,10 @@ window._cardRoomSuggested = null; // match suggeriti da "Mazzi pubblici" per la 
 async function _openCardRoom(roomId, suggested = null) {
   try {
     const data = await cardsApi('cards-room-detail', { params: { room_id: roomId } });
+    const sameRoom = window._cardRoomState?.room?.id === roomId;
     window._cardRoomState = data;
     window._cardRoomSuggested = suggested;
+    if (!sameRoom) window._cartePropose = { give: null, get: null };
     renderCardRoomModal(data);
   } catch (e) {
     alert(e.message || 'Errore apertura stanza.');
@@ -2860,7 +2901,10 @@ function renderCardRoomModal(data) {
 
   const proposalsHtml = data.proposals.filter(p => p.status === 'pending').map(p => {
     const isProposer = p.proposer_profile === myId;
-    return `<div class="carte-proposal-card">
+    const committedBadge = p.proposer_committed
+      ? `<div class="carte-committed-badge">⚡ ${isProposer ? 'Hai già ceduto la tua carta' : `${escH(data.other.username || data.other.coc_tag)} ha già ceduto la sua carta`}: in attesa di completamento.</div>`
+      : '';
+    return `<div class="carte-proposal-card ${p.proposer_committed ? 'is-committed' : ''}">
       <div class="carte-match-cards">
         ${_cardMiniImg(p.card_give_meta)}
         <span class="carte-match-arrow">→</span>
@@ -2869,9 +2913,11 @@ function renderCardRoomModal(data) {
       <div class="carte-match-info">
         <div class="carte-match-names">${isProposer ? 'Hai proposto' : `${escH(data.other.username || data.other.coc_tag)} propone`}: cede ${escH(p.card_give_meta?.name_it || p.card_give)} → riceve ${escH(p.card_get_meta?.name_it || p.card_get)}</div>
       </div>
+      ${committedBadge}
       <div class="carte-proposal-actions">
-        ${!isProposer && live ? `<button type="button" class="btn-primary btn-sm" onclick="_cardRoomRespond('${p.id}','accept')">✓ Accetta</button>` : ''}
+        ${!isProposer && live ? `<button type="button" class="btn-primary btn-sm" onclick="_cardRoomRespond('${p.id}','accept')">${p.proposer_committed ? '⚡ Applica subito e completa' : '✓ Accetta'}</button>` : ''}
         ${!isProposer && live ? `<button type="button" class="btn-secondary btn-sm" onclick="_cardRoomRespond('${p.id}','reject')">✕ Rifiuta</button>` : ''}
+        ${isProposer && !p.proposer_committed && live ? `<button type="button" class="btn-secondary btn-sm" onclick="_cardRoomCommit('${p.id}')">⚡ Applica subito (solo il mio mazzo)</button>` : ''}
         ${isProposer && live ? `<button type="button" class="btn-secondary btn-sm" onclick="_cardRoomRespond('${p.id}','cancel')">Annulla</button>` : ''}
       </div>
     </div>`;
@@ -2891,49 +2937,46 @@ function renderCardRoomModal(data) {
           <div class="carte-match-info">
             <div class="carte-match-names">Cedi <strong>${escH(m.card_give_meta?.name_it || m.card_give)}</strong> → ricevi <strong>${escH(m.card_get_meta?.name_it || m.card_get)}</strong></div>
           </div>
-          <button type="button" class="btn-primary btn-sm" onclick="_proposeSuggested(${i})">Proponi</button>
+          <div class="carte-row-actions">
+            <button type="button" class="btn-secondary btn-sm" onclick="_applySuggested(${i})">⚡ Applica subito</button>
+            <button type="button" class="btn-primary btn-sm" onclick="_proposeSuggested(${i})">💬 Proponi</button>
+          </div>
         </div>`).join('')}
     </div>` : '';
 
   const myTag = data.me.coc_tag;
   const myColl = (window._cardEventData?.collections && window._cardEventData.collections[myTag]) || {};
-  const myDupes = (cat?.cards || []).filter(c => (myColl[c.key] || 0) >= 2);
-  const myMissing = (cat?.cards || []).filter(c => (myColl[c.key] || 0) === 0);
-  const catLabel = (k) => escH(cat?.category_label_it?.[k] || k);
-  const optHtml = (cards) => cards.map(c =>
-    `<option value="${escH(c.key)}" data-cat="${escH(c.category)}">${escH(c.name_it)} · ${catLabel(c.category)}</option>`
-  ).join('');
+  const otherColl = data.other_collection || {};
+  const sel = window._cartePropose || { give: null, get: null };
+  window._cartePropose = sel;
+  // Stesse regole di computeP2pMatches: doppione mio che l'altro non ha ↔ suo doppione che a me manca.
+  const giveAll = (cat?.cards || []).filter(c => (myColl[c.key] || 0) >= 2 && (otherColl[c.key] || 0) === 0);
+  const getAll = (cat?.cards || []).filter(c => (otherColl[c.key] || 0) >= 2 && (myColl[c.key] || 0) === 0);
+  const giveSelCard = cat?.cards?.find(c => c.key === sel.give);
+  const getSelCard = cat?.cards?.find(c => c.key === sel.get);
+  const lockCat = giveSelCard?.category || getSelCard?.category || null;
+  const giveOptions = lockCat ? giveAll.filter(c => c.category === lockCat) : giveAll;
+  const getOptions = lockCat ? getAll.filter(c => c.category === lockCat) : getAll;
+  const canSubmitPropose = !!(sel.give && sel.get);
   const proposeForm = live ? `
     <div class="carte-propose-form">
-      <p class="carte-propose-rule">Solo carte della <strong>stessa tipologia</strong>: elisir↔elisir, elisir nero↔elisir nero, builder↔builder, super truppe↔super truppe. Non si possono mischiare categorie.</p>
+      <p class="carte-propose-rule">Solo carte della <strong>stessa tipologia</strong>. Tocca una carta per selezionarla: a sinistra i tuoi doppioni scambiabili con lui, a destra i suoi doppioni che a te mancano.</p>
       <div class="carte-propose-sides">
         <div class="carte-propose-side">
-          <label class="carte-propose-label">Cedi (doppione)</label>
-          <div class="carte-propose-preview" id="carte-propose-give-preview">
-            <div class="carte-propose-preview-empty">Scegli una carta</div>
-          </div>
-          <select id="carte-propose-give" onchange="_syncCarteProposeForm('give')">
-            <option value="">Cedi…</option>
-            ${optHtml(myDupes)}
-          </select>
+          <label class="carte-propose-label">📤 Cedi (il tuo doppione)</label>
+          ${_carteProposeGridHtml(giveOptions, 'give', sel.give)}
         </div>
         <div class="carte-propose-arrow" aria-hidden="true">⇄</div>
         <div class="carte-propose-side">
-          <label class="carte-propose-label">Ricevi (mancante)</label>
-          <div class="carte-propose-preview" id="carte-propose-get-preview">
-            <div class="carte-propose-preview-empty">Scegli una carta</div>
-          </div>
-          <select id="carte-propose-get" onchange="_syncCarteProposeForm('get')">
-            <option value="">Ricevi…</option>
-            ${optHtml(myMissing)}
-          </select>
+          <label class="carte-propose-label">📥 Ricevi (suo doppione, a te manca)</label>
+          ${_carteProposeGridHtml(getOptions, 'get', sel.get)}
         </div>
       </div>
-      <button type="button" class="btn-primary btn-sm carte-propose-submit" onclick="_cardRoomPropose()">Proponi scambio</button>
+      <div class="carte-row-actions">
+        <button type="button" class="btn-secondary btn-sm" ${canSubmitPropose ? '' : 'disabled'} onclick="_cardRoomPropose(true)">⚡ Applica subito</button>
+        <button type="button" class="btn-primary btn-sm" ${canSubmitPropose ? '' : 'disabled'} onclick="_cardRoomPropose(false)">💬 Proponi scambio</button>
+      </div>
     </div>` : '';
-
-  // Store option lists for category filtering after mount
-  window._carteProposeLists = { dupes: myDupes, missing: myMissing };
 
   const modal = document.createElement('div');
   modal.id = 'carte-room-modal';
@@ -2979,100 +3022,87 @@ async function _cardRoomSendMessage() {
   }
 }
 
-async function _cardRoomPropose() {
-  const give = document.getElementById('carte-propose-give')?.value;
-  const get = document.getElementById('carte-propose-get')?.value;
+/** Griglia fotografica cliccabile per la sezione "Cedi"/"Ricevi" della proposta in chat. */
+function _carteProposeGridHtml(cards, side, selectedKey) {
+  if (!cards.length) {
+    return `<div class="carte-propose-preview-empty">Nessuna carta disponibile${selectedKey ? ' in questa categoria' : ' con questo giocatore'}.</div>`;
+  }
+  return `<div class="carte-pick-grid">${cards.map(c => {
+    const border = CARTE_CAT_BORDER[c.category] || '';
+    const sel = c.key === selectedKey ? 'is-selected' : '';
+    return `<button type="button" class="carte-pick-tile ${border} ${sel}" onclick="_pickCarteProposeCard('${side}','${escH(c.key)}')" title="${escH(c.name_it)}">
+      <img src="${escH(c.icon_url)}" alt="${escH(c.name_it)}" loading="lazy" onerror="this.style.visibility='hidden'">
+    </button>`;
+  }).join('')}</div>`;
+}
+
+function _pickCarteProposeCard(side, key) {
+  const sel = window._cartePropose || (window._cartePropose = { give: null, get: null });
+  if (side === 'give') sel.give = sel.give === key ? null : key;
+  else sel.get = sel.get === key ? null : key;
+  // Se dopo il click le due carte non sono più della stessa categoria, resetta l'altro lato.
+  const cat = window._cardEventCatalog;
+  const giveCard = cat?.cards?.find(c => c.key === sel.give);
+  const getCard = cat?.cards?.find(c => c.key === sel.get);
+  if (giveCard && getCard && giveCard.category !== getCard.category) {
+    if (side === 'give') sel.get = null; else sel.give = null;
+  }
+  if (window._cardRoomState) renderCardRoomModal(window._cardRoomState);
+}
+
+async function _cardRoomPropose(commitNow = false) {
+  const sel = window._cartePropose || {};
+  const give = sel.give;
+  const get = sel.get;
   if (!give || !get || !window._cardRoomState) { alert('Seleziona entrambe le carte.'); return; }
   const cat = window._cardEventCatalog;
   const giveMeta = cat?.cards?.find(c => c.key === give);
   const getMeta = cat?.cards?.find(c => c.key === get);
-  if (giveMeta && getMeta && giveMeta.category !== getMeta.category) {
-    alert('Puoi scambiare solo carte della stessa tipologia (es. elisir con elisir, non elisir con elisir nero).');
-    return;
-  }
   const roomState = window._cardRoomState;
   const me = roomState.me || {};
   const other = roomState.other || {};
   const sem = _carteP2pSemaforo(me.coc_tag, other.coc_tag, give, get);
   _openCarteTradeConfirmModal({
-    title: 'Proponi scambio',
+    title: commitNow ? 'Applica subito (solo il mio mazzo)' : 'Proponi scambio',
     nameA: me.username || me.coc_tag || 'Tu',
     nameB: other.username || other.coc_tag || 'Altro',
     cardAMeta: giveMeta,
     cardBMeta: getMeta,
     aIsNew: sem.aIsNew,
     bIsNew: sem.bIsNew,
-    note: 'La proposta verrà inviata in questa chat. L’altro giocatore dovrà accettarla.',
-    confirmLabel: 'Proponi scambio delle carte',
+    note: commitNow
+      ? 'Cedi SUBITO il tuo doppione, senza bisogno del consenso dell’altro giocatore. Riceverai la carta richiesta solo quando anche lui completerà lo scambio.'
+      : 'La proposta verrà inviata in questa chat. L’altro giocatore dovrà accettarla.',
+    confirmLabel: commitNow ? 'Applica subito' : 'Proponi scambio delle carte',
     onConfirm: async () => {
       await cardsApi('cards-propose', {
         method: 'POST',
-        body: { room_id: roomState.room.id, profile_id: roomState.room.my_profile_id, card_give: give, card_get: get },
+        body: { room_id: roomState.room.id, profile_id: roomState.room.my_profile_id, card_give: give, card_get: get, commit: commitNow },
       });
+      window._cartePropose = { give: null, get: null };
+      if (commitNow) { window._cardEventData = await profilesApi('cards-get'); renderCardEventContent(); }
       await _openCardRoom(roomState.room.id);
       await loadCardTradeTab();
     },
   });
 }
 
-function _carteProposePreviewHtml(card) {
-  if (!card) return `<div class="carte-propose-preview-empty">Scegli una carta</div>`;
-  const cat = window._cardEventCatalog;
-  const border = CARTE_CAT_BORDER[card.category] || '';
-  const lab = cat?.category_label_it?.[card.category] || card.category;
-  return `<div class="carte-propose-preview-card ${border}">
-    <img src="${escH(card.icon_url)}" alt="${escH(card.name_it)}" loading="lazy" onerror="this.style.visibility='hidden'">
-    <div class="carte-propose-preview-meta">
-      <strong>${escH(card.name_it)}</strong>
-      <span>${escH(lab)}</span>
-    </div>
-  </div>`;
-}
-
-function _fillProposeSelect(sel, cards, selectedKey, placeholder) {
-  if (!sel) return;
-  const cat = window._cardEventCatalog;
-  const catLabel = (k) => cat?.category_label_it?.[k] || k;
-  const keep = selectedKey && cards.some(c => c.key === selectedKey) ? selectedKey : '';
-  sel.innerHTML = `<option value="">${placeholder}</option>` + cards.map(c =>
-    `<option value="${escH(c.key)}" data-cat="${escH(c.category)}"${c.key === keep ? ' selected' : ''}>${escH(c.name_it)} · ${escH(catLabel(c.category))}</option>`
-  ).join('');
-  return keep;
-}
-
-function _syncCarteProposeForm(changed) {
-  const lists = window._carteProposeLists || { dupes: [], missing: [] };
-  const cat = window._cardEventCatalog;
-  const giveSel = document.getElementById('carte-propose-give');
-  const getSel = document.getElementById('carte-propose-get');
-  const givePrev = document.getElementById('carte-propose-give-preview');
-  const getPrev = document.getElementById('carte-propose-get-preview');
-  if (!giveSel || !getSel) return;
-
-  let giveKey = giveSel.value || '';
-  let getKey = getSel.value || '';
-  const giveCard = cat?.cards?.find(c => c.key === giveKey);
-  const getCard = cat?.cards?.find(c => c.key === getKey);
-  const lockCat = (changed === 'give' ? giveCard?.category : null)
-    || (changed === 'get' ? getCard?.category : null)
-    || giveCard?.category
-    || getCard?.category
-    || null;
-
-  const dupes = lockCat ? lists.dupes.filter(c => c.category === lockCat) : lists.dupes;
-  const missing = lockCat ? lists.missing.filter(c => c.category === lockCat) : lists.missing;
-
-  if (changed === 'give') {
-    getKey = _fillProposeSelect(getSel, missing, getKey, 'Ricevi…') || '';
-  } else if (changed === 'get') {
-    giveKey = _fillProposeSelect(giveSel, dupes, giveKey, 'Cedi…') || '';
-  } else {
-    giveKey = _fillProposeSelect(giveSel, dupes, giveKey, 'Cedi…') || '';
-    getKey = _fillProposeSelect(getSel, missing, getKey, 'Ricevi…') || '';
+/** Il proponente conferma la propria cessione (escrow) su una proposta già creata ma non ancora committed. */
+async function _cardRoomCommit(proposalId) {
+  if (!window._cardRoomState) return;
+  if (!confirm('Confermi di cedere subito la tua carta per questa proposta? Non serve il consenso dell’altro giocatore: riceverai la carta richiesta solo quando anche lui completerà lo scambio.')) return;
+  try {
+    await cardsApi('cards-commit', {
+      method: 'POST',
+      body: { proposal_id: proposalId, profile_id: window._cardRoomState.room.my_profile_id },
+    });
+    window._cardEventData = await profilesApi('cards-get');
+    renderCardEventContent();
+    await _openCardRoom(window._cardRoomState.room.id);
+    await loadCardTradeTab();
+  } catch (e) {
+    alert(e.message || 'Errore applicazione scambio.');
   }
-
-  if (givePrev) givePrev.innerHTML = _carteProposePreviewHtml(cat?.cards?.find(c => c.key === (giveSel.value || '')));
-  if (getPrev) getPrev.innerHTML = _carteProposePreviewHtml(cat?.cards?.find(c => c.key === (getSel.value || '')));
 }
 
 async function _cardRoomRespond(proposalId, action) {
@@ -3088,10 +3118,10 @@ async function _cardRoomRespond(proposalId, action) {
       method: 'POST',
       body: { proposal_id: proposalId, profile_id: window._cardRoomState.room.my_profile_id, action },
     });
-    if (action === 'accept') {
-      window._cardEventData = await profilesApi('cards-get');
-      renderCardEventContent();
-    }
+    // Aggiorna sempre "La mia collezione": accept aggiorna le quantità, cancel/reject
+    // possono restituire un doppione ceduto in escrow ("Applica subito").
+    window._cardEventData = await profilesApi('cards-get');
+    renderCardEventContent();
     await _openCardRoom(window._cardRoomState.room.id);
     await loadCardTradeTab();
   } catch (e) {

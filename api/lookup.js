@@ -659,6 +659,7 @@ module.exports = async (req, res) => {
           type === 'cards-room-detail' ||
           type === 'cards-room-send' ||
           type === 'cards-propose' ||
+          type === 'cards-commit' ||
           type === 'cards-respond' ||
           type === 'cards-self-apply' ||
           type === 'cards-trade-log' ||
@@ -725,8 +726,9 @@ module.exports = async (req, res) => {
 
                 if (type === 'cards-matches') {
                     if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
-                    const profileId = req.query.profile_id || req.query.profileId;
-                    if (!profileId) return res.status(400).json({ error: 'profile_id obbligatorio.' });
+                    // profile_id opzionale: se omesso, aggrega gli scambi suggeriti su TUTTI i
+                    // profili CoC collegati (ogni match indica con quale mio profilo si applica).
+                    const profileId = req.query.profile_id || req.query.profileId || null;
                     const data = await cardTrades.getMatchesForProfile(admin, user, profileId);
                     return res.status(200).json(data);
                 }
@@ -785,7 +787,24 @@ module.exports = async (req, res) => {
                     if (!roomId || !profileId || !cardGive || !cardGet) {
                         return res.status(400).json({ error: 'room_id, profile_id, card_give e card_get sono obbligatori.' });
                     }
-                    const data = await cardTrades.proposeTrade(admin, user, roomId, profileId, cardGive, cardGet);
+                    // commit: true → "Applica subito" (escrow immediato del doppione, senza
+                    // consenso dell'altro lato). Assente/false → "Proponi scambio" classico.
+                    const commitNow = body.commit === true || body.commitNow === true;
+                    const data = await cardTrades.proposeTrade(admin, user, roomId, profileId, cardGive, cardGet, { commitNow });
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-commit') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const proposalId = body.proposal_id || body.proposalId;
+                    // profile_id opzionale: se omesso, il proponente viene risolto in automatico
+                    // (utile per i bottoni delle notifiche Telegram, senza stato pregresso).
+                    const profileId = body.profile_id || body.profileId || null;
+                    if (!proposalId) {
+                        return res.status(400).json({ error: 'proposal_id obbligatorio.' });
+                    }
+                    const data = await cardTrades.commitProposal(admin, user, proposalId, profileId);
                     return res.status(200).json(data);
                 }
 
@@ -793,10 +812,12 @@ module.exports = async (req, res) => {
                     if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
                     const body = req.body || {};
                     const proposalId = body.proposal_id || body.proposalId;
-                    const profileId = body.profile_id || body.profileId;
+                    // profile_id opzionale: se omesso, viene risolto in automatico dalla stanza
+                    // (utile per i bottoni delle notifiche Telegram, senza stato pregresso).
+                    const profileId = body.profile_id || body.profileId || null;
                     const action = body.action;
-                    if (!proposalId || !profileId || !['accept', 'reject', 'cancel'].includes(action)) {
-                        return res.status(400).json({ error: 'proposal_id, profile_id e action (accept|reject|cancel) sono obbligatori.' });
+                    if (!proposalId || !['accept', 'reject', 'cancel'].includes(action)) {
+                        return res.status(400).json({ error: 'proposal_id e action (accept|reject|cancel) sono obbligatori.' });
                     }
                     const data = await cardTrades.respondProposal(admin, user, proposalId, profileId, action);
                     return res.status(200).json(data);
@@ -824,8 +845,10 @@ module.exports = async (req, res) => {
 
                 if (type === 'cards-public-list') {
                     if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
-                    const profileId = req.query.profile_id || req.query.profileId;
-                    if (!profileId) return res.status(400).json({ error: 'profile_id obbligatorio.' });
+                    // profile_id opzionale: se omesso, calcola i match verso ogni mazzo pubblico
+                    // aggregando TUTTI i profili CoC dell'utente (indica con quale mio profilo
+                    // si applica ogni scambio suggerito).
+                    const profileId = req.query.profile_id || req.query.profileId || null;
                     const data = await cardTrades.listPublicDecks(admin, user, profileId);
                     return res.status(200).json(data);
                 }
@@ -845,7 +868,7 @@ module.exports = async (req, res) => {
         } else {
             return res.status(400).json({
                 error:
-                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, cards-catalog, cards-get, cards-save, cards-matches, cards-self-matches, cards-rooms, cards-room-open, cards-room-detail, cards-room-send, cards-propose, cards-respond, cards-self-apply, cards-trade-log, cards-public-list, cards-public-toggle',
+                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, cards-catalog, cards-get, cards-save, cards-matches, cards-self-matches, cards-rooms, cards-room-open, cards-room-detail, cards-room-send, cards-propose, cards-commit, cards-respond, cards-self-apply, cards-trade-log, cards-public-list, cards-public-toggle',
             });
         }
         const r = await fetch(`${proxyUrl}${proxyPath}`, {

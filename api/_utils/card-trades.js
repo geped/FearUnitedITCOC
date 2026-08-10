@@ -108,7 +108,7 @@ async function queueNotification(admin, { userId, kind, dedupeKey, payload }) {
 }
 
 async function profileUserId(admin, profileId) {
-  const { data } = await admin.from('user_coc_profiles').select('id, user_id, username').eq('id', profileId).maybeSingle();
+  const { data } = await admin.from('user_coc_profiles').select('id, user_id, username, coc_tag').eq('id', profileId).maybeSingle();
   return data || null;
 }
 
@@ -141,6 +141,7 @@ async function notifyMatchesForTag(admin, cocTag) {
         kind: 'match',
         dedupeKey: `${me.coc_tag}|${other.coc_tag}|${m.card_give}|${m.card_get}`,
         payload: {
+          my_profile_id: me.id,
           my_coc_tag: me.coc_tag,
           other_coc_tag: other.coc_tag,
           other_username: other.username,
@@ -155,6 +156,7 @@ async function notifyMatchesForTag(admin, cocTag) {
         kind: 'match',
         dedupeKey: `${other.coc_tag}|${me.coc_tag}|${m.card_get}|${m.card_give}`,
         payload: {
+          my_profile_id: other.id,
           my_coc_tag: other.coc_tag,
           other_coc_tag: me.coc_tag,
           other_username: me.username,
@@ -172,11 +174,21 @@ async function notifyMatchesForTag(admin, cocTag) {
 
 // ── MATCHING ────────────────────────────────────────────────────────────
 
+/**
+ * Scambi suggeriti con altri account CoCBoard. Se profileId è fornito, comportamento
+ * legacy (solo quel profilo, compat con vecchie chiamate). Se omesso, calcola i match
+ * per TUTTI i profili CoC dell'utente contemporaneamente: ogni match indica con quale
+ * mio profilo (my_profile) si applica — l'utente non deve più scegliere un profilo
+ * "attivo" per vedere tutti gli scambi possibili.
+ */
 async function getMatchesForProfile(admin, user, profileId) {
-  const me = await myProfileOr403(admin, user, profileId);
+  const myProfiles = profileId
+    ? [await myProfileOr403(admin, user, profileId)]
+    : await profilesUtil.listProfiles(admin, user.id);
+  if (!myProfiles.length) return { ok: true, profile: null, matches: [] };
 
-  // Preferisci calcolo da collezioni (assenza riga = mancante). Filtra alle sole
-  // controparti con mazzo pubblico: è la stessa platea di "Mazzi pubblici".
+  const myTags = myProfiles.map((p) => p.coc_tag);
+
   const { data: publicProfiles, error: ePub } = await admin
     .from('user_coc_profiles')
     .select('id, coc_tag, username, coc_clan_name, coc_clan_badge_url, town_hall_level, user_id')
@@ -184,12 +196,11 @@ async function getMatchesForProfile(admin, user, profileId) {
     .neq('user_id', user.id);
   if (ePub) throw ePub;
 
-  const otherTags = (publicProfiles || []).map((p) => p.coc_tag).filter((t) => t && t !== me.coc_tag);
-  const tagsToLoad = [me.coc_tag, ...otherTags];
-  const { data: collRows, error: eColl } = await admin
-    .from('card_event_collections')
-    .select('coc_tag, card_key, qty_state')
-    .in('coc_tag', tagsToLoad);
+  const otherTags = (publicProfiles || []).map((p) => p.coc_tag).filter((t) => t && !myTags.includes(t));
+  const tagsToLoad = [...myTags, ...otherTags];
+  const { data: collRows, error: eColl } = tagsToLoad.length
+    ? await admin.from('card_event_collections').select('coc_tag, card_key, qty_state').in('coc_tag', tagsToLoad)
+    : { data: [], error: null };
   if (eColl) throw eColl;
 
   const collByTag = {};
@@ -201,26 +212,30 @@ async function getMatchesForProfile(admin, user, profileId) {
 
   const profileByTag = Object.fromEntries((publicProfiles || []).map((r) => [r.coc_tag, r]));
   const matches = [];
-  for (const tag of otherTags) {
-    const pair = computeP2pMatches(collByTag[me.coc_tag], collByTag[tag]);
-    for (const m of pair) {
-      matches.push(
-        enrichCardKeys(
-          {
-            other_profile: profileByTag[tag] || { coc_tag: tag },
-            card_give: m.card_give,
-            card_get: m.card_get,
-            category: m.category,
-          },
-          ['card_give', 'card_get'],
-        ),
-      );
+  for (const myProfile of myProfiles) {
+    for (const tag of otherTags) {
+      const pair = computeP2pMatches(collByTag[myProfile.coc_tag], collByTag[tag]);
+      for (const m of pair) {
+        matches.push(
+          enrichCardKeys(
+            {
+              my_profile: profilesUtil.profileToPublic(myProfile),
+              other_profile: profileByTag[tag] || { coc_tag: tag },
+              card_give: m.card_give,
+              card_get: m.card_get,
+              category: m.category,
+            },
+            ['card_give', 'card_get'],
+          ),
+        );
+      }
     }
   }
 
   return {
     ok: true,
-    profile: profilesUtil.profileToPublic(me),
+    profile: profilesUtil.profileToPublic(myProfiles[0]),
+    profiles: myProfiles.map(profilesUtil.profileToPublic),
     matches,
   };
 }
@@ -269,14 +284,21 @@ async function setProfilePublic(admin, user, profileId, isPublic) {
 }
 
 /**
- * Elenco dei mazzi pubblici di ALTRI account CoCBoard, con i possibili scambi
- * verso il profilo attivo (stesse regole P2P: doppione↔mancante, stessa categoria).
+ * Elenco dei mazzi pubblici di ALTRI account CoCBoard, con i possibili scambi.
+ * Se myProfileId è fornito, comportamento legacy (solo quel profilo). Se omesso,
+ * calcola i match aggregando TUTTI i profili CoC dell'utente: ogni scambio indica
+ * con quale mio profilo (my_profile) si applica, senza dover scegliere un profilo
+ * "attivo" a priori.
  * Matching calcolato sulle collezioni: carta assente = mancante (non serve riga qty=0).
  *
  * Ogni voce include la collezione posseduta (qty>=1) e le combinazioni di scambio.
  */
 async function listPublicDecks(admin, user, myProfileId) {
-  const me = await myProfileOr403(admin, user, myProfileId);
+  const myProfiles = myProfileId
+    ? [await myProfileOr403(admin, user, myProfileId)]
+    : await profilesUtil.listProfiles(admin, user.id);
+  const myTags = myProfiles.map((p) => p.coc_tag);
+  const myPublicFlag = myProfiles.some((p) => p.card_deck_public === true);
 
   const { data: publicProfiles, error: e1 } = await admin
     .from('user_coc_profiles')
@@ -285,8 +307,8 @@ async function listPublicDecks(admin, user, myProfileId) {
     .neq('user_id', user.id);
   if (e1) throw e1;
 
-  const otherTags = (publicProfiles || []).map((p) => p.coc_tag).filter((t) => t !== me.coc_tag);
-  const tagsToLoad = [me.coc_tag, ...otherTags];
+  const otherTags = (publicProfiles || []).map((p) => p.coc_tag).filter((t) => !myTags.includes(t));
+  const tagsToLoad = [...myTags, ...otherTags];
   const { data: collRows, error: e3 } = tagsToLoad.length
     ? await admin.from('card_event_collections').select('coc_tag, card_key, qty_state').in('coc_tag', tagsToLoad)
     : { data: [], error: null };
@@ -309,17 +331,29 @@ async function listPublicDecks(admin, user, myProfileId) {
 
   return {
     ok: true,
-    my_public: me.card_deck_public === true,
+    my_public: myPublicFlag,
+    my_profiles: myProfiles.map(profilesUtil.profileToPublic),
     decks: (publicProfiles || [])
-      .filter((p) => p.coc_tag !== me.coc_tag)
+      .filter((p) => !myTags.includes(p.coc_tag))
       .map((p) => {
         const fullColl = collectionByTag[p.coc_tag] || {};
-        const matches = computeP2pMatches(collectionByTag[me.coc_tag], fullColl).map((m) =>
-          enrichCardKeys({ card_give: m.card_give, card_get: m.card_get, category: m.category }, [
-            'card_give',
-            'card_get',
-          ]),
-        );
+        const matches = [];
+        for (const myProfile of myProfiles) {
+          const pair = computeP2pMatches(collectionByTag[myProfile.coc_tag], fullColl);
+          for (const m of pair) {
+            matches.push(
+              enrichCardKeys(
+                {
+                  my_profile: profilesUtil.profileToPublic(myProfile),
+                  card_give: m.card_give,
+                  card_get: m.card_get,
+                  category: m.category,
+                },
+                ['card_give', 'card_get'],
+              ),
+            );
+          }
+        }
         return {
           profile: profilesUtil.profileToPublic(p),
           matches,
@@ -394,7 +428,15 @@ async function getRoomDetail(admin, user, roomId, preloaded) {
       ? { [preloaded.me.id]: preloaded.me, [preloaded.other.id]: preloaded.other }
       : await publicProfilesByIds(admin, [myProfileId, otherProfileId]);
 
-  const [{ data: messages, error: e1 }, { data: proposals, error: e2 }] = await Promise.all([
+  // Best-effort: rileva subito eventuali proposte "stale" (collezioni cambiate da
+  // quando sono state create) prima di mostrare la stanza, invece di scoprirlo solo
+  // al momento dell'accettazione.
+  const myTag = profilesMap[myProfileId]?.coc_tag;
+  const otherTag = profilesMap[otherProfileId]?.coc_tag;
+  if (myTag) await revalidateProposalsForTag(admin, myTag);
+  if (otherTag && otherTag !== myTag) await revalidateProposalsForTag(admin, otherTag);
+
+  const [{ data: messages, error: e1 }, { data: proposals, error: e2 }, { data: otherColl, error: e3 }] = await Promise.all([
     admin
       .from('card_event_room_messages')
       .select('*')
@@ -407,9 +449,19 @@ async function getRoomDetail(admin, user, roomId, preloaded) {
       .eq('room_id', room.id)
       .order('created_at', { ascending: false })
       .limit(50),
+    admin
+      .from('card_event_collections')
+      .select('card_key, qty_state')
+      .eq('coc_tag', profilesMap[otherProfileId]?.coc_tag || ''),
   ]);
   if (e1) throw e1;
   if (e2) throw e2;
+  if (e3) throw e3;
+
+  const otherCollection = {};
+  for (const row of otherColl || []) {
+    if (Number(row.qty_state) >= 1) otherCollection[row.card_key] = row.qty_state;
+  }
 
   return {
     ok: true,
@@ -421,6 +473,7 @@ async function getRoomDetail(admin, user, roomId, preloaded) {
     },
     me: profilesUtil.profileToPublic(profilesMap[myProfileId]),
     other: profilesUtil.profileToPublic(profilesMap[otherProfileId]),
+    other_collection: otherCollection,
     messages: messages || [],
     proposals: (proposals || []).map((p) => enrichCardKeys(p, ['card_give', 'card_get'])),
   };
@@ -519,7 +572,7 @@ function assertCard(cardKey) {
   return c;
 }
 
-async function proposeTrade(admin, user, roomId, myProfileId, cardGive, cardGet) {
+async function proposeTrade(admin, user, roomId, myProfileId, cardGive, cardGet, opts = {}) {
   await requireEventLive(admin);
   const me = await myProfileOr403(admin, user, myProfileId);
   const give = assertCard(cardGive);
@@ -586,6 +639,9 @@ async function proposeTrade(admin, user, roomId, myProfileId, cardGive, cardGet)
       dedupeKey: proposal.id,
       payload: {
         room_id: roomId,
+        proposal_id: proposal.id,
+        my_profile_id: otherId,
+        my_coc_tag: other.coc_tag,
         proposer_username: me.username,
         card_give: cardGive,
         card_get: cardGet,
@@ -595,11 +651,31 @@ async function proposeTrade(admin, user, roomId, myProfileId, cardGive, cardGet)
     });
   }
 
+  if (opts.commitNow) {
+    // "Applica subito": il proponente cede subito il suo doppione (escrow), senza
+    // bisogno del consenso dell'altro. Se il commit fallisce (race sulle quantità),
+    // la proposta resta comunque creata come classica "Proponi scambio".
+    try {
+      const committed = await commitProposal(admin, user, proposal.id, myProfileId);
+      return { ok: true, proposal: enrichCardKeys(committed.proposal, ['card_give', 'card_get']) };
+    } catch (e) {
+      return { ok: true, proposal: enrichCardKeys(proposal, ['card_give', 'card_get']), commit_error: e.message };
+    }
+  }
+
   return { ok: true, proposal: enrichCardKeys(proposal, ['card_give', 'card_get']) };
 }
 
-async function respondProposal(admin, user, proposalId, myProfileId, action) {
-  const me = await myProfileOr403(admin, user, myProfileId);
+/**
+ * Tasto "Applica subito (solo il mio mazzo)": il proponente cede DAVVERO e SUBITO
+ * il suo doppione (escrow), senza bisogno del consenso dell'altro lato. Non riceve
+ * ancora la carta richiesta: lo scambio si conclude solo quando l'altro fa lo stesso
+ * (accettando la proposta, che a quel punto salta il débito già fatto qui).
+ * Rollback automatico (il doppione torna al proponente) se la proposta viene poi
+ * annullata, rifiutata o invalidata (collezioni cambiate).
+ */
+async function commitProposal(admin, user, proposalId, myProfileId) {
+  await requireEventLive(admin);
   const { data: proposal, error } = await admin
     .from('card_event_proposals')
     .select('*, card_event_rooms!inner(id, profile_lo, profile_hi)')
@@ -608,6 +684,165 @@ async function respondProposal(admin, user, proposalId, myProfileId, action) {
   if (error) throw error;
   if (!proposal) throw err(404, 'Proposta non trovata.');
   const room = proposal.card_event_rooms;
+  // profile_id opzionale: se omesso (es. bottone da una notifica Telegram), solo chi
+  // ha proposto lo scambio può comunque confermare, quindi si usa direttamente
+  // proposal.proposer_profile (verificandone la proprietà più sotto).
+  const resolvedProfileId = myProfileId || proposal.proposer_profile;
+  const mineSet = await myProfileIdsSet(admin, user.id);
+  if (!mineSet.has(resolvedProfileId)) throw err(403, 'Profilo non collegato al tuo account.');
+  const meMap = await publicProfilesByIds(admin, [resolvedProfileId]);
+  const me = meMap[resolvedProfileId];
+  if (!me) throw err(403, 'Profilo non collegato al tuo account.');
+  if (room.profile_lo !== me.id && room.profile_hi !== me.id) throw err(403, 'Non fai parte di questa stanza.');
+  if (proposal.proposer_profile !== me.id) {
+    throw err(403, 'Solo chi ha proposto lo scambio può confermare la propria cessione.');
+  }
+  if (proposal.status !== 'pending') throw err(400, 'Questa proposta non è più in attesa.');
+
+  if (!proposal.proposer_committed) {
+    const { error: rpcErr } = await admin.rpc('commit_card_trade_offer', {
+      p_proposal_id: proposalId,
+      p_profile_id: me.id,
+    });
+    if (rpcErr) throw err(400, rpcErr.message || 'Non hai più il doppione richiesto.');
+    proposal.proposer_committed = true;
+
+    const giveMeta = cardMeta(proposal.card_give);
+    await admin.from('card_event_room_messages').insert({
+      room_id: room.id,
+      kind: 'system',
+      body: `⚡ ${me.username || me.coc_tag} ha già ceduto ${giveMeta?.name_it || proposal.card_give}: in attesa che l'altro completi lo scambio con "Applica subito".`,
+    });
+    await admin.from('card_event_rooms').update({ updated_at: new Date().toISOString() }).eq('id', room.id);
+
+    const otherId = room.profile_lo === me.id ? room.profile_hi : room.profile_lo;
+    const other = await profileUserId(admin, otherId);
+    if (other?.user_id) {
+      const getMeta = cardMeta(proposal.card_get);
+      queueNotification(admin, {
+        userId: other.user_id,
+        kind: 'committed',
+        dedupeKey: `${proposalId}:committed`,
+        payload: {
+          room_id: room.id,
+          proposal_id: proposalId,
+          my_profile_id: otherId,
+          my_coc_tag: other.coc_tag,
+          proposer_username: me.username,
+          card_give: proposal.card_give,
+          card_get: proposal.card_get,
+          card_give_name: giveMeta?.name_it,
+          card_get_name: getMeta?.name_it,
+        },
+      });
+    }
+  }
+
+  return { ok: true, proposal, room_id: room.id };
+}
+
+/**
+ * Ricontrolla le proposte "pending" che coinvolgono un profilo (per coc_tag) dopo che
+ * la sua collezione è cambiata: se lo scambio non è più valido, la marca "stale",
+ * rimborsa l'eventuale doppione già ceduto in escrow e lascia un messaggio di sistema.
+ * Best-effort: non deve mai bloccare il salvataggio della collezione.
+ */
+async function revalidateProposalsForTag(admin, cocTag) {
+  try {
+    const { data: profile } = await admin
+      .from('user_coc_profiles')
+      .select('id, coc_tag')
+      .eq('coc_tag', cocTag)
+      .maybeSingle();
+    if (!profile) return;
+
+    const { data: rooms } = await admin
+      .from('card_event_rooms')
+      .select('id, profile_lo, profile_hi')
+      .or(`profile_lo.in.(${profile.id}),profile_hi.in.(${profile.id})`);
+    if (!rooms?.length) return;
+    const roomIds = rooms.map((r) => r.id);
+    const roomById = Object.fromEntries(rooms.map((r) => [r.id, r]));
+
+    const { data: pending } = await admin
+      .from('card_event_proposals')
+      .select('*')
+      .in('room_id', roomIds)
+      .eq('status', 'pending');
+    if (!pending?.length) return;
+
+    const involvedProfileIds = new Set([profile.id]);
+    for (const p of pending) {
+      const room = roomById[p.room_id];
+      if (!room) continue;
+      involvedProfileIds.add(room.profile_lo);
+      involvedProfileIds.add(room.profile_hi);
+    }
+    const { data: profRows } = await admin
+      .from('user_coc_profiles')
+      .select('id, coc_tag')
+      .in('id', [...involvedProfileIds]);
+    const tagById = Object.fromEntries((profRows || []).map((p) => [p.id, p.coc_tag]));
+    const involvedTags = [...new Set(Object.values(tagById))];
+
+    const { data: collRows } = await admin
+      .from('card_event_collections')
+      .select('coc_tag, card_key, qty_state')
+      .in('coc_tag', involvedTags);
+    const qtyOf = (tag, key) => (collRows || []).find((r) => r.coc_tag === tag && r.card_key === key)?.qty_state ?? 0;
+
+    for (const p of pending) {
+      const room = roomById[p.room_id];
+      if (!room) continue;
+      const otherId = room.profile_lo === p.proposer_profile ? room.profile_hi : room.profile_lo;
+      const proposerTag = tagById[p.proposer_profile];
+      const otherTag = tagById[otherId];
+      if (!proposerTag || !otherTag) continue;
+
+      const proposerHasGive = p.proposer_committed === true || qtyOf(proposerTag, p.card_give) >= 2;
+      const proposerLacksGet = qtyOf(proposerTag, p.card_get) === 0;
+      const otherLacksGive = qtyOf(otherTag, p.card_give) === 0;
+      const otherHasGet = qtyOf(otherTag, p.card_get) >= 2;
+      if (proposerHasGive && proposerLacksGet && otherLacksGive && otherHasGet) continue;
+
+      if (p.proposer_committed) {
+        await admin.rpc('refund_card_trade_offer', { p_proposal_id: p.id }).catch(() => {});
+      }
+      await admin
+        .from('card_event_proposals')
+        .update({ status: 'stale', resolved_at: new Date().toISOString() })
+        .eq('id', p.id);
+      await admin.from('card_event_room_messages').insert({
+        room_id: p.room_id,
+        kind: 'system',
+        body: '⚠️ Questa proposta non è più applicabile: una delle due collezioni è cambiata nel frattempo.',
+      });
+    }
+  } catch (_) {
+    // best-effort: non deve mai bloccare il salvataggio della collezione
+  }
+}
+
+async function respondProposal(admin, user, proposalId, myProfileId, action) {
+  const { data: proposal, error } = await admin
+    .from('card_event_proposals')
+    .select('*, card_event_rooms!inner(id, profile_lo, profile_hi)')
+    .eq('id', proposalId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!proposal) throw err(404, 'Proposta non trovata.');
+  const room = proposal.card_event_rooms;
+  // profile_id opzionale: se omesso (es. bottone da una notifica Telegram, senza stato
+  // pregresso), risolve automaticamente qual è il "mio" profilo in questa stanza.
+  const me = myProfileId
+    ? await myProfileOr403(admin, user, myProfileId)
+    : await (async () => {
+        const mineSet = await myProfileIdsSet(admin, user.id);
+        const resolvedId = [room.profile_lo, room.profile_hi].find((pid) => mineSet.has(pid));
+        if (!resolvedId) throw err(403, 'Non fai parte di questa stanza.');
+        const map = await publicProfilesByIds(admin, [resolvedId]);
+        return map[resolvedId];
+      })();
   if (room.profile_lo !== me.id && room.profile_hi !== me.id) throw err(403, 'Non fai parte di questa stanza.');
   if (proposal.status !== 'pending') throw err(400, 'Questa proposta è già stata gestita.');
 
@@ -615,15 +850,33 @@ async function respondProposal(admin, user, proposalId, myProfileId, action) {
 
   if (action === 'cancel') {
     if (proposal.proposer_profile !== me.id) throw err(403, 'Solo chi ha proposto può annullare.');
+    if (proposal.proposer_committed) {
+      await admin.rpc('refund_card_trade_offer', { p_proposal_id: proposalId }).catch(() => {});
+    }
     await admin.from('card_event_proposals').update({ status: 'cancelled', resolved_at: new Date().toISOString() }).eq('id', proposalId);
-    await admin.from('card_event_room_messages').insert({ room_id: room.id, kind: 'system', body: 'Proposta annullata.' });
-    return { ok: true, status: 'cancelled' };
+    await admin.from('card_event_room_messages').insert({
+      room_id: room.id,
+      kind: 'system',
+      body: proposal.proposer_committed
+        ? 'Proposta annullata: il doppione già ceduto è stato restituito al proponente.'
+        : 'Proposta annullata.',
+    });
+    return { ok: true, status: 'cancelled', room_id: room.id };
   }
 
   if (action === 'reject') {
+    if (proposal.proposer_committed) {
+      await admin.rpc('refund_card_trade_offer', { p_proposal_id: proposalId }).catch(() => {});
+    }
     await admin.from('card_event_proposals').update({ status: 'rejected', resolved_at: new Date().toISOString() }).eq('id', proposalId);
-    await admin.from('card_event_room_messages').insert({ room_id: room.id, kind: 'system', body: 'Proposta rifiutata.' });
-    return { ok: true, status: 'rejected' };
+    await admin.from('card_event_room_messages').insert({
+      room_id: room.id,
+      kind: 'system',
+      body: proposal.proposer_committed
+        ? 'Proposta rifiutata: il doppione già ceduto è stato restituito al proponente.'
+        : 'Proposta rifiutata.',
+    });
+    return { ok: true, status: 'rejected', room_id: room.id };
   }
 
   if (action === 'accept') {
@@ -637,6 +890,7 @@ async function respondProposal(admin, user, proposalId, myProfileId, action) {
       p_card_b_gave: proposal.card_get,
       p_room_id: room.id,
       p_proposal_id: proposalId,
+      p_skip_a_debit: proposal.proposer_committed === true,
     });
     if (rpcErr) throw err(400, rpcErr.message || 'Scambio non applicabile (collezioni cambiate).');
     const giveMeta = cardMeta(proposal.card_give);
@@ -655,6 +909,7 @@ async function respondProposal(admin, user, proposalId, myProfileId, action) {
         payload: {
           room_id: room.id,
           accepted_by_username: me.username,
+          my_coc_tag: proposer.coc_tag,
           card_give: proposal.card_give,
           card_get: proposal.card_get,
           card_give_name: giveMeta?.name_it,
@@ -662,7 +917,7 @@ async function respondProposal(admin, user, proposalId, myProfileId, action) {
         },
       });
     }
-    return { ok: true, status: 'accepted' };
+    return { ok: true, status: 'accepted', room_id: room.id };
   }
 
   throw err(400, 'Azione non valida.');
@@ -732,6 +987,8 @@ module.exports = {
   listRoomsForUser,
   sendRoomMessage,
   proposeTrade,
+  commitProposal,
+  revalidateProposalsForTag,
   respondProposal,
   applySelfTrade,
   getTradeLog,

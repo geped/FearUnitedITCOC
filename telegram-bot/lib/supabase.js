@@ -1192,6 +1192,19 @@ async function listPendingCardNotifications(limit = 25) {
   return data || [];
 }
 
+/** Recupera una singola riga outbox (per i bottoni "Applica subito"/"Proponi" nelle notifiche match). */
+async function getCardNotificationById(id) {
+  const client = sb();
+  if (!client || !id) return null;
+  const { data, error } = await client
+    .from('card_event_notify_outbox')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) return null;
+  return data || null;
+}
+
 async function markCardNotificationsSent(ids) {
   const client = sb();
   if (!client || !ids?.length) return;
@@ -1287,6 +1300,7 @@ module.exports = {
   setGlobalReportTargetTelegramUser,
   getUsageDailyStats,
   listPendingCardNotifications,
+  getCardNotificationById,
   markCardNotificationsSent,
   getTelegramUserIdForSupabaseUser,
 };

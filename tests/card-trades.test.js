@@ -155,6 +155,128 @@ describe('card-trades: respondProposal', () => {
   });
 });
 
+describe('card-trades: escrow — "Applica subito" a due fasi', () => {
+  let admin, roomId, proposalId;
+  beforeEach(async () => {
+    admin = seedBase();
+    const opened = await cardTrades.getOrCreateRoom(admin, fakeUser(USER_A), 'p-a1', '#BBB1');
+    roomId = opened.room.id;
+    const proposed = await cardTrades.proposeTrade(admin, fakeUser(USER_A), roomId, 'p-a1', 'elx_barbarian', 'elx_archer');
+    proposalId = proposed.proposal.id;
+  });
+
+  const qty = (admin, tag, key) =>
+    admin.db.tables.card_event_collections.find((c) => c.coc_tag === tag && c.card_key === key)?.qty_state;
+
+  it('commitProposal scala subito il doppione del proponente, senza toccare l\'altro lato', async () => {
+    const res = await cardTrades.commitProposal(admin, fakeUser(USER_A), proposalId, 'p-a1');
+    assert.equal(res.ok, true);
+    assert.equal(res.proposal.proposer_committed, true);
+    assert.equal(qty(admin, '#AAA1', 'elx_barbarian'), 1, 'Alice ha già ceduto il doppione');
+    assert.equal(qty(admin, '#AAA1', 'elx_archer'), 0, 'Alice non ha ancora ricevuto nulla');
+    assert.equal(qty(admin, '#BBB1', 'elx_archer'), 2, 'Bob non ha ancora ceduto nulla');
+    const proposal = admin.db.tables.card_event_proposals.find((p) => p.id === proposalId);
+    assert.equal(proposal.status, 'pending', 'resta pending finché Bob non completa');
+  });
+
+  it('solo il proponente può confermare la propria cessione', async () => {
+    await assert.rejects(
+      () => cardTrades.commitProposal(admin, fakeUser(USER_B), proposalId, 'p-b1'),
+      /Solo chi ha proposto/,
+    );
+  });
+
+  it('commitProposal senza profile_id (bottone da notifica Telegram) risolve automaticamente il proponente', async () => {
+    const res = await cardTrades.commitProposal(admin, fakeUser(USER_A), proposalId, null);
+    assert.equal(res.proposal.proposer_committed, true);
+    assert.equal(qty(admin, '#AAA1', 'elx_barbarian'), 1);
+  });
+
+  it('respondProposal senza profile_id (bottone da notifica Telegram) risolve automaticamente il destinatario', async () => {
+    const res = await cardTrades.respondProposal(admin, fakeUser(USER_B), proposalId, null, 'accept');
+    assert.equal(res.status, 'accepted');
+  });
+
+  it('proposeTrade con commitNow crea e conferma la cessione in un solo passaggio ("Applica subito")', async () => {
+    const admin2 = seedBase();
+    const opened2 = await cardTrades.getOrCreateRoom(admin2, fakeUser(USER_A), 'p-a1', '#BBB1');
+    const res = await cardTrades.proposeTrade(
+      admin2, fakeUser(USER_A), opened2.room.id, 'p-a1', 'elx_barbarian', 'elx_archer', { commitNow: true },
+    );
+    assert.equal(res.proposal.proposer_committed, true);
+    assert.equal(qty(admin2, '#AAA1', 'elx_barbarian'), 1);
+  });
+
+  it('accettare una proposta già confermata (escrow) non decrementa due volte il proponente', async () => {
+    await cardTrades.commitProposal(admin, fakeUser(USER_A), proposalId, 'p-a1');
+    const res = await cardTrades.respondProposal(admin, fakeUser(USER_B), proposalId, 'p-b1', 'accept');
+    assert.equal(res.status, 'accepted');
+    assert.equal(qty(admin, '#AAA1', 'elx_barbarian'), 1, 'Alice ha ceduto una sola volta (escrow, non due)');
+    assert.equal(qty(admin, '#AAA1', 'elx_archer'), 1, 'Alice riceve Archer al completamento');
+    assert.equal(qty(admin, '#BBB1', 'elx_archer'), 1, 'Bob ha ceduto il suo doppione');
+    assert.equal(qty(admin, '#BBB1', 'elx_barbarian'), 1, 'Bob riceve Barbarian al completamento');
+  });
+
+  it('annullare una proposta confermata (escrow) restituisce il doppione al proponente', async () => {
+    await cardTrades.commitProposal(admin, fakeUser(USER_A), proposalId, 'p-a1');
+    assert.equal(qty(admin, '#AAA1', 'elx_barbarian'), 1);
+    const res = await cardTrades.respondProposal(admin, fakeUser(USER_A), proposalId, 'p-a1', 'cancel');
+    assert.equal(res.status, 'cancelled');
+    assert.equal(qty(admin, '#AAA1', 'elx_barbarian'), 2, 'il doppione ceduto in escrow torna ad Alice');
+  });
+
+  it('rifiutare una proposta confermata (escrow) restituisce il doppione al proponente', async () => {
+    await cardTrades.commitProposal(admin, fakeUser(USER_A), proposalId, 'p-a1');
+    const res = await cardTrades.respondProposal(admin, fakeUser(USER_B), proposalId, 'p-b1', 'reject');
+    assert.equal(res.status, 'rejected');
+    assert.equal(qty(admin, '#AAA1', 'elx_barbarian'), 2, 'il doppione ceduto in escrow torna ad Alice');
+  });
+});
+
+describe('card-trades: revalidateProposalsForTag (proposte "stale")', () => {
+  it('marca "stale" una proposta pending se l\'altro lato perde il doppione richiesto', async () => {
+    const admin = seedBase();
+    const opened = await cardTrades.getOrCreateRoom(admin, fakeUser(USER_A), 'p-a1', '#BBB1');
+    const proposed = await cardTrades.proposeTrade(admin, fakeUser(USER_A), opened.room.id, 'p-a1', 'elx_barbarian', 'elx_archer');
+
+    // Bob non ha più il doppione Archer (es. l'ha aggiornato lui stesso nel frattempo).
+    admin.db.tables.card_event_collections.find((c) => c.coc_tag === '#BBB1' && c.card_key === 'elx_archer').qty_state = 1;
+
+    await cardTrades.revalidateProposalsForTag(admin, '#BBB1');
+    const proposal = admin.db.tables.card_event_proposals.find((p) => p.id === proposed.proposal.id);
+    assert.equal(proposal.status, 'stale');
+    const sysMsg = admin.db.tables.card_event_room_messages.find((m) => m.kind === 'system' && /non è più applicabile/.test(m.body || ''));
+    assert.ok(sysMsg, 'inserisce un messaggio di sistema che spiega l\'invalidazione');
+  });
+
+  it('quando la proposta invalidata era già "committed" (escrow), rimborsa il doppione al proponente', async () => {
+    const admin = seedBase();
+    const opened = await cardTrades.getOrCreateRoom(admin, fakeUser(USER_A), 'p-a1', '#BBB1');
+    const proposed = await cardTrades.proposeTrade(
+      admin, fakeUser(USER_A), opened.room.id, 'p-a1', 'elx_barbarian', 'elx_archer', { commitNow: true },
+    );
+    const get = (tag, key) => admin.db.tables.card_event_collections.find((c) => c.coc_tag === tag && c.card_key === key)?.qty_state;
+    assert.equal(get('#AAA1', 'elx_barbarian'), 1, 'Alice ha già ceduto in escrow');
+
+    admin.db.tables.card_event_collections.find((c) => c.coc_tag === '#BBB1' && c.card_key === 'elx_archer').qty_state = 0;
+    await cardTrades.revalidateProposalsForTag(admin, '#BBB1');
+
+    const proposal = admin.db.tables.card_event_proposals.find((p) => p.id === proposed.proposal.id);
+    assert.equal(proposal.status, 'stale');
+    assert.equal(proposal.proposer_committed, false);
+    assert.equal(get('#AAA1', 'elx_barbarian'), 2, 'il doppione ceduto in escrow torna ad Alice');
+  });
+
+  it('non tocca le proposte ancora valide', async () => {
+    const admin = seedBase();
+    const opened = await cardTrades.getOrCreateRoom(admin, fakeUser(USER_A), 'p-a1', '#BBB1');
+    const proposed = await cardTrades.proposeTrade(admin, fakeUser(USER_A), opened.room.id, 'p-a1', 'elx_barbarian', 'elx_archer');
+    await cardTrades.revalidateProposalsForTag(admin, '#BBB1');
+    const proposal = admin.db.tables.card_event_proposals.find((p) => p.id === proposed.proposal.id);
+    assert.equal(proposal.status, 'pending');
+  });
+});
+
 describe('card-trades: applySelfTrade', () => {
   it('rifiuta lo scambio tra lo stesso profilo', async () => {
     const admin = seedBase();
@@ -395,6 +517,30 @@ describe('card-trades: matching (enrichment su collezioni)', () => {
     const data = await cardTrades.getSelfMatches(admin, fakeUser(USER_A));
     assert.equal(data.matches[0].a_is_new, true);
     assert.equal(data.matches[0].b_is_new, true);
+  });
+
+  it('getMatchesForProfile aggrega gli scambi su TUTTI i profili quando profile_id è omesso', async () => {
+    const admin = seedBase();
+    await cardTrades.setProfilePublic(admin, fakeUser(USER_B), 'p-b1', true);
+    // p-a2 (Alice2) ha un doppione Goblin: anche lui trova un match con Bob (Goblin -> Archer),
+    // dato che Bob ha Archer in doppione e non possiede Goblin.
+    const res = await cardTrades.getMatchesForProfile(admin, fakeUser(USER_A), null);
+    assert.equal(res.ok, true);
+    assert.equal(res.profiles.length, 2);
+    assert.equal(res.matches.length, 2, 'un match per ciascuno dei 2 profili di Alice');
+    const byGive = Object.fromEntries(res.matches.map((m) => [m.card_give, m]));
+    assert.equal(byGive.elx_barbarian.my_profile.coc_tag, '#AAA1');
+    assert.equal(byGive.elx_goblin.my_profile.coc_tag, '#AAA2');
+  });
+
+  it('listPublicDecks aggrega gli scambi su TUTTI i profili quando profile_id è omesso', async () => {
+    const admin = seedBase();
+    await cardTrades.setProfilePublic(admin, fakeUser(USER_B), 'p-b1', true);
+    const res = await cardTrades.listPublicDecks(admin, fakeUser(USER_A), null);
+    assert.equal(res.decks.length, 1);
+    assert.equal(res.decks[0].matches.length, 2);
+    const tags = res.decks[0].matches.map((m) => m.my_profile.coc_tag).sort();
+    assert.deepEqual(tags, ['#AAA1', '#AAA2']);
   });
 
   it('getSelfMatches marca "semaforo giallo" per il lato che possiede già la carta che riceverebbe', async () => {

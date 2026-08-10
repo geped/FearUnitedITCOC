@@ -157,8 +157,9 @@ function rpcApplyCardTrade(db, params) {
     return created;
   };
 
+  const skipADebit = params.p_skip_a_debit === true;
   const aGave = findColl(a.coc_tag, params.p_card_a_gave);
-  if (!aGave || aGave.qty_state < 2) {
+  if (!aGave || (!skipADebit && aGave.qty_state < 2)) {
     return { data: null, error: { message: `Il profilo A non ha più il doppione richiesto (${params.p_card_a_gave}).` } };
   }
   const bGave = findColl(b.coc_tag, params.p_card_b_gave);
@@ -166,24 +167,23 @@ function rpcApplyCardTrade(db, params) {
     return { data: null, error: { message: `Il profilo B non ha più il doppione richiesto (${params.p_card_b_gave}).` } };
   }
 
+  if (!skipADebit) aGave.qty_state -= 1;
+  bGave.qty_state -= 1;
+
   if (params.p_kind === 'self') {
-    aGave.qty_state -= 1;
-    bGave.qty_state -= 1;
     upsertColl(a.coc_tag, params.p_card_b_gave, bGave.category, 1);
     upsertColl(b.coc_tag, params.p_card_a_gave, aGave.category, 1);
   } else {
     const aGet = findColl(a.coc_tag, params.p_card_b_gave);
-    if (!aGet || aGet.qty_state !== 0) {
+    if (aGet && aGet.qty_state >= 1) {
       return { data: null, error: { message: `Il profilo A ha già sbloccato la carta richiesta (${params.p_card_b_gave}).` } };
     }
     const bGet = findColl(b.coc_tag, params.p_card_a_gave);
-    if (!bGet || bGet.qty_state !== 0) {
+    if (bGet && bGet.qty_state >= 1) {
       return { data: null, error: { message: `Il profilo B ha già sbloccato la carta richiesta (${params.p_card_a_gave}).` } };
     }
-    aGave.qty_state -= 1;
-    bGave.qty_state -= 1;
-    aGet.qty_state = 1;
-    bGet.qty_state = 1;
+    if (aGet) aGet.qty_state = 1; else upsertColl(a.coc_tag, params.p_card_b_gave, bGave.category, 1);
+    if (bGet) bGet.qty_state = 1; else upsertColl(b.coc_tag, params.p_card_a_gave, aGave.category, 1);
   }
 
   (db.tables.card_event_trade_log = db.tables.card_event_trade_log || []).push({
@@ -209,6 +209,49 @@ function rpcApplyCardTrade(db, params) {
   return { data: null, error: null };
 }
 
+// ── Simulazione RPC escrow (rispecchia schema-card-event-escrow.sql) ─────
+function rpcCommitCardTradeOffer(db, params) {
+  const proposals = db.tables.card_event_proposals || [];
+  const proposal = proposals.find((p) => p.id === params.p_proposal_id);
+  if (!proposal) return { data: null, error: { message: 'Proposta non trovata.' } };
+  if (proposal.proposer_profile !== params.p_profile_id) {
+    return { data: null, error: { message: 'Solo chi ha proposto lo scambio può confermare la propria cessione.' } };
+  }
+  if (proposal.status !== 'pending') {
+    return { data: null, error: { message: 'Questa proposta non è più in attesa.' } };
+  }
+  if (proposal.proposer_committed) return { data: null, error: null };
+
+  const profiles = db.tables.user_coc_profiles || [];
+  const me = profiles.find((p) => p.id === params.p_profile_id);
+  if (!me) return { data: null, error: { message: 'Profilo non trovato.' } };
+  const collections = db.tables.card_event_collections || [];
+  const row = collections.find((c) => c.coc_tag === me.coc_tag && c.card_key === proposal.card_give);
+  if (!row || row.qty_state < 2) {
+    return { data: null, error: { message: `Non hai più il doppione richiesto (${proposal.card_give}).` } };
+  }
+  row.qty_state -= 1;
+  proposal.proposer_committed = true;
+  return { data: null, error: null };
+}
+
+function rpcRefundCardTradeOffer(db, params) {
+  const proposals = db.tables.card_event_proposals || [];
+  const proposal = proposals.find((p) => p.id === params.p_proposal_id);
+  if (!proposal || !proposal.proposer_committed) return { data: null, error: null };
+
+  const profiles = db.tables.user_coc_profiles || [];
+  const me = profiles.find((p) => p.id === proposal.proposer_profile);
+  if (me) {
+    const collections = db.tables.card_event_collections || [];
+    const row = collections.find((c) => c.coc_tag === me.coc_tag && c.card_key === proposal.card_give);
+    if (row) row.qty_state += 1;
+    else collections.push({ coc_tag: me.coc_tag, card_key: proposal.card_give, category: proposal.category, qty_state: 1 });
+  }
+  proposal.proposer_committed = false;
+  return { data: null, error: null };
+}
+
 function makeFakeSupabase(seed = {}) {
   const db = { tables: {} };
   for (const [table, rows] of Object.entries(seed)) {
@@ -221,6 +264,8 @@ function makeFakeSupabase(seed = {}) {
     },
     async rpc(fn, params) {
       if (fn === 'apply_card_trade') return rpcApplyCardTrade(db, params);
+      if (fn === 'commit_card_trade_offer') return rpcCommitCardTradeOffer(db, params);
+      if (fn === 'refund_card_trade_offer') return rpcRefundCardTradeOffer(db, params);
       if (fn === 'find_card_matches' || fn === 'find_self_card_matches') {
         return { data: (db.rpcStubs && db.rpcStubs[fn]) || [], error: null };
       }
