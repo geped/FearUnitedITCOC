@@ -4370,12 +4370,13 @@ tbody tr:last-child td { border-bottom: none; }
 }
 .carte-card.is-search-hit,
 .carte-album-tile.is-search-hit {
-    outline: 2px solid var(--gold);
-    outline-offset: 2px;
+    /* Rimuovo outline dorato - solo bordo colorato categoria */
+    box-shadow: 0 2px 8px rgba(201,169,98,0.25);
     z-index: 1;
 }
 .carte-card.is-search-dim,
 .carte-album-tile.is-search-dim {
+    /* Classe non più usata - rimossa dalla logica */
     opacity: 0.38;
 }
 .carte-album-card.is-search-relevant {
@@ -4433,7 +4434,7 @@ tbody tr:last-child td { border-bottom: none; }
     align-items: center;
     gap: 0.3rem;
     background: var(--bg-2);
-    border: 1px solid var(--border);
+    border: 2px solid var(--border);
     border-radius: var(--radius);
     padding: 0.5rem 0.3rem 0.4rem;
     cursor: pointer;
@@ -4452,11 +4453,14 @@ tbody tr:last-child td { border-bottom: none; }
 .carte-card.state-0 .carte-card-name { color: var(--text-3); }
 /* Stato: sfondo/badge — il colore del bordo è solo quello della tipologia (un bordo solo) */
 .carte-card.state-1 { background: var(--bg-2); }
-.carte-card.state-2 { background: var(--gold-glow); }
-.carte-card.cat-border-elixir { border-color: #e879a9; }
-.carte-card.cat-border-dark { border-color: #9b6bff; }
-.carte-card.cat-border-builder { border-color: #5ec8e8; }
-.carte-card.cat-border-super { border-color: #f08a3c; }
+.carte-card.state-2 { 
+    background: linear-gradient(135deg, var(--bg-2) 0%, color-mix(in srgb, var(--gold) 8%, var(--bg-2)) 100%); 
+}
+/* Bordi colorati categoria - unico bordo, spessore 2px */
+.carte-card.cat-border-elixir { border-color: #e879a9; border-width: 2px; }
+.carte-card.cat-border-dark { border-color: #9b6bff; border-width: 2px; }
+.carte-card.cat-border-builder { border-color: #5ec8e8; border-width: 2px; }
+.carte-card.cat-border-super { border-color: #f08a3c; border-width: 2px; }
 .carte-card-badge {
     position: absolute;
     top: 4px;
@@ -4951,13 +4955,20 @@ tbody tr:last-child td { border-bottom: none; }
   padding: 0.2rem;
 }
 .carte-album-tile img { width: 100%; height: 100%; object-fit: contain; }
-.carte-album-tile.state-0 { opacity: 0.45; }
+/* Carta mancante: grayscale ma bordo colorato visibile */
+.carte-album-tile.state-0 { opacity: 0.5; }
 .carte-album-tile.state-0 img { filter: grayscale(1) brightness(0.6); }
-.carte-album-tile.state-2 { background: color-mix(in srgb, var(--gold) 10%, var(--bg-1)); }
-.carte-album-tile.cat-border-elixir { border-color: #e879a9; }
-.carte-album-tile.cat-border-dark { border-color: #9b6bff; }
-.carte-album-tile.cat-border-builder { border-color: #5ec8e8; }
-.carte-album-tile.cat-border-super { border-color: #f08a3c; }
+/* Carta posseduta: normale */
+/* state-1: nessuno stile extra */
+/* Doppione: background glow leggero */
+.carte-album-tile.state-2 { 
+  background: linear-gradient(135deg, var(--bg-1) 0%, color-mix(in srgb, var(--gold) 6%, var(--bg-1)) 100%); 
+}
+/* Bordi colorati per categoria - unico bordo visibile */
+.carte-album-tile.cat-border-elixir { border-color: #e879a9; border-width: 2px; }
+.carte-album-tile.cat-border-dark { border-color: #9b6bff; border-width: 2px; }
+.carte-album-tile.cat-border-builder { border-color: #5ec8e8; border-width: 2px; }
+.carte-album-tile.cat-border-super { border-color: #f08a3c; border-width: 2px; }
 @media (max-width: 480px) {
   .carte-album-grid { grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 0.28rem; }
   .carte-album-card-head { gap: 0.35rem; }

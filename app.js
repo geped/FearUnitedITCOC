@@ -2001,6 +2001,7 @@ function _carteResetFilters() {
     onlyMatches: false,
     playerQ: '',
   };
+  window._carteAlbumFilter = 'all';
   _carteApplyFiltersUi();
 }
 
@@ -2115,9 +2116,9 @@ function _renderCollectionCatGrid(cardsInCat, coll, hitKeys, searching, hitsLen,
     const stateCls = qty >= 2 ? 'state-2' : qty === 1 ? 'state-1' : 'state-0';
     const borderCls = CARTE_CAT_BORDER[c.category] || '';
     const isHit = hitKeys.has(c.key);
-    const dim = searching && hitsLen && !isHit ? 'is-search-dim' : '';
-    const hit = isHit ? 'is-search-hit' : '';
-    return `<button type="button" class="carte-card ${stateCls} ${borderCls} ${hit} ${dim}" data-card-key="${escH(c.key)}" ${readOnly ? 'disabled' : ''}
+    // Non applico più is-search-dim - le carte si vedono sempre chiaramente
+    const hit = isHit && searching ? 'is-search-hit' : '';
+    return `<button type="button" class="carte-card ${stateCls} ${borderCls} ${hit}" data-card-key="${escH(c.key)}" ${readOnly ? 'disabled' : ''}
         onclick="_onCardEventClick('${c.key}')" title="${escH(c.name_it)}">
       <img src="${escH(c.icon_url)}" alt="${escH(c.name_it)}" loading="lazy"
            onerror="this.style.visibility='hidden'">
@@ -2171,7 +2172,8 @@ function renderCardEventContent() {
 
   const totalFound = cat.cards.filter((c) => (coll[c.key] || 0) >= 1).length;
   const readOnly = !cat.settings?.live;
-  const searching = !!(f.q || f.direction !== 'any' || f.onlyTradable || f.qty !== 'all');
+  // Evidenzia (outline) solo quando c'è ricerca testuale attiva
+  const searching = !!(f.q);
   const catsToShow = f.category === 'all' ? cat.category_order : [f.category];
 
   const otherCatHits = {};
@@ -3024,6 +3026,7 @@ function _renderFullAlbumGrid(collection, albumId, highlightKeys = null) {
     if (first) filter = first.category;
   }
   const cats = filter === 'all' ? cat.category_order : cat.category_order.filter((c) => c === filter);
+  // Evidenzia solo se c'è effettivamente una ricerca testuale
   const searching = !!(highlightKeys && highlightKeys.size);
   return cats.map((catKey) => {
     const cardsInCat = cat.cards.filter((c) => c.category === catKey);
@@ -3033,9 +3036,9 @@ function _renderFullAlbumGrid(collection, albumId, highlightKeys = null) {
       const stateCls = qty >= 2 ? 'state-2' : qty === 1 ? 'state-1' : 'state-0';
       const borderCls = CARTE_CAT_BORDER[c.category] || '';
       const isHit = searching && highlightKeys.has(c.key);
-      const dim = searching && !isHit ? 'is-search-dim' : '';
+      // Rimuovo is-search-dim - tutte le carte si vedono sempre
       const hit = isHit ? 'is-search-hit' : '';
-      return `<div class="carte-album-tile ${stateCls} ${borderCls} ${hit} ${dim}" title="${escH(c.name_it)}${qty >= 2 ? ` ×${qty}` : qty === 1 ? ' (posseduta)' : ' (mancante)'}">
+      return `<div class="carte-album-tile ${stateCls} ${borderCls} ${hit}" title="${escH(c.name_it)}${qty >= 2 ? ` ×${qty}` : qty === 1 ? ' (posseduta)' : ' (mancante)'}">
         <img src="${escH(c.icon_url)}" alt="${escH(c.name_it)}" loading="lazy" onerror="this.style.visibility='hidden'">
         ${qty >= 2 ? `<span class="carte-card-badge">x${qty}</span>` : ''}
       </div>`;
