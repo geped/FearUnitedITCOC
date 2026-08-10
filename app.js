@@ -5460,21 +5460,6 @@ function prevSeasonYM(season) {
   return `${yy}-${mm}`;
 }
 
-  filtered.sort((a, b) => b.merit - a.merit);
-  bmCandidates = filtered;
-
-  // Auto-seleziona top N
-  bmSelections = new Set(filtered.slice(0, count).map(c => c.player_name));
-
-  renderBmCandidates();
-  applyBtn.textContent = '🔍 Applica Criteri';
-
-  const excluded = pool.length - filtered.length;
-  msg.textContent = `${filtered.length} candidati idonei${excluded ? ` (${excluded} esclusi dai criteri)` : ''}.`;
-  document.getElementById('bm-footer').style.display = 'flex';
-  document.getElementById('bm-sel-count').textContent = bmSelections.size;
-}
-
 function renderBmCandidates() {
   const div = document.getElementById('bm-candidates');
   if (!bmCandidates.length) { div.innerHTML = '<p style="color:#5a7a98;padding:1rem 0">Nessun candidato idoneo con questi criteri.</p>'; return; }
