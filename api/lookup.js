@@ -664,10 +664,17 @@ module.exports = async (req, res) => {
           type === 'cards-self-apply' ||
           type === 'cards-trade-log' ||
           type === 'cards-public-list' ||
-          type === 'cards-public-toggle'
+          type === 'cards-public-toggle' ||
+          type === 'cards-triangles' ||
+          type === 'cards-triangles-self' ||
+          type === 'cards-triangle-propose' ||
+          type === 'cards-triangle-respond' ||
+          type === 'cards-triangle-self-apply' ||
+          type === 'cards-triangle-proposals'
         ) {
             const cardEvent = require('./_utils/card-event');
             const cardTrades = require('./_utils/card-trades');
+            const cardTriangles = require('./_utils/card-triangles');
             const profilesUtil = require('./_utils/user-profiles');
             const admin = profilesUtil.adminClient();
 
@@ -861,6 +868,56 @@ module.exports = async (req, res) => {
                     const data = await cardTrades.setProfilePublic(admin, user, profileId, body.is_public === true || body.isPublic === true);
                     return res.status(200).json(data);
                 }
+
+                if (type === 'cards-triangles') {
+                    if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const data = await cardTriangles.getP2pTriangles(admin, user);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-triangles-self') {
+                    if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const data = await cardTriangles.getSelfTriangles(admin, user);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-triangle-proposals') {
+                    if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const data = await cardTriangles.listMyTriangleProposals(admin, user);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-triangle-propose') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const data = await cardTriangles.proposeTriangle(admin, user, req.body || {});
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-triangle-respond') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const triangleId = body.triangle_id || body.triangleId;
+                    const action = body.action;
+                    if (!triangleId || !['accept', 'reject', 'cancel'].includes(action)) {
+                        return res.status(400).json({ error: 'triangle_id e action (accept|reject|cancel) obbligatori.' });
+                    }
+                    const data = await cardTriangles.respondTriangle(admin, user, triangleId, action);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-triangle-self-apply') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const data = await cardTriangles.applySelfTriangle(admin, user, {
+                        profileA: body.profile_a || body.profileA,
+                        profileB: body.profile_b || body.profileB,
+                        profileC: body.profile_c || body.profileC,
+                        cardA: body.card_a_gives || body.cardA,
+                        cardB: body.card_b_gives || body.cardB,
+                        cardC: body.card_c_gives || body.cardC,
+                    });
+                    return res.status(200).json(data);
+                }
             } catch (e) {
                 return res.status(e.status || 500).json({ error: e.message || 'Errore evento carte.', code: e.code || undefined });
             }
@@ -868,7 +925,7 @@ module.exports = async (req, res) => {
         } else {
             return res.status(400).json({
                 error:
-                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, cards-catalog, cards-get, cards-save, cards-matches, cards-self-matches, cards-rooms, cards-room-open, cards-room-detail, cards-room-send, cards-propose, cards-commit, cards-respond, cards-self-apply, cards-trade-log, cards-public-list, cards-public-toggle',
+                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, cards-catalog, cards-get, cards-save, cards-matches, cards-self-matches, cards-rooms, cards-room-open, cards-room-detail, cards-room-send, cards-propose, cards-commit, cards-respond, cards-self-apply, cards-trade-log, cards-public-list, cards-public-toggle, cards-triangles, cards-triangles-self, cards-triangle-propose, cards-triangle-respond, cards-triangle-self-apply, cards-triangle-proposals',
             });
         }
         const r = await fetch(`${proxyUrl}${proxyPath}`, {

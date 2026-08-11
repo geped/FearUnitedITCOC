@@ -252,6 +252,81 @@ function rpcRefundCardTradeOffer(db, params) {
   return { data: null, error: null };
 }
 
+function rpcApplyCardTriangle(db, params) {
+  const kind = params.p_kind;
+  const idA = params.p_profile_a;
+  const idB = params.p_profile_b;
+  const idC = params.p_profile_c;
+  const cardA = params.p_card_a;
+  const cardB = params.p_card_b;
+  const cardC = params.p_card_c;
+  const triangleId = params.p_triangle_id || null;
+
+  const profiles = db.tables.user_coc_profiles || [];
+  const tagA = profiles.find((p) => p.id === idA)?.coc_tag;
+  const tagB = profiles.find((p) => p.id === idB)?.coc_tag;
+  const tagC = profiles.find((p) => p.id === idC)?.coc_tag;
+  if (!tagA || !tagB || !tagC) return { data: null, error: { message: 'Profilo non trovato per il triangolo.' } };
+
+  const coll = db.tables.card_event_collections || [];
+  const find = (tag, key) => coll.find((r) => r.coc_tag === tag && r.card_key === key);
+  const aGave = find(tagA, cardA);
+  const bGave = find(tagB, cardB);
+  const cGave = find(tagC, cardC);
+  if (!aGave || aGave.qty_state < 2) return { data: null, error: { message: `Il profilo A non ha più il doppione richiesto (${cardA}).` } };
+  if (!bGave || bGave.qty_state < 2) return { data: null, error: { message: `Il profilo B non ha più il doppione richiesto (${cardB}).` } };
+  if (!cGave || cGave.qty_state < 2) return { data: null, error: { message: `Il profilo C non ha più il doppione richiesto (${cardC}).` } };
+
+  aGave.qty_state -= 1;
+  bGave.qty_state -= 1;
+  cGave.qty_state -= 1;
+
+  const credit = (tag, key, cat, allowSum) => {
+    let row = find(tag, key);
+    if (!row) {
+      coll.push({ coc_tag: tag, card_key: key, category: cat, qty_state: 1 });
+      return null;
+    }
+    if (!allowSum && row.qty_state >= 1) {
+      return { message: `Ha già sbloccato la carta (${key}).` };
+    }
+    row.qty_state = allowSum ? row.qty_state + 1 : 1;
+    return null;
+  };
+
+  const allowSum = kind === 'self';
+  let e = credit(tagC, cardA, aGave.category, allowSum);
+  if (e) return { data: null, error: e };
+  e = credit(tagA, cardB, bGave.category, allowSum);
+  if (e) return { data: null, error: e };
+  e = credit(tagB, cardC, cGave.category, allowSum);
+  if (e) return { data: null, error: e };
+
+  if (!db.tables.card_event_trade_log) db.tables.card_event_trade_log = [];
+  db.tables.card_event_trade_log.push({
+    kind: 'triangle',
+    profile_a: idA,
+    profile_b: idB,
+    profile_c: idC,
+    card_a_gave: cardA,
+    card_b_gave: cardB,
+    card_c_gave: cardC,
+    triangle_id: triangleId,
+  });
+
+  if (triangleId) {
+    const t = (db.tables.card_event_triangle_proposals || []).find((x) => x.id === triangleId);
+    if (t) {
+      t.status = 'accepted';
+      t.accept_a = true;
+      t.accept_b = true;
+      t.accept_c = true;
+      t.resolved_at = new Date().toISOString();
+    }
+  }
+  return { data: null, error: null };
+}
+
 function makeFakeSupabase(seed = {}) {
   const db = { tables: {} };
   for (const [table, rows] of Object.entries(seed)) {
@@ -264,6 +339,7 @@ function makeFakeSupabase(seed = {}) {
     },
     async rpc(fn, params) {
       if (fn === 'apply_card_trade') return rpcApplyCardTrade(db, params);
+      if (fn === 'apply_card_triangle') return rpcApplyCardTriangle(db, params);
       if (fn === 'commit_card_trade_offer') return rpcCommitCardTradeOffer(db, params);
       if (fn === 'refund_card_trade_offer') return rpcRefundCardTradeOffer(db, params);
       if (fn === 'find_card_matches' || fn === 'find_self_card_matches') {

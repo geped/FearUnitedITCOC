@@ -2051,6 +2051,11 @@ function _carteSearchBarHtml({ showTradeExtras = false } = {}) {
   const f = _carteGetFilters();
   const cat = window._cardEventCatalog;
   const active = _carteFiltersActive();
+  // Default compresso su mobile/viewport stretta; stato ricordato in sessione
+  if (window._carteFiltersCollapsed == null) {
+    window._carteFiltersCollapsed = (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 640px)').matches);
+  }
+  const collapsed = window._carteFiltersCollapsed === true;
   const shortLabel = {
     elixir: 'Elisir',
     dark_elixir: 'Elisir nero',
@@ -2072,42 +2077,75 @@ function _carteSearchBarHtml({ showTradeExtras = false } = {}) {
     `<button type="button" class="carte-album-filter-btn ${f.qty === v && !f.onlyTradable ? 'active' : ''}" onclick="_carteSetFilter('qty','${v}')">${lab}</button>`
   ).join('');
 
+  const summaryBits = [];
+  if (f.q) summaryBits.push(`“${f.q}”`);
+  if (f.category !== 'all') summaryBits.push(shortLabel[f.category] || f.category);
+  if (f.qty !== 'all') summaryBits.push({ '0': 'Mancanti', '1': 'Possedute', '2': 'Doppioni' }[f.qty] || f.qty);
+  if (f.direction !== 'any') summaryBits.push(f.direction === 'give' ? 'Cedere' : 'Ricevere');
+  if (f.onlyTradable) summaryBits.push('Scambiabili');
+  if (f.onlyMatches) summaryBits.push('Solo match');
+  if (f.playerQ) summaryBits.push(`Giocatore: ${f.playerQ}`);
+  const summary = summaryBits.length ? summaryBits.map(escH).join(' · ') : 'Nessun filtro attivo';
+
   return `
-    <div class="carte-search-bar">
-      <div class="carte-search-row">
-        <label class="carte-search-field carte-search-grow">
-          <span class="carte-search-label">Cerca carta</span>
-          <input type="search" id="carte-filter-q" class="carte-search-input" placeholder="es. arciere, golem meteorite…"
-            value="${escH(f.q)}" autocomplete="off"
-            oninput="_carteOnSearchInput(this,'q')">
-        </label>
-        ${showTradeExtras ? `
-        <label class="carte-search-field carte-search-grow">
-          <span class="carte-search-label">Giocatore / mazzo</span>
-          <input type="search" id="carte-filter-player" class="carte-search-input" placeholder="username o tag…"
-            value="${escH(f.playerQ)}" autocomplete="off"
-            oninput="_carteOnSearchInput(this,'player')">
-        </label>` : ''}
-        <div class="carte-search-seg" role="group" aria-label="Verso scambio">
-          <button type="button" class="carte-search-seg-btn ${f.direction === 'any' ? 'active' : ''}" onclick="_carteSetFilter('direction','any')">Entrambi</button>
-          <button type="button" class="carte-search-seg-btn ${f.direction === 'give' ? 'active' : ''}" onclick="_carteSetFilter('direction','give')">Cedere</button>
-          <button type="button" class="carte-search-seg-btn ${f.direction === 'get' ? 'active' : ''}" onclick="_carteSetFilter('direction','get')">Ricevere</button>
+    <div class="carte-search-bar ${collapsed ? 'is-collapsed' : ''}">
+      <div class="carte-search-toggle-row">
+        <button type="button" class="carte-search-toggle" onclick="_carteToggleFiltersCollapsed()" aria-expanded="${collapsed ? 'false' : 'true'}">
+          ${collapsed ? '▾ Mostra filtri' : '▴ Nascondi filtri'}
+          ${active ? `<span class="carte-search-toggle-badge">attivi</span>` : ''}
+        </button>
+        ${collapsed ? `<span class="carte-search-collapsed-summary">${summary}</span>` : ''}
+        ${collapsed && active ? `<button type="button" class="btn-secondary btn-sm carte-search-reset" onclick="_carteResetFilters()">✕</button>` : ''}
+      </div>
+      <div class="carte-search-body">
+        <div class="carte-search-row">
+          <label class="carte-search-field carte-search-grow">
+            <span class="carte-search-label">Cerca carta</span>
+            <input type="search" id="carte-filter-q" class="carte-search-input" placeholder="es. arciere, golem meteorite…"
+              value="${escH(f.q)}" autocomplete="off"
+              oninput="_carteOnSearchInput(this,'q')">
+          </label>
+          ${showTradeExtras ? `
+          <label class="carte-search-field carte-search-grow">
+            <span class="carte-search-label">Giocatore / mazzo</span>
+            <input type="search" id="carte-filter-player" class="carte-search-input" placeholder="username o tag…"
+              value="${escH(f.playerQ)}" autocomplete="off"
+              oninput="_carteOnSearchInput(this,'player')">
+          </label>` : ''}
+          <div class="carte-search-seg" role="group" aria-label="Verso scambio">
+            <button type="button" class="carte-search-seg-btn ${f.direction === 'any' ? 'active' : ''}" onclick="_carteSetFilter('direction','any')">Entrambi</button>
+            <button type="button" class="carte-search-seg-btn ${f.direction === 'give' ? 'active' : ''}" onclick="_carteSetFilter('direction','give')">Cedere</button>
+            <button type="button" class="carte-search-seg-btn ${f.direction === 'get' ? 'active' : ''}" onclick="_carteSetFilter('direction','get')">Ricevere</button>
+          </div>
+          <button type="button" class="btn-secondary btn-sm carte-search-reset" ${active ? '' : 'disabled'} onclick="_carteResetFilters()">✕ Reset</button>
         </div>
-        <button type="button" class="btn-secondary btn-sm carte-search-reset" ${active ? '' : 'disabled'} onclick="_carteResetFilters()">✕ Reset</button>
-      </div>
-      <div class="carte-search-chip-block">
-        <span class="carte-search-label">Tipologia</span>
-        <div class="carte-album-filters">${catChips}</div>
-      </div>
-      <div class="carte-search-chip-block">
-        <span class="carte-search-label">Stato</span>
-        <div class="carte-album-filters">
-          ${qtyChips}
-          <button type="button" class="carte-album-filter-btn ${f.onlyTradable ? 'active' : ''}" onclick="_carteSetFilter('onlyTradable', ${f.onlyTradable ? 'false' : 'true'})">Solo scambiabili</button>
-          ${showTradeExtras ? `<button type="button" class="carte-album-filter-btn ${f.onlyMatches ? 'active' : ''}" onclick="_carteSetFilter('onlyMatches', ${f.onlyMatches ? 'false' : 'true'})">Solo match</button>` : ''}
+        <div class="carte-search-chip-block">
+          <span class="carte-search-label">Tipologia</span>
+          <div class="carte-album-filters">${catChips}</div>
+        </div>
+        <div class="carte-search-chip-block">
+          <span class="carte-search-label">Stato</span>
+          <div class="carte-album-filters">
+            ${qtyChips}
+            <button type="button" class="carte-album-filter-btn ${f.onlyTradable ? 'active' : ''}" onclick="_carteSetFilter('onlyTradable', ${f.onlyTradable ? 'false' : 'true'})">Solo scambiabili</button>
+            ${showTradeExtras ? `<button type="button" class="carte-album-filter-btn ${f.onlyMatches ? 'active' : ''}" onclick="_carteSetFilter('onlyMatches', ${f.onlyMatches ? 'false' : 'true'})">Solo match</button>` : ''}
+          </div>
         </div>
       </div>
     </div>`;
+}
+
+function _carteToggleFiltersCollapsed() {
+  window._carteFiltersCollapsed = !(window._carteFiltersCollapsed === true);
+  // Re-render della vista attiva
+  const trade = document.getElementById('carte-trade-content');
+  const coll = document.getElementById('carte-content');
+  if (trade && trade.style.display !== 'none') {
+    if (window._carteTradeSub === 'public') _renderCartePublicWindow();
+    else renderCardTradeContent();
+  } else if (coll) {
+    renderCardEventContent();
+  }
 }
 
 function _renderCollectionCatGrid(cardsInCat, coll, hitKeys, searching, hitsLen, readOnly) {
@@ -2644,13 +2682,23 @@ async function loadCardTradeTab() {
     // Nessun profile_id: aggrega gli scambi suggeriti su TUTTI i profili CoC collegati
     // (ogni match indica con quale mio profilo si applica), senza dover scegliere un
     // profilo "attivo" a priori.
-    const [matches, selfMatches, rooms, publicDecks] = await Promise.all([
+    const [matches, selfMatches, rooms, publicDecks, p2pTriangles, selfTriangles, triangleProposals] = await Promise.all([
       cardsApi('cards-matches'),
       profiles.length > 1 ? cardsApi('cards-self-matches') : Promise.resolve({ matches: [] }),
       cardsApi('cards-rooms'),
       cardsApi('cards-public-list'),
+      cardsApi('cards-triangles'),
+      profiles.length >= 3 ? cardsApi('cards-triangles-self') : Promise.resolve({ triangles: [] }),
+      cardsApi('cards-triangle-proposals'),
     ]);
-    window._cardTradeData = { matches: matches.matches || [], selfMatches: selfMatches.matches || [], rooms: rooms.rooms || [] };
+    window._cardTradeData = {
+      matches: matches.matches || [],
+      selfMatches: selfMatches.matches || [],
+      rooms: rooms.rooms || [],
+      p2pTriangles: p2pTriangles.triangles || [],
+      selfTriangles: selfTriangles.triangles || [],
+      triangleProposals: triangleProposals.proposals || [],
+    };
     window._cardPublicData = { myPublic: publicDecks.my_public === true, decks: publicDecks.decks || [] };
   } catch (e) {
     box.innerHTML = `<div class="profilo-empty"><p style="color:var(--red)">Errore caricamento scambi: ${escH(e.message || '')}</p></div>`;
@@ -2664,6 +2712,131 @@ async function loadCardTradeTab() {
 function _cardMiniImg(meta) {
   if (!meta) return '';
   return `<img src="${escH(meta.icon_url)}" alt="${escH(meta.name_it)}" class="carte-trade-card-icon" loading="lazy" onerror="this.style.visibility='hidden'">`;
+}
+
+function _carteTriangleRowHtml(t, idx, { selfMode = false, live = false } = {}) {
+  const nA = escH(t.profile_a?.username || t.profile_a?.coc_tag || 'A');
+  const nB = escH(t.profile_b?.username || t.profile_b?.coc_tag || 'B');
+  const nC = escH(t.profile_c?.username || t.profile_c?.coc_tag || 'C');
+  const cA = escH(t.card_a_gives_meta?.name_it || t.card_a_gives);
+  const cB = escH(t.card_b_gives_meta?.name_it || t.card_b_gives);
+  const cC = escH(t.card_c_gives_meta?.name_it || t.card_c_gives);
+  const prefer = t.prefer_score >= 1 ? ' · preferito (×3+)' : '';
+  const actions = live
+    ? (selfMode
+      ? `<button type="button" class="btn-secondary btn-sm" onclick="_applySelfTriangle(${idx})">⚡ Applica subito</button>`
+      : `<button type="button" class="btn-primary btn-sm" onclick="_proposeTriangle(${idx})">💬 Proponi triangolo</button>`)
+    : '';
+  return `<div class="carte-self-row semaforo-green carte-triangle-row">
+    <div class="carte-self-row-header">
+      <span class="carte-self-row-players">🔀 Triangolo · ${nA} → ${nC} → ${nB} → ${nA}</span>
+      <span class="carte-self-row-dot" title="Ciclo a tre: tutti sbloccano una carta nuova">🟢</span>
+    </div>
+    <div class="carte-triangle-legs">
+      <div class="carte-self-row-item">${_cardMiniImg(t.card_a_gives_meta)}<div><div class="carte-self-row-card-name">${nA} cede ${cA}</div><div class="carte-self-row-sub">${nC} riceve</div></div></div>
+      <div class="carte-self-row-item">${_cardMiniImg(t.card_b_gives_meta)}<div><div class="carte-self-row-card-name">${nB} cede ${cB}</div><div class="carte-self-row-sub">${nA} riceve</div></div></div>
+      <div class="carte-self-row-item">${_cardMiniImg(t.card_c_gives_meta)}<div><div class="carte-self-row-card-name">${nC} cede ${cC}</div><div class="carte-self-row-sub">${nB} riceve</div></div></div>
+    </div>
+    <div class="carte-qty-modal-note" style="text-align:left;margin:0.35rem 0">${prefer ? `Variante A${prefer}` : 'Ciclo valido (qty ≥ 2)'}</div>
+    <div class="carte-row-actions">${actions}</div>
+  </div>`;
+}
+
+async function _applySelfTriangle(idx) {
+  const t = window._cardTradeData?.selfTriangles?.[idx];
+  if (!t) return;
+  try {
+    await cardsApi('cards-triangle-self-apply', {
+      method: 'POST',
+      body: {
+        profile_a: t.profile_a.id,
+        profile_b: t.profile_b.id,
+        profile_c: t.profile_c.id,
+        card_a_gives: t.card_a_gives,
+        card_b_gives: t.card_b_gives,
+        card_c_gives: t.card_c_gives,
+      },
+    });
+    _carteInlineNotice('✅ Triangolo applicato ai tuoi profili.', 2500);
+    window._cardEventData = await cardsApi('cards-get');
+    renderCardEventContent();
+    await loadCardTradeTab();
+  } catch (e) {
+    _carteInlineNotice('❌ ' + (e.message || 'Errore triangolo.'), 3500);
+  }
+}
+
+async function _proposeTriangle(idx) {
+  const t = window._cardTradeData?.p2pTriangles?.[idx];
+  if (!t) return;
+  const createdBy = t.my_profile?.id || t.profile_a?.id;
+  try {
+    await cardsApi('cards-triangle-propose', {
+      method: 'POST',
+      body: {
+        profile_a: t.profile_a.id,
+        profile_b: t.profile_b.id,
+        profile_c: t.profile_c.id,
+        card_a_gives: t.card_a_gives,
+        card_b_gives: t.card_b_gives,
+        card_c_gives: t.card_c_gives,
+        created_by: createdBy,
+      },
+    });
+    _carteInlineNotice('✅ Triangolo proposto: in attesa delle altre accettazioni.', 3000);
+    await loadCardTradeTab();
+  } catch (e) {
+    _carteInlineNotice('❌ ' + (e.message || 'Errore proposta.'), 3500);
+  }
+}
+
+async function _respondTriangle(triangleId, action) {
+  try {
+    const r = await cardsApi('cards-triangle-respond', {
+      method: 'POST',
+      body: { triangle_id: triangleId, action },
+    });
+    if (r.status === 'accepted') _carteInlineNotice('✅ Triangolo completato!', 2500);
+    else if (r.status === 'pending') _carteInlineNotice('✅ Accettato: in attesa degli altri.', 2500);
+    else _carteInlineNotice('Proposta aggiornata.', 2000);
+    if (r.status === 'accepted') {
+      window._cardEventData = await cardsApi('cards-get');
+      renderCardEventContent();
+    }
+    await loadCardTradeTab();
+  } catch (e) {
+    _carteInlineNotice('❌ ' + (e.message || 'Errore.'), 3500);
+  }
+}
+
+function _carteTriangleProposalsHtml(live) {
+  const list = window._cardTradeData?.triangleProposals || [];
+  if (!list.length) return '';
+  const rows = list.map((p) => {
+    const nA = escH(p.profile_a?.username || p.profile_a?.coc_tag || 'A');
+    const nB = escH(p.profile_b?.username || p.profile_b?.coc_tag || 'B');
+    const nC = escH(p.profile_c?.username || p.profile_c?.coc_tag || 'C');
+    const accepted = [p.accept_a, p.accept_b, p.accept_c].filter(Boolean).length;
+    const myAccepted = p.my_role === 'a' ? p.accept_a : p.my_role === 'b' ? p.accept_b : p.accept_c;
+    const isCreator = p.created_by === p.my_profile_id || p.created_by_profile?.id === p.my_profile_id;
+    return `<div class="carte-self-row">
+      <div class="carte-self-row-header">
+        <span class="carte-self-row-players">🔀 Proposta triangolo · ${nA} / ${nB} / ${nC}</span>
+        <span class="carte-room-badge">${accepted}/3</span>
+      </div>
+      <div class="carte-qty-modal-note" style="text-align:left">
+        ${escH(p.card_a_gives_meta?.name_it || p.card_a_gives)} → ${nC} ·
+        ${escH(p.card_b_gives_meta?.name_it || p.card_b_gives)} → ${nA} ·
+        ${escH(p.card_c_gives_meta?.name_it || p.card_c_gives)} → ${nB}
+      </div>
+      ${live ? `<div class="carte-row-actions">
+        ${!myAccepted ? `<button type="button" class="btn-primary btn-sm" onclick="_respondTriangle('${p.id}','accept')">✅ Accetta</button>
+        <button type="button" class="btn-secondary btn-sm" onclick="_respondTriangle('${p.id}','reject')">✕ Rifiuta</button>` : '<span class="carte-committed-badge">Hai già accettato</span>'}
+        ${isCreator ? `<button type="button" class="btn-secondary btn-sm" onclick="_respondTriangle('${p.id}','cancel')">Annulla</button>` : ''}
+      </div>` : ''}
+    </div>`;
+  }).join('');
+  return `<div class="carte-trade-section"><h4 class="carte-win-title" style="font-size:0.95rem;margin-bottom:0.5rem">Proposte triangolo in corso</h4>${rows}</div>`;
 }
 
 function renderCardTradeContent() {
@@ -2752,6 +2925,10 @@ function renderCardTradeContent() {
       }).join('')
     : `<div class="profilo-empty"><p style="color:var(--text-3)">${_carteFiltersActive() ? 'Nessuno scambio tra i tuoi profili con questi filtri.' : 'Nessuno scambio disponibile tra i tuoi profili collegati.'}</p></div>`;
 
+  const selfTrianglesHtml = (data.selfTriangles || []).length
+    ? (data.selfTriangles || []).map((t, i) => _carteTriangleRowHtml(t, i, { selfMode: true, live })).join('')
+    : '';
+
   const subtabs = `
     <div class="subtab-bar" id="carte-trade-subtabs">
       ${multiProfiles ? `<button type="button" class="subtab-btn ${sub === 'self' ? 'active' : ''}" onclick="_switchCarteTradeSub('self',this)">Tra i tuoi profili</button>` : ''}
@@ -2768,6 +2945,9 @@ function renderCardTradeContent() {
           🟢 sblocca una carta nuova · 🟡 possibile ma non necessario (già posseduta). Solo se hai 2+ profili CoC collegati.
         </p>
         ${selfHtml}
+        ${selfTrianglesHtml ? `<h4 class="carte-win-title" style="font-size:0.95rem;margin:1rem 0 0.5rem">🔀 Triangoli tra i tuoi profili</h4>
+        <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.5rem">Ciclo a 3 profili: Applica subito senza accettazioni multiple.</p>
+        ${selfTrianglesHtml}` : ''}
       </div>
     </div>
     <div id="carte-trade-public" style="display:${sub === 'public' ? 'block' : 'none'}"></div>
@@ -2989,11 +3169,18 @@ function _renderCartePublicWindow() {
       : `<div class="profilo-empty"><p style="color:var(--text-3)">${_carteFiltersActive()
         ? 'Nessuno scambio suggerito con questi filtri.'
         : 'Nessuno scambio automatico con mazzi pubblici al momento. Serve: tu hai un doppione che all’altro manca, e lui ha un doppione (stessa tipologia) che manca a te.'}</p></div>`;
+    const trianglesHtml = (data?.p2pTriangles || []).length
+      ? (data.p2pTriangles || []).map((t, i) => _carteTriangleRowHtml(t, i, { selfMode: false, live })).join('')
+      : '';
     box.innerHTML = `${_cartePublicWinHeader('Scambi suggeriti con altri')}<div class="carte-trade-section">
       <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.7rem">
         Stesse regole di «Tra i tuoi profili», ma tra account diversi: solo doppione ↔ carta mancante, stessa tipologia. Usa la barra ricerca sopra per filtrare per carta o giocatore.
       </p>
+      ${_carteTriangleProposalsHtml(live)}
       ${matchesHtml}
+      ${trianglesHtml ? `<h4 class="carte-win-title" style="font-size:0.95rem;margin:1rem 0 0.5rem">🔀 Scambi a tre (triangoli)</h4>
+      <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.5rem">Quando il 1↔1 non basta: ciclo a 3 profili. Proponi e attendi le altre due accettazioni.</p>
+      ${trianglesHtml}` : ''}
     </div>`;
     return;
   }
@@ -3133,9 +3320,14 @@ function _renderAlbumsWindow(live, which = 'mine') {
           const filteredMatches = (d.matches || []).filter((m) => _carteMatchPassesFilters({ ...m, other_profile: p }, f));
           const n = filteredMatches.length;
           const multiMine = myProfiles.length > 1;
-          const matchesPreview = n
+          const deckTriangles = (window._cardTradeData?.p2pTriangles || [])
+            .map((t, ti) => ({ t, ti }))
+            .filter(({ t }) =>
+              [t.profile_a?.id, t.profile_b?.id, t.profile_c?.id].includes(p.id),
+            );
+          const matchesPreview = (n || deckTriangles.length)
             ? `<div class="carte-album-matches">
-                <div class="carte-album-matches-title">Possibili carte da scambiare · ${n}</div>
+                ${n ? `<div class="carte-album-matches-title">Possibili carte da scambiare · ${n}</div>
                 ${filteredMatches.slice(0, 6).map((m) => {
                   const mi = (d.matches || []).indexOf(m);
                   return `
@@ -3160,7 +3352,9 @@ function _renderAlbumsWindow(live, which = 'mine') {
                     </div>` : ''}
                   </div>`;
                 }).join('')}
-                ${n > 6 ? `<div class="carte-qty-modal-note" style="text-align:left;margin:0.35rem 0 0">+${n - 6} altri — apri chat o «Scambi suggeriti».</div>` : ''}
+                ${n > 6 ? `<div class="carte-qty-modal-note" style="text-align:left;margin:0.35rem 0 0">+${n - 6} altri — apri chat o «Scambi suggeriti».</div>` : ''}` : ''}
+                ${deckTriangles.length ? `<div class="carte-album-matches-title" style="margin-top:0.5rem">🔀 Triangoli che coinvolgono questo mazzo · ${deckTriangles.length}</div>
+                ${deckTriangles.slice(0, 3).map(({ t, ti }) => _carteTriangleRowHtml(t, ti, { selfMode: false, live })).join('')}` : ''}
               </div>`
             : `<div class="carte-album-matches carte-album-matches-empty">${_carteFiltersActive() ? 'Nessuno scambio automatico con questi filtri.' : 'Nessuno scambio automatico con questo mazzo (serve doppione↔mancante, stessa tipologia).'}</div>`;
           return `<div class="carte-album-card ${highlightKeys.size ? 'is-search-relevant' : ''}">

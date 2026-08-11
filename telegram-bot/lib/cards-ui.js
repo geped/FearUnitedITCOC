@@ -401,6 +401,11 @@ function setup(bot, deps) {
     if (st.profiles.length > 1) {
       rows.push([Markup.button.callback('🔁 Scambi tra i miei profili', 'cards:tr:self')]);
     }
+    if (st.profiles.length >= 3) {
+      rows.push([Markup.button.callback('🔀 Triangoli (miei profili)', 'cards:tr:triself')]);
+    }
+    rows.push([Markup.button.callback('🔀 Triangoli con altri', 'cards:tr:trip2p')]);
+    rows.push([Markup.button.callback('📋 Proposte triangolo', 'cards:tr:triprop')]);
     rows.push([Markup.button.callback('🌐 Mazzi pubblici', 'cards:tr:pub')]);
     rows.push([Markup.button.callback('💬 Le mie stanze', 'cards:tr:rooms')]);
     rows.push([Markup.button.callback('« Carte', 'cards:home')]);
@@ -554,6 +559,152 @@ function setup(bot, deps) {
       await replyTransient(ctx, '✅ Scambio applicato: le collezioni sono state aggiornate.', { parse_mode: 'HTML' }, 4000);
       const fresh = await ensureState(sb, tauth, ctx.from.id);
       await openTradeHub(ctx, fresh);
+    });
+  });
+
+  // ── Triangoli ────────────────────────────────────────────────────────────
+  function formatTriangleLine(t, i) {
+    const nA = escapeHtml(t.profile_a?.username || t.profile_a?.coc_tag || 'A');
+    const nB = escapeHtml(t.profile_b?.username || t.profile_b?.coc_tag || 'B');
+    const nC = escapeHtml(t.profile_c?.username || t.profile_c?.coc_tag || 'C');
+    const cA = escapeHtml(t.card_a_gives_meta?.name_it || t.card_a_gives);
+    const cB = escapeHtml(t.card_b_gives_meta?.name_it || t.card_b_gives);
+    const cC = escapeHtml(t.card_c_gives_meta?.name_it || t.card_c_gives);
+    return `${i + 1}. ${nA} cede ${cA} → ${nC}\n   ${nB} cede ${cB} → ${nA}\n   ${nC} cede ${cC} → ${nB}${t.prefer_score >= 1 ? ' · ★×3+' : ''}`;
+  }
+
+  bot.action('cards:tr:triself', async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const data = await cardsApi.trianglesSelf(st.token);
+      st.lastSelfTriangles = data.triangles || [];
+      const live = st.catalog.settings?.live === true;
+      const lines = [`${fmt.DIV}`, '🔀 <b>Triangoli tra i tuoi profili</b>', fmt.DIV, '', 'Applica subito (nessuna accettazione multipla).', ''];
+      const rows = [];
+      if (!st.lastSelfTriangles.length) lines.push('Nessun triangolo disponibile (servono almeno 3 profili con ciclo valido).');
+      else {
+        st.lastSelfTriangles.slice(0, 8).forEach((t, i) => {
+          lines.push(formatTriangleLine(t, i));
+          if (live) rows.push([Markup.button.callback(`⚡ Applica #${i + 1}`, `cards:triself:${i}`)]);
+        });
+      }
+      rows.push([Markup.button.callback('« Scambi', 'cards:tr')]);
+      await renderView(ctx, lines.join('\n'), Markup.inlineKeyboard(rows));
+    });
+  });
+
+  bot.action(/^cards:triself:(\d+)$/, async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const t = (st.lastSelfTriangles || [])[Number(ctx.match[1])];
+      if (!t) return;
+      await cardsApi.triangleSelfApply(st.token, {
+        profile_a: t.profile_a.id,
+        profile_b: t.profile_b.id,
+        profile_c: t.profile_c.id,
+        card_a_gives: t.card_a_gives,
+        card_b_gives: t.card_b_gives,
+        card_c_gives: t.card_c_gives,
+      });
+      await refreshCollection(sb, tauth, ctx.from.id);
+      await replyTransient(ctx, '✅ Triangolo applicato.', { parse_mode: 'HTML' }, 4000);
+      const fresh = await ensureState(sb, tauth, ctx.from.id);
+      await openTradeHub(ctx, fresh);
+    });
+  });
+
+  bot.action('cards:tr:trip2p', async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const data = await cardsApi.triangles(st.token);
+      st.lastP2pTriangles = data.triangles || [];
+      const live = st.catalog.settings?.live === true;
+      const lines = [`${fmt.DIV}`, '🔀 <b>Triangoli con altri</b>', fmt.DIV, '', 'Proponi: gli altri due devono accettare.', ''];
+      const rows = [];
+      if (!st.lastP2pTriangles.length) lines.push('Nessun triangolo P2P disponibile con i mazzi pubblici.');
+      else {
+        st.lastP2pTriangles.slice(0, 8).forEach((t, i) => {
+          lines.push(formatTriangleLine(t, i));
+          if (live) rows.push([Markup.button.callback(`💬 Proponi #${i + 1}`, `cards:triprop:${i}`)]);
+        });
+      }
+      rows.push([Markup.button.callback('« Scambi', 'cards:tr')]);
+      await renderView(ctx, lines.join('\n'), Markup.inlineKeyboard(rows));
+    });
+  });
+
+  bot.action(/^cards:triprop:(\d+)$/, async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const t = (st.lastP2pTriangles || [])[Number(ctx.match[1])];
+      if (!t) return;
+      await cardsApi.trianglePropose(st.token, {
+        profile_a: t.profile_a.id,
+        profile_b: t.profile_b.id,
+        profile_c: t.profile_c.id,
+        card_a_gives: t.card_a_gives,
+        card_b_gives: t.card_b_gives,
+        card_c_gives: t.card_c_gives,
+        created_by: t.my_profile?.id || t.profile_a.id,
+      });
+      await replyTransient(ctx, '✅ Triangolo proposto: in attesa delle altre accettazioni.', { parse_mode: 'HTML' }, 5000);
+    });
+  });
+
+  bot.action('cards:tr:triprop', async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const data = await cardsApi.triangleProposals(st.token);
+      const list = data.proposals || [];
+      const live = st.catalog.settings?.live === true;
+      const lines = [`${fmt.DIV}`, '📋 <b>Proposte triangolo</b>', fmt.DIV, ''];
+      const rows = [];
+      if (!list.length) lines.push('Nessuna proposta in corso.');
+      else {
+        list.slice(0, 8).forEach((p) => {
+          const accepted = [p.accept_a, p.accept_b, p.accept_c].filter(Boolean).length;
+          lines.push(
+            `• ${escapeHtml(p.profile_a?.username || '?')} / ${escapeHtml(p.profile_b?.username || '?')} / ${escapeHtml(p.profile_c?.username || '?')} · ${accepted}/3`,
+          );
+          if (live) {
+            rows.push([
+              Markup.button.callback('✅', `cards:tri:acc:${p.id}`),
+              Markup.button.callback('✕', `cards:tri:rej:${p.id}`),
+            ]);
+          }
+        });
+      }
+      rows.push([Markup.button.callback('« Scambi', 'cards:tr')]);
+      await renderView(ctx, lines.join('\n'), Markup.inlineKeyboard(rows));
+    });
+  });
+
+  bot.action(/^cards:tri:(acc|rej):(.+)$/, async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const action = ctx.match[1] === 'acc' ? 'accept' : 'reject';
+      const triangleId = ctx.match[2];
+      const r = await cardsApi.triangleRespond(st.token, { triangleId, action });
+      if (r.status === 'accepted') {
+        await refreshCollection(sb, tauth, ctx.from.id);
+        await replyTransient(ctx, '✅ Triangolo completato!', { parse_mode: 'HTML' }, 4000);
+      } else if (action === 'accept') {
+        await replyTransient(ctx, '✅ Accettato: in attesa degli altri.', { parse_mode: 'HTML' }, 4000);
+      } else {
+        await replyTransient(ctx, 'Proposta rifiutata.', { parse_mode: 'HTML' }, 3000);
+      }
     });
   });
 

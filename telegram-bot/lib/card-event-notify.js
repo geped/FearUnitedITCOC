@@ -62,6 +62,30 @@ function buildMessage(row) {
       `La tua collezione è già stata aggiornata.`
     );
   }
+  if (row.kind === 'triangle_proposal') {
+    const a = fmt.escapeHtml(p.card_a_gives_name || p.card_a_gives || '?');
+    const b = fmt.escapeHtml(p.card_b_gives_name || p.card_b_gives || '?');
+    const c = fmt.escapeHtml(p.card_c_gives_name || p.card_c_gives || '?');
+    return (
+      `${fmt.DIV}\n🔀 <b>Proposta scambio a tre</b>\n${fmt.DIV}\n\n` +
+      `<b>${fmt.escapeHtml(p.proposer_username || 'Un giocatore')}</b> propone un triangolo.${profileLine}\n\n` +
+      `Ciclo: ${a} → ${b} → ${c}\n\n` +
+      `Accetta o rifiuta con i bottoni sotto.`
+    );
+  }
+  if (row.kind === 'triangle_done') {
+    return (
+      `${fmt.DIV}\n✅ <b>Triangolo completato</b>\n${fmt.DIV}\n\n` +
+      `Lo scambio a tre è stato applicato.${profileLine}\n` +
+      `La tua collezione è aggiornata.`
+    );
+  }
+  if (row.kind === 'triangle_match') {
+    return (
+      `${fmt.DIV}\n🔀 <b>Nuovo triangolo possibile</b>\n${fmt.DIV}\n\n` +
+      `C'è uno scambio a tre disponibile con i mazzi pubblici.${profileLine}`
+    );
+  }
   return '🎴 Aggiornamento evento Clash of Cards.';
 }
 
@@ -84,6 +108,13 @@ function buildKeyboard(row) {
     rows.push([Markup.button.callback('💬 Apri chat', `cards:room:${p.room_id}`)]);
   } else if (row.kind === 'message' && p.room_id) {
     rows.push([Markup.button.callback('💬 Apri chat', `cards:room:${p.room_id}`)]);
+  } else if (row.kind === 'triangle_proposal' && p.triangle_id) {
+    rows.push([
+      Markup.button.callback('✅ Accetta', `cards:tri:acc:${p.triangle_id}`),
+      Markup.button.callback('✕ Rifiuta', `cards:tri:rej:${p.triangle_id}`),
+    ]);
+  } else if (row.kind === 'triangle_done') {
+    rows.push([Markup.button.callback('🎴 Apri carte', 'cards:menu')]);
   }
   return rows.length ? Markup.inlineKeyboard(rows) : undefined;
 }

@@ -4258,6 +4258,45 @@ tbody tr:last-child td { border-bottom: none; }
     border: 1px solid var(--border);
     border-radius: var(--radius);
 }
+.carte-search-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.carte-search-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-2);
+    font-size: 0.78rem;
+    padding: 0.35rem 0.65rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+}
+.carte-search-toggle:hover { border-color: var(--gold); color: var(--gold); }
+.carte-search-toggle-badge {
+    margin-left: 0.35rem;
+    font-size: 0.65rem;
+    color: var(--gold);
+    font-weight: 700;
+}
+.carte-search-collapsed-summary {
+    flex: 1;
+    font-size: 0.72rem;
+    color: var(--text-3);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.carte-search-bar.is-collapsed .carte-search-body { display: none; }
+.carte-triangle-legs {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin: 0.4rem 0;
+}
+.carte-triangle-row { border-left: 3px solid #5ec8e8; }
 .carte-search-row {
     display: flex;
     flex-wrap: wrap;

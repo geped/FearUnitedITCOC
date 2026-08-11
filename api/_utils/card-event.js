@@ -143,9 +143,11 @@ async function saveCardState(admin, user, { cocTag, cardKey, qtyState }) {
   // ciclo di dipendenza (card-trades.js richiede questo file per CARD_BY_KEY).
   try {
     const cardTrades = require('./card-trades');
+    const cardTriangles = require('./card-triangles');
     // Se la collezione cambia, eventuali proposte pending non più valide (una carta
     // in meno/in più rispetto a quando erano state create) vanno auto-invalidate.
     await cardTrades.revalidateProposalsForTag(admin, cocTag);
+    await cardTriangles.revalidateTrianglesForTag(admin, cocTag);
     await cardTrades.notifyMatchesForTag(admin, cocTag);
   } catch (_) {}
 

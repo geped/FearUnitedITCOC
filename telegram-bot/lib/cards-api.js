@@ -135,6 +135,33 @@ async function publicToggle(accessToken, profileId, isPublic) {
   });
 }
 
+async function triangles(accessToken) {
+  return callCards('cards-triangles', accessToken, { method: 'GET' });
+}
+
+async function trianglesSelf(accessToken) {
+  return callCards('cards-triangles-self', accessToken, { method: 'GET' });
+}
+
+async function triangleProposals(accessToken) {
+  return callCards('cards-triangle-proposals', accessToken, { method: 'GET' });
+}
+
+async function trianglePropose(accessToken, body) {
+  return callCards('cards-triangle-propose', accessToken, { method: 'POST', body });
+}
+
+async function triangleRespond(accessToken, { triangleId, action }) {
+  return callCards('cards-triangle-respond', accessToken, {
+    method: 'POST',
+    body: { triangle_id: triangleId, action },
+  });
+}
+
+async function triangleSelfApply(accessToken, body) {
+  return callCards('cards-triangle-self-apply', accessToken, { method: 'POST', body });
+}
+
 module.exports = {
   catalog,
   getCollection,
@@ -153,4 +180,10 @@ module.exports = {
   tradeLog,
   publicList,
   publicToggle,
+  triangles,
+  trianglesSelf,
+  triangleProposals,
+  trianglePropose,
+  triangleRespond,
+  triangleSelfApply,
 };
