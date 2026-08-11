@@ -6629,7 +6629,11 @@ async function loadWarLog() {
   try {
     const ctrl = new AbortController();
     const tid = setTimeout(() => ctrl.abort(), 10000);
-    const r = await fetch(`/api/war-log${clanQ()}`, { signal: ctrl.signal });
+    const tag = window._userClanTag || '';
+    const [r, cw] = await Promise.all([
+      fetch(`/api/war-log${clanQ()}`, { signal: ctrl.signal }),
+      tag ? fetchCurrentWarApi(tag) : Promise.resolve(null),
+    ]);
     clearTimeout(tid);
     const data = await r.json();
     if (data.reason === 'accessDenied') {
@@ -6641,7 +6645,7 @@ async function loadWarLog() {
       return;
     }
     // Mantieni solo war classiche: esclude CWL (warType cwl, opponent assente, o stelle impossibili)
-    const items = (data.items || []).filter(w => {
+    let items = (data.items || []).filter(w => {
       const wt = (w.warType || '').toLowerCase();
       if (wt === 'cwl') return false;
       if (!w.opponent?.name) return false;
@@ -6650,24 +6654,74 @@ async function loadWarLog() {
       if ((w.clan?.stars || 0) > maxStars) return false;
       return true;
     });
+
+    // Se currentwar è attiva/appena finita e non è già nel log, anteponila (con roster API)
+    if (cw && ['preparation', 'inWar', 'warEnded'].includes(cw.state) && cw.opponent?.name) {
+      const already = items.some(w => currentWarMatchesLogEntry(cw, w));
+      if (!already) {
+        const synth = {
+          result: (() => {
+            const a = cw.clan?.stars || 0, b = cw.opponent?.stars || 0;
+            if (a > b) return 'win';
+            if (a < b) return 'lose';
+            return 'tie';
+          })(),
+          endTime: cw.endTime,
+          teamSize: cw.teamSize,
+          attacksPerMember: cw.attacksPerMember,
+          clan: cw.clan,
+          opponent: cw.opponent,
+          _fromCurrentWar: true,
+          _warState: cw.state,
+        };
+        items = [synth, ...items];
+      } else {
+        // Arricchisci la riga del log con members da currentwar (per dettaglio immediato)
+        items = items.map(w => {
+          if (!currentWarMatchesLogEntry(cw, w)) return w;
+          return {
+            ...w,
+            clan: { ...(w.clan || {}), members: cw.clan?.members || w.clan?.members, badgeUrls: w.clan?.badgeUrls || cw.clan?.badgeUrls },
+            opponent: { ...(w.opponent || {}), members: cw.opponent?.members || w.opponent?.members, badgeUrls: w.opponent?.badgeUrls || cw.opponent?.badgeUrls },
+            attacksPerMember: w.attacksPerMember || cw.attacksPerMember,
+            _fromCurrentWar: true,
+            _warState: cw.state,
+          };
+        });
+      }
+    }
+
     if (!items.length) { div.innerHTML = '<p class="wl-loading">Nessuna war classica nel log.</p>'; return; }
 
     // Mappa per endTime — evita race condition se la lista si ricarica mentre un modal è aperto
     window._warLogMap = {};
-    items.forEach(w => { if (w.endTime) window._warLogMap[w.endTime] = w; });
+    items.forEach((w, idx) => {
+      const k = w.endTime || `live-${idx}`;
+      window._warLogMap[k] = w;
+      if (!w.endTime) w._mapKey = k;
+    });
 
     const rows = items.map((w, idx) => {
+      const mapKey = w.endTime || w._mapKey || String(idx);
       const date = w.endTime ? new Date(
         w.endTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6')
       ).toLocaleDateString('it-IT', { day:'2-digit', month:'short', year:'2-digit' }) : '—';
+
+      const liveBadge = w._fromCurrentWar
+        ? (w._warState === 'warEnded'
+          ? ' <span class="wl-draw">Appena finita</span>'
+          : w._warState === 'preparation'
+            ? ' <span class="wl-draw">Preparazione</span>'
+            : ' <span class="wl-win">In corso</span>')
+        : '';
 
       const result = w.result === 'win' ? '<span class="wl-win">Vinta ✓</span>'
                    : w.result === 'lose' ? '<span class="wl-lose">Persa ✗</span>'
                    : '<span class="wl-draw">Patta =</span>';
 
       const stars     = `${w.clan?.stars ?? 0} ⭐ — ⭐ ${w.opponent?.stars ?? 0}`;
-      const destrClan = w.clan?.destructionPercentage?.toFixed(1) ?? '0.0';
-      const destrOpp  = w.opponent?.destructionPercentage?.toFixed(1) ?? '0.0';
+      const destrClan = w.clan?.destructionPercentage?.toFixed?.(1) ?? Number(w.clan?.destructionPercentage || 0).toFixed(1);
+      const destrOpp  = w.opponent?.destructionPercentage?.toFixed?.(1) ?? Number(w.opponent?.destructionPercentage || 0).toFixed(1);
       const size      = w.teamSize ?? '?';
 
       const clanBadge  = w.clan?.badgeUrls?.small
@@ -6680,9 +6734,10 @@ async function loadWarLog() {
 
       const ourClan = `<div class="wl-clan-cell">${clanBadge}<span>${w.clan?.name ?? 'Noi'}${clanLv}</span></div>`;
       const oppClan = `<div class="wl-clan-cell">${oppBadge}<span>${oppName}${oppLv}</span></div>`;
+      const escKey = String(mapKey).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
-      return `<tr class="wl-row-clickable" onclick="openClassicWarDetail('${w.endTime || idx}')">
-        <td class="stat-cell">${date}</td>
+      return `<tr class="wl-row-clickable" onclick="openClassicWarDetail('${escKey}')">
+        <td class="stat-cell">${date}${liveBadge}</td>
         <td>${result}</td>
         <td>${ourClan}</td>
         <td class="stat-cell" style="text-align:center">vs<br><span style="font-size:0.72rem;color:var(--text-3)">${size}v${size}</span></td>
@@ -6919,6 +6974,84 @@ async function fetchClassicWarEnrichment(clanTag, war) {
 }
 
 /**
+ * API CoC: solo /currentwar espone roster+attacchi (warlog = solo riepilogo).
+ * Utile per war in corso e per warEnded finché non parte un nuovo matchmaking.
+ */
+async function fetchCurrentWarApi(clanTag) {
+  const tag = normClanTag(clanTag);
+  if (!tag) return null;
+  try {
+    const r = await fetch(`/api/war-log?type=current&clanTag=${encodeURIComponent(tag)}`, { cache: 'no-store' });
+    if (!r.ok) return null;
+    const raw = await r.json();
+    const data = raw?.state ? raw : (raw?.data || raw);
+    if (!data || data.state === 'notInWar' || !data.state) return null;
+    if ((data.warType || '').toLowerCase() === 'cwl') return null;
+    return data;
+  } catch (_) {
+    return null;
+  }
+}
+
+function currentWarMatchesLogEntry(cw, w) {
+  if (!cw || !w) return false;
+  if (cw.endTime && w.endTime && String(cw.endTime) === String(w.endTime)) return true;
+  const oppCw = cw.opponent?.tag ? normClanTag(cw.opponent.tag) : '';
+  const oppW = w.opponent?.tag ? normClanTag(w.opponent.tag) : '';
+  if (oppCw && oppW && oppCw === oppW) {
+    if (!cw.endTime || !w.endTime) return true;
+    return String(cw.endTime).slice(0, 8) === String(w.endTime).slice(0, 8);
+  }
+  return false;
+}
+
+/** Converte payload currentwar → shape classic_wars (per il modal dettaglio). */
+function currentWarToEnrichment(cw) {
+  if (!cw?.clan) return null;
+  let result = 'tie';
+  const our = cw.clan || {};
+  const opp = cw.opponent || {};
+  if ((our.stars || 0) > (opp.stars || 0)) result = 'win';
+  else if ((our.stars || 0) < (opp.stars || 0)) result = 'lose';
+  else if ((our.destructionPercentage || 0) > (opp.destructionPercentage || 0)) result = 'win';
+  else if ((our.destructionPercentage || 0) < (opp.destructionPercentage || 0)) result = 'lose';
+
+  const mapMembers = (arr) => (arr || []).map(m => ({
+    tag: m.tag,
+    name: m.name,
+    townhallLevel: m.townhallLevel ?? m.townHallLevel ?? m.thLevel ?? null,
+    mapPosition: m.mapPosition,
+    attacks: (m.attacks || []).map(a => ({
+      defenderTag: a.defenderTag,
+      stars: a.stars,
+      destructionPercentage: a.destructionPercentage,
+      order: a.order,
+    })),
+  }));
+
+  return {
+    end_time: cw.endTime,
+    result: cw.result || result,
+    team_size: cw.teamSize ?? null,
+    atk_per_member: cw.attacksPerMember ?? 2,
+    our_tag: our.tag,
+    our_name: our.name,
+    our_badge: our.badgeUrls?.small ?? null,
+    our_stars: our.stars ?? 0,
+    our_destr: +(our.destructionPercentage ?? 0).toFixed(2),
+    opp_tag: opp.tag,
+    opp_name: opp.name,
+    opp_badge: opp.badgeUrls?.small ?? null,
+    opp_stars: opp.stars ?? 0,
+    opp_destr: +(opp.destructionPercentage ?? 0).toFixed(2),
+    our_members: mapMembers(our.members),
+    opp_members: mapMembers(opp.members),
+    _fromCurrentWarApi: true,
+    _warState: cw.state,
+  };
+}
+
+/**
  * @param {string} key — endTime war
  * @param {{ clanTag?: string, warMap?: object }} [opts]
  */
@@ -6934,6 +7067,25 @@ async function openClassicWarDetail(key, opts) {
   let enriched = null;
   if (w.endTime && clanTag) {
     enriched = await fetchClassicWarEnrichment(clanTag, w);
+  }
+
+  // Se manca il roster in DB: prova currentwar CoC (in corso o appena terminata)
+  let ourMembers = _parseWarMembersJson(enriched?.our_members);
+  let oppMembers = _parseWarMembersJson(enriched?.opp_members);
+  if (!ourMembers?.length) ourMembers = w.clan?.members || null;
+  if (!oppMembers?.length) oppMembers = w.opponent?.members || null;
+  if ((!ourMembers?.length && !oppMembers?.length) && clanTag) {
+    const cw = await fetchCurrentWarApi(clanTag);
+    if (cw && currentWarMatchesLogEntry(cw, w)) {
+      enriched = currentWarToEnrichment(cw) || enriched;
+      ourMembers = _parseWarMembersJson(enriched?.our_members);
+      oppMembers = _parseWarMembersJson(enriched?.opp_members);
+    } else if (cw && !w.endTime && ['preparation', 'inWar', 'warEnded'].includes(cw.state)) {
+      // Riga live senza endTime nel log
+      enriched = currentWarToEnrichment(cw) || enriched;
+      ourMembers = _parseWarMembersJson(enriched?.our_members);
+      oppMembers = _parseWarMembersJson(enriched?.opp_members);
+    }
   }
 
   const fmtDate = w.endTime ? new Date(
@@ -6953,9 +7105,6 @@ async function openClassicWarDetail(key, opts) {
   const size = (enriched?.team_size ?? w.teamSize) ?? '?';
   const atkPerMember = enriched?.atk_per_member ?? w.attacksPerMember ?? 2;
 
-  const ourMembers = _parseWarMembersJson(enriched?.our_members) ?? w.clan?.members ?? null;
-  const oppMembers = _parseWarMembersJson(enriched?.opp_members) ?? w.opponent?.members ?? null;
-
   // Mappa tag → {name, pos} — usa roster arricchito se presente (war-log non ha members)
   const defMap = {};
   [...(ourMembers || []), ...(oppMembers || [])].forEach(m => {
@@ -6969,7 +7118,7 @@ async function openClassicWarDetail(key, opts) {
   function buildTeamCards(members) {
     if (!members?.length) {
       return `<p class="wdm-no-data">Dati non disponibili per questa war.<br>
-        <span style="font-size:0.78rem;color:var(--text-3)">Il dettaglio attacchi viene salvato automaticamente quando la war risulta conclusa (cron / bot).</span></p>`;
+        <span style="font-size:0.78rem;color:var(--text-3)">L'API CoC espone attacchi/roster solo sulla war corrente (in corso o appena finita). Le war più vecchie restano in archivio se salvate automaticamente.</span></p>`;
     }
 
     const sorted = [...members].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
@@ -7020,6 +7169,9 @@ async function openClassicWarDetail(key, opts) {
   const oppCards = buildTeamCards(oppMembers);
   const ourName = w.clan?.name ?? enriched?.our_name ?? 'Noi';
   const oppName = w.opponent?.name ?? enriched?.opp_name ?? 'Avversario';
+  const liveHint = enriched?._fromCurrentWarApi
+    ? `<div style="font-size:0.75rem;color:var(--text-3);padding:0 0.25rem 0.5rem">Fonte: API CoC current war${enriched._warState ? ` (${enriched._warState})` : ''} — snapshot automatico</div>`
+    : '';
 
   const modal = document.createElement('div');
   modal.id = 'classic-war-detail-modal';
@@ -7035,6 +7187,7 @@ async function openClassicWarDetail(key, opts) {
         </div>
         <button class="cdm-close" onclick="closeClassicWarDetail()">✕</button>
       </div>
+      ${liveHint}
 
       <div class="cdm-war-header">
         <div class="cdm-war-side cdm-war-side--us">

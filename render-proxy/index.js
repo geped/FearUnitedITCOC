@@ -103,31 +103,30 @@ async function enrichRankingPlayerClanBadges(items) {
 
 // ── SYNC MEMBERS ────────────────────────────────────────────────────────────
 
-// ── SALVA WAR CONCLUSA ──────────────────────────────────────────────────────
+// ── SALVA WAR CLASSICA (snapshot automatico da currentwar) ───────────────────
+// L'API warlog CoC NON include attacchi/roster: solo currentwar li espone
+// (preparation / inWar / warEnded). Snapshot idempotente su classic_wars.
 
-async function saveEndedWar(clanTagRaw) {
+async function saveEndedWar(clanTagRaw, warPayload) {
     const clanTag = parseClanTag(clanTagRaw);
     if (!clanTag) throw new Error('clan_tag obbligatorio.');
 
-    const r = await fetch(
-        `https://api.clashofclans.com/v1/clans/${encodeTag(clanTag)}/currentwar`,
-        { headers: cocHeaders() }
-    );
-    if (!r.ok) return { skipped: true, reason: `CoC API ${r.status}` };
-    const war = await r.json();
+    let war = warPayload || null;
+    if (!war) {
+        const r = await fetch(
+            `https://api.clashofclans.com/v1/clans/${encodeTag(clanTag)}/currentwar`,
+            { headers: cocHeaders() }
+        );
+        if (!r.ok) return { skipped: true, reason: `CoC API ${r.status}` };
+        war = await r.json();
+    }
 
+    if (!war || war.state === 'notInWar') return { skipped: true, reason: 'notInWar' };
     if ((war.warType || '').toLowerCase() === 'cwl') return { skipped: true, reason: 'cwl' };
-
-    // Accetta warEnded; se ancora "inWar" ma endTime già passato, salva comunque (finestra breve post-fine)
-    const endMs = (() => {
-        const m = String(war.endTime || '').match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/);
-        if (!m) return null;
-        return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
-    })();
-    const endedByClock = endMs != null && endMs <= Date.now();
-    if (war.state !== 'warEnded' && !(war.state === 'inWar' && endedByClock)) {
+    if (!['preparation', 'inWar', 'warEnded'].includes(war.state)) {
         return { skipped: true, reason: `state=${war.state}` };
     }
+    if (!war.endTime) return { skipped: true, reason: 'no-endTime' };
     if (!(war.clan?.members?.length) && !(war.opponent?.members?.length)) {
         return { skipped: true, reason: 'no-members' };
     }
@@ -135,7 +134,7 @@ async function saveEndedWar(clanTagRaw) {
     const ourSide = war.clan;
     const oppSide = war.opponent;
 
-    // Determina risultato
+    // Determina risultato (provvisorio se in corso)
     let result = 'tie';
     if ((ourSide.stars || 0) > (oppSide.stars || 0)) result = 'win';
     else if ((ourSide.stars || 0) < (oppSide.stars || 0)) result = 'lose';
@@ -180,7 +179,7 @@ async function saveEndedWar(clanTagRaw) {
         .from('classic_wars')
         .upsert(row, { onConflict: 'clan_tag,end_time' });
     if (error) throw new Error(error.message);
-    return { saved: true, endTime: war.endTime, result };
+    return { saved: true, endTime: war.endTime, result, state: war.state };
 }
 
 async function saveCapitalRaids(clanTagRaw) {
@@ -805,6 +804,10 @@ app.get('/current-war', authMiddleware, async (req, res) => {
         );
         const data = await r.json();
         if (!r.ok) return res.status(r.status).json({ error: data.reason || 'CoC API error', detail: data });
+        // Snapshot automatico finché CoC espone i roster (in corso o appena finita)
+        if (data && data.state !== 'notInWar') {
+            saveEndedWar(clanTag, data).catch(() => {});
+        }
         return res.json(data);
     } catch (err) {
         return res.status(500).json({ error: err.message });
