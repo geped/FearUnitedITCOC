@@ -54,7 +54,11 @@ function parseFromAddress(raw, fallbackName = 'CoCBoard') {
   return null;
 }
 
-function configuredFromRaw() {
+function configuredFromRaw(provider) {
+  if (provider === 'brevo') {
+    // Non usare RESEND_FROM come fallback: spesso è un dominio non verificato su Brevo.
+    return (process.env.BREVO_FROM || '').trim();
+  }
   return (
     (process.env.BREVO_FROM || '').trim() ||
     (process.env.RESEND_FROM || '').trim() ||
@@ -63,10 +67,9 @@ function configuredFromRaw() {
 }
 
 function resendFrom() {
-  const from = normalizeFromAddress(configuredFromRaw(), 'CoCBoard');
+  const from = normalizeFromAddress(configuredFromRaw('resend'), 'CoCBoard');
   if (from) return from;
   if (activeProvider() === 'brevo') {
-    // Brevo richiede un Single Sender verificato (es. Gmail): non c'è sandbox utile
     return '';
   }
   return 'CoCBoard <onboarding@resend.dev>';
@@ -82,16 +85,27 @@ function resendReplyTo() {
   return (m ? m[1] : raw).trim();
 }
 
-function friendlyEmailError(err, provider) {
+function friendlyEmailError(err, provider, extra = {}) {
   const e = String(err || '').toLowerCase();
   if (provider === 'brevo') {
     if (e.includes('sender') || e.includes('unrecognised') || e.includes('unrecognized') || e.includes('not verified')) {
-      return 'Mittente Brevo non verificato. In Brevo → Senders: verifica la tua Gmail e imposta BREVO_FROM=quella@gmail.com su Vercel.';
+      const tried = extra.fromEmail ? ` (hai usato: ${extra.fromEmail})` : '';
+      return (
+        'Mittente Brevo non accettato' +
+        tried +
+        '. Su Vercel imposta BREVO_FROM=info.cocboard@gmail.com (la Gmail verificata in Mittenti), poi redeploy.'
+      );
+    }
+    if (e.includes('ip') && (e.includes('authoriz') || e.includes('allow') || e.includes('whitelist') || e.includes('blocked'))) {
+      return 'Brevo blocca la chiave API per IP. In Brevo → SMTP e API → togli la restrizione IP (Vercel usa IP variabili).';
     }
     if (e.includes('api') && (e.includes('key') || e.includes('unauthorized') || e.includes('401'))) {
-      return 'BREVO_API_KEY non valida su Vercel (Production). Controlla la chiave e rifai il redeploy.';
+      return 'BREVO_API_KEY non valida su Vercel (Production). Usa la chiave da «Chiavi API e MCP», poi redeploy.';
     }
-    return 'Invio email non riuscito (Brevo). Controlla BREVO_API_KEY e mittente verificato, poi riprova.';
+    const detail = String(err || '').trim();
+    return detail
+      ? `Invio email non riuscito (Brevo): ${detail}`
+      : 'Invio email non riuscito (Brevo). Controlla BREVO_API_KEY e BREVO_FROM, poi riprova.';
   }
   if (e.includes('domain') || e.includes('not verified') || e.includes('unverified')) {
     return 'Dominio mittente non verificato su Resend. Senza dominio usa Brevo (gratis) oppure RESEND_FROM=CoCBoard <onboarding@resend.dev> (solo verso la tua email Resend).';
@@ -114,7 +128,7 @@ async function sendViaBrevo({ recipients, subject, html, text, fromParsed, reply
     return {
       ok: false,
       error:
-        'BREVO_FROM mancante. Imposta su Vercel la tua Gmail verificata come Single Sender (es. BREVO_FROM=tua@gmail.com).',
+        'BREVO_FROM mancante o non valido. Su Vercel Production imposta BREVO_FROM=info.cocboard@gmail.com (mittente verificato), poi redeploy.',
     };
   }
   const payload = {
@@ -138,12 +152,16 @@ async function sendViaBrevo({ recipients, subject, html, text, fromParsed, reply
   const data = await r.json().catch(() => ({}));
   if (!r.ok) {
     const msg =
-      data?.message ||
+      (typeof data?.message === 'string' && data.message) ||
       (Array.isArray(data?.message) ? data.message.join(', ') : null) ||
       data?.error ||
       `Brevo HTTP ${r.status}`;
     console.error('[brevo]', msg, { from: fromParsed, to: recipients, data });
-    return { ok: false, error: friendlyEmailError(msg, 'brevo'), detail: String(msg) };
+    return {
+      ok: false,
+      error: friendlyEmailError(msg, 'brevo', { fromEmail: fromParsed.email }),
+      detail: String(msg),
+    };
   }
   return { ok: true, id: data?.messageId || data?.messageIds?.[0] };
 }
@@ -196,7 +214,7 @@ async function sendEmail(opts) {
   if (!opts.subject || !opts.html) return { ok: false, error: 'subject/html obbligatori.' };
 
   const replyTo = resendReplyTo();
-  const fromParsed = parseFromAddress(configuredFromRaw(), 'CoCBoard');
+  const fromParsed = parseFromAddress(configuredFromRaw(provider), 'CoCBoard');
 
   try {
     if (provider === 'brevo') {
