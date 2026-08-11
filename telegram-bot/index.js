@@ -499,6 +499,7 @@ function isCommunityOpenGuestCallback(d) {
 function buildPrivateGuestKb() {
   const rows = [
     [Markup.button.callback('🔑 Accedi', 'auth_login'), Markup.button.callback('📝 Registrati', 'auth_register')],
+    [Markup.button.callback('🔑 Password dimenticata', 'auth_forgot')],
     [Markup.button.callback('💬 Community', 'comm_hub')],
     [Markup.button.callback('🔍 Cerca', 'nav_search'), Markup.button.callback('📊 Classifica', 'nav_rank')],
     [Markup.button.callback('📩 Contatta amministratore', 'support_open')],
@@ -812,6 +813,56 @@ async function handlePendingMessage(ctx) {
           await ctx.telegram.deleteMessage(uid, loadingMsg.message_id).catch(() => {});
         }
         postAuthGlobalResume.delete(uid);
+        await replyTransient(ctx, `❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
+        await sendGuestMenu(ctx);
+      }
+    }
+    return;
+  }
+
+  if (p.kind === 'reset') {
+    if (p.step === 1) {
+      p.username = textRaw;
+      try {
+        const data = await api.passwordResetRequest(p.username);
+        p.step = 2;
+        const hint = data.emailHint
+          ? `Codice inviato a <code>${fmt.escapeHtml(data.emailHint)}</code>.`
+          : fmt.escapeHtml(data.message || "Se l'account ha un'email, abbiamo inviato un codice.");
+        await ctx.reply(
+          `🔑 <b>Recupero password</b>\n\n${hint}\n\nInvia il <b>codice a 6 cifre</b> ricevuto via email.`,
+          { parse_mode: 'HTML' },
+        );
+      } catch (e) {
+        pendingAuth.delete(uid);
+        await replyTransient(ctx, `❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
+        await sendGuestMenu(ctx);
+      }
+      return;
+    }
+    if (p.step === 2) {
+      p.code = textRaw.replace(/\s+/g, '');
+      p.step = 3;
+      await ctx.reply('🔒 Invia la <b>nuova password</b> (minimo 6 caratteri).', { parse_mode: 'HTML' });
+      return;
+    }
+    if (p.step === 3) {
+      const newPassword = textRaw;
+      pendingAuth.delete(uid);
+      try {
+        await ctx.deleteMessage().catch(() => {});
+        await api.passwordResetConfirm({
+          username: p.username,
+          code: p.code,
+          newPassword,
+        });
+        await replyTransient(
+          ctx,
+          '✅ <b>Password aggiornata.</b>\nOra puoi usare <b>Accedi</b> con la nuova password.',
+          { parse_mode: 'HTML' },
+        );
+        await sendGuestMenu(ctx);
+      } catch (e) {
         await replyTransient(ctx, `❌ ${fmt.escapeHtml(String(e.message || ''))}`, { parse_mode: 'HTML' });
         await sendGuestMenu(ctx);
       }
@@ -3723,6 +3774,32 @@ function setupBot(bot) {
     pendingSearch.delete(uid);
     pendingAuth.set(uid, { kind: 'reg', step: 1 });
     await ctx.reply('📝 <b>Registrati</b>\n\nInvia il <b>tag villaggio</b> (es. <code>#2ABC</code>).', { parse_mode: 'HTML' });
+  });
+
+  bot.action('auth_forgot', async (ctx) => {
+    safeAnswerCb(ctx);
+    if (isLinkedChatContext(ctx)) {
+      await ensureTgBotUsername(ctx.telegram);
+      const url = privateChatUrl(cachedTgBotUsername);
+      if (url) {
+        await ctx.reply(`🔐 <b>Recupero password in privato</b>\n\n<a href="${url}">Apri la chat con il bot</a>`, {
+          parse_mode: 'HTML',
+        });
+      } else {
+        await ctx.reply(fmt.formatPrivateOnlyWizard(), { parse_mode: 'HTML' });
+      }
+      return;
+    }
+    const uid = ctx.from?.id;
+    if (uid == null) return;
+    pendingSearch.delete(uid);
+    pendingAuth.set(uid, { kind: 'reset', step: 1 });
+    await ctx.reply(
+      '🔑 <b>Password dimenticata</b>\n\n' +
+        'Invia <b>nome utente</b>, <b>tag</b> <code>#...</code> o <b>email di recupero</b>.\n' +
+        'Riceverai un codice a 6 cifre via email (se configurata).',
+      { parse_mode: 'HTML' },
+    );
   });
 
   bot.action('auth_login', async (ctx) => {

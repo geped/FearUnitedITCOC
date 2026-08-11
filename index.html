@@ -93,10 +93,33 @@
         <div id="recovery-section" style="display:none">
             <div class="login-section-title">🔑 Recupero Password</div>
             <p class="login-hint-text">
-                Gli account CoCBoard non usano un'email reale, quindi il recupero automatico non è disponibile:
-                un amministratore deve reimpostare la password per te.
+                Se hai indicato un’email di recupero in registrazione o nel profilo, riceverai un <strong>codice a 6 cifre</strong>.
+                Altrimenti contatta un amministratore dal bot Telegram («Contatta amministratore»).
             </p>
-            <p class="login-hint-text">Contatta un amministratore tramite il bot Telegram di CoCBoard (menù «Contatta amministratore») indicando il tuo nome utente: riceverai una password temporanea, con cui ti verrà chiesto di sceglierne subito una nuova.</p>
+            <form id="recovery-request-form" method="post" action="/" style="display:flex;flex-direction:column;gap:0.7rem">
+                <div class="input-wrap">
+                    <span class="input-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></span>
+                    <input type="text" id="recovery-username" placeholder="Username, tag #… o email di recupero" required autocomplete="username" autocapitalize="off" spellcheck="false">
+                </div>
+                <button type="submit" class="btn-primary btn-full" id="recovery-request-btn">Invia codice via email</button>
+            </form>
+            <form id="recovery-confirm-form" method="post" action="/" style="display:none;flex-direction:column;gap:0.7rem;margin-top:1rem">
+                <p class="login-hint-text" id="recovery-hint" style="margin:0"></p>
+                <div class="input-wrap">
+                    <span class="input-icon">🔢</span>
+                    <input type="text" id="recovery-code" placeholder="Codice a 6 cifre" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required>
+                </div>
+                <div class="input-wrap">
+                    <span class="input-icon">🔒</span>
+                    <input type="password" id="recovery-new-password" placeholder="Nuova password (min 6 caratteri)" autocomplete="new-password" required minlength="6">
+                </div>
+                <div class="input-wrap">
+                    <span class="input-icon">🔒</span>
+                    <input type="password" id="recovery-new-password2" placeholder="Conferma nuova password" autocomplete="new-password" required minlength="6">
+                </div>
+                <button type="submit" class="btn-primary btn-full" id="recovery-confirm-btn">Imposta nuova password</button>
+            </form>
+            <p id="recovery-msg" style="display:none;margin-top:0.75rem;font-size:0.88rem"></p>
         </div>
 
         <button id="show-login" class="link-btn" style="display:none">← Torna al login</button>

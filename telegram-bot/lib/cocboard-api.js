@@ -416,6 +416,44 @@ async function registerWithCoc({ playerTag, apiToken, password, email }) {
   return data;
 }
 
+/** Recupero password OTP (POST /api/lookup?type=password-reset-request). */
+async function passwordResetRequest(username) {
+  const url = new URL('/api/lookup', apiBase() + '/');
+  url.searchParams.set('type', 'password-reset-request');
+  const r = await fetch(url.href, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ username }),
+    signal: AbortSignal.timeout(30000),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const err = new Error(typeof data.error === 'string' ? data.error : `HTTP ${r.status}`);
+    err.status = r.status;
+    throw err;
+  }
+  return data;
+}
+
+/** Conferma OTP + nuova password (POST /api/lookup?type=password-reset-confirm). */
+async function passwordResetConfirm({ username, code, newPassword }) {
+  const url = new URL('/api/lookup', apiBase() + '/');
+  url.searchParams.set('type', 'password-reset-confirm');
+  const r = await fetch(url.href, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ username, code, newPassword }),
+    signal: AbortSignal.timeout(30000),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const err = new Error(typeof data.error === 'string' ? data.error : `HTTP ${r.status}`);
+    err.status = r.status;
+    throw err;
+  }
+  return data;
+}
+
 module.exports = {
   fetchJson,
   clanMembers,
@@ -431,5 +469,7 @@ module.exports = {
   searchClans,
   rankings,
   registerWithCoc,
+  passwordResetRequest,
+  passwordResetConfirm,
   canUseLocalProxy,
 };

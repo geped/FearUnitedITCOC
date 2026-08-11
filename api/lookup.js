@@ -552,7 +552,9 @@ module.exports = async (req, res) => {
           type === 'profiles-always-ask' ||
           type === 'profiles-mini-app' ||
           type === 'profiles-remove' ||
-          type === 'resolve-login'
+          type === 'resolve-login' ||
+          type === 'password-reset-request' ||
+          type === 'password-reset-confirm'
         ) {
             const profilesUtil = require('./_utils/user-profiles');
 
@@ -571,6 +573,41 @@ module.exports = async (req, res) => {
                     return res.status(200).json({ ok: true, email });
                 } catch (e) {
                     return res.status(500).json({ error: e.message });
+                }
+            }
+
+            if (type === 'password-reset-request') {
+                if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                const body = req.body || {};
+                const input = body.username || body.email || body.q || '';
+                try {
+                    const passwordReset = require('./_utils/password-reset');
+                    const result = await passwordReset.requestPasswordReset(input);
+                    if (!result.ok) {
+                        return res.status(result.status || 400).json({ error: result.error });
+                    }
+                    return res.status(200).json(result);
+                } catch (e) {
+                    return res.status(500).json({ error: e.message || 'Errore recupero password.' });
+                }
+            }
+
+            if (type === 'password-reset-confirm') {
+                if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                const body = req.body || {};
+                try {
+                    const passwordReset = require('./_utils/password-reset');
+                    const result = await passwordReset.confirmPasswordReset({
+                        rawInput: body.username || body.email || body.q || '',
+                        code: body.code || body.otp,
+                        newPassword: body.newPassword || body.password || body.new_password,
+                    });
+                    if (!result.ok) {
+                        return res.status(result.status || 400).json({ error: result.error });
+                    }
+                    return res.status(200).json(result);
+                } catch (e) {
+                    return res.status(500).json({ error: e.message || 'Errore conferma password.' });
                 }
             }
 
@@ -925,7 +962,7 @@ module.exports = async (req, res) => {
         } else {
             return res.status(400).json({
                 error:
-                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, cards-catalog, cards-get, cards-save, cards-matches, cards-self-matches, cards-rooms, cards-room-open, cards-room-detail, cards-room-send, cards-propose, cards-commit, cards-respond, cards-self-apply, cards-trade-log, cards-public-list, cards-public-toggle, cards-triangles, cards-triangles-self, cards-triangle-propose, cards-triangle-respond, cards-triangle-self-apply, cards-triangle-proposals',
+                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, password-reset-request, password-reset-confirm, cards-catalog, cards-get, cards-save, cards-matches, cards-self-matches, cards-rooms, cards-room-open, cards-room-detail, cards-room-send, cards-propose, cards-commit, cards-respond, cards-self-apply, cards-trade-log, cards-public-list, cards-public-toggle, cards-triangles, cards-triangles-self, cards-triangle-propose, cards-triangle-respond, cards-triangle-self-apply, cards-triangle-proposals',
             });
         }
         const r = await fetch(`${proxyUrl}${proxyPath}`, {

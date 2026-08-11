@@ -431,12 +431,13 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
   // Evita che credenziali restino nella barra indirizzi (bookmark / GET accidentale)
   try {
     const u = new URL(window.location.href);
-    ['username', 'password', 'email', 'pwd', 'pass', 'passwd', 'user', 'login'].forEach((k) => u.searchParams.delete(k));
-    const qs = u.searchParams.toString();
-    if (window.location.search && (window.location.search.includes('password') || window.location.search.includes('username'))) {
+    let dirty = false;
+    ['username', 'password', 'email', 'pwd', 'pass', 'passwd', 'user', 'login'].forEach((k) => {
+      if (u.searchParams.has(k)) { u.searchParams.delete(k); dirty = true; }
+    });
+    if (dirty) {
+      const qs = u.searchParams.toString();
       history.replaceState({}, '', u.pathname + (qs ? '?' + qs : '') + u.hash);
-    } else if (!u.search && window.location.search) {
-      history.replaceState({}, '', u.pathname + u.hash);
     }
   } catch (_) {}
   const submitBtn = e.target.querySelector('button[type="submit"]');
@@ -482,11 +483,97 @@ function showSection(section) {
   document.getElementById('recovery-section').style.display  = section === 'recovery' ? 'block' : 'none';
   document.getElementById('show-login').style.display        = section !== 'login'    ? 'block' : 'none';
   document.getElementById('login-error').style.display       = 'none';
+  if (section === 'recovery') {
+    const req = document.getElementById('recovery-request-form');
+    const conf = document.getElementById('recovery-confirm-form');
+    const msg = document.getElementById('recovery-msg');
+    if (req) req.style.display = 'flex';
+    if (conf) conf.style.display = 'none';
+    if (msg) { msg.style.display = 'none'; msg.textContent = ''; }
+  }
 }
 
 document.getElementById('show-signup').addEventListener('click',   () => showSection('signup'));
 document.getElementById('show-recovery').addEventListener('click', () => showSection('recovery'));
 document.getElementById('show-login').addEventListener('click',    () => showSection('login'));
+
+function showRecoveryMsg(text, type) {
+  const el = document.getElementById('recovery-msg');
+  if (!el) return;
+  el.textContent = text;
+  el.style.display = 'block';
+  el.style.color = type === 'error' ? 'var(--red,#ef5350)' : 'var(--green,#4caf50)';
+}
+
+document.getElementById('recovery-request-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('recovery-request-btn');
+  const username = document.getElementById('recovery-username')?.value?.trim() || '';
+  if (!username) return showRecoveryMsg('Inserisci username, tag o email.', 'error');
+  if (btn) { btn.disabled = true; btn.textContent = 'Invio…'; }
+  try {
+    const r = await fetch('/api/lookup?type=password-reset-request', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      showRecoveryMsg(data.error || 'Richiesta non riuscita.', 'error');
+      return;
+    }
+    window._recoveryUsername = username;
+    const hint = document.getElementById('recovery-hint');
+    if (hint) {
+      hint.textContent = data.emailHint
+        ? `Codice inviato a ${data.emailHint}. Inseriscilo sotto e scegli la nuova password.`
+        : (data.message || 'Se l’account ha un’email, abbiamo inviato un codice.');
+    }
+    document.getElementById('recovery-request-form').style.display = 'none';
+    const conf = document.getElementById('recovery-confirm-form');
+    if (conf) conf.style.display = 'flex';
+    showRecoveryMsg(data.message || 'Controlla la posta.', 'ok');
+  } catch (_) {
+    showRecoveryMsg('Errore di connessione. Riprova.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Invia codice via email'; }
+  }
+});
+
+document.getElementById('recovery-confirm-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('recovery-confirm-btn');
+  const username = window._recoveryUsername || document.getElementById('recovery-username')?.value?.trim() || '';
+  const code = document.getElementById('recovery-code')?.value?.trim() || '';
+  const p1 = document.getElementById('recovery-new-password')?.value || '';
+  const p2 = document.getElementById('recovery-new-password2')?.value || '';
+  if (p1.length < 6) return showRecoveryMsg('Password minimo 6 caratteri.', 'error');
+  if (p1 !== p2) return showRecoveryMsg('Le due password non coincidono.', 'error');
+  if (btn) { btn.disabled = true; btn.textContent = 'Salvataggio…'; }
+  try {
+    const r = await fetch('/api/lookup?type=password-reset-confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, code, newPassword: p1 }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      showRecoveryMsg(data.error || 'Conferma non riuscita.', 'error');
+      return;
+    }
+    showRecoveryMsg(data.message || 'Password aggiornata. Ora puoi accedere.', 'ok');
+    setTimeout(() => {
+      showSection('login');
+      const emailEl = document.getElementById('email');
+      if (emailEl && username) emailEl.value = username;
+      showLoginError('Password aggiornata. Accedi con la nuova password.', 'info');
+    }, 800);
+  } catch (_) {
+    showRecoveryMsg('Errore di connessione. Riprova.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Imposta nuova password'; }
+  }
+});
 
 // ── Registrazione tramite chiave API CoC ─────────────────────────────────────
 
@@ -6062,8 +6149,8 @@ function _openAdminPwdModal(userId, username) {
       <div id="admin-pwd-modal-body" style="padding:0.5rem 1.2rem 1.3rem">
         <p style="color:var(--text-3);font-size:0.88rem;margin:0 0 1rem">
           Genera una password temporanea per <strong>${escH(username)}</strong>.
-          Se ha collegato Telegram gli verrà inviata automaticamente in privato; altrimenti potrai copiarla e comunicarla tu.
-          Al primo accesso gli verrà chiesto di sceglierne una nuova.
+          Verrà inviata automaticamente su Telegram (se collegato) e/o via email di recupero (Resend).
+          Altrimenti potrai copiarla e comunicarla tu. Al primo accesso gli verrà chiesto di sceglierne una nuova.
         </p>
         <div style="display:flex;gap:0.6rem;justify-content:flex-end">
           <button type="button" class="btn-secondary" onclick="document.getElementById('admin-pwd-modal').remove()">Annulla</button>
@@ -6091,9 +6178,12 @@ async function _generateAdminTempPassword(userId, username) {
         <div style="text-align:right;margin-top:0.8rem"><button type="button" class="btn-secondary" onclick="document.getElementById('admin-pwd-modal').remove()">Chiudi</button></div>`;
       return;
     }
-    const statusLine = data.sentViaTelegram
-      ? `✅ Inviata automaticamente su Telegram a <strong>${escH(username)}</strong>.`
-      : `⚠️ <strong>${escH(username)}</strong> non ha collegato Telegram: copiala e comunicala tu (es. WhatsApp, chat di gioco).`;
+    const channels = [];
+    if (data.sentViaTelegram) channels.push('Telegram');
+    if (data.sentViaEmail) channels.push('email');
+    const statusLine = channels.length
+      ? `✅ Inviata automaticamente via <strong>${channels.join(' + ')}</strong> a <strong>${escH(username)}</strong>.`
+      : `⚠️ <strong>${escH(username)}</strong> non ha Telegram collegato né email di recupero: copiala e comunicala tu.`;
     body.innerHTML = `
       <p style="margin:0 0 0.6rem">${statusLine}</p>
       <div style="display:flex;align-items:center;gap:0.5rem;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:0.6rem 0.8rem;margin-bottom:1rem">

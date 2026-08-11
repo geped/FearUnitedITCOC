@@ -73,6 +73,7 @@ module.exports = async (req, res) => {
             if (upErr) return res.status(500).json({ error: upErr.message });
 
             let sentViaTelegram = false;
+            let sentViaEmail = false;
             try {
                 const { data: link } = await supabase
                     .from('telegram_links')
@@ -90,7 +91,28 @@ module.exports = async (req, res) => {
                 }
             } catch (_) {}
 
-            return res.status(200).json({ ok: true, tempPassword, sentViaTelegram });
+            try {
+                const resend = require('../_utils/resend');
+                const metaEmail = cur.user.user_metadata?.email;
+                const authEmail = cur.user.email;
+                const recovery =
+                    (metaEmail && !String(metaEmail).endsWith('.internal') ? String(metaEmail).trim() : null) ||
+                    (authEmail && !String(authEmail).endsWith('.internal') ? String(authEmail).trim() : null);
+                if (recovery && resend.resendConfigured()) {
+                    const uname =
+                        cur.user.user_metadata?.username ||
+                        (authEmail && String(authEmail).includes('@') ? String(authEmail).split('@')[0] : 'utente');
+                    const mail = await resend.sendEmail({
+                        to: recovery,
+                        subject: 'Password temporanea CoCBoard',
+                        html: resend.tempPasswordEmailHtml({ username: uname, tempPassword }),
+                        text: `Password temporanea CoCBoard: ${tempPassword}`,
+                    });
+                    if (mail.ok) sentViaEmail = true;
+                }
+            } catch (_) {}
+
+            return res.status(200).json({ ok: true, tempPassword, sentViaTelegram, sentViaEmail });
         }
 
         if (

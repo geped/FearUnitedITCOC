@@ -188,7 +188,9 @@ SUPABASE_SERVICE_ROLE_KEY
 RENDER_PROXY_URL             # URL servizio Render unificato (es. https://fearuniteditcoc.onrender.com)
 SYNC_SECRET
 CRON_SECRET
-RESEND_API_KEY               # Opzionale: email di benvenuto
+RESEND_API_KEY               # Email (benvenuto, reset password OTP, temp password admin)
+RESEND_FROM                  # Mittente verificato, es. CoCBoard <noreply@tuodominio.it>
+RESEND_REPLY_TO              # Opzionale: indirizzo reply-to
 TELEGRAM_BOT_TOKEN           # Obbligatorio per /api/lookup?type=recruit-list (foto via getFile)
 
 # Render — servizio unificato cocboard (proxy CoC API + bot Telegram)

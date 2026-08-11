@@ -176,27 +176,15 @@ module.exports = async (req, res) => {
 
     if (realEmail && process.env.RESEND_API_KEY) {
         try {
-            await fetch('https://api.resend.com/emails', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    from: 'Fear United IT <onboarding@resend.dev>',
-                    to: realEmail,
-                    subject: 'Benvenuto nel clan Fear United IT! ⚔️',
-                    html: `
-                        <h2>Ciao ${username}, benvenuto nella nostra Dashboard!</h2>
-                        <p>Il tuo account è stato collegato con successo al tuo villaggio.</p>
-                        <ul>
-                            <li><strong>Tag:</strong> ${playerTag}</li>
-                            <li><strong>Ruolo Clan:</strong> ${appRole}</li>
-                        </ul>
-                        <p>Ora puoi accedere per vedere le tue statistiche CWL e i bonus.</p>
-                        <p>A presto in gioco!</p>
-                    `
-                })
+            const resend = require('./_utils/resend');
+            await resend.sendEmail({
+                to: realEmail,
+                subject: 'Benvenuto su CoCBoard',
+                html: resend.welcomeEmailHtml({
+                    username,
+                    playerTag,
+                    role: appRole,
+                }),
             });
         } catch (emailErr) {
             console.error('Errore invio email di benvenuto:', emailErr);
