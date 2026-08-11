@@ -174,18 +174,20 @@ module.exports = async (req, res) => {
         // Account Auth già creato: non rollback automatico (utente può fare bootstrap lazy al login)
     }
 
-    if (realEmail && process.env.RESEND_API_KEY) {
+    if (realEmail) {
         try {
             const resend = require('./_utils/resend');
-            await resend.sendEmail({
-                to: realEmail,
-                subject: 'Benvenuto su CoCBoard',
-                html: resend.welcomeEmailHtml({
-                    username,
-                    playerTag,
-                    role: appRole,
-                }),
-            });
+            if (resend.resendConfigured()) {
+                await resend.sendEmail({
+                    to: realEmail,
+                    subject: 'Benvenuto su CoCBoard',
+                    html: resend.welcomeEmailHtml({
+                        username,
+                        playerTag,
+                        role: appRole,
+                    }),
+                });
+            }
         } catch (emailErr) {
             console.error('Errore invio email di benvenuto:', emailErr);
         }

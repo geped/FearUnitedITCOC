@@ -11,17 +11,19 @@ Il sito resta su `https://cocboard.vercel.app`. Per inviare email a **tutti** gl
 ### Setup Brevo (5 minuti)
 
 1. Crea account su [brevo.com](https://www.brevo.com/) (ex Sendinblue).
-2. **Senders & IP** → aggiungi la tua Gmail → conferma il link nella posta.
-3. **SMTP & API** → crea una **API key**.
-4. Su **Vercel → Production**:
+2. **Mittenti e IP** → aggiungi la tua Gmail → conferma il codice in posta.
+3. **SMTP e API → Chiavi API e MCP** → crea una **API key** (non la chiave SMTP).
+4. **Obbligatorio su Vercel:** apri [IP autorizzati](https://app.brevo.com/security/authorised_ips) e **disattiva** il blocco IP.  
+   Vercel usa IP sempre diversi; con la whitelist attiva l’invio fallisce (`unrecognised IP address`).
+5. Su **Vercel → Production**:
 
 | Variabile | Valore |
 |-----------|--------|
 | `BREVO_API_KEY` | la chiave API Brevo |
-| `BREVO_FROM` | la Gmail verificata, es. `tua@gmail.com` (o `CoCBoard <tua@gmail.com>`) |
+| `BREVO_FROM` | la Gmail verificata, es. `info.cocboard@gmail.com` |
 
-5. (Opzionale) togli o ignora `RESEND_*` se usi solo Brevo.
-6. **Redeploy** Production.
+6. (Opzionale) togli o ignora `RESEND_*` se usi solo Brevo.
+7. **Redeploy** Production.
 
 Se sono presenti sia Brevo sia Resend, **vince Brevo**.
 
