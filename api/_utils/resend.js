@@ -273,23 +273,102 @@ function siteHomeUrl() {
   );
 }
 
+function telegramBotUrl() {
+  const u = (process.env.TELEGRAM_BOT_USERNAME || 'cocboardbot').replace(/^@/, '').trim() || 'cocboardbot';
+  return `https://t.me/${u}`;
+}
+
+function brandLogoUrl() {
+  const home = siteHomeUrl();
+  return `${home}/assets/cocboardbot-no-bg.png`;
+}
+
 function welcomeEmailHtml({ username, playerTag, role }) {
   const home = siteHomeUrl();
+  const botUrl = telegramBotUrl();
+  const logo = brandLogoUrl();
   const u = escapeHtml(username);
   const tag = escapeHtml(playerTag);
   const roleSafe = escapeHtml(role || 'utente');
+  const homeSafe = escapeHtml(home);
+  const botSafe = escapeHtml(botUrl);
   return `
-    <div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;color:#1a1a1a">
-      <h2 style="margin:0 0 12px">Ciao ${u}, benvenuto su CoCBoard</h2>
-      <p>Il tuo account è collegato al villaggio Clash of Clans.</p>
-      <ul>
-        <li><strong>Username di accesso:</strong> ${u}</li>
-        <li><strong>Tag:</strong> ${tag}</li>
-        <li><strong>Ruolo:</strong> ${roleSafe}</li>
-      </ul>
-      <p>Accedi alla dashboard: <a href="${home}">${home}</a></p>
-      <p style="color:#666;font-size:13px">Se hai indicato un'email di recupero, potrai usarla per reimpostare la password in autonomia.</p>
-    </div>`;
+<!DOCTYPE html>
+<html lang="it">
+<body style="margin:0;padding:0;background:#0f1419;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0f1419;padding:28px 12px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#1a222c;border:1px solid #2a3542;border-radius:14px;overflow:hidden;">
+          <tr>
+            <td align="center" style="padding:28px 24px 12px;background:linear-gradient(180deg,#243040 0%,#1a222c 100%);">
+              <img src="${escapeHtml(logo)}" alt="CoCBoard" width="96" height="96" style="display:block;width:96px;height:96px;border:0;outline:none;">
+              <div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:22px;font-weight:700;color:#f0c75e;letter-spacing:0.02em;margin-top:12px;">CoCBoard</div>
+              <div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:13px;color:#9aa7b5;margin-top:4px;">Gestione clan, CWL e giocatori</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 28px 4px;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#e8eef4;">
+              <h1 style="margin:16px 0 10px;font-size:20px;font-weight:700;color:#ffffff;line-height:1.3;">Ciao ${u}, benvenuto!</h1>
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.55;color:#c5d0db;">Il tuo account è collegato al villaggio Clash of Clans. Ecco i tuoi dati di accesso:</p>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#121820;border:1px solid #2a3542;border-radius:10px;margin:0 0 20px;">
+                <tr>
+                  <td style="padding:14px 16px;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;color:#c5d0db;border-bottom:1px solid #2a3542;">
+                    <span style="color:#9aa7b5;">Username di accesso</span><br>
+                    <strong style="color:#ffffff;font-size:15px;">${u}</strong>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:14px 16px;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;color:#c5d0db;border-bottom:1px solid #2a3542;">
+                    <span style="color:#9aa7b5;">Tag</span><br>
+                    <strong style="color:#ffffff;font-size:15px;">${tag}</strong>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:14px 16px;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;color:#c5d0db;">
+                    <span style="color:#9aa7b5;">Ruolo</span><br>
+                    <strong style="color:#ffffff;font-size:15px;">${roleSafe}</strong>
+                  </td>
+                </tr>
+              </table>
+              <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 12px;">
+                <tr>
+                  <td style="border-radius:8px;background:#f0c75e;">
+                    <a href="${homeSafe}" style="display:inline-block;padding:12px 22px;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#1a1508;text-decoration:none;">Apri la dashboard</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 18px;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#9aa7b5;">
+                Oppure vai su <a href="${homeSafe}" style="color:#f0c75e;">${homeSafe}</a>
+              </p>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#15202b;border:1px solid #2f6fed55;border-radius:10px;margin:0 0 18px;">
+                <tr>
+                  <td style="padding:14px 16px;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;color:#c5d0db;line-height:1.55;">
+                    <strong style="color:#ffffff;">Usa CoCBoard anche su Telegram</strong><br>
+                    Stesso account: clan, profilo, cerca, classifica e altro dal bot.
+                    <div style="margin-top:10px;">
+                      <a href="${botSafe}" style="display:inline-block;padding:10px 16px;border-radius:8px;background:#2f6fed;color:#ffffff;font-weight:700;text-decoration:none;font-size:13px;">Apri @cocboardbot</a>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 8px;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#9aa7b5;">
+                Se hai indicato un’email di recupero, potrai usarla per reimpostare la password in autonomia.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 28px 24px;border-top:1px solid #2a3542;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;color:#7a8794;">
+              <strong style="color:#c5d0db;">Non rispondere a questa email.</strong>
+              I messaggi inviati a questo indirizzo non vengono letti. Per assistenza usa il bot Telegram CoCBoard.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }
 
 function tempPasswordEmailHtml({ username, tempPassword }) {
