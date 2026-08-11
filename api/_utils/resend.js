@@ -88,16 +88,27 @@ function resendReplyTo() {
 function friendlyEmailError(err, provider, extra = {}) {
   const e = String(err || '').toLowerCase();
   if (provider === 'brevo') {
-    if (e.includes('sender') || e.includes('unrecognised') || e.includes('unrecognized') || e.includes('not verified')) {
+    // Prima degli altri check: "unrecognised IP" contiene "unrecognised" e veniva
+    // confuso con mittente non verificato.
+    if (
+      e.includes('ip address') ||
+      e.includes('authorised_ips') ||
+      e.includes('authorized_ips') ||
+      (e.includes('unrecognised') && e.includes('ip')) ||
+      (e.includes('unrecognized') && e.includes('ip'))
+    ) {
+      return (
+        'Brevo blocca le chiamate dagli IP di Vercel. Apri https://app.brevo.com/security/authorised_ips ' +
+        'e disattiva la restrizione IP (o autorizza tutti gli IP). Su Vercel gli IP cambiano sempre: non si possono whitelistare uno a uno.'
+      );
+    }
+    if (e.includes('sender') || e.includes('not verified')) {
       const tried = extra.fromEmail ? ` (hai usato: ${extra.fromEmail})` : '';
       return (
         'Mittente Brevo non accettato' +
         tried +
         '. Su Vercel imposta BREVO_FROM=info.cocboard@gmail.com (la Gmail verificata in Mittenti), poi redeploy.'
       );
-    }
-    if (e.includes('ip') && (e.includes('authoriz') || e.includes('allow') || e.includes('whitelist') || e.includes('blocked'))) {
-      return 'Brevo blocca la chiave API per IP. In Brevo → SMTP e API → togli la restrizione IP (Vercel usa IP variabili).';
     }
     if (e.includes('api') && (e.includes('key') || e.includes('unauthorized') || e.includes('401'))) {
       return 'BREVO_API_KEY non valida su Vercel (Production). Usa la chiave da «Chiavi API e MCP», poi redeploy.';
