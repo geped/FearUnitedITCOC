@@ -54,7 +54,8 @@ function cocHeaders() {
 
 /**
  * L'API `/locations/.../rankings/players` (e builder-base) può riusare lo stesso `badgeUrls`
- * per clan con `tag` diversi. Arricchiamo con GET /v1/clans/{tag}.
+ * per clan con `tag` diversi. Arricchiamo SEMPRE gli stemmi da GET /v1/clans/{tag}
+ * quando ci sono almeno 2 clan (anche se l'API restituisce 2–3 URL riciclati).
  */
 async function enrichRankingPlayerClanBadges(items) {
     if (!items || !Array.isArray(items) || !items.length) return;
@@ -63,13 +64,16 @@ async function enrichRankingPlayerClanBadges(items) {
         const raw = pl.clan && pl.clan.tag;
         if (raw) tagSet.add(normClanTag(raw));
     }
+    if (tagSet.size < 2) return;
+
     const badgeKeys = new Set(
         items.map((pl) => {
             const bu = pl.clan && pl.clan.badgeUrls;
             return bu ? (bu.small || bu.medium || bu.large || '') : '';
         }).filter(Boolean)
     );
-    if (tagSet.size < 2 || badgeKeys.size > 1) return;
+    // Ripara se tutti uguali O se gli URL unici sono meno dei clan (riciclo parziale)
+    if (badgeKeys.size >= tagSet.size) return;
 
     const clanBadgeMap = {};
     const tags = [...tagSet];
@@ -112,8 +116,21 @@ async function saveEndedWar(clanTagRaw) {
     if (!r.ok) return { skipped: true, reason: `CoC API ${r.status}` };
     const war = await r.json();
 
-    if (war.state !== 'warEnded') return { skipped: true, reason: `state=${war.state}` };
     if ((war.warType || '').toLowerCase() === 'cwl') return { skipped: true, reason: 'cwl' };
+
+    // Accetta warEnded; se ancora "inWar" ma endTime già passato, salva comunque (finestra breve post-fine)
+    const endMs = (() => {
+        const m = String(war.endTime || '').match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/);
+        if (!m) return null;
+        return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+    })();
+    const endedByClock = endMs != null && endMs <= Date.now();
+    if (war.state !== 'warEnded' && !(war.state === 'inWar' && endedByClock)) {
+        return { skipped: true, reason: `state=${war.state}` };
+    }
+    if (!(war.clan?.members?.length) && !(war.opponent?.members?.length)) {
+        return { skipped: true, reason: 'no-members' };
+    }
 
     const ourSide = war.clan;
     const oppSide = war.opponent;

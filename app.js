@@ -548,6 +548,7 @@ function showLogin() {
   // non deve ereditare la scelta profilo dell'utente precedente.
   window.__cocboardManualProfilePick = false;
   window.__cocboardDefaultApplied = false;
+  window.__cocboardLandingTabApplied = false;
   _prefillLoginSaved();
 }
 
@@ -1427,16 +1428,26 @@ async function showApp(sessionUser) {
 
   await tryHydrateClanFromUserMetadata(user);
 
+  // Tab clan-dipendenti: nascoste senza clan; ripristinate se il clan è disponibile
+  ['members', 'warlog', 'cwl'].forEach(tab => {
+    document.querySelectorAll(`[data-tab="${tab}"]`).forEach(el => {
+      if (!window._userClanTag) {
+        el.style.display = 'none';
+        return;
+      }
+      const tag = el.tagName.toLowerCase();
+      el.style.display = (el.classList.contains('bnav-btn') || el.classList.contains('bnav-altro-item'))
+        ? 'flex'
+        : (tag === 'button' || tag === 'span' ? 'inline-block' : 'block');
+    });
+  });
+
   // Nessun clan risolvibile: messaggio solo per utenti normali (non admin app / staff bot)
   if (!window._userClanTag) {
     if (!isAdmin && !isTelegramModerator) {
       showNoClanScreen(user.user_metadata?.username || '');
       return;
     }
-    // Admin dashboard o moderatore Telegram senza clan: resto dell'app + tab CoCBoardBot; niente roster CWL
-    ['members', 'warlog', 'cwl'].forEach(tab => {
-      document.querySelectorAll(`[data-tab="${tab}"]`).forEach(el => el.style.display = 'none');
-    });
   }
 
   // Mostra nome in-game nella sidebar (utenti anonimi non hanno username/email)
@@ -1494,11 +1505,17 @@ async function showApp(sessionUser) {
   window._userBotAdminFull = isAdmin;
   applyBotAdminStaffUi();
 
-  if (!window._userClanTag && isAdmin) {
-    activateTab('admin');
-  } else if (!window._userClanTag && isTelegramModerator) {
-    activateTab('botadmin');
-  } else {
+  // Landing tab SOLO al primo ingresso sessione — non ad ogni refresh JWT / token
+  // (altrimenti navigare verso cerca/classifica/carte riporta sempre ad admin).
+  if (!window.__cocboardLandingTabApplied) {
+    window.__cocboardLandingTabApplied = true;
+    if (!window._userClanTag && (isAdmin || isTelegramModerator)) {
+      activateTab('profilo');
+    } else if (window._userClanTag) {
+      loadMembers();
+    }
+  } else if (window._userClanTag) {
+    // Refresh sessione: aggiorna roster senza rubare la tab attiva
     loadMembers();
   }
 
@@ -6753,6 +6770,7 @@ async function loadCapitalRaids() {
           raids_completed: Number(it?.raidsCompleted || 0),
           top_contributor_name: top?.name || null,
           top_contributor_loot: Number(top?.capitalResourcesLooted || 0),
+          members,
         };
       });
     }
@@ -6762,8 +6780,8 @@ async function loadCapitalRaids() {
       return;
     }
 
-    const cards = rows.map((r) => `
-      <div class="raid-card">
+    const cards = rows.map((r, ridx) => `
+      <div class="raid-card raid-card--clickable" onclick="openCapitalRaidDetail(${ridx})" title="Clicca per il dettaglio membri">
         <div class="raid-card-top">
           <div><strong>${_formatApiTime(r.weekend_start)}</strong> <span style="color:var(--text-3)">→ ${_formatApiTime(r.weekend_end)}</span></div>
           <div class="raid-loot">💰 ${Number(r.capital_total_loot || 0).toLocaleString('it-IT')}</div>
@@ -6774,35 +6792,148 @@ async function loadCapitalRaids() {
           <span>✅ Raid completati: <b>${Number(r.raids_completed || 0)}</b></span>
         </div>
         <div class="raid-top-player">🥇 Top contributore: <b>${r.top_contributor_name || '—'}</b> · ${Number(r.top_contributor_loot || 0).toLocaleString('it-IT')} loot</div>
+        <div class="raid-card-hint">Dettagli membri →</div>
       </div>
     `).join('');
 
+    window._capitalRaidRows = rows;
     div.innerHTML = `<div class="raid-list">${cards}</div>`;
   } catch (_) {
     div.innerHTML = '<p class="wl-err">⚠️ Impossibile caricare i weekend raid.</p>';
   }
 }
 
+function openCapitalRaidDetail(idx) {
+  const r = (window._capitalRaidRows || [])[idx];
+  if (!r) return;
+  document.getElementById('capital-raid-detail-modal')?.remove();
+
+  let members = r.members;
+  if (typeof members === 'string') {
+    try { members = JSON.parse(members); } catch (_) { members = []; }
+  }
+  if (!Array.isArray(members)) members = [];
+  const sorted = members.slice().sort((a, b) =>
+    Number(b?.capitalResourcesLooted || 0) - Number(a?.capitalResourcesLooted || 0)
+  );
+
+  const memberCards = sorted.length
+    ? sorted.map((m, i) => {
+        const loot = Number(m.capitalResourcesLooted || 0).toLocaleString('it-IT');
+        const atks = m.attacks != null ? Number(m.attacks) : (m.attackCount != null ? Number(m.attackCount) : '—');
+        return `<div class="wdm-member-card">
+          <div class="wdm-member-header">
+            <span class="wdm-pos">${i + 1}.</span>
+            <span class="wdm-name">${m.name || '—'}</span>
+            <span class="wdm-total-stars wdm-total-stars--good">💰 ${loot}</span>
+          </div>
+          <div class="wdm-atk-list">
+            <div class="wdm-atk-row">
+              <span class="wdm-atk-label">Attacchi</span>
+              <span class="wdm-atk-pct">${atks}</span>
+              <span class="wdm-atk-target mono" style="font-size:0.72rem;color:var(--text-3)">${m.tag || ''}</span>
+            </div>
+          </div>
+        </div>`;
+      }).join('')
+    : '<p class="wdm-no-data">Dettaglio membri non disponibile per questo weekend (verrà salvato automaticamente ai prossimi raid).</p>';
+
+  const modal = document.createElement('div');
+  modal.id = 'capital-raid-detail-modal';
+  modal.className = 'cdm-overlay';
+  modal.innerHTML = `
+    <div class="cdm-box wdm-box" onclick="event.stopPropagation()">
+      <div class="cdm-header">
+        <div class="cdm-header-left">
+          <div>
+            <div class="cdm-header-season">Capital Raid</div>
+            <div class="cdm-header-league" style="color:var(--text-3)">${_formatApiTime(r.weekend_start)} → ${_formatApiTime(r.weekend_end)}</div>
+          </div>
+        </div>
+        <button class="cdm-close" onclick="closeCapitalRaidDetail()">✕</button>
+      </div>
+      <div class="cdm-war-header" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="cdm-war-side"><div class="cdm-war-stars">💰 ${Number(r.capital_total_loot || 0).toLocaleString('it-IT')}</div><div class="cdm-war-destr">Loot totale</div></div>
+        <div class="cdm-war-side"><div class="cdm-war-stars">⚔️ ${Number(r.total_attacks || 0)}</div><div class="cdm-war-destr">Attacchi</div></div>
+        <div class="cdm-war-side"><div class="cdm-war-stars">🏚️ ${Number(r.enemy_districts_destroyed || 0)}</div><div class="cdm-war-destr">Distretti</div></div>
+      </div>
+      <div class="wdm-panel" style="margin-top:0.75rem">${memberCards}</div>
+    </div>`;
+  modal.addEventListener('click', closeCapitalRaidDetail);
+  document.body.appendChild(modal);
+  requestAnimationFrame(() => modal.classList.add('cdm-overlay--visible'));
+}
+
+function closeCapitalRaidDetail() {
+  const modal = document.getElementById('capital-raid-detail-modal');
+  if (!modal) return;
+  modal.classList.remove('cdm-overlay--visible');
+  modal.addEventListener('transitionend', () => modal.remove(), { once: true });
+}
+
 // ── DETTAGLIO WAR CLASSICA ────────────────────────────────────────────────────
 
-async function openClassicWarDetail(key) {
-  // Cerca per endTime (chiave univoca) — robusto a ricaricamenti della lista
-  const w = (window._warLogMap || {})[key];
+function _parseWarMembersJson(maybe) {
+  if (!maybe) return null;
+  if (Array.isArray(maybe)) return maybe;
+  if (typeof maybe === 'string') {
+    try {
+      const p = JSON.parse(maybe);
+      return Array.isArray(p) ? p : null;
+    } catch (_) { return null; }
+  }
+  return null;
+}
+
+/** Carica dettaglio roster da classic_wars (match esatto end_time, poi giorno+avversario). */
+async function fetchClassicWarEnrichment(clanTag, war) {
+  const tag = normClanTag(clanTag);
+  if (!tag || !war?.endTime) return null;
+  try {
+    const { data } = await db.from('classic_wars')
+      .select('*')
+      .eq('clan_tag', tag)
+      .eq('end_time', war.endTime)
+      .maybeSingle();
+    if (data && (_parseWarMembersJson(data.our_members)?.length || _parseWarMembersJson(data.opp_members)?.length)) {
+      return data;
+    }
+    if (data) return data;
+
+    const day = String(war.endTime).slice(0, 8);
+    const opp = war.opponent?.tag ? normClanTag(war.opponent.tag) : null;
+    const { data: list } = await db.from('classic_wars')
+      .select('*')
+      .eq('clan_tag', tag)
+      .like('end_time', `${day}%`)
+      .limit(8);
+    if (!list?.length) return null;
+    if (opp) {
+      const byOpp = list.find(r => normClanTag(r.opp_tag) === opp);
+      if (byOpp) return byOpp;
+    }
+    return list.find(r => _parseWarMembersJson(r.our_members)?.length) || list[0];
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * @param {string} key — endTime war
+ * @param {{ clanTag?: string, warMap?: object }} [opts]
+ */
+async function openClassicWarDetail(key, opts) {
+  opts = opts || {};
+  const warMap = opts.warMap || window._warLogMap || {};
+  const w = warMap[key];
   if (!w) return;
 
   document.getElementById('classic-war-detail-modal')?.remove();
 
-  // Cerca dati completi in Supabase (classic_wars)
+  const clanTag = normClanTag(opts.clanTag || window._userClanTag);
   let enriched = null;
-  if (w.endTime && window._userClanTag) {
-    try {
-      const { data } = await db.from('classic_wars')
-        .select('*')
-        .eq('clan_tag', window._userClanTag)
-        .eq('end_time', w.endTime)
-        .maybeSingle();
-      if (data) enriched = data;
-    } catch (_) {}
+  if (w.endTime && clanTag) {
+    enriched = await fetchClassicWarEnrichment(clanTag, w);
   }
 
   const fmtDate = w.endTime ? new Date(
@@ -6814,22 +6945,21 @@ async function openClassicWarDetail(key) {
 
   const clanBadge = w.clan?.badgeUrls?.small
     ? `<img src="${w.clan.badgeUrls.small}" class="cdm-war-badge" alt="">`
-    : '<span class="cdm-war-badge-ph">🛡️</span>';
+    : (enriched?.our_badge ? `<img src="${enriched.our_badge}" class="cdm-war-badge" alt="">` : '<span class="cdm-war-badge-ph">🛡️</span>');
   const oppBadge = w.opponent?.badgeUrls?.small
     ? `<img src="${w.opponent.badgeUrls.small}" class="cdm-war-badge" alt="">`
-    : '<span class="cdm-war-badge-ph">🛡️</span>';
+    : (enriched?.opp_badge ? `<img src="${enriched.opp_badge}" class="cdm-war-badge" alt="">` : '<span class="cdm-war-badge-ph">🛡️</span>');
 
   const size = (enriched?.team_size ?? w.teamSize) ?? '?';
-  const atkPerMember = enriched?.atk_per_member ?? 2;
+  const atkPerMember = enriched?.atk_per_member ?? w.attacksPerMember ?? 2;
 
-  // Usa dati Supabase (enriched) se disponibili, altrimenti war log (w)
-  const ourMembers = enriched?.our_members ?? w.clan?.members ?? null;
-  const oppMembers = enriched?.opp_members ?? w.opponent?.members ?? null;
+  const ourMembers = _parseWarMembersJson(enriched?.our_members) ?? w.clan?.members ?? null;
+  const oppMembers = _parseWarMembersJson(enriched?.opp_members) ?? w.opponent?.members ?? null;
 
-  // Mappa tag → {name, pos} da entrambe le squadre
+  // Mappa tag → {name, pos} — usa roster arricchito se presente (war-log non ha members)
   const defMap = {};
-  [...(w.clan?.members || []), ...(w.opponent?.members || [])].forEach(m => {
-    defMap[m.tag] = { name: m.name, pos: m.mapPosition };
+  [...(ourMembers || []), ...(oppMembers || [])].forEach(m => {
+    if (m?.tag) defMap[m.tag] = { name: m.name, pos: m.mapPosition };
   });
 
   function starsRow(stars, maxStars) {
@@ -6837,7 +6967,10 @@ async function openClassicWarDetail(key) {
   }
 
   function buildTeamCards(members) {
-    if (!members?.length) return '<p class="wdm-no-data">Dati non disponibili per questa war</p>';
+    if (!members?.length) {
+      return `<p class="wdm-no-data">Dati non disponibili per questa war.<br>
+        <span style="font-size:0.78rem;color:var(--text-3)">Il dettaglio attacchi viene salvato automaticamente quando la war risulta conclusa (cron / bot).</span></p>`;
+    }
 
     const sorted = [...members].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
     return sorted.map(m => {
@@ -6847,9 +6980,7 @@ async function openClassicWarDetail(key) {
 
       const attacks = [...(m.attacks || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       const totalStars = attacks.reduce((s, a) => s + (a.stars ?? 0), 0);
-      const maxPossible = atkPerMember * 3;
 
-      // righe attacchi
       const atkRows = Array.from({ length: atkPerMember }, (_, i) => {
         const a = attacks[i];
         if (!a) {
@@ -6885,10 +7016,10 @@ async function openClassicWarDetail(key) {
     }).join('');
   }
 
-  // Tab attivo
-  let activeTab = 'us';
   const ourCards = buildTeamCards(ourMembers);
   const oppCards = buildTeamCards(oppMembers);
+  const ourName = w.clan?.name ?? enriched?.our_name ?? 'Noi';
+  const oppName = w.opponent?.name ?? enriched?.opp_name ?? 'Avversario';
 
   const modal = document.createElement('div');
   modal.id = 'classic-war-detail-modal';
@@ -6905,13 +7036,12 @@ async function openClassicWarDetail(key) {
         <button class="cdm-close" onclick="closeClassicWarDetail()">✕</button>
       </div>
 
-      <!-- VS Header -->
       <div class="cdm-war-header">
         <div class="cdm-war-side cdm-war-side--us">
           ${clanBadge}
-          <div class="cdm-war-clan-name">${w.clan?.name ?? 'Noi'}</div>
-          <div class="cdm-war-stars">⭐ ${w.clan?.stars ?? 0}</div>
-          <div class="cdm-war-destr">💥 ${(w.clan?.destructionPercentage ?? 0).toFixed(1)}%</div>
+          <div class="cdm-war-clan-name">${ourName}</div>
+          <div class="cdm-war-stars">⭐ ${w.clan?.stars ?? enriched?.our_stars ?? 0}</div>
+          <div class="cdm-war-destr">💥 ${(+(w.clan?.destructionPercentage ?? enriched?.our_destr ?? 0)).toFixed(1)}%</div>
         </div>
         <div class="cdm-war-vs">
           <div class="cdm-war-result ${resClass}">${resLabel}</div>
@@ -6919,19 +7049,18 @@ async function openClassicWarDetail(key) {
         </div>
         <div class="cdm-war-side cdm-war-side--opp">
           ${oppBadge}
-          <div class="cdm-war-clan-name">${w.opponent?.name ?? 'Avversario'}</div>
-          <div class="cdm-war-stars">⭐ ${w.opponent?.stars ?? 0}</div>
-          <div class="cdm-war-destr">💥 ${(w.opponent?.destructionPercentage ?? 0).toFixed(1)}%</div>
+          <div class="cdm-war-clan-name">${oppName}</div>
+          <div class="cdm-war-stars">⭐ ${w.opponent?.stars ?? enriched?.opp_stars ?? 0}</div>
+          <div class="cdm-war-destr">💥 ${(+(w.opponent?.destructionPercentage ?? enriched?.opp_destr ?? 0)).toFixed(1)}%</div>
         </div>
       </div>
 
-      <!-- Tab squadra -->
       <div class="wdm-tab-bar">
         <button class="wdm-tab active" id="wdm-tab-us" onclick="_wdmTab('us')">
-          ${clanBadge} La Nostra Squadra
+          ${clanBadge} ${ourName === 'Noi' ? 'La Nostra Squadra' : ourName}
         </button>
         <button class="wdm-tab" id="wdm-tab-opp" onclick="_wdmTab('opp')">
-          ${oppBadge} ${w.opponent?.name ?? 'Avversario'}
+          ${oppBadge} ${oppName}
         </button>
       </div>
       <div id="wdm-panel-us" class="wdm-panel">${ourCards}</div>
@@ -7056,9 +7185,77 @@ const MONTH_IT = ['', 'Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
                   'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 
 function seasonLabel(season) {
-  // season = 'YYYY-MM'
-  const [y, m] = season.split('-');
+  // season = 'YYYY-MM' oppure 'YYYY-MM-DD' (API CWL)
+  const [y, m] = String(season || '').split('-');
   return `Stagione di ${MONTH_IT[+m] || season} ${y}`;
+}
+
+/** Chiave mese per dedup stagioni CWL: '2026-08-01' e '2026-08' → '2026-08' */
+function seasonMonthKey(season) {
+  const parts = String(season || '').split('-');
+  if (parts.length >= 2) return `${parts[0]}-${parts[1]}`;
+  return String(season || '');
+}
+
+function _cwlSeasonRichness(s, roundsMap) {
+  let score = 0;
+  if (s?.isLive) score += 100;
+  if (s?.position != null) score += 10;
+  if (s?.league) score += 5;
+  if (s?.groupStandings?.length) score += 20;
+  if (s?.players?.length) score += 10;
+  const rounds = roundsMap?.[s?.season] || [];
+  if (rounds.length) score += rounds.length;
+  if (rounds.some(r => r?.clan?.members?.length || r?.defenderMap)) score += 50;
+  if (String(s?.season || '').length > 7) score += 3; // preferisci YYYY-MM-DD da API
+  return score;
+}
+
+/**
+ * Unisce 'YYYY-MM' (war-log) con 'YYYY-MM-DD' (API/DB) dello stesso mese.
+ * Se nello stesso mese ci sono due date API distinte (es. giugno doppia CWL), le tiene entrambe.
+ */
+function dedupeCwlSeasonEntries(merged, roundsMap) {
+  const byMonth = new Map();
+  for (const s of merged) {
+    const mk = seasonMonthKey(s.season);
+    if (!byMonth.has(mk)) byMonth.set(mk, []);
+    byMonth.get(mk).push(s);
+  }
+  const out = [];
+  for (const [, group] of byMonth) {
+    const fullDates = group.filter(s => String(s.season).length > 7);
+    if (fullDates.length >= 2) {
+      out.push(...fullDates);
+      continue;
+    }
+    const best = group.slice().sort(
+      (a, b) => _cwlSeasonRichness(b, roundsMap) - _cwlSeasonRichness(a, roundsMap)
+    )[0];
+    for (const o of group) {
+      if (o.season === best.season) continue;
+      if (best.position == null && o.position != null) best.position = o.position;
+      if (!best.league && o.league) best.league = o.league;
+      if (best.stars == null && o.stars != null) best.stars = o.stars;
+      if (best.destruction == null && o.destruction != null) best.destruction = o.destruction;
+      if (best.attacks == null && o.attacks != null) best.attacks = o.attacks;
+      if (best.wins == null && o.wins != null) best.wins = o.wins;
+      if (best.losses == null && o.losses != null) best.losses = o.losses;
+      if (!best.groupStandings && o.groupStandings) best.groupStandings = o.groupStandings;
+      if (!best.players && o.players) best.players = o.players;
+      const bestR = roundsMap[best.season];
+      const otherR = roundsMap[o.season];
+      const otherHasMembers = otherR?.some(r => r?.clan?.members?.length);
+      const bestHasMembers = bestR?.some(r => r?.clan?.members?.length);
+      if ((!bestR?.length && otherR?.length) || (otherHasMembers && !bestHasMembers)) {
+        roundsMap[best.season] = otherR;
+      }
+      best.hasRounds = !!(roundsMap[best.season]?.length);
+    }
+    out.push(best);
+  }
+  out.sort((a, b) => b.season.localeCompare(a.season));
+  return out;
 }
 
 // Aggiorna il messaggio di stato nella barra di caricamento CWL
@@ -7216,8 +7413,14 @@ async function loadCwlSeasons() {
       });
     });
     Object.entries(bySeason).forEach(([season, rounds]) => {
-      if (!warSeasonRoundsMap[season] || !warSeasonRoundsMap[season][0]?.clan?.members?.length) {
-        warSeasonRoundsMap[season] = rounds;
+      const prefer = !warSeasonRoundsMap[season] || !warSeasonRoundsMap[season][0]?.clan?.members?.length;
+      if (prefer) warSeasonRoundsMap[season] = rounds;
+      // Alias mese: i round war-log usano YYYY-MM, cwl_wars usa YYYY-MM-DD
+      const mk = seasonMonthKey(season);
+      if (mk && mk !== season) {
+        if (!warSeasonRoundsMap[mk] || !warSeasonRoundsMap[mk][0]?.clan?.members?.length) {
+          warSeasonRoundsMap[mk] = rounds;
+        }
       }
     });
   }
@@ -7247,7 +7450,7 @@ async function loadCwlSeasons() {
     if (cwlData.roundsData?.length) warSeasonRoundsMap[key] = cwlData.roundsData;
   }
 
-  // Salva globalmente per accesso dal modal dettaglio stagione
+  // Salva globalmente per accesso dal modal dettaglio stagione (poi aggiornato dopo dedup)
   window._cwlSeasonRoundsMap = warSeasonRoundsMap;
 
   // ── Merge: unifica DB + war-log ───────────────────────────────────────────
@@ -7256,6 +7459,9 @@ async function loadCwlSeasons() {
   allSeasons.forEach(s => {
     const d  = dbMap[s]       || {};
     const wl = warSeasonMap[s] || {};
+    // Round anche sotto chiave mese (war-log YYYY-MM ↔ DB YYYY-MM-DD)
+    const mk = seasonMonthKey(s);
+    const rounds = warSeasonRoundsMap[s] || warSeasonRoundsMap[mk] || [];
     merged.push({
       season:         s,
       league:         d.league      || null,
@@ -7268,13 +7474,15 @@ async function loadCwlSeasons() {
       isLive:         d.isLive      || false,
       groupStandings: d.groupStandings || d.group_standings || null,
       players:        d.players        || d.roster          || null,
-      hasRounds:      !!(warSeasonRoundsMap[s]?.length)
+      hasRounds:      !!rounds.length
     });
   });
   merged.sort((a, b) => b.season.localeCompare(a.season));
 
-  window._cwlMergedSeasons = merged;
-  renderCwlSeasons(merged, cwlSeasonsTableMissing);
+  const deduped = dedupeCwlSeasonEntries(merged, warSeasonRoundsMap);
+  window._cwlSeasonRoundsMap = warSeasonRoundsMap;
+  window._cwlMergedSeasons = deduped;
+  renderCwlSeasons(deduped, cwlSeasonsTableMissing);
 }
 
 // ── ANTEPRIMA CWL ─────────────────────────────────────────────────────────────
@@ -7418,7 +7626,11 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
 function openCwlSeasonDetail(season, modalExtra) {
   window._cwlOpenSeason = season;
   window._cwlModalAlienFocusTag = null;
-  const rounds = (window._cwlSeasonRoundsMap || {})[season] || [];
+  let rounds = (window._cwlSeasonRoundsMap || {})[season] || [];
+  if (!rounds.length) {
+    const mk = seasonMonthKey(season);
+    rounds = (window._cwlSeasonRoundsMap || {})[mk] || [];
+  }
   if (!rounds.length) return;
   let groupStandings = null;
   const allMerged = window._cwlMergedSeasons || [];
@@ -9271,6 +9483,7 @@ function _renderCercaMembersList(members, clanTag) {
 async function _loadCercaWarLog(clanTag, tabId = 'cc-tab-warlog') {
   const cont = document.getElementById(tabId);
   if (!cont) return;
+  window._cercaClanTag = normClanTag(clanTag);
   try {
     const r = await fetch(`/api/war-log?clanTag=${encodeURIComponent(clanTag)}`);
     const data = await r.json();
@@ -9290,6 +9503,9 @@ async function _loadCercaWarLog(clanTag, tabId = 'cc-tab-warlog') {
     if (!wars.length) { cont.innerHTML='<div class="profilo-empty"><p>Nessuna war classica nel log.</p></div>'; return; }
 
     window._cercaWarLogItems = wars;
+    window._cercaWarLogMap = {};
+    wars.forEach(w => { if (w.endTime) window._cercaWarLogMap[w.endTime] = w; });
+
     const rows = wars.map((w, widx)=>{
       const date = w.endTime ? new Date(
         w.endTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/,'$1-$2-$3T$4:$5:$6')
@@ -9310,8 +9526,7 @@ async function _loadCercaWarLog(clanTag, tabId = 'cc-tab-warlog') {
       const starsLoro= w.opponent?.stars??0;
       const destNoi  = (+(w.clan?.destructionPercentage??0)).toFixed(1);
       const destLoro = (+(w.opponent?.destructionPercentage??0)).toFixed(1);
-      const idx = widx;
-      return `<tr class="wl-row-clickable" onclick="openCercaWarDetail(${idx})">
+      return `<tr class="wl-row-clickable" onclick="openCercaWarDetail(${widx})">
         <td class="stat-cell">${date}</td>
         <td>${result}</td>
         <td>${clanCell}</td>
@@ -9319,16 +9534,17 @@ async function _loadCercaWarLog(clanTag, tabId = 'cc-tab-warlog') {
         <td>${oppCell}</td>
         <td class="stat-cell">${starsNoi}⭐ — ${starsLoro}⭐</td>
         <td class="stat-cell">${destNoi}% — ${destLoro}%</td>
+        <td class="stat-cell"><button class="btn-war-detail" type="button">Dettagli</button></td>
       </tr>`;
     }).join('');
 
-    cont.innerHTML = `<p style="font-size:0.78rem;color:var(--text-3);margin:0.5rem 0 0.25rem">Clicca su una riga per vedere i dettagli.</p>
+    cont.innerHTML = `<p style="font-size:0.78rem;color:var(--text-3);margin:0.5rem 0 0.25rem">Clicca su una riga per vedere i dettagli (roster e attacchi se salvati).</p>
     <div class="table-wrap" style="margin-top:0.25rem">
       <table>
         <thead><tr>
           <th>Data</th><th>Risultato</th><th>Clan</th>
           <th style="text-align:center">—</th><th>Avversario</th>
-          <th>⭐ Noi — Loro</th><th>💥 Noi — Loro</th>
+          <th>⭐ Noi — Loro</th><th>💥 Noi — Loro</th><th></th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -9338,85 +9554,85 @@ async function _loadCercaWarLog(clanTag, tabId = 'cc-tab-warlog') {
   }
 }
 
-function openCercaWarDetail(idx) {
+async function openCercaWarDetail(idx) {
   const w = (window._cercaWarLogItems || [])[idx];
   if (!w) return;
-  document.getElementById('cerca-war-detail-modal')?.remove();
-
-  const fmtDate = w.endTime ? new Date(
-    w.endTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/, '$1-$2-$3T$4:$5:$6')
-  ).toLocaleDateString('it-IT', {day:'2-digit',month:'long',year:'numeric'}) : '—';
-
-  const resLabel = w.result==='win' ? '🏆 VITTORIA' : w.result==='lose' ? '❌ SCONFITTA' : '🤝 PAREGGIO';
-  const resColor = w.result==='win' ? 'var(--green)' : w.result==='lose' ? 'var(--red)' : 'var(--text-3)';
-
-  const clanBadge  = w.clan?.badgeUrls?.small  ? `<img src="${w.clan.badgeUrls.small}" class="cdm-war-badge" alt="">` : '🛡️';
-  const oppBadge   = w.opponent?.badgeUrls?.small ? `<img src="${w.opponent.badgeUrls.small}" class="cdm-war-badge" alt="">` : '🛡️';
-  const size = w.teamSize ?? '?';
-
-  const modal = document.createElement('div');
-  modal.id = 'cerca-war-detail-modal';
-  modal.className = 'modal-overlay';
-  modal.style.cssText = 'display:flex;z-index:1000';
-  modal.innerHTML = `
-    <div class="modal-box" style="max-width:480px;width:100%">
-      <div class="modal-header">
-        <h2 style="font-size:1rem">Dettaglio War — ${fmtDate}</h2>
-        <button class="modal-close" onclick="document.getElementById('cerca-war-detail-modal').remove()">✕</button>
-      </div>
-      <div style="padding:1rem">
-        <div style="text-align:center;font-size:1.2rem;font-weight:700;color:${resColor};margin-bottom:1rem">${resLabel}</div>
-        <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:0.75rem;align-items:center;text-align:center">
-          <div>
-            ${clanBadge}
-            <div style="font-weight:600;font-size:0.9rem;margin-top:0.3rem">${w.clan?.name||'Noi'}</div>
-            <div style="font-size:2rem;font-weight:700;color:var(--gold)">${w.clan?.stars??0}⭐</div>
-            <div style="font-size:0.85rem;color:var(--text-2)">${(+(w.clan?.destructionPercentage??0)).toFixed(1)}% 💥</div>
-          </div>
-          <div style="font-size:0.8rem;color:var(--text-3)">
-            <div style="font-size:1.1rem;font-weight:700">VS</div>
-            <div style="margin-top:0.3rem">${size}v${size}</div>
-          </div>
-          <div>
-            ${oppBadge}
-            <div style="font-weight:600;font-size:0.9rem;margin-top:0.3rem">${w.opponent?.name||'Avversario'}</div>
-            <div style="font-size:2rem;font-weight:700;color:var(--text-2)">${w.opponent?.stars??0}⭐</div>
-            <div style="font-size:0.85rem;color:var(--text-2)">${(+(w.opponent?.destructionPercentage??0)).toFixed(1)}% 💥</div>
-          </div>
-        </div>
-      </div>
-    </div>`;
-  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-  document.body.appendChild(modal);
+  if (!window._cercaWarLogMap) window._cercaWarLogMap = {};
+  const key = w.endTime || String(idx);
+  window._cercaWarLogMap[key] = w;
+  await openClassicWarDetail(key, {
+    clanTag: window._cercaClanTag || w.clan?.tag,
+    warMap: window._cercaWarLogMap,
+  });
 }
 
 async function _loadCercaCwlHistory(clanTag) {
   const cont = document.getElementById('cc-tab-cwl');
   if (!cont) return;
+  const tag = normClanTag(clanTag);
   try {
-    const {data,error} = await db.from('cwl_seasons')
-      .select('*').eq('clan_tag', clanTag)
-      .order('season',{ascending:false}).limit(20);
-    if (error) throw new Error(error.message);
-    if (!data||!data.length) {
-      // Fallback: prova a caricare CWL attuale dall'API
+    const [seasonsRes, warsRes] = await Promise.all([
+      db.from('cwl_seasons').select('*').eq('clan_tag', tag).order('season', { ascending: false }).limit(20),
+      db.from('cwl_wars').select('*').eq('clan_tag', tag).order('season', { ascending: false }).order('round', { ascending: true }),
+    ]);
+    if (seasonsRes.error) throw new Error(seasonsRes.error.message);
+    const data = seasonsRes.data || [];
+    if (!data.length) {
       cont.innerHTML=`<div class="profilo-empty">
         <p style="font-size:0.85rem;color:var(--text-3);margin-bottom:0.75rem">Nessuna cronologia salvata per questo clan.</p>
-        <button class="btn-secondary btn-sm" onclick="_loadCercaCwlLive('${clanTag.replace(/'/g,"\\'")}',this)">
+        <button class="btn-secondary btn-sm" onclick="_loadCercaCwlLive('${tag.replace(/'/g,"\\'")}',this)">
           🔄 Carica CWL attuale dall'API
         </button>
         <div id="cc-cwl-live-result" style="margin-top:0.75rem"></div>
       </div>`;
       return;
     }
+
+    // Prepara round map come in loadCwlSeasons (per aprire lo stesso modal dettaglio)
+    const roundsMap = {};
+    (warsRes.data || []).forEach(w => {
+      if (!roundsMap[w.season]) roundsMap[w.season] = [];
+      roundsMap[w.season].push({
+        roundNumber: w.round,
+        state: w.state || 'warEnded',
+        startTime: w.start_time || null,
+        endTime: w.end_time || null,
+        teamSize: w.team_size || 15,
+        attacksPerMember: 1,
+        result: w.result || 'draw',
+        clan: {
+          tag: w.our_tag, name: w.our_name, badgeUrls: w.our_badge ? { small: w.our_badge } : null,
+          stars: w.our_stars || 0, destruction: +(w.our_destr || 0),
+          attacksUsed: (_parseWarMembersJson(w.our_members) || []).reduce((s, m) => s + (m.attacks?.length || 0), 0),
+          members: _parseWarMembersJson(w.our_members) || []
+        },
+        opponent: {
+          tag: w.opp_tag, name: w.opp_name || 'Sconosciuto',
+          badgeUrls: w.opp_badge ? { small: w.opp_badge } : null,
+          stars: w.opp_stars || 0, destruction: +(w.opp_destr || 0),
+          attacksUsed: (_parseWarMembersJson(w.opp_members) || []).reduce((s, m) => s + (m.attacks?.length || 0), 0),
+          members: _parseWarMembersJson(w.opp_members) || []
+        },
+        defenderMap: w.defender_map || {}
+      });
+    });
+    Object.keys(roundsMap).forEach(s => {
+      const mk = seasonMonthKey(s);
+      if (mk !== s && !roundsMap[mk]) roundsMap[mk] = roundsMap[s];
+    });
+    window._cercaCwlRoundsMap = roundsMap;
+    window._cercaCwlSeasons = data;
+    window._cercaCwlClanTag = tag;
+
     cont.innerHTML = data.map(s=>{
       const leagueIt=LEAGUE_EN_TO_IT[s.league]||s.league||'—';
       const lb=LEAGUE_BADGE[leagueIt];
       const pos=s.position||0;
-      const dt=new Date(s.season+'-01').toLocaleDateString('it',{year:'numeric',month:'long'});
-      return `<div class="cwl-season-card">
+      const hasRounds = !!(roundsMap[s.season]?.length || roundsMap[seasonMonthKey(s.season)]?.length);
+      const seasonEsc = String(s.season).replace(/'/g, "\\'");
+      return `<div class="cwl-season-card${hasRounds ? ' cwl-season-card--clickable' : ''}"${hasRounds ? ` onclick="openCercaCwlSeasonDetail('${seasonEsc}')" title="Clicca per vedere i turni"` : ''}>
         <div class="cwl-card-left">
-          <div class="cwl-card-month">${dt}</div>
+          <div class="cwl-card-month">${seasonLabel(s.season)}</div>
           <div class="cwl-card-league">
             ${lb?`<img src="${lb}" class="cwl-league-img" alt="">`:''}<span class="cwl-league-name">${leagueIt}</span>
           </div>
@@ -9434,6 +9650,22 @@ async function _loadCercaCwlHistory(clanTag) {
   } catch(e) {
     cont.innerHTML=`<div class="cerca-error">Errore: ${e.message}</div>`;
   }
+}
+
+function openCercaCwlSeasonDetail(season) {
+  const roundsMap = window._cercaCwlRoundsMap || {};
+  let rounds = roundsMap[season] || roundsMap[seasonMonthKey(season)] || [];
+  if (!rounds.length) return;
+  const seasonObj = (window._cercaCwlSeasons || []).find(s => s.season === season) || { season };
+  const focusTag = window._cercaCwlClanTag || seasonObj.clan_tag;
+  const focusName = seasonObj.our_name || rounds[0]?.clan?.name || 'Clan';
+  _renderCwlDetailModal(season, rounds, seasonObj.group_standings || null, {
+    season,
+    league: LEAGUE_EN_TO_IT[seasonObj.league] || seasonObj.league,
+    position: seasonObj.position,
+    groupStandings: seasonObj.group_standings || null,
+    players: seasonObj.roster || null,
+  }, { focusClanTag: focusTag, focusClanName: focusName });
 }
 
 async function _loadCercaCwlLive(clanTag, btn) {
@@ -9899,8 +10131,8 @@ function _renderRankPlayers(el, items) {
 }
 
 /**
- * Fallback anti-anomalia: i ranking possono arrivare con lo stesso badge per clan diversi (bug/limitazione API).
- * Se almeno 2 clan distinti ma al massimo 1 URL badge, carichiamo gli stemmi da /api/clan-info (un fetch per tag).
+ * Fallback anti-anomalia: i ranking possono arrivare con stemmi riciclati (bug/limitazione API).
+ * Se gli URL badge unici sono meno dei clan distinti, carichiamo gli stemmi da /api/clan-info.
  */
 async function _repairRankingClanBadges(container, items) {
   try {
@@ -9911,11 +10143,10 @@ async function _repairRankingClanBadges(container, items) {
     const badgeSet = new Set(
       withClan.map(p => cocBadgeUrl(p?.clan?.badgeUrls)).filter(Boolean)
     );
-    const suspicious = clanTags.size >= 2 && badgeSet.size <= 1;
-    if (!suspicious) return;
+    if (clanTags.size < 2 || badgeSet.size >= clanTags.size) return;
 
     const tagToBadge = {};
-    const uniqueTags = [...clanTags].slice(0, 40);
+    const uniqueTags = [...clanTags].slice(0, 50);
     await Promise.all(
       uniqueTags.map(async (ct) => {
         try {

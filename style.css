@@ -1597,6 +1597,21 @@ tbody tr:last-child td { border-bottom: none; }
   padding: 0.8rem 0.9rem;
 }
 
+.raid-card--clickable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.raid-card--clickable:hover {
+  border-color: var(--gold-dim, #c9a227);
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+}
+.raid-card-hint {
+  margin-top: 0.45rem;
+  font-size: 0.72rem;
+  color: var(--text-3);
+  text-align: right;
+}
+
 .raid-card-top {
   display: flex;
   justify-content: space-between;
