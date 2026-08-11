@@ -279,88 +279,138 @@ function telegramBotUrl() {
 }
 
 function brandLogoUrl() {
+  return `${siteHomeUrl()}/assets/cocboardbot-no-bg.png`;
+}
+
+/** Colori e font allineati a style.css (:root CoC Dark Theme). */
+function siteTheme() {
   const home = siteHomeUrl();
-  return `${home}/assets/cocboardbot-no-bg.png`;
+  return {
+    fontUi: "'Supercell Magic', system-ui, -apple-system, 'Segoe UI', sans-serif",
+    fontMono: "'IBM Plex Mono', ui-monospace, monospace",
+    fontForm: "system-ui, -apple-system, 'Segoe UI', sans-serif",
+    fontFaceUrl: `${home}/fonts/SupercellMagic-Regular.ttf`,
+    bg: '#0D0B08',
+    bg1: '#110E09',
+    bg2: '#1A150E',
+    bg3: '#221A0F',
+    border: '#2A2010',
+    border2: '#3A3020',
+    gold: '#C9A962',
+    goldDim: 'rgba(201,169,98,0.12)',
+    text: '#EEEAE0',
+    text2: '#C8BCA8',
+    text3: '#7A6A50',
+    blue: '#2980B9',
+    radius: '3px',
+    radiusSm: '2px',
+  };
 }
 
 function welcomeEmailHtml({ username, playerTag, role }) {
   const home = siteHomeUrl();
   const botUrl = telegramBotUrl();
   const logo = brandLogoUrl();
+  const t = siteTheme();
   const u = escapeHtml(username);
   const tag = escapeHtml(playerTag);
   const roleSafe = escapeHtml(role || 'utente');
   const homeSafe = escapeHtml(home);
   const botSafe = escapeHtml(botUrl);
+  const botUser = escapeHtml((process.env.TELEGRAM_BOT_USERNAME || 'cocboardbot').replace(/^@/, '') || 'cocboardbot');
   return `
 <!DOCTYPE html>
 <html lang="it">
-<body style="margin:0;padding:0;background:#0f1419;">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0f1419;padding:28px 12px;">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <style type="text/css">
+    @font-face {
+      font-family: 'Supercell Magic';
+      src: url('${escapeHtml(t.fontFaceUrl)}') format('truetype');
+      font-weight: 400;
+      font-style: normal;
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:${t.bg};">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${t.bg};padding:28px 12px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#1a222c;border:1px solid #2a3542;border-radius:14px;overflow:hidden;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:420px;background:${t.bg1};border:1px solid ${t.border};border-radius:${t.radius};overflow:hidden;box-shadow:0 0 40px rgba(0,0,0,0.7),0 0 28px rgba(201,169,98,0.04);">
           <tr>
-            <td align="center" style="padding:28px 24px 12px;background:linear-gradient(180deg,#243040 0%,#1a222c 100%);">
-              <img src="${escapeHtml(logo)}" alt="CoCBoard" width="96" height="96" style="display:block;width:96px;height:96px;border:0;outline:none;">
-              <div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:22px;font-weight:700;color:#f0c75e;letter-spacing:0.02em;margin-top:12px;">CoCBoard</div>
-              <div style="font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:13px;color:#9aa7b5;margin-top:4px;">Gestione clan, CWL e giocatori</div>
+            <td align="center" style="padding:32px 28px 16px;background:radial-gradient(ellipse 70% 50% at 50% 0%, rgba(201,169,98,0.08) 0%, transparent 70%), ${t.bg1};">
+              <img src="${escapeHtml(logo)}" alt="CoCBoard" width="88" height="88" style="display:block;width:88px;height:88px;border:0;outline:none;">
+              <div style="font-family:${t.fontUi};font-size:28px;font-weight:400;color:${t.gold};letter-spacing:1.5px;margin-top:14px;line-height:1.2;">CoCBoard</div>
+              <div style="font-family:${t.fontMono};font-size:11px;color:${t.text3};letter-spacing:2px;text-transform:uppercase;margin-top:6px;">Gestione clan, CWL e giocatori</div>
             </td>
           </tr>
           <tr>
-            <td style="padding:8px 28px 4px;font-family:Segoe UI,Helvetica,Arial,sans-serif;color:#e8eef4;">
-              <h1 style="margin:16px 0 10px;font-size:20px;font-weight:700;color:#ffffff;line-height:1.3;">Ciao ${u}, benvenuto!</h1>
-              <p style="margin:0 0 16px;font-size:15px;line-height:1.55;color:#c5d0db;">Il tuo account è collegato al villaggio Clash of Clans. Ecco i tuoi dati di accesso:</p>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#121820;border:1px solid #2a3542;border-radius:10px;margin:0 0 20px;">
-                <tr>
-                  <td style="padding:14px 16px;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;color:#c5d0db;border-bottom:1px solid #2a3542;">
-                    <span style="color:#9aa7b5;">Username di accesso</span><br>
-                    <strong style="color:#ffffff;font-size:15px;">${u}</strong>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:14px 16px;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;color:#c5d0db;border-bottom:1px solid #2a3542;">
-                    <span style="color:#9aa7b5;">Tag</span><br>
-                    <strong style="color:#ffffff;font-size:15px;">${tag}</strong>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:14px 16px;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;color:#c5d0db;">
-                    <span style="color:#9aa7b5;">Ruolo</span><br>
-                    <strong style="color:#ffffff;font-size:15px;">${roleSafe}</strong>
-                  </td>
-                </tr>
-              </table>
-              <table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 12px;">
-                <tr>
-                  <td style="border-radius:8px;background:#f0c75e;">
-                    <a href="${homeSafe}" style="display:inline-block;padding:12px 22px;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;color:#1a1508;text-decoration:none;">Apri la dashboard</a>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:0 0 18px;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#9aa7b5;">
-                Oppure vai su <a href="${homeSafe}" style="color:#f0c75e;">${homeSafe}</a>
+            <td style="padding:8px 28px 4px;">
+              <h1 style="margin:12px 0 10px;font-family:${t.fontUi};font-size:18px;font-weight:400;color:${t.text};line-height:1.35;letter-spacing:0.02em;">Ciao ${u}, benvenuto!</h1>
+              <p style="margin:0 0 16px;font-family:${t.fontForm};font-size:14px;line-height:1.6;color:${t.text2};">
+                Il tuo account è collegato al villaggio Clash of Clans. Ecco i tuoi dati di accesso:
               </p>
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#15202b;border:1px solid #2f6fed55;border-radius:10px;margin:0 0 18px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${t.bg2};border:1px solid ${t.border2};border-radius:${t.radius};margin:0 0 18px;">
                 <tr>
-                  <td style="padding:14px 16px;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:14px;color:#c5d0db;line-height:1.55;">
-                    <strong style="color:#ffffff;">Usa CoCBoard anche su Telegram</strong><br>
-                    Stesso account: clan, profilo, cerca, classifica e altro dal bot.
-                    <div style="margin-top:10px;">
-                      <a href="${botSafe}" style="display:inline-block;padding:10px 16px;border-radius:8px;background:#2f6fed;color:#ffffff;font-weight:700;text-decoration:none;font-size:13px;">Apri @cocboardbot</a>
-                    </div>
+                  <td style="padding:12px 14px;border-bottom:1px solid ${t.border};">
+                    <div style="font-family:${t.fontMono};font-size:10px;color:${t.text3};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;">Username di accesso</div>
+                    <div style="font-family:${t.fontUi};font-size:15px;color:${t.text};letter-spacing:0.02em;">${u}</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 14px;border-bottom:1px solid ${t.border};">
+                    <div style="font-family:${t.fontMono};font-size:10px;color:${t.text3};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;">Tag</div>
+                    <div style="font-family:${t.fontMono};font-size:14px;color:${t.gold};letter-spacing:0;">${tag}</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 14px;">
+                    <div style="font-family:${t.fontMono};font-size:10px;color:${t.text3};letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;">Ruolo</div>
+                    <div style="font-family:${t.fontUi};font-size:15px;color:${t.text};letter-spacing:0.02em;">${roleSafe}</div>
                   </td>
                 </tr>
               </table>
-              <p style="margin:0 0 8px;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;color:#9aa7b5;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 10px;">
+                <tr>
+                  <td align="center" style="border-radius:${t.radiusSm};background:${t.gold};">
+                    <a href="${homeSafe}" style="display:block;padding:12px 18px;font-family:${t.fontUi};font-size:14px;font-weight:400;color:${t.bg};text-decoration:none;letter-spacing:0.03em;">Apri la dashboard</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 18px;font-family:${t.fontForm};font-size:12px;line-height:1.5;color:${t.text3};text-align:center;">
+                Oppure vai su <a href="${homeSafe}" style="color:${t.gold};text-decoration:none;">${homeSafe}</a>
+              </p>
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:${t.goldDim};border:1px solid ${t.border2};border-radius:${t.radius};margin:0 0 16px;">
+                <tr>
+                  <td style="padding:14px;">
+                    <div style="font-family:${t.fontUi};font-size:14px;color:${t.gold};margin-bottom:6px;letter-spacing:0.02em;">Usa CoCBoard anche su Telegram</div>
+                    <p style="margin:0 0 12px;font-family:${t.fontForm};font-size:13px;line-height:1.55;color:${t.text2};">
+                      Stesso account: clan, profilo, cerca, classifica e altro dal bot.
+                    </p>
+                    <table role="presentation" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td style="border-radius:${t.radiusSm};background:${t.bg3};border:1px solid ${t.border2};">
+                          <a href="${botSafe}" style="display:inline-block;padding:10px 14px;font-family:${t.fontUi};font-size:13px;color:${t.text2};text-decoration:none;letter-spacing:0.02em;">Apri @${botUser}</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 8px;font-family:${t.fontForm};font-size:12px;line-height:1.55;color:${t.text3};">
                 Se hai indicato un’email di recupero, potrai usarla per reimpostare la password in autonomia.
               </p>
             </td>
           </tr>
           <tr>
-            <td style="padding:16px 28px 24px;border-top:1px solid #2a3542;font-family:Segoe UI,Helvetica,Arial,sans-serif;font-size:12px;line-height:1.5;color:#7a8794;">
-              <strong style="color:#c5d0db;">Non rispondere a questa email.</strong>
-              I messaggi inviati a questo indirizzo non vengono letti. Per assistenza usa il bot Telegram CoCBoard.
+            <td style="padding:14px 28px 22px;border-top:1px solid ${t.border};">
+              <p style="margin:0;font-family:${t.fontForm};font-size:11px;line-height:1.55;color:${t.text3};">
+                <strong style="color:${t.text2};font-family:${t.fontUi};font-weight:400;">Non rispondere a questa email.</strong>
+                I messaggi inviati a questo indirizzo non vengono letti. Per assistenza usa il bot Telegram CoCBoard.
+              </p>
             </td>
           </tr>
         </table>
