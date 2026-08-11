@@ -6,6 +6,26 @@
     <title>CoCBoard – Fear United IT</title>
     <meta name="description" content="CoCBoard – Gestione CWL e guerra del clan Fear United IT">
     <meta name="theme-color" content="#0D0B08">
+    <!-- Mai lasciare credenziali nella barra indirizzi (form GET / password manager). -->
+    <script>
+    (function () {
+      try {
+        var u = new URL(window.location.href);
+        var scrub = ['username', 'password', 'email', 'pwd', 'pass', 'passwd', 'user', 'login'];
+        var dirty = false;
+        for (var i = 0; i < scrub.length; i++) {
+          if (u.searchParams.has(scrub[i])) {
+            u.searchParams.delete(scrub[i]);
+            dirty = true;
+          }
+        }
+        if (dirty) {
+          var qs = u.searchParams.toString();
+          history.replaceState({}, '', u.pathname + (qs ? '?' + qs : '') + u.hash);
+        }
+      } catch (e) {}
+    })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet">
@@ -24,7 +44,7 @@
         <div id="login-error" style="display:none"></div>
 
         <!-- ── ACCEDI ── -->
-        <form id="login-form" autocomplete="on">
+        <form id="login-form" method="post" action="/" autocomplete="on">
             <div class="input-wrap">
                 <span class="input-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></span>
                 <input type="text" id="email" name="username" placeholder="Nome utente o tag (#)" required autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text">
@@ -48,7 +68,7 @@
                 <span class="coc-hint-icon">💡</span>
                 <span>Nel gioco: <strong>Impostazioni → Altre impostazioni → Chiave API → Mostra</strong></span>
             </div>
-            <form id="signup-coc-form">
+            <form id="signup-coc-form" method="post" action="/">
                 <div class="input-wrap">
                     <span class="input-icon">🎮</span>
                     <input type="text" id="coc-reg-tag" placeholder="Tag giocatore (es. #2J2ABC)" autocomplete="off" spellcheck="false">
@@ -110,7 +130,7 @@
         <div class="no-clan-icon">🔑</div>
         <h2>Imposta una nuova password</h2>
         <p>Un amministratore ha reimpostato la tua password. Per motivi di sicurezza, scegline una nuova prima di continuare.</p>
-        <form id="force-password-form" style="margin-top:1.2rem;display:flex;flex-direction:column;gap:0.7rem;text-align:left">
+        <form id="force-password-form" method="post" action="/" style="margin-top:1.2rem;display:flex;flex-direction:column;gap:0.7rem;text-align:left">
             <div class="input-wrap">
                 <span class="input-icon">🔒</span>
                 <input type="password" id="force-password-new" placeholder="Nuova password (min 6 caratteri)" autocomplete="new-password" required minlength="6">

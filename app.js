@@ -428,6 +428,17 @@ function _prefillLoginSaved() {
 
 document.getElementById("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  // Evita che credenziali restino nella barra indirizzi (bookmark / GET accidentale)
+  try {
+    const u = new URL(window.location.href);
+    ['username', 'password', 'email', 'pwd', 'pass', 'passwd', 'user', 'login'].forEach((k) => u.searchParams.delete(k));
+    const qs = u.searchParams.toString();
+    if (window.location.search && (window.location.search.includes('password') || window.location.search.includes('username'))) {
+      history.replaceState({}, '', u.pathname + (qs ? '?' + qs : '') + u.hash);
+    } else if (!u.search && window.location.search) {
+      history.replaceState({}, '', u.pathname + u.hash);
+    }
+  } catch (_) {}
   const submitBtn = e.target.querySelector('button[type="submit"]');
   submitBtn.disabled = true;
   submitBtn.textContent = "Caricamento…";
