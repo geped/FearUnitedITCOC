@@ -126,24 +126,15 @@
     </div>
 </div>
 
-<!-- ─── NO CLAN SCREEN ────────────────────────────────────────────────────── -->
+<!-- ─── NO CLAN SCREEN (legacy; non più usato come blocco) ───────────────── -->
 <div id="no-clan-screen" style="display:none">
     <div class="no-clan-box">
         <div class="no-clan-icon">⚔️</div>
-        <h2>Nessun clan trovato<span id="no-clan-username"></span></h2>
-        <p>Il tuo account non è associato a nessun clan in Clash of Clans.</p>
-        <p>Per usare CoCBoard devi essere membro di un clan.</p>
-        <div class="no-clan-steps">
-            <div class="no-clan-step">
-                <span class="no-clan-num">1</span>
-                <span>Apri Clash of Clans e unisciti a un clan esistente, oppure creane uno nuovo.</span>
-            </div>
-            <div class="no-clan-step">
-                <span class="no-clan-num">2</span>
-                <span>Torna su CoCBoard e registrati di nuovo con la tua Chiave API.</span>
-            </div>
-        </div>
-        <button onclick="window.sb.auth.signOut()" class="btn-primary" style="margin-top:1.5rem">Esci</button>
+        <h2>Nessun clan associato<span id="no-clan-username"></span></h2>
+        <p>Puoi comunque usare Profilo, Cerca, Classifica e Carte.</p>
+        <p>Quando entri in un clan in Clash of Clans, al prossimo accesso si sbloccano Clan, Registri e Bonus.</p>
+        <button type="button" class="btn-primary" style="margin-top:1.5rem" onclick="continueWithoutClan()">Continua</button>
+        <button type="button" class="btn-secondary" style="margin-top:0.75rem" onclick="window.sb.auth.signOut()">Esci</button>
     </div>
 </div>
 
@@ -247,6 +238,9 @@
                     <span class="topbar-email" id="topbar-email"></span>
                 </div>
             </div>
+        </div>
+        <div id="no-clan-banner" class="no-clan-banner" style="display:none" role="status">
+            Non sei in un clan: puoi usare Profilo, Cerca, Classifica e Carte. Unisciti a un clan in Clash of Clans e rientra (o aggiorna il profilo) per sbloccare Clan, Registri e Bonus.
         </div>
 
         <!-- MAIN -->

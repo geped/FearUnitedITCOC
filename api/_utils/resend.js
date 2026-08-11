@@ -1,65 +1,230 @@
 'use strict';
 
 /**
- * Client Resend condiviso (benvenuto, reset password, avvisi).
- * Env: RESEND_API_KEY (obbligatoria per inviare), RESEND_FROM (mittente verificato),
- *      RESEND_REPLY_TO (opzionale).
+ * Invio email transazionali (benvenuto, reset password, avvisi).
+ *
+ * Provider (priorità):
+ * 1) Brevo — BREVO_API_KEY (+ BREVO_FROM o RESEND_FROM = Gmail verificato come Single Sender)
+ *    Gratis ~300 mail/giorno, SENZA dominio proprio.
+ * 2) Resend — RESEND_API_KEY (+ RESEND_FROM). Senza dominio: solo verso l'email account Resend.
+ *
+ * Opzionale: RESEND_REPLY_TO / BREVO_REPLY_TO
  */
 
-function resendConfigured() {
+function brevoConfigured() {
+  return Boolean(process.env.BREVO_API_KEY && String(process.env.BREVO_API_KEY).trim());
+}
+
+function resendKeyConfigured() {
   return Boolean(process.env.RESEND_API_KEY && String(process.env.RESEND_API_KEY).trim());
 }
 
+/** True se almeno un provider può inviare. */
+function resendConfigured() {
+  return brevoConfigured() || resendKeyConfigured();
+}
+
+function activeProvider() {
+  if (brevoConfigured()) return 'brevo';
+  if (resendKeyConfigured()) return 'resend';
+  return null;
+}
+
+/** Accetta `CoCBoard <a@b.it>` oppure solo `a@b.it`. */
+function normalizeFromAddress(raw, displayName = 'CoCBoard') {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  if (s.includes('<') && s.includes('>')) return s;
+  if (s.includes('@')) return `${displayName} <${s}>`;
+  return s;
+}
+
+function parseFromAddress(raw, fallbackName = 'CoCBoard') {
+  const normalized = normalizeFromAddress(raw, fallbackName);
+  const m = normalized.match(/^(.*?)\s*<([^>]+)>$/);
+  if (m) {
+    return {
+      name: (m[1] || fallbackName).trim() || fallbackName,
+      email: m[2].trim().toLowerCase(),
+    };
+  }
+  if (normalized.includes('@')) {
+    return { name: fallbackName, email: normalized.toLowerCase() };
+  }
+  return null;
+}
+
+function configuredFromRaw() {
+  return (
+    (process.env.BREVO_FROM || '').trim() ||
+    (process.env.RESEND_FROM || '').trim() ||
+    ''
+  );
+}
+
 function resendFrom() {
-  const from = (process.env.RESEND_FROM || '').trim();
+  const from = normalizeFromAddress(configuredFromRaw(), 'CoCBoard');
   if (from) return from;
-  // Fallback sandbox Resend (funziona solo verso l'email del tuo account Resend)
+  if (activeProvider() === 'brevo') {
+    // Brevo richiede un Single Sender verificato (es. Gmail): non c'è sandbox utile
+    return '';
+  }
   return 'CoCBoard <onboarding@resend.dev>';
+}
+
+function resendReplyTo() {
+  const raw = (
+    (process.env.BREVO_REPLY_TO || '').trim() ||
+    (process.env.RESEND_REPLY_TO || '').trim()
+  );
+  if (!raw) return '';
+  const m = raw.match(/<([^>]+)>/);
+  return (m ? m[1] : raw).trim();
+}
+
+function friendlyEmailError(err, provider) {
+  const e = String(err || '').toLowerCase();
+  if (provider === 'brevo') {
+    if (e.includes('sender') || e.includes('unrecognised') || e.includes('unrecognized') || e.includes('not verified')) {
+      return 'Mittente Brevo non verificato. In Brevo → Senders: verifica la tua Gmail e imposta BREVO_FROM=quella@gmail.com su Vercel.';
+    }
+    if (e.includes('api') && (e.includes('key') || e.includes('unauthorized') || e.includes('401'))) {
+      return 'BREVO_API_KEY non valida su Vercel (Production). Controlla la chiave e rifai il redeploy.';
+    }
+    return 'Invio email non riuscito (Brevo). Controlla BREVO_API_KEY e mittente verificato, poi riprova.';
+  }
+  if (e.includes('domain') || e.includes('not verified') || e.includes('unverified')) {
+    return 'Dominio mittente non verificato su Resend. Senza dominio usa Brevo (gratis) oppure RESEND_FROM=CoCBoard <onboarding@resend.dev> (solo verso la tua email Resend).';
+  }
+  if (e.includes('api key') || e.includes('unauthorized') || e.includes('invalid api')) {
+    return 'RESEND_API_KEY non valida su Vercel (Production). Controlla la chiave e rifai il redeploy.';
+  }
+  if (e.includes('from') || e.includes('sender')) {
+    return 'Mittente non valido. Con Brevo usa la Gmail verificata; con Resend serve dominio o onboarding@resend.dev.';
+  }
+  if (e.includes('only send testing') || e.includes('testing emails')) {
+    return 'Resend in modalità test: senza dominio puoi inviare solo all’email del tuo account Resend. Usa Brevo per inviare a tutti gratis.';
+  }
+  return 'Invio email non riuscito. Controlla il provider email su Vercel, poi riprova.';
+}
+
+async function sendViaBrevo({ recipients, subject, html, text, fromParsed, replyTo }) {
+  const apiKey = (process.env.BREVO_API_KEY || '').trim();
+  if (!fromParsed?.email) {
+    return {
+      ok: false,
+      error:
+        'BREVO_FROM mancante. Imposta su Vercel la tua Gmail verificata come Single Sender (es. BREVO_FROM=tua@gmail.com).',
+    };
+  }
+  const payload = {
+    sender: { name: fromParsed.name || 'CoCBoard', email: fromParsed.email },
+    to: recipients.map((email) => ({ email })),
+    subject: String(subject),
+    htmlContent: String(html),
+  };
+  if (text) payload.textContent = String(text);
+  if (replyTo) payload.replyTo = { email: replyTo };
+
+  const r = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+      'api-key': apiKey,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const msg =
+      data?.message ||
+      (Array.isArray(data?.message) ? data.message.join(', ') : null) ||
+      data?.error ||
+      `Brevo HTTP ${r.status}`;
+    console.error('[brevo]', msg, { from: fromParsed, to: recipients, data });
+    return { ok: false, error: friendlyEmailError(msg, 'brevo'), detail: String(msg) };
+  }
+  return { ok: true, id: data?.messageId || data?.messageIds?.[0] };
+}
+
+async function sendViaResend({ recipients, subject, html, text, from, replyTo }) {
+  const apiKey = (process.env.RESEND_API_KEY || '').trim();
+  const body = {
+    from,
+    to: recipients,
+    subject: String(subject),
+    html: String(html),
+  };
+  if (text) body.text = String(text);
+  if (replyTo) body.reply_to = replyTo;
+
+  const r = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const msg = data?.message || data?.error || `Resend HTTP ${r.status}`;
+    console.error('[resend]', msg, { from: body.from, to: body.to, data });
+    return { ok: false, error: friendlyEmailError(msg, 'resend'), detail: String(msg) };
+  }
+  return { ok: true, id: data?.id };
 }
 
 /**
  * @param {{ to: string|string[], subject: string, html: string, text?: string }} opts
- * @returns {Promise<{ ok: true, id?: string } | { ok: false, skipped?: boolean, error: string }>}
+ * @returns {Promise<{ ok: true, id?: string } | { ok: false, skipped?: boolean, error: string, detail?: string }>}
  */
 async function sendEmail(opts) {
-  const apiKey = (process.env.RESEND_API_KEY || '').trim();
-  if (!apiKey) {
-    return { ok: false, skipped: true, error: 'RESEND_API_KEY non configurata.' };
+  const provider = activeProvider();
+  if (!provider) {
+    return {
+      ok: false,
+      skipped: true,
+      error: 'Nessun provider email configurato (BREVO_API_KEY o RESEND_API_KEY).',
+    };
   }
+
   const to = Array.isArray(opts.to) ? opts.to : [opts.to];
   const recipients = to.map((t) => String(t || '').trim().toLowerCase()).filter(Boolean);
   if (!recipients.length) return { ok: false, error: 'Destinatario mancante.' };
   if (!opts.subject || !opts.html) return { ok: false, error: 'subject/html obbligatori.' };
 
-  const body = {
-    from: resendFrom(),
-    to: recipients,
-    subject: String(opts.subject),
-    html: String(opts.html),
-  };
-  if (opts.text) body.text = String(opts.text);
-  const replyTo = (process.env.RESEND_REPLY_TO || '').trim();
-  if (replyTo) body.reply_to = replyTo;
+  const replyTo = resendReplyTo();
+  const fromParsed = parseFromAddress(configuredFromRaw(), 'CoCBoard');
 
   try {
-    const r = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-    const data = await r.json().catch(() => ({}));
-    if (!r.ok) {
-      const msg = data?.message || data?.error || `Resend HTTP ${r.status}`;
-      console.error('[resend]', msg, data);
-      return { ok: false, error: String(msg) };
+    if (provider === 'brevo') {
+      return await sendViaBrevo({
+        recipients,
+        subject: opts.subject,
+        html: opts.html,
+        text: opts.text,
+        fromParsed,
+        replyTo,
+      });
     }
-    return { ok: true, id: data?.id };
+    const from = resendFrom();
+    return await sendViaResend({
+      recipients,
+      subject: opts.subject,
+      html: opts.html,
+      text: opts.text,
+      from,
+      replyTo,
+    });
   } catch (e) {
-    console.error('[resend]', e.message);
-    return { ok: false, error: e.message || 'Errore rete Resend.' };
+    console.error(`[${provider}]`, e.message);
+    return {
+      ok: false,
+      error: friendlyEmailError(e.message, provider),
+      detail: e.message || `Errore rete ${provider}.`,
+    };
   }
 }
 
@@ -136,7 +301,11 @@ function maskEmail(email) {
 
 module.exports = {
   resendConfigured,
+  brevoConfigured,
+  activeProvider,
   resendFrom,
+  resendReplyTo,
+  friendlyResendError: friendlyEmailError,
   sendEmail,
   escapeHtml,
   siteHomeUrl,

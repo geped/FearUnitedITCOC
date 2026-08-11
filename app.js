@@ -854,11 +854,22 @@ function renderClanDetails(info, div) {
 }
 
 function showNoClanScreen(username) {
-  document.getElementById("login-screen").style.display = "none";
-  document.getElementById("app").style.display = "none";
-  document.getElementById("no-clan-screen").style.display = "flex";
-  const nameEl = document.getElementById("no-clan-username");
-  if (nameEl) nameEl.textContent = username ? `, ${username}` : '';
+  // Non bloccare più l'app: gli utenti senza clan usano le sezioni pubbliche.
+  const nc = document.getElementById("no-clan-screen");
+  if (nc) nc.style.display = "none";
+  continueWithoutClan();
+}
+
+function continueWithoutClan() {
+  const nc = document.getElementById("no-clan-screen");
+  if (nc) nc.style.display = "none";
+  const app = document.getElementById("app");
+  if (app) app.style.display = "flex";
+  const banner = document.getElementById("no-clan-banner");
+  if (banner) banner.style.display = "block";
+  try {
+    activateTab("profilo");
+  } catch (_) {}
 }
 
 // ── Cambio password obbligatorio (dopo reset da pannello admin) ─────────────
@@ -1540,12 +1551,11 @@ async function showApp(sessionUser) {
     });
   });
 
-  // Nessun clan risolvibile: messaggio solo per utenti normali (non admin app / staff bot)
-  if (!window._userClanTag) {
-    if (!isAdmin && !isTelegramModerator) {
-      showNoClanScreen(user.user_metadata?.username || '');
-      return;
-    }
+  // Senza clan: resta in app (profilo, cerca, classifica, carte…). Niente blocco a schermo pieno.
+  document.getElementById('no-clan-screen').style.display = 'none';
+  const noClanBanner = document.getElementById('no-clan-banner');
+  if (noClanBanner) {
+    noClanBanner.style.display = window._userClanTag ? 'none' : 'block';
   }
 
   // Mostra nome in-game nella sidebar (utenti anonimi non hanno username/email)
@@ -1604,12 +1614,11 @@ async function showApp(sessionUser) {
   applyBotAdminStaffUi();
 
   // Landing tab SOLO al primo ingresso sessione — non ad ogni refresh JWT / token
-  // (altrimenti navigare verso cerca/classifica/carte riporta sempre ad admin).
   if (!window.__cocboardLandingTabApplied) {
     window.__cocboardLandingTabApplied = true;
-    if (!window._userClanTag && (isAdmin || isTelegramModerator)) {
+    if (!window._userClanTag) {
       activateTab('profilo');
-    } else if (window._userClanTag) {
+    } else {
       loadMembers();
     }
   } else if (window._userClanTag) {
@@ -1796,6 +1805,10 @@ function activateTab(tabId) {
   // botadmin deep-links redirect to unified admin tab (bot panel)
   if (tabId === 'botadmin') { tabId = 'admin'; window._adminOpenPanel = 'bot'; }
   if (!tabId) return;
+  // Senza clan: Clan / Registri / Bonus non disponibili
+  if (!window._userClanTag && (tabId === 'members' || tabId === 'warlog' || tabId === 'cwl')) {
+    tabId = 'profilo';
+  }
   closeBnavAltro();
 
   document.querySelectorAll('.tab-btn, .bnav-btn[data-tab]').forEach(b => {

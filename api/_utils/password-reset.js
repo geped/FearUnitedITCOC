@@ -177,10 +177,10 @@ async function requestPasswordReset(rawInput) {
   });
 
   if (!sent.ok) {
-    console.error('[password-reset] send', sent.error);
+    console.error('[password-reset] send', sent.error, sent.detail);
     return {
       ok: false,
-      error: 'Invio email non riuscito. Riprova tra poco o contatta un amministratore.',
+      error: sent.error || 'Invio email non riuscito. Riprova tra poco o contatta un amministratore.',
       status: 502,
     };
   }

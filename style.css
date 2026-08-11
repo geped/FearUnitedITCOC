@@ -437,6 +437,15 @@ textarea.mono,
     z-index: 100;
 }
 
+.no-clan-banner {
+    background: color-mix(in srgb, var(--gold) 12%, var(--bg-2));
+    border-bottom: 1px solid var(--border);
+    color: var(--text-2);
+    font-size: 0.85rem;
+    line-height: 1.4;
+    padding: 0.65rem 1.5rem;
+}
+
 .hamburger {
     display: none;
     flex-direction: column;
