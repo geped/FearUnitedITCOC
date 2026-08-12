@@ -19,9 +19,10 @@ function err(status, message, code) {
 }
 
 /**
- * Matching P2P (account diversi), stesse regole di find_card_matches:
+ * Matching P2P (account diversi):
  * - cedi solo doppioni (qty >= 2)
- * - ricevi solo carte mancanti (qty === 0 oppure riga assente)
+ * - ricevi solo carte che non possiedi (qty === 0): il proponente deve beneficiare
+ * - l'altro può già avere la carta che riceve (aggiunge al conteggio)
  * - stessa categoria, carte diverse
  * Usa le mappe card_key → qty (assenza = 0). Non dipende da righe qty=0 in DB.
  */
@@ -32,12 +33,14 @@ function computeP2pMatches(myColl, otherColl) {
   const out = [];
   for (const give of CARD_EVENT_CATALOG) {
     if (qty(mine, give.key) < 2) continue;
-    if (qty(other, give.key) >= 1) continue; // l'altro la possiede già
+    // NB: non si verifica se l'altro ha già la carta che cediamo:
+    // l'altro può ricevere doppioni (aumenta il suo conteggio).
+    // Solo chi propone deve beneficiare (vedere sotto: qty(mine,get)==0).
     for (const get of CARD_EVENT_CATALOG) {
       if (get.category !== give.category) continue;
       if (get.key === give.key) continue;
       if (qty(other, get.key) < 2) continue;
-      if (qty(mine, get.key) >= 1) continue; // io la possiedo già
+      if (qty(mine, get.key) >= 1) continue; // io la possiedo già → non beneficio
       out.push({
         card_give: give.key,
         card_get: get.key,
@@ -607,7 +610,7 @@ async function proposeTrade(admin, user, roomId, myProfileId, cardGive, cardGet,
 
   if (state(me.coc_tag, cardGive) < 2) throw err(400, 'Non hai un doppione di questa carta.');
   if (state(me.coc_tag, cardGet) !== 0) throw err(400, 'Hai già sbloccato la carta richiesta.');
-  if (state(other.coc_tag, cardGive) !== 0) throw err(400, "L'altro giocatore ha già sbloccato questa carta.");
+  // L'altro può già avere la carta che riceve (aggiunge al conteggio): non è un errore.
   if (state(other.coc_tag, cardGet) < 2) throw err(400, "L'altro giocatore non ha un doppione di quella carta.");
 
   const { data: proposal, error } = await admin
@@ -802,9 +805,9 @@ async function revalidateProposalsForTag(admin, cocTag) {
 
       const proposerHasGive = p.proposer_committed === true || qtyOf(proposerTag, p.card_give) >= 2;
       const proposerLacksGet = qtyOf(proposerTag, p.card_get) === 0;
-      const otherLacksGive = qtyOf(otherTag, p.card_give) === 0;
+      // L'altro può già avere la carta che cede il proponente (riceve un doppione): ok.
       const otherHasGet = qtyOf(otherTag, p.card_get) >= 2;
-      if (proposerHasGive && proposerLacksGet && otherLacksGive && otherHasGet) continue;
+      if (proposerHasGive && proposerLacksGet && otherHasGet) continue;
 
       if (p.proposer_committed) {
         await admin.rpc('refund_card_trade_offer', { p_proposal_id: p.id }).catch(() => {});
