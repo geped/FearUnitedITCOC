@@ -4183,6 +4183,7 @@ tbody tr:last-child td { border-bottom: none; }
     flex-wrap: wrap;
     margin-bottom: 0.8rem;
 }
+.carte-profile-picker { flex-wrap: wrap; gap: 0.4rem 0.6rem; }
 .carte-profile-chip {
     display: flex;
     align-items: center;
@@ -5327,3 +5328,143 @@ tbody tr:last-child td { border-bottom: none; }
 .carte-qty-modal-note { color: var(--text-3); font-size: 0.78rem; min-height: 1.2em; margin: 0 0 1rem; }
 .carte-qty-modal-actions { display: flex; gap: 0.6rem; justify-content: center; }
 .carte-qty-modal-actions button { flex: 1; max-width: 140px; }
+
+/* ── Carte Evento: profilo chip con tasti ordine ────────────────────────── */
+.carte-profile-chip-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.2rem; }
+.carte-profile-order-btns { display: flex; gap: 0.2rem; }
+.carte-profile-order-btn {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0 4px;
+    font-size: 0.6rem;
+    color: var(--text-3);
+    cursor: pointer;
+    line-height: 1.4;
+}
+.carte-profile-order-btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+.carte-profile-order-btn:disabled { opacity: 0.25; cursor: default; }
+
+/* ── Carte Evento: total-actions inline ─────────────────────────────────── */
+.carte-total-actions { display: flex; gap: 0.35rem; align-items: center; flex-shrink: 0; }
+.carte-tutorial-inline-btn { font-weight: 700; min-width: 28px; }
+
+/* ── Carte Evento: share modal - esclude completate ─────────────────────── */
+.carte-share-exclude-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    color: var(--text-2);
+    cursor: pointer;
+}
+.carte-share-exclude-label input[type=checkbox] { accent-color: var(--gold); }
+
+/* ── Carte Evento: toggle vista lista/album ─────────────────────────────── */
+.carte-view-toggle { display: flex; gap: 0.3rem; margin-bottom: 0.5rem; }
+.carte-view-btn {
+    padding: 0.25rem 0.7rem;
+    font-size: 0.8rem;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-3);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+}
+.carte-view-btn.active { border-color: var(--gold); color: var(--gold); background: var(--gold-glow); }
+.carte-view-btn:hover:not(.active) { border-color: var(--text-3); color: var(--text-2); }
+
+/* ── Carte Evento: griglia album ────────────────────────────────────────── */
+.carte-decks-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 0.85rem;
+}
+.carte-deck-card {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    transition: border-color 0.15s;
+}
+.carte-deck-card:hover { border-color: var(--gold); }
+.carte-deck-card-visual {
+    all: unset;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+    width: 100%;
+}
+.carte-deck-fan {
+    position: relative;
+    width: 100%;
+    height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.carte-deck-fan-card {
+    position: absolute;
+    width: 56px;
+    height: 68px;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.4);
+    background: var(--bg-3);
+}
+.carte-deck-fan-card img { width: 100%; height: 100%; object-fit: cover; }
+.carte-deck-fan-count {
+    position: absolute;
+    bottom: -2px;
+    right: 4px;
+    font-size: 0.65rem;
+    color: var(--text-3);
+    font-family: var(--font-mono);
+}
+.carte-deck-fan-empty {
+    font-size: 2rem;
+    opacity: 0.4;
+    padding: 1rem 0;
+}
+.carte-deck-card-name {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+}
+.carte-deck-card-clan, .carte-deck-card-date {
+    font-size: 0.68rem;
+    color: var(--text-3);
+    text-align: center;
+    width: 100%;
+}
+.carte-deck-card-badge {
+    font-size: 0.72rem;
+    color: var(--gold);
+    font-weight: 600;
+    text-align: center;
+}
+.carte-deck-card-actions {
+    display: flex;
+    gap: 0.3rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+.carte-deck-card-actions .btn-primary,
+.carte-deck-card-actions .btn-secondary { flex: 1; min-width: 0; font-size: 0.75rem; padding: 0.3rem 0.4rem; }
+
+@media (max-width: 480px) {
+    .carte-decks-grid { grid-template-columns: repeat(2, 1fr); gap: 0.6rem; }
+    .carte-deck-fan { height: 85px; }
+    .carte-deck-fan-card { width: 46px; height: 56px; }
+}

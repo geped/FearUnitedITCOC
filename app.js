@@ -2007,24 +2007,71 @@ function _carteTutorialPrev() {
   _renderCarteTutorialStep();
 }
 
+/** Legge l'ordine custom dei profili CoC da localStorage. */
+function _carteProfileOrder() {
+  try { return JSON.parse(localStorage.getItem('cocboard_carte_profile_order') || '[]'); } catch (_) { return []; }
+}
+
+/** Salva l'ordine custom. */
+function _saveCarteProfileOrder(tags) {
+  try { localStorage.setItem('cocboard_carte_profile_order', JSON.stringify(tags)); } catch (_) {}
+}
+
+/** Restituisce i profili ordinati secondo l'ordine salvato. */
+function _sortedCarteProfiles(profiles) {
+  const order = _carteProfileOrder();
+  if (!order.length) return profiles;
+  return [...profiles].sort((a, b) => {
+    const ia = order.indexOf(a.coc_tag);
+    const ib = order.indexOf(b.coc_tag);
+    if (ia === -1 && ib === -1) return 0;
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+}
+
+/** Sposta un profilo su (-1) o giù (+1) e aggiorna il picker. */
+function _moveCarteProfile(cocTag, direction) {
+  const profiles = window._cardEventData?.profiles || [];
+  const sorted = _sortedCarteProfiles(profiles);
+  const idx = sorted.findIndex(p => p.coc_tag === cocTag);
+  if (idx < 0) return;
+  const newIdx = idx + direction;
+  if (newIdx < 0 || newIdx >= sorted.length) return;
+  [sorted[idx], sorted[newIdx]] = [sorted[newIdx], sorted[idx]];
+  _saveCarteProfileOrder(sorted.map(p => p.coc_tag));
+  renderCardEventProfilePicker();
+}
+
 function renderCardEventProfilePicker() {
   const el = document.getElementById('carte-profile-picker');
   if (!el) return;
-  const profiles = window._cardEventData?.profiles || [];
+  const profiles = _sortedCarteProfiles(window._cardEventData?.profiles || []);
   if (profiles.length < 2) { el.style.display = 'none'; el.innerHTML = ''; return; }
   el.style.display = 'flex';
-  el.innerHTML = profiles.map(p => {
+  el.innerHTML = profiles.map((p, idx) => {
     const th = Number(p.town_hall_level) || 0;
     const thN = String(Math.min(Math.max(th || 1, 1), 18)).padStart(2, '0');
     const thImg = th > 0
       ? `<img src="th/level_${thN}.webp" class="carte-profile-th" alt="" onerror="this.onerror=null;this.src='th/level_${thN}.png'">`
       : '';
+    const isFirst = idx === 0;
+    const isLast = idx === profiles.length - 1;
     return `
-    <button type="button" class="carte-profile-chip ${p.coc_tag === window._cardEventActiveTag ? 'active' : ''}"
-      onclick="_switchCarteProfile('${escH(p.coc_tag)}')">
-      ${thImg}
-      ${escH(p.username || p.coc_tag)}
-    </button>`;
+    <div class="carte-profile-chip-wrap">
+      <button type="button" class="carte-profile-chip ${p.coc_tag === window._cardEventActiveTag ? 'active' : ''}"
+        onclick="_switchCarteProfile('${escH(p.coc_tag)}')">
+        ${thImg}
+        ${escH(p.username || p.coc_tag)}
+      </button>
+      <div class="carte-profile-order-btns">
+        <button type="button" class="carte-profile-order-btn" onclick="_moveCarteProfile('${escH(p.coc_tag)}',-1)"
+          ${isFirst ? 'disabled' : ''} title="Sposta su">▲</button>
+        <button type="button" class="carte-profile-order-btn" onclick="_moveCarteProfile('${escH(p.coc_tag)}',1)"
+          ${isLast ? 'disabled' : ''} title="Sposta giù">▼</button>
+      </div>
+    </div>`;
   }).join('');
 }
 
@@ -2179,9 +2226,9 @@ function _carteSearchBarHtml({ showTradeExtras = false } = {}) {
   const f = _carteGetFilters();
   const cat = window._cardEventCatalog;
   const active = _carteFiltersActive();
-  // Default compresso su mobile/viewport stretta; stato ricordato in sessione
+  // Sempre collapsed di default; l'utente lo espande manualmente se vuole filtrare
   if (window._carteFiltersCollapsed == null) {
-    window._carteFiltersCollapsed = (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 640px)').matches);
+    window._carteFiltersCollapsed = true;
   }
   const collapsed = window._carteFiltersCollapsed === true;
   const shortLabel = {
@@ -2415,7 +2462,10 @@ function renderCardEventContent() {
   box.innerHTML = `
     <div class="carte-total-row">
       <div class="carte-total-counter">Carte trovate: <strong>${totalFound}/${cat.total_cards}</strong></div>
-      ${hasAnyProfile ? `<button type="button" class="btn-secondary btn-sm" onclick="_openCarteShareDupes()">📋 Condividi doppioni</button>` : ''}
+      <div class="carte-total-actions">
+        ${hasAnyProfile ? `<button type="button" class="btn-secondary btn-sm" onclick="_openCarteShareDupes()" title="Condividi lista doppioni">📋 Doppioni</button>` : ''}
+        <button type="button" class="btn-secondary btn-sm carte-tutorial-inline-btn" onclick="_openCarteTutorial(true)" title="Guida e tutorial">?</button>
+      </div>
     </div>
     ${_carteSearchBarHtml({ showTradeExtras: false })}
     ${statusHtml}
@@ -2440,24 +2490,34 @@ const CARTE_CAT_EMOJI = {
   super_troop: '⭐',
 };
 
-/** Elenco doppioni (qty >= 2) per profilo, già filtrati e ordinati per categoria/catalogo. */
-function _carteDupesByProfile() {
+/** Elenco doppioni (qty >= 2) per profilo, già filtrati e ordinati per categoria/catalogo.
+ *  Se excludeComplete=true, salta le categorie dove TUTTE le carte sono già possedute (qty >= 1). */
+function _carteDupesByProfile(excludeComplete = false) {
   const cat = window._cardEventCatalog;
   const data = window._cardEventData;
   if (!cat || !data) return [];
   return (data.profiles || []).map((p) => {
     const coll = (data.collections && data.collections[p.coc_tag]) || {};
     const byCat = {};
+    const completedCats = [];
     for (const catKey of cat.category_order) {
-      byCat[catKey] = cat.cards
-        .filter((c) => c.category === catKey && (coll[c.key] || 0) >= 2)
-        .map((c) => ({ key: c.key, name_it: c.name_it, qty: coll[c.key] }));
+      const catCards = cat.cards.filter((c) => c.category === catKey);
+      const allOwned = catCards.length > 0 && catCards.every((c) => (coll[c.key] || 0) >= 1);
+      if (excludeComplete && allOwned) {
+        byCat[catKey] = [];
+        completedCats.push(catKey);
+      } else {
+        byCat[catKey] = catCards
+          .filter((c) => (coll[c.key] || 0) >= 2)
+          .map((c) => ({ key: c.key, name_it: c.name_it, qty: coll[c.key] }));
+      }
     }
     return {
       id: p.id,
       coc_tag: p.coc_tag,
       label: p.username || p.label || p.coc_tag,
       byCat,
+      completedCats,
     };
   });
 }
@@ -2473,10 +2533,10 @@ function _carteShareCatLine(cat, catKey) {
 }
 
 /** Formato A: blocco per ogni profilo CoC, categorie sotto. */
-function buildCarteDupesTextA() {
+function buildCarteDupesTextA(excludeComplete = false) {
   const cat = window._cardEventCatalog;
   if (!cat) return '';
-  const profiles = _carteDupesByProfile();
+  const profiles = _carteDupesByProfile(excludeComplete);
   const lines = [_carteShareHeader(), ''];
   if (!profiles.length) {
     lines.push('(Nessun profilo CoC collegato.)');
@@ -2496,10 +2556,10 @@ function buildCarteDupesTextA() {
 }
 
 /** Formato B: un elenco per categoria, profilo tra parentesi su ogni voce. */
-function buildCarteDupesTextB() {
+function buildCarteDupesTextB(excludeComplete = false) {
   const cat = window._cardEventCatalog;
   if (!cat) return '';
-  const profiles = _carteDupesByProfile();
+  const profiles = _carteDupesByProfile(excludeComplete);
   const lines = [_carteShareHeader(), ''];
   for (const catKey of cat.category_order) {
     lines.push(_carteShareCatLine(cat, catKey));
@@ -2517,10 +2577,10 @@ function buildCarteDupesTextB() {
 }
 
 /** Formato C: solo carte per categoria, quantità sommate tra i profili (senza attributo profilo). */
-function buildCarteDupesTextC() {
+function buildCarteDupesTextC(excludeComplete = false) {
   const cat = window._cardEventCatalog;
   if (!cat) return '';
-  const profiles = _carteDupesByProfile();
+  const profiles = _carteDupesByProfile(excludeComplete);
   const lines = [_carteShareHeader(), ''];
   for (const catKey of cat.category_order) {
     lines.push(_carteShareCatLine(cat, catKey));
@@ -2540,10 +2600,10 @@ function buildCarteDupesTextC() {
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
 }
 
-function buildCarteDupesText(format) {
-  if (format === 'b') return buildCarteDupesTextB();
-  if (format === 'c') return buildCarteDupesTextC();
-  return buildCarteDupesTextA();
+function buildCarteDupesText(format, excludeComplete = false) {
+  if (format === 'b') return buildCarteDupesTextB(excludeComplete);
+  if (format === 'c') return buildCarteDupesTextC(excludeComplete);
+  return buildCarteDupesTextA(excludeComplete);
 }
 
 function _carteInlineNotice(msg) {
@@ -2566,7 +2626,8 @@ function _openCarteShareDupes(format) {
   }
   const fmt = ['a', 'b', 'c'].includes(format) ? format : (window._carteShareFormat || 'a');
   window._carteShareFormat = fmt;
-  const text = buildCarteDupesText(fmt);
+  const excludeComplete = window._carteShareExcludeComplete === true;
+  const text = buildCarteDupesText(fmt, excludeComplete);
   document.getElementById('carte-share-modal')?.remove();
 
   const modal = document.createElement('div');
@@ -2591,7 +2652,12 @@ function _openCarteShareDupes(format) {
             : fmt === 'b' ? 'Elenco unico per categoria; il profilo è tra parentesi.'
             : 'Solo carte; le quantità dei profili sono sommate.'
         }</p>
-        <textarea id="carte-share-preview" class="carte-share-preview" readonly rows="14"></textarea>
+        <label class="carte-share-exclude-label">
+          <input type="checkbox" id="carte-share-exclude-check" ${excludeComplete ? 'checked' : ''}
+            onchange="window._carteShareExcludeComplete=this.checked;_openCarteShareDupes('${escH(fmt)}')">
+          Escludi categorie completate (hai già tutte le carte)
+        </label>
+        <textarea id="carte-share-preview" class="carte-share-preview" readonly rows="12"></textarea>
         <div class="carte-row-actions">
           <button type="button" class="btn-primary" id="carte-share-copy-btn" onclick="_copyCarteShareDupes()">Copia negli appunti</button>
         </div>
@@ -3383,6 +3449,132 @@ function _setCarteAlbumFilter(catKey) {
   _renderCartePublicWindow();
 }
 
+/** Mostra una modale con l'album completo di un deck altrui. */
+function _openDeckAlbumModal(idx) {
+  const deck = (window._cardPublicData?.decks || [])[idx];
+  const cat = window._cardEventCatalog;
+  if (!deck || !cat) return;
+  const p = deck.profile;
+  const coll = deck.collection || {};
+  const found = cat.cards.filter((c) => (coll[c.key] || 0) >= 1).length;
+  const lastModStr = deck.last_modified ? _formatLastModified(deck.last_modified) : null;
+  const live = window._cardEventCatalog?.settings?.live === true;
+  const f = _carteGetFilters();
+  const highlightKeys = _carteDeckHighlightKeys(deck, f, cat);
+  const myProfiles = window._cardEventData?.profiles || [];
+  const multiMine = myProfiles.length > 1;
+
+  document.getElementById('carte-deck-album-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'carte-deck-album-modal';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'display:flex;z-index:1010;align-items:flex-start;padding-top:2rem';
+
+  const filteredMatches = (deck.matches || []).filter((m) => _carteMatchPassesFilters({ ...m, other_profile: p }, f));
+  const n = filteredMatches.length;
+  const matchesSec = n ? `
+    <div class="carte-album-matches" style="margin-bottom:0.6rem">
+      <div class="carte-album-matches-title">🔄 Scambi possibili · ${n}</div>
+      ${filteredMatches.slice(0, 6).map((m, mi) => {
+        const realIdx = (deck.matches || []).indexOf(m);
+        return `<div class="carte-album-match-row">
+          ${multiMine ? `<div class="carte-match-my-profile">👤 ${escH(m.my_profile?.username || m.my_profile?.coc_tag || '—')}</div>` : ''}
+          <div class="carte-album-match-pair">
+            <div class="carte-album-match-side"><span class="carte-album-match-lbl">Cedi</span>${_cardMiniImg(m.card_give_meta)}<span>${escH(m.card_give_meta?.name_it || m.card_give)}</span></div>
+            <span class="carte-match-arrow">⇄</span>
+            <div class="carte-album-match-side"><span class="carte-album-match-lbl">Ricevi</span>${_cardMiniImg(m.card_get_meta)}<span>${escH(m.card_get_meta?.name_it || m.card_get)}</span></div>
+          </div>
+          ${live ? `<div class="carte-row-actions">
+            <button type="button" class="btn-secondary btn-sm" onclick="_applyFromPublicDeck(${idx},${realIdx});document.getElementById('carte-deck-album-modal')?.remove()">⚡ Applica</button>
+            <button type="button" class="btn-primary btn-sm" onclick="_proposeFromPublicDeck(${idx},${realIdx});document.getElementById('carte-deck-album-modal')?.remove()">💬 Proponi</button>
+          </div>` : ''}
+        </div>`;
+      }).join('')}
+      ${n > 6 ? `<div class="carte-qty-modal-note" style="text-align:left">+${n - 6} altri nella chat.</div>` : ''}
+    </div>` : '';
+
+  modal.innerHTML = `
+    <div class="modal-box" style="max-width:560px;width:100%;max-height:85vh;overflow-y:auto;padding:1rem">
+      <div class="modal-header" style="margin-bottom:0.6rem">
+        <div>
+          <strong style="font-size:1rem">${escH(p.username || p.coc_tag)}</strong>
+          <span style="color:var(--text-3);font-size:0.8rem;margin-left:0.5rem">${found}/${cat.total_cards}${p.coc_clan_name ? ' · ' + escH(p.coc_clan_name) : ''}${lastModStr ? ' · agg. ' + escH(lastModStr) : ''}</span>
+        </div>
+        <button type="button" class="modal-close" onclick="document.getElementById('carte-deck-album-modal')?.remove()">✕</button>
+      </div>
+      ${matchesSec}
+      ${live ? `<div style="margin-bottom:0.8rem">
+        <button type="button" class="btn-primary btn-sm" onclick="_openPublicDeck(${idx});document.getElementById('carte-deck-album-modal')?.remove()">💬 Apri chat</button>
+      </div>` : ''}
+      <div class="carte-album-card-body" style="display:block">
+        ${_renderFullAlbumGrid(coll, 'modal-' + idx, highlightKeys)}
+      </div>
+    </div>`;
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+/** Toggle tra vista lista e vista album per i deck altrui. */
+function _carteSetDecksView(mode) {
+  window._carteDecksViewMode = mode;
+  _renderCartePublicWindow();
+}
+
+/** Genera una "card visuale" per la vista album: fan delle prime carte possedute. */
+function _renderDeckCardVisual(coll, cat) {
+  const ownedCards = (cat?.cards || []).filter((c) => (coll[c.key] || 0) >= 1);
+  if (!ownedCards.length) {
+    return `<div class="carte-deck-fan-empty">📭</div>`;
+  }
+  const show = ownedCards.slice(0, 4);
+  const total = ownedCards.length;
+  const offsets = [
+    { rotate: -12, tx: -18, ty: 6 },
+    { rotate: -5,  tx: -6,  ty: 2 },
+    { rotate: 4,   tx: 6,   ty: 0 },
+    { rotate: 12,  tx: 18,  ty: -4 },
+  ];
+  const cards = show.map((c, i) => {
+    const o = offsets[i] || offsets[offsets.length - 1];
+    const qty = (coll[c.key] || 0);
+    return `<div class="carte-deck-fan-card" style="transform:rotate(${o.rotate}deg) translate(${o.tx}px,${o.ty}px);z-index:${i + 1}">
+      <img src="${escH(c.icon_url)}" alt="${escH(c.name_it)}" loading="lazy" onerror="this.style.visibility='hidden'">
+      ${qty >= 2 ? `<span class="carte-card-badge" style="font-size:0.55rem;padding:0 2px">x${qty}</span>` : ''}
+    </div>`;
+  }).join('');
+  return `<div class="carte-deck-fan">${cards}<span class="carte-deck-fan-count">${total}/${cat?.total_cards || '?'}</span></div>`;
+}
+
+/** Render della sezione "Mazzi di altri" in modalità griglia album. */
+function _renderAlbumsOthersGrid(decks, live, cat, myProfiles) {
+  if (!decks.length) {
+    return `<div class="profilo-empty"><p style="color:var(--text-3)">Nessun mazzo corrisponde ai filtri.</p></div>`;
+  }
+  const multiMine = myProfiles.length > 1;
+  return `<div class="carte-decks-grid">${decks.map(({ d, i }) => {
+    const p = d.profile;
+    const coll = d.collection || {};
+    const f = _carteGetFilters();
+    const filteredMatches = (d.matches || []).filter((m) => _carteMatchPassesFilters({ ...m, other_profile: p }, f));
+    const n = filteredMatches.length;
+    const lastModStr = d.last_modified ? _formatLastModified(d.last_modified) : null;
+    return `<div class="carte-deck-card">
+      <button type="button" class="carte-deck-card-visual" onclick="_openDeckAlbumModal(${i})" title="Apri album completo">
+        ${_renderDeckCardVisual(coll, cat)}
+        <div class="carte-deck-card-name">${escH(p.username || p.coc_tag)}</div>
+        ${p.coc_clan_name ? `<div class="carte-deck-card-clan">${escH(p.coc_clan_name)}</div>` : ''}
+        ${lastModStr ? `<div class="carte-deck-card-date">agg. ${escH(lastModStr)}</div>` : ''}
+        ${n ? `<div class="carte-deck-card-badge">🔄 ${n} match</div>` : ''}
+      </button>
+      <div class="carte-deck-card-actions">
+        ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_openPublicDeck(${i})">💬 Chat</button>` : ''}
+        ${(live && filteredMatches.length) ? `<button type="button" class="btn-secondary btn-sm" onclick="_proposeFromPublicDeck(${i},${(d.matches||[]).indexOf(filteredMatches[0])})">⚡ Proponi</button>` : ''}
+        <button type="button" class="btn-secondary btn-sm" onclick="_openDeckAlbumModal(${i})" title="Visualizza album">📚 Album</button>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
 function _renderAlbumsWindow(live, which = 'mine') {
   const cat = window._cardEventCatalog;
   const myProfiles = window._cardEventData?.profiles || [];
@@ -3402,9 +3594,28 @@ function _renderAlbumsWindow(live, which = 'mine') {
 
   if (which === 'others') {
     const f = _carteGetFilters();
+    const viewMode = window._carteDecksViewMode || 'lista';
     const decks = (pub.decks || [])
       .map((d, i) => ({ d, i }))
       .filter(({ d }) => _carteDeckPassesFilters(d, f, cat));
+
+    const viewToggle = `<div class="carte-view-toggle" style="margin-bottom:0.6rem">
+      <button type="button" class="carte-view-btn ${viewMode === 'lista' ? 'active' : ''}" onclick="_carteSetDecksView('lista')" title="Vista lista">≡ Lista</button>
+      <button type="button" class="carte-view-btn ${viewMode === 'album' ? 'active' : ''}" onclick="_carteSetDecksView('album')" title="Vista album">⊞ Album</button>
+    </div>`;
+
+    if (viewMode === 'album') {
+      const status = _carteFiltersActive()
+        ? `<div class="carte-search-status">${decks.length} mazzo${decks.length === 1 ? '' : 'i'} con i filtri attivi</div>`
+        : '';
+      return `<div class="carte-trade-section">
+        ${legend}
+        ${viewToggle}
+        ${status}
+        ${_renderAlbumsOthersGrid(decks, live, cat, myProfiles)}
+      </div>`;
+    }
+
     const otherAlbums = decks.length
       ? decks.map(({ d, i }) => {
           const albumId = `other:${i}`;
@@ -3472,15 +3683,16 @@ function _renderAlbumsWindow(live, which = 'mine') {
           </div>`;
         }).join('')
       : `<div class="profilo-empty"><p style="color:var(--text-3)">${_carteFiltersActive() ? 'Nessun mazzo corrisponde ai filtri.' : 'Nessun altro utente ha ancora inserito carte nella propria collezione.'}</p></div>`;
-    const status = _carteFiltersActive()
+        const statusLista = _carteFiltersActive()
       ? `<div class="carte-search-status">${decks.length} mazzo${decks.length === 1 ? '' : 'i'} con i filtri attivi · album evidenziato sulla tipologia cercata</div>`
       : '';
     return `
       <div class="carte-trade-section">
         ${legend}
-        ${status}
+        ${viewToggle}
+        ${statusLista}
         <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.7rem">
-          Album pubblici con anteprima scambi. Usa i filtri sopra (tipologia / cedere / ricevere) — un’unica barra per tutta la sezione Scambi.
+          Album di tutti i giocatori CoCBoard con anteprima scambi e data ultima modifica. Usa i filtri sopra per cercare per carta o giocatore.
         </p>
         ${otherAlbums}
       </div>`;
