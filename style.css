@@ -5585,6 +5585,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 /* ── Carte Evento: triangoli album view ──────────────────────────────────── */
 .carte-triangle-album-card { border-color: rgba(76,175,80,0.35); }
+.carte-match-card-wide { grid-column: span 2; }
 .carte-triangle-album-cycle {
     font-size: 0.72rem;
     color: var(--text-3);

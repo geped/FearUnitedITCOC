@@ -2664,9 +2664,41 @@ function buildCarteDupesTextC(excludeComplete = false) {
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
 }
 
-function buildCarteDupesText(format, excludeComplete = false) {
+/** Formato D: OFFRO/CERCO — una riga per (profilo × categoria), emoji colore per profilo. */
+function buildCarteDupesTextD(excludeComplete = false, showProfile = true) {
+  const cat = window._cardEventCatalog;
+  const data = window._cardEventData;
+  if (!cat || !data) return '';
+  const PROFILE_EMOJIS = ['🩷', '💜', '💛', '🩵', '🧡', '💚', '🩶', '🤍'];
+  const profiles = data.profiles || [];
+  const lines = [''];
+  for (let pi = 0; pi < profiles.length; pi++) {
+    const p = profiles[pi];
+    const coll = (data.collections && data.collections[p.coc_tag]) || {};
+    const emoji = PROFILE_EMOJIS[pi % PROFILE_EMOJIS.length];
+    const profileLabel = showProfile ? ` [${p.username || p.coc_tag}]` : '';
+    for (const catKey of cat.category_order) {
+      const catCards = cat.cards.filter((c) => c.category === catKey);
+      if (excludeComplete) {
+        const allOwned = catCards.length > 0 && catCards.every((c) => (coll[c.key] || 0) >= 1);
+        if (allOwned) continue;
+      }
+      const offro = catCards.filter((c) => (coll[c.key] || 0) >= 2).map((c) => c.name_it);
+      const cerco = catCards.filter((c) => (coll[c.key] || 0) === 0).map((c) => c.name_it);
+      if (!offro.length && !cerco.length) continue;
+      lines.push(
+        `${emoji}${profileLabel} OFFRO: ${offro.length ? offro.join(', ') : '—'} CERCO🔎 ${cerco.length ? cerco.join(', ') : '—'}`
+      );
+    }
+  }
+  if (lines.length <= 1) return '(nessuna offerta o richiesta)';
+  return (_carteShareHeader() + '\n' + lines.join('\n')).trim() + '\n';
+}
+
+function buildCarteDupesText(format, excludeComplete = false, showProfile = true) {
   if (format === 'b') return buildCarteDupesTextB(excludeComplete);
   if (format === 'c') return buildCarteDupesTextC(excludeComplete);
+  if (format === 'd') return buildCarteDupesTextD(excludeComplete, showProfile);
   return buildCarteDupesTextA(excludeComplete);
 }
 
@@ -2688,11 +2720,25 @@ function _openCarteShareDupes(format) {
     _carteInlineNotice('Nessun profilo CoC con collezione da condividere.');
     return;
   }
-  const fmt = ['a', 'b', 'c'].includes(format) ? format : (window._carteShareFormat || 'a');
+  const fmt = ['a', 'b', 'c', 'd'].includes(format) ? format : (window._carteShareFormat || 'a');
   window._carteShareFormat = fmt;
   const excludeComplete = window._carteShareExcludeComplete === true;
-  const text = buildCarteDupesText(fmt, excludeComplete);
+  const showProfile = window._carteShareShowProfile !== false;
+  const text = buildCarteDupesText(fmt, excludeComplete, showProfile);
   document.getElementById('carte-share-modal')?.remove();
+
+  const fmtDescMap = {
+    a: 'Un blocco per ogni villaggio, categorie sotto.',
+    b: 'Elenco unico per categoria; il profilo è tra parentesi.',
+    c: 'Solo carte; le quantità dei profili sono sommate.',
+    d: 'Una riga per profilo × categoria con OFFRO e CERCO, emoji colore per profilo.',
+  };
+  const profileToggleHtml = fmt === 'd' ? `
+    <label class="carte-share-exclude-label">
+      <input type="checkbox" id="carte-share-show-profile-check" ${showProfile ? 'checked' : ''}
+        onchange="window._carteShareShowProfile=this.checked;_openCarteShareDupes('d')">
+      Includi nome profilo CoC
+    </label>` : '';
 
   const modal = document.createElement('div');
   modal.id = 'carte-share-modal';
@@ -2710,17 +2756,15 @@ function _openCarteShareDupes(format) {
           <button type="button" class="carte-share-fmt-btn ${fmt === 'a' ? 'active' : ''}" onclick="_openCarteShareDupes('a')">A · Per profilo</button>
           <button type="button" class="carte-share-fmt-btn ${fmt === 'b' ? 'active' : ''}" onclick="_openCarteShareDupes('b')">B · Con profilo</button>
           <button type="button" class="carte-share-fmt-btn ${fmt === 'c' ? 'active' : ''}" onclick="_openCarteShareDupes('c')">C · Solo carte</button>
+          <button type="button" class="carte-share-fmt-btn ${fmt === 'd' ? 'active' : ''}" onclick="_openCarteShareDupes('d')">D · OFFRO/CERCO</button>
         </div>
-        <p class="carte-share-fmt-desc">${
-          fmt === 'a' ? 'Un blocco per ogni villaggio, categorie sotto.'
-            : fmt === 'b' ? 'Elenco unico per categoria; il profilo è tra parentesi.'
-            : 'Solo carte; le quantità dei profili sono sommate.'
-        }</p>
+        <p class="carte-share-fmt-desc">${escH(fmtDescMap[fmt] || '')}</p>
         <label class="carte-share-exclude-label">
           <input type="checkbox" id="carte-share-exclude-check" ${excludeComplete ? 'checked' : ''}
             onchange="window._carteShareExcludeComplete=this.checked;_openCarteShareDupes('${escH(fmt)}')">
           Escludi categorie completate (hai già tutte le carte)
         </label>
+        ${profileToggleHtml}
         <textarea id="carte-share-preview" class="carte-share-preview" readonly rows="12"></textarea>
         <div class="carte-row-actions">
           <button type="button" class="btn-primary" id="carte-share-copy-btn" onclick="_copyCarteShareDupes()">Copia negli appunti</button>
@@ -3044,7 +3088,7 @@ function _renderQuadsAlbumView(quads, live) {
     const nB = escH(q.profile_b?.username || q.profile_b?.coc_tag || 'B');
     const nC = escH(q.profile_c?.username || q.profile_c?.coc_tag || 'C');
     const nD = escH(q.profile_d?.username || q.profile_d?.coc_tag || 'D');
-    return `<div class="carte-match-card carte-triangle-album-card">
+    return `<div class="carte-match-card carte-triangle-album-card carte-match-card-wide">
       <div class="carte-match-card-player">🔗 Catena a 4</div>
       <div class="carte-triangle-album-cycle">${nA} → ${nB} → ${nC} → ${nD}</div>
       <div class="carte-triangle-album-cards">
