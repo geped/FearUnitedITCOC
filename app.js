@@ -2664,18 +2664,24 @@ function buildCarteDupesTextC(excludeComplete = false) {
   return lines.join('\n').replace(/\n{3,}/g, '\n\n').trim() + '\n';
 }
 
-/** Formato D: OFFRO/CERCO — una riga per (profilo × categoria), emoji colore per profilo. */
+/** Formato D: OFFRO/CERCO — una riga per (profilo × categoria), pallino colore per categoria.
+ *  Categorie: elixir=🔴, dark_elixir=🟣, builder_base=🔵, super_troop=🟡
+ *  Escluse righe senza nulla da offrire (OFFRO vuoto).
+ */
 function buildCarteDupesTextD(excludeComplete = false, showProfile = true) {
   const cat = window._cardEventCatalog;
   const data = window._cardEventData;
   if (!cat || !data) return '';
-  const PROFILE_EMOJIS = ['🩷', '💜', '💛', '🩵', '🧡', '💚', '🩶', '🤍'];
+  const CAT_EMOJI = {
+    elixir: '🔴',
+    dark_elixir: '🟣',
+    builder_base: '🔵',
+    super_troop: '🟡',
+  };
   const profiles = data.profiles || [];
   const lines = [''];
-  for (let pi = 0; pi < profiles.length; pi++) {
-    const p = profiles[pi];
+  for (const p of profiles) {
     const coll = (data.collections && data.collections[p.coc_tag]) || {};
-    const emoji = PROFILE_EMOJIS[pi % PROFILE_EMOJIS.length];
     const profileLabel = showProfile ? ` [${p.username || p.coc_tag}]` : '';
     for (const catKey of cat.category_order) {
       const catCards = cat.cards.filter((c) => c.category === catKey);
@@ -2684,14 +2690,16 @@ function buildCarteDupesTextD(excludeComplete = false, showProfile = true) {
         if (allOwned) continue;
       }
       const offro = catCards.filter((c) => (coll[c.key] || 0) >= 2).map((c) => c.name_it);
+      // Salta la riga se non ho nulla da offrire in questa categoria
+      if (!offro.length) continue;
       const cerco = catCards.filter((c) => (coll[c.key] || 0) === 0).map((c) => c.name_it);
-      if (!offro.length && !cerco.length) continue;
+      const emoji = CAT_EMOJI[catKey] || '⚪';
       lines.push(
-        `${emoji}${profileLabel} OFFRO: ${offro.length ? offro.join(', ') : '—'} CERCO🔎 ${cerco.length ? cerco.join(', ') : '—'}`
+        `${emoji}${profileLabel} OFFRO: ${offro.join(', ')} CERCO🔎 ${cerco.length ? cerco.join(', ') : '—'}`
       );
     }
   }
-  if (lines.length <= 1) return '(nessuna offerta o richiesta)';
+  if (lines.length <= 1) return '(nessun doppione da offrire)';
   return (_carteShareHeader() + '\n' + lines.join('\n')).trim() + '\n';
 }
 
@@ -2731,7 +2739,7 @@ function _openCarteShareDupes(format) {
     a: 'Un blocco per ogni villaggio, categorie sotto.',
     b: 'Elenco unico per categoria; il profilo è tra parentesi.',
     c: 'Solo carte; le quantità dei profili sono sommate.',
-    d: 'Una riga per profilo × categoria con OFFRO e CERCO, emoji colore per profilo.',
+    d: 'Una riga per profilo × categoria — solo se hai doppioni da offrire. 🔴 elisir · 🟣 elisir scuro · 🔵 casa costruttore · 🟡 super truppe.',
   };
   const profileToggleHtml = fmt === 'd' ? `
     <label class="carte-share-exclude-label">
