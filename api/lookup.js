@@ -703,6 +703,7 @@ module.exports = async (req, res) => {
           type === 'cards-public-list' ||
           type === 'cards-public-toggle' ||
           type === 'cards-triangles' ||
+          type === 'cards-quads' ||
           type === 'cards-triangles-self' ||
           type === 'cards-triangle-propose' ||
           type === 'cards-triangle-respond' ||
@@ -909,6 +910,12 @@ module.exports = async (req, res) => {
                 if (type === 'cards-triangles') {
                     if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
                     const data = await cardTriangles.getP2pTriangles(admin, user);
+                    return res.status(200).json(data);
+                }
+
+                if (type === 'cards-quads') {
+                    if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const data = await cardTriangles.getP2pQuads(admin, user);
                     return res.status(200).json(data);
                 }
 

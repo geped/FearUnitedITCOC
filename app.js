@@ -2940,12 +2940,13 @@ async function loadCardTradeTab() {
     // Nessun profile_id: aggrega gli scambi suggeriti su TUTTI i profili CoC collegati
     // (ogni match indica con quale mio profilo si applica), senza dover scegliere un
     // profilo "attivo" a priori.
-    const [matches, selfMatches, rooms, publicDecks, p2pTriangles, selfTriangles, triangleProposals] = await Promise.all([
+    const [matches, selfMatches, rooms, publicDecks, p2pTriangles, p2pQuads, selfTriangles, triangleProposals] = await Promise.all([
       cardsApi('cards-matches'),
       profiles.length > 1 ? cardsApi('cards-self-matches') : Promise.resolve({ matches: [] }),
       cardsApi('cards-rooms'),
       cardsApi('cards-public-list'),
       cardsApi('cards-triangles'),
+      cardsApi('cards-quads'),
       profiles.length >= 3 ? cardsApi('cards-triangles-self') : Promise.resolve({ triangles: [] }),
       cardsApi('cards-triangle-proposals'),
     ]);
@@ -2954,6 +2955,7 @@ async function loadCardTradeTab() {
       selfMatches: selfMatches.matches || [],
       rooms: rooms.rooms || [],
       p2pTriangles: p2pTriangles.triangles || [],
+      p2pQuads: p2pQuads.quads || [],
       selfTriangles: selfTriangles.triangles || [],
       triangleProposals: triangleProposals.proposals || [],
     };
@@ -3002,6 +3004,86 @@ function _carteTriangleRowHtml(t, idx, { selfMode = false, live = false } = {}) 
     <div class="carte-qty-modal-note" style="text-align:left;margin:0.35rem 0">${prefer ? `Variante A${prefer}` : 'Ciclo valido (qty ≥ 2)'}</div>
     <div class="carte-row-actions">${actions}</div>
   </div>`;
+}
+
+/** Render riga lista per un ciclo a 4 giocatori. */
+function _carteQuadRowHtml(q, idx, live = false) {
+  const nA = escH(q.profile_a?.username || q.profile_a?.coc_tag || 'A');
+  const nB = escH(q.profile_b?.username || q.profile_b?.coc_tag || 'B');
+  const nC = escH(q.profile_c?.username || q.profile_c?.coc_tag || 'C');
+  const nD = escH(q.profile_d?.username || q.profile_d?.coc_tag || 'D');
+  const cA = escH(q.card_a_gives_meta?.name_it || q.card_a_gives);
+  const cB = escH(q.card_b_gives_meta?.name_it || q.card_b_gives);
+  const cC = escH(q.card_c_gives_meta?.name_it || q.card_c_gives);
+  const cD = escH(q.card_d_gives_meta?.name_it || q.card_d_gives);
+  const prefer = q.prefer_score >= 1 ? ' · preferito (qty×3+)' : '';
+  const actions = live
+    ? `<button type="button" class="btn-primary btn-sm" onclick="_proposeQuad(${idx})">💬 Proponi catena</button>`
+    : '';
+  return `<div class="carte-self-row semaforo-green carte-triangle-row">
+    <div class="carte-self-row-header">
+      <span class="carte-self-row-players">🔗 Catena a 4 · ${nA} → ${nB} → ${nC} → ${nD} → ${nA}</span>
+      <span class="carte-self-row-dot" title="Ciclo a quattro: tutti sbloccano una carta nuova">🟢</span>
+    </div>
+    <div class="carte-triangle-legs">
+      <div class="carte-self-row-item">${_cardMiniImg(q.card_a_gives_meta)}<div><div class="carte-self-row-card-name">${nA} cede ${cA}</div><div class="carte-self-row-sub">${nB} riceve</div></div></div>
+      <div class="carte-self-row-item">${_cardMiniImg(q.card_b_gives_meta)}<div><div class="carte-self-row-card-name">${nB} cede ${cB}</div><div class="carte-self-row-sub">${nC} riceve</div></div></div>
+      <div class="carte-self-row-item">${_cardMiniImg(q.card_c_gives_meta)}<div><div class="carte-self-row-card-name">${nC} cede ${cC}</div><div class="carte-self-row-sub">${nD} riceve</div></div></div>
+      <div class="carte-self-row-item">${_cardMiniImg(q.card_d_gives_meta)}<div><div class="carte-self-row-card-name">${nD} cede ${cD}</div><div class="carte-self-row-sub">${nA} riceve</div></div></div>
+    </div>
+    <div class="carte-qty-modal-note" style="text-align:left;margin:0.35rem 0">${prefer ? `Variante preferita${prefer}` : 'Ciclo valido (qty ≥ 2)'}</div>
+    <div class="carte-row-actions">${actions}</div>
+  </div>`;
+}
+
+/** Render vista Album per cicli a 4. */
+function _renderQuadsAlbumView(quads, live) {
+  if (!quads.length) return '';
+  return `<div class="carte-match-grid">${quads.map((q, i) => {
+    const nA = escH(q.profile_a?.username || q.profile_a?.coc_tag || 'A');
+    const nB = escH(q.profile_b?.username || q.profile_b?.coc_tag || 'B');
+    const nC = escH(q.profile_c?.username || q.profile_c?.coc_tag || 'C');
+    const nD = escH(q.profile_d?.username || q.profile_d?.coc_tag || 'D');
+    return `<div class="carte-match-card carte-triangle-album-card">
+      <div class="carte-match-card-player">🔗 Catena a 4</div>
+      <div class="carte-triangle-album-cycle">${nA} → ${nB} → ${nC} → ${nD}</div>
+      <div class="carte-triangle-album-cards">
+        <div class="carte-triangle-album-leg">
+          ${_cardMiniImg(q.card_a_gives_meta)}
+          <span class="carte-match-card-cname">${escH(q.card_a_gives_meta?.name_it || q.card_a_gives)}</span>
+          <span class="carte-match-card-label">${nA}→${nB}</span>
+        </div>
+        <div class="carte-triangle-album-leg">
+          ${_cardMiniImg(q.card_b_gives_meta)}
+          <span class="carte-match-card-cname">${escH(q.card_b_gives_meta?.name_it || q.card_b_gives)}</span>
+          <span class="carte-match-card-label">${nB}→${nC}</span>
+        </div>
+        <div class="carte-triangle-album-leg">
+          ${_cardMiniImg(q.card_c_gives_meta)}
+          <span class="carte-match-card-cname">${escH(q.card_c_gives_meta?.name_it || q.card_c_gives)}</span>
+          <span class="carte-match-card-label">${nC}→${nD}</span>
+        </div>
+        <div class="carte-triangle-album-leg">
+          ${_cardMiniImg(q.card_d_gives_meta)}
+          <span class="carte-match-card-cname">${escH(q.card_d_gives_meta?.name_it || q.card_d_gives)}</span>
+          <span class="carte-match-card-label">${nD}→${nA}</span>
+        </div>
+      </div>
+      ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_proposeQuad(${i})">💬 Proponi catena</button>` : ''}
+    </div>`;
+  }).join('')}</div>`;
+}
+
+/** Propone una catena a 4 — apre una nota informativa (il meccanismo proposta
+ *  è identico ai triangoli, va implementato separatamente nel DB se necessario). */
+function _proposeQuad(idx) {
+  const q = window._cardTradeData?.p2pQuads?.[idx];
+  if (!q) return;
+  const nA = q.profile_a?.username || q.profile_a?.coc_tag || 'A';
+  const nB = q.profile_b?.username || q.profile_b?.coc_tag || 'B';
+  const nC = q.profile_c?.username || q.profile_c?.coc_tag || 'C';
+  const nD = q.profile_d?.username || q.profile_d?.coc_tag || 'D';
+  _carteInlineNotice(`💬 Catena: ${nA} → ${nB} → ${nC} → ${nD} → ${nA}\nContatta direttamente i giocatori via chat per coordinarvi (catena a 4 richiede accordo manuale fuori sistema).`);
 }
 
 async function _applySelfTriangle(idx) {
@@ -3344,6 +3426,19 @@ function _formatLastModified(isoStr) {
 
 
 /** Render vista Album per i match P2P suggeriti. */
+
+/** Legge stato collapsed per una sezione. */
+function _isSectionCollapsed(section) {
+  return (window._carteSectionCollapsed || {})[section] === true;
+}
+
+/** Toggle collapsed per una sezione e ri-renderizza. */
+function _carteToggleSectionCollapsed(section) {
+  if (!window._carteSectionCollapsed) window._carteSectionCollapsed = {};
+  window._carteSectionCollapsed[section] = !window._carteSectionCollapsed[section];
+  _renderCartePublicWindow();
+}
+
 function _renderMatchesAlbumView(filteredMatches, live, multiMine) {
   if (!filteredMatches.length) {
     return `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio suggerito al momento.</p></div>`;
@@ -3429,9 +3524,17 @@ function _renderCartePublicWindow() {
 
   if (win === 'suggested') {
     const sv = window._carteSectionView || {};
-    const svSugg = sv.suggested || 'lista';
-    const svTri  = sv.triangles || 'lista';
-    const svAlb  = sv.albums    || (window._carteDecksViewMode || 'lista');
+    const sc = window._carteSectionCollapsed || {};
+
+    // Default: album
+    const svSugg = sv.suggested !== undefined ? sv.suggested : 'album';
+    const svTri  = sv.triangles !== undefined ? sv.triangles : 'album';
+    const svAlb  = sv.albums    !== undefined ? sv.albums    : 'album';
+    if (window._carteDecksViewMode == null) window._carteDecksViewMode = 'album';
+    const colSugg = sc.suggested === true;
+    const colTri  = sc.triangles === true;
+    const colAlb  = sc.albums    === true;
+
     const multiMine = myProfiles.length > 1;
     const f = _carteGetFilters();
 
@@ -3442,6 +3545,9 @@ function _renderCartePublicWindow() {
 
     // Triangles
     const triangles = (data?.p2pTriangles || []);
+
+    // Quad cycles (4 giocatori)
+    const quads = (data?.p2pQuads || []);
 
     // Proposals in corso
     const proposalsHtml = _carteTriangleProposalsHtml(live);
@@ -3464,11 +3570,17 @@ function _renderCartePublicWindow() {
       </div>
     </div>`;
 
-    // Section helper per generare header + toggle individuale
-    function sectionToggle(section, current) {
-      return `<div class="carte-view-toggle" style="flex-shrink:0">
-        <button type="button" class="carte-view-btn ${current === 'lista' ? 'active' : ''}" onclick="_carteSetSectionView('${section}','lista')" title="Vista lista">≡</button>
-        <button type="button" class="carte-view-btn ${current === 'album' ? 'active' : ''}" onclick="_carteSetSectionView('${section}','album')" title="Vista album">⊞</button>
+    // Genera header sezione con toggle view + bottone collapse
+    function sectionHead(section, title, current, collapsed) {
+      return `<div class="carte-section-block-head">
+        <button type="button" class="carte-section-collapse-btn" onclick="_carteToggleSectionCollapsed('${section}')" title="${collapsed ? 'Espandi' : 'Comprimi'}">
+          <span class="carte-section-block-title">${title}</span>
+          <span class="carte-section-collapse-icon">${collapsed ? '▸' : '▾'}</span>
+        </button>
+        <div class="carte-view-toggle">
+          <button type="button" class="carte-view-btn ${current === 'lista' ? 'active' : ''}" onclick="_carteSetSectionView('${section}','lista')" title="Vista lista">≡</button>
+          <button type="button" class="carte-view-btn ${current === 'album' ? 'active' : ''}" onclick="_carteSetSectionView('${section}','album')" title="Vista album">⊞</button>
+        </div>
       </div>`;
     }
 
@@ -3507,41 +3619,40 @@ function _renderCartePublicWindow() {
           : 'Nessuno scambio automatico con mazzi pubblici al momento. Serve: tu hai un doppione che all’altro manca, e lui ha un doppione (stessa tipologia) che manca a te.'}</p></div>`;
 
     const sec1 = `<div class="carte-section-block">
-      <div class="carte-section-block-head">
-        <h4 class="carte-section-block-title">🔄 Scambi suggeriti</h4>
-        ${sectionToggle('suggested', svSugg)}
-      </div>
-      <div class="carte-section-block-body">
+      ${sectionHead('suggested', '🔄 Scambi suggeriti', svSugg, colSugg)}
+      ${colSugg ? '' : `<div class="carte-section-block-body">
         ${proposalsHtml}
         ${svSugg === 'album' ? _renderMatchesAlbumView(filtered, live, multiMine) : matchesLista}
-      </div>
+      </div>`}
     </div>`;
 
-    // ── Sezione 2: Scambi a tre ────────────────────────────────────────────
+    // ── Sezione 2: Scambi a ciclo (triangoli + catene a 4) ────────────────
     const trianglesLista = triangles.length
       ? triangles.map((t, i) => _carteTriangleRowHtml(t, i, { selfMode: false, live })).join('')
       : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessun triangolo disponibile al momento.</p></div>`;
+    const quadsLista = quads.length
+      ? quads.map((q, i) => _carteQuadRowHtml(q, i, live)).join('')
+      : '';
+    const trianglesBody = `${trianglesLista}${quads.length ? `<h5 style="margin:0.8rem 0 0.4rem;font-size:0.85rem;color:var(--text-3)">🔗 Catene a 4 giocatori (${quads.length})</h5>${quadsLista}` : ''}`;
+
+    const trianglesAlbumView = `
+      ${_renderTrianglesAlbumView(triangles, live)}
+      ${quads.length ? `<h5 style="margin:0.6rem 0 0.3rem;font-size:0.85rem;color:var(--text-3)">🔗 Catene a 4</h5>${_renderQuadsAlbumView(quads, live)}` : ''}`;
 
     const sec2 = `<div class="carte-section-block">
-      <div class="carte-section-block-head">
-        <h4 class="carte-section-block-title">🔀 Scambi a tre</h4>
-        ${sectionToggle('triangles', svTri)}
-      </div>
-      <div class="carte-section-block-body">
-        <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.5rem">Ciclo a 3 profili: tutti sbloccano una carta nuova. Proponi e attendi le altre due accettazioni.</p>
-        ${svTri === 'album' ? _renderTrianglesAlbumView(triangles, live) : trianglesLista}
-      </div>
+      ${sectionHead('triangles', '🔀 Scambi a ciclo (3-4 giocatori)', svTri, colTri)}
+      ${colTri ? '' : `<div class="carte-section-block-body">
+        <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.5rem">Ciclo a 3 o 4 profili: tutti sbloccano una carta nuova. Proponi e attendi le altre accettazioni.</p>
+        ${svTri === 'album' ? trianglesAlbumView : trianglesBody}
+      </div>`}
     </div>`;
 
     // ── Sezione 3: Mazzi altri giocatori ──────────────────────────────────
     const sec3 = `<div class="carte-section-block">
-      <div class="carte-section-block-head">
-        <h4 class="carte-section-block-title">📚 Mazzi di altri giocatori</h4>
-        ${sectionToggle('albums', svAlb)}
-      </div>
-      <div class="carte-section-block-body">
+      ${sectionHead('albums', '📚 Mazzi di altri giocatori', svAlb, colAlb)}
+      ${colAlb ? '' : `<div class="carte-section-block-body">
         ${_renderAlbumsWindow(live, 'others')}
-      </div>
+      </div>`}
     </div>`;
 
     box.innerHTML = `

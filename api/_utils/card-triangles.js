@@ -113,6 +113,162 @@ function computeTriangleCycles(profiles) {
   return out;
 }
 
+/**
+ * Trova cicli a 4 profili: A→B→C→D→A.
+ * Regole: stessa categoria per tutte le carte, qty≥2 per chi cede, qty=0 per chi riceve.
+ * Usa edge-graph per efficienza. Limite: maxCycles risultati.
+ */
+function computeQuadCycles(profiles, maxCycles = 20) {
+  const list = (profiles || []).filter((p) => p && p.id && p.collection);
+  if (list.length < 4) return [];
+
+  const byId = Object.fromEntries(list.map((p) => [p.id, p]));
+
+  // Costruisci grafo diretto: edgesFrom[id] = [{to, card, category}]
+  const edgesFrom = {};
+  for (const A of list) {
+    edgesFrom[A.id] = [];
+    for (const card of CARD_EVENT_CATALOG) {
+      if (qtyOf(A.collection, card.key) < 2) continue;
+      for (const B of list) {
+        if (B.id === A.id) continue;
+        if (qtyOf(B.collection, card.key) !== 0) continue;
+        edgesFrom[A.id].push({ to: B.id, card: card.key, category: card.category });
+      }
+    }
+  }
+
+  const out = [];
+  const seen = new Set();
+
+  outer: for (const A of list) {
+    for (const e1 of (edgesFrom[A.id] || [])) {
+      if (!byId[e1.to]) continue;
+      for (const e2 of (edgesFrom[e1.to] || [])) {
+        if (e2.to === A.id) continue;
+        if (e2.category !== e1.category) continue;
+        if (e2.card === e1.card) continue;
+        if (!byId[e2.to]) continue;
+        for (const e3 of (edgesFrom[e2.to] || [])) {
+          if (e3.to === A.id || e3.to === e1.to) continue;
+          if (e3.category !== e1.category) continue;
+          if (e3.card === e1.card || e3.card === e2.card) continue;
+          if (!byId[e3.to]) continue;
+          for (const e4 of (edgesFrom[e3.to] || [])) {
+            if (e4.to !== A.id) continue;
+            if (e4.category !== e1.category) continue;
+            if (e4.card === e1.card || e4.card === e2.card || e4.card === e3.card) continue;
+
+            const B = byId[e1.to];
+            const C = byId[e2.to];
+            const D = byId[e3.to];
+
+            // Dedup canonico: minima rotazione lessicografica
+            const rotations = [
+              [A.id, B.id, C.id, D.id, e1.card, e2.card, e3.card, e4.card],
+              [B.id, C.id, D.id, A.id, e2.card, e3.card, e4.card, e1.card],
+              [C.id, D.id, A.id, B.id, e3.card, e4.card, e1.card, e2.card],
+              [D.id, A.id, B.id, C.id, e4.card, e1.card, e2.card, e3.card],
+            ];
+            const canon = rotations.map((r) => r.join('|')).sort()[0];
+            if (seen.has(canon)) continue;
+            seen.add(canon);
+
+            const prefer =
+              (qtyOf(A.collection, e1.card) >= 3 ? 1 : 0) +
+              (qtyOf(B.collection, e2.card) >= 3 ? 1 : 0) +
+              (qtyOf(C.collection, e3.card) >= 3 ? 1 : 0) +
+              (qtyOf(D.collection, e4.card) >= 3 ? 1 : 0);
+
+            out.push({
+              profile_a: A, profile_b: B, profile_c: C, profile_d: D,
+              card_a_gives: e1.card, card_b_gives: e2.card, card_c_gives: e3.card, card_d_gives: e4.card,
+              category: e1.category, prefer_score: prefer,
+              qty_a: qtyOf(A.collection, e1.card),
+              qty_b: qtyOf(B.collection, e2.card),
+              qty_c: qtyOf(C.collection, e3.card),
+              qty_d: qtyOf(D.collection, e4.card),
+            });
+            if (out.length >= maxCycles) break outer;
+          }
+        }
+      }
+    }
+  }
+
+  out.sort((x, y) => y.prefer_score - x.prefer_score);
+  return out;
+}
+
+function formatQuadCycle(cycle) {
+  return enrichMeta(
+    {
+      profile_a: toPublicProfile(cycle.profile_a),
+      profile_b: toPublicProfile(cycle.profile_b),
+      profile_c: toPublicProfile(cycle.profile_c),
+      profile_d: toPublicProfile(cycle.profile_d),
+      card_a_gives: cycle.card_a_gives,
+      card_b_gives: cycle.card_b_gives,
+      card_c_gives: cycle.card_c_gives,
+      card_d_gives: cycle.card_d_gives,
+      category: cycle.category,
+      prefer_score: cycle.prefer_score,
+      qty_a: cycle.qty_a,
+      qty_b: cycle.qty_b,
+      qty_c: cycle.qty_c,
+      qty_d: cycle.qty_d,
+      legs: {
+        a: { gives: cycle.card_a_gives, gets: cycle.card_d_gives },
+        b: { gives: cycle.card_b_gives, gets: cycle.card_a_gives },
+        c: { gives: cycle.card_c_gives, gets: cycle.card_b_gives },
+        d: { gives: cycle.card_d_gives, gets: cycle.card_c_gives },
+      },
+    },
+    ['card_a_gives', 'card_b_gives', 'card_c_gives', 'card_d_gives'],
+  );
+}
+
+/**
+ * Catene a 4 P2P che coinvolgono almeno un profilo dell'utente.
+ */
+async function getP2pQuads(admin, user) {
+  const { data: mine, error } = await admin
+    .from('user_coc_profiles')
+    .select('*')
+    .eq('user_id', user.id);
+  if (error) throw error;
+  if (!mine?.length) return { ok: true, quads: [] };
+
+  const { data: publics, error: e2 } = await admin
+    .from('user_coc_profiles')
+    .select('*')
+    .neq('user_id', user.id);
+  if (e2) throw e2;
+  if ((publics?.length || 0) < 3) return { ok: true, quads: [] };
+
+  const pool = await loadProfilesWithCollections(admin, [...mine, ...publics]);
+  const myIds = new Set(mine.map((p) => p.id));
+
+  const quads = computeQuadCycles(pool)
+    .filter((c) => {
+      const ids = [c.profile_a, c.profile_b, c.profile_c, c.profile_d];
+      const mineCount = ids.filter((p) => myIds.has(p.id)).length;
+      return mineCount >= 1 && (4 - mineCount) >= 1;
+    })
+    .map((c) => {
+      const formatted = formatQuadCycle(c);
+      const myRole = myIds.has(c.profile_a.id) ? 'a'
+        : myIds.has(c.profile_b.id) ? 'b'
+        : myIds.has(c.profile_c.id) ? 'c'
+        : 'd';
+      formatted.my_role = myRole;
+      formatted.my_profile = formatted[`profile_${myRole}`];
+      return formatted;
+    });
+
+  return { ok: true, quads };
+}
+
 async function requireEventLive(admin) {
   const settings = await cardEvent.getSettings(admin);
   if (!cardEvent.isEventLive(settings)) {
@@ -626,8 +782,10 @@ async function revalidateTrianglesForTag(admin, cocTag) {
 
 module.exports = {
   computeTriangleCycles,
+  computeQuadCycles,
   getSelfTriangles,
   getP2pTriangles,
+  getP2pQuads,
   applySelfTriangle,
   proposeTriangle,
   listMyTriangleProposals,

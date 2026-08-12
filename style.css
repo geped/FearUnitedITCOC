@@ -5510,6 +5510,19 @@ tbody tr:last-child td { border-bottom: none; }
 /* ── Carte Evento: quicklinks ────────────────────────────────────────────── */
 .carte-quicklinks { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
 
+/* ── Carte Evento: sezione collapse button ───────────────────────────────── */
+.carte-section-collapse-btn {
+    all: unset;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    cursor: pointer;
+    flex: 1;
+    min-width: 0;
+}
+.carte-section-collapse-btn:hover .carte-section-block-title { color: var(--gold); }
+.carte-section-collapse-icon { font-size: 0.75rem; color: var(--text-3); flex-shrink: 0; }
+
 /* ── Carte Evento: match card (vista Album scambi suggeriti) ─────────────── */
 .carte-match-grid {
     display: grid;
