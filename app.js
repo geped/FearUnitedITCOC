@@ -1224,6 +1224,13 @@ function renderProfilesModal(state, { gate = false } = {}) {
     };
     actions.appendChild(add);
   }
+  if (!gate && (state.profiles || []).length > 1) {
+    const sortBtn = document.createElement('button');
+    sortBtn.className = 'btn-logout btn-sm';
+    sortBtn.textContent = '↕ Ordina profili (Carte Evento)';
+    sortBtn.onclick = () => _openCarteProfileSortModal(state.profiles);
+    actions.appendChild(sortBtn);
+  }
   if (!gate) {
     const ask = document.createElement('button');
     ask.className = 'btn-logout btn-sm';
@@ -2007,6 +2014,75 @@ function _carteTutorialPrev() {
   _renderCarteTutorialStep();
 }
 
+/** Apre la modale drag-to-reorder per ordinare i profili CoC in Carte Evento. */
+function _openCarteProfileSortModal(profiles) {
+  const sorted = _sortedCarteProfiles(profiles || window._cardEventData?.profiles || []);
+  if (sorted.length < 2) return;
+  document.getElementById('carte-profile-sort-modal')?.remove();
+  const modal = document.createElement('div');
+  modal.id = 'carte-profile-sort-modal';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'display:flex;z-index:1020';
+  modal.innerHTML = `
+    <div class="modal-box" style="max-width:380px;width:100%;padding:1rem">
+      <div class="modal-header" style="margin-bottom:0.6rem">
+        <h3 style="font-size:1rem;margin:0">↕ Ordina profili CoC</h3>
+        <button type="button" class="modal-close" onclick="document.getElementById('carte-profile-sort-modal')?.remove()">✕</button>
+      </div>
+      <p style="font-size:0.8rem;color:var(--text-3);margin:0 0 0.7rem">Trascina per riordinare. L'ordine si applica ai profili in "Carte Evento".</p>
+      <div id="carte-profile-sort-list" class="carte-sort-list">
+        ${sorted.map(p => `
+          <div class="carte-sort-item" draggable="true" data-tag="${escH(p.coc_tag)}">
+            <span class="carte-sort-handle">⠿</span>
+            <span class="carte-sort-name">${escH(p.username || p.coc_tag)}</span>
+          </div>`).join('')}
+      </div>
+      <div class="carte-row-actions" style="margin-top:0.8rem">
+        <button type="button" class="btn-primary btn-sm" onclick="_saveCarteProfileSortOrder()">✓ Salva ordine</button>
+        <button type="button" class="btn-secondary btn-sm" onclick="document.getElementById('carte-profile-sort-modal')?.remove()">Annulla</button>
+      </div>
+    </div>`;
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+  _initCarteProfileSortDrag();
+}
+
+function _initCarteProfileSortDrag() {
+  const list = document.getElementById('carte-profile-sort-list');
+  if (!list) return;
+  let dragSrc = null;
+  list.querySelectorAll('.carte-sort-item').forEach((item) => {
+    item.addEventListener('dragstart', (e) => {
+      dragSrc = item;
+      e.dataTransfer.effectAllowed = 'move';
+      item.classList.add('is-dragging');
+    });
+    item.addEventListener('dragend', () => item.classList.remove('is-dragging'));
+    item.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (!dragSrc || dragSrc === item) return;
+      const rect = item.getBoundingClientRect();
+      if (e.clientY < rect.top + rect.height / 2) {
+        list.insertBefore(dragSrc, item);
+      } else {
+        list.insertBefore(dragSrc, item.nextSibling);
+      }
+    });
+  });
+  list.addEventListener('drop', (e) => e.preventDefault());
+}
+
+function _saveCarteProfileSortOrder() {
+  const items = document.querySelectorAll('#carte-profile-sort-list .carte-sort-item');
+  const tags = [...items].map((el) => el.dataset.tag).filter(Boolean);
+  _saveCarteProfileOrder(tags);
+  document.getElementById('carte-profile-sort-modal')?.remove();
+  renderCardEventProfilePicker();
+  if (window._cardTradeData) _renderCartePublicWindow();
+  _carteInlineNotice('✅ Ordine profili salvato.');
+}
+
 /** Legge l'ordine custom dei profili CoC da localStorage. */
 function _carteProfileOrder() {
   try { return JSON.parse(localStorage.getItem('cocboard_carte_profile_order') || '[]'); } catch (_) { return []; }
@@ -2050,28 +2126,16 @@ function renderCardEventProfilePicker() {
   const profiles = _sortedCarteProfiles(window._cardEventData?.profiles || []);
   if (profiles.length < 2) { el.style.display = 'none'; el.innerHTML = ''; return; }
   el.style.display = 'flex';
-  el.innerHTML = profiles.map((p, idx) => {
+  el.innerHTML = profiles.map((p) => {
     const th = Number(p.town_hall_level) || 0;
     const thN = String(Math.min(Math.max(th || 1, 1), 18)).padStart(2, '0');
     const thImg = th > 0
       ? `<img src="th/level_${thN}.webp" class="carte-profile-th" alt="" onerror="this.onerror=null;this.src='th/level_${thN}.png'">`
       : '';
-    const isFirst = idx === 0;
-    const isLast = idx === profiles.length - 1;
-    return `
-    <div class="carte-profile-chip-wrap">
-      <button type="button" class="carte-profile-chip ${p.coc_tag === window._cardEventActiveTag ? 'active' : ''}"
-        onclick="_switchCarteProfile('${escH(p.coc_tag)}')">
-        ${thImg}
-        ${escH(p.username || p.coc_tag)}
-      </button>
-      <div class="carte-profile-order-btns">
-        <button type="button" class="carte-profile-order-btn" onclick="_moveCarteProfile('${escH(p.coc_tag)}',-1)"
-          ${isFirst ? 'disabled' : ''} title="Sposta su">▲</button>
-        <button type="button" class="carte-profile-order-btn" onclick="_moveCarteProfile('${escH(p.coc_tag)}',1)"
-          ${isLast ? 'disabled' : ''} title="Sposta giù">▼</button>
-      </div>
-    </div>`;
+    return `<button type="button" class="carte-profile-chip ${p.coc_tag === window._cardEventActiveTag ? 'active' : ''}"
+      onclick="_switchCarteProfile('${escH(p.coc_tag)}')">
+      ${thImg}${escH(p.username || p.coc_tag)}
+    </button>`;
   }).join('');
 }
 
@@ -3278,6 +3342,83 @@ function _formatLastModified(isoStr) {
   } catch (_) { return null; }
 }
 
+
+/** Render vista Album per i match P2P suggeriti. */
+function _renderMatchesAlbumView(filteredMatches, live, multiMine) {
+  if (!filteredMatches.length) {
+    return `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio suggerito al momento.</p></div>`;
+  }
+  return `<div class="carte-match-grid">${filteredMatches.map(({ m, i }) => `
+    <div class="carte-match-card">
+      <div class="carte-match-card-player">con ${escH(m.other_profile?.username || m.other_profile?.coc_tag || '—')}</div>
+      ${multiMine ? `<div class="carte-match-card-myprofile">👤 ${escH(m.my_profile?.username || m.my_profile?.coc_tag || '—')}</div>` : ''}
+      <div class="carte-match-card-exchange">
+        <div class="carte-match-card-side">
+          ${_cardMiniImg(m.card_give_meta)}
+          <span class="carte-match-card-cname">${escH(m.card_give_meta?.name_it || m.card_give)}</span>
+          <span class="carte-match-card-label">📤 Cedi</span>
+        </div>
+        <span class="carte-match-card-arrow">⇄</span>
+        <div class="carte-match-card-side">
+          ${_cardMiniImg(m.card_get_meta)}
+          <span class="carte-match-card-cname">${escH(m.card_get_meta?.name_it || m.card_get)} 🟢</span>
+          <span class="carte-match-card-label">📥 Ricevi</span>
+        </div>
+      </div>
+      ${live ? `<div class="carte-match-card-actions">
+        <button type="button" class="btn-secondary btn-sm" onclick="_applyFromMatch(${i})" title="Applica subito">⚡</button>
+        <button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">💬 Proponi</button>
+      </div>` : ''}
+    </div>`).join('')}</div>`;
+}
+
+/** Render vista Album per i triangoli P2P. */
+function _renderTrianglesAlbumView(triangles, live) {
+  if (!triangles.length) return '';
+  return `<div class="carte-match-grid">${triangles.map((t, i) => {
+    const nA = escH(t.profile_a?.username || t.profile_a?.coc_tag || 'A');
+    const nB = escH(t.profile_b?.username || t.profile_b?.coc_tag || 'B');
+    const nC = escH(t.profile_c?.username || t.profile_c?.coc_tag || 'C');
+    return `<div class="carte-match-card carte-triangle-album-card">
+      <div class="carte-match-card-player">🔀 Triangolo</div>
+      <div class="carte-triangle-album-cycle">${nA} → ${nC} → ${nB} → ${nA}</div>
+      <div class="carte-triangle-album-cards">
+        <div class="carte-triangle-album-leg">
+          ${_cardMiniImg(t.card_a_gives_meta)}
+          <span class="carte-match-card-cname">${escH(t.card_a_gives_meta?.name_it || t.card_a_gives)}</span>
+          <span class="carte-match-card-label">${nA} cede</span>
+        </div>
+        <div class="carte-triangle-album-leg">
+          ${_cardMiniImg(t.card_b_gives_meta)}
+          <span class="carte-match-card-cname">${escH(t.card_b_gives_meta?.name_it || t.card_b_gives)}</span>
+          <span class="carte-match-card-label">${nB} cede</span>
+        </div>
+        <div class="carte-triangle-album-leg">
+          ${_cardMiniImg(t.card_c_gives_meta)}
+          <span class="carte-match-card-cname">${escH(t.card_c_gives_meta?.name_it || t.card_c_gives)}</span>
+          <span class="carte-match-card-label">${nC} cede</span>
+        </div>
+      </div>
+      ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_proposeTriangle(${i})">💬 Proponi triangolo</button>` : ''}
+    </div>`;
+  }).join('')}</div>`;
+}
+
+/** Imposta la vista (lista/album) di una sezione specifica e ri-renderizza. */
+function _carteSetSectionView(section, mode) {
+  if (!window._carteSectionView) window._carteSectionView = {};
+  window._carteSectionView[section] = mode;
+  if (section === 'albums') window._carteDecksViewMode = mode;
+  _renderCartePublicWindow();
+}
+
+/** Imposta la stessa vista per tutte e tre le sezioni (toggle master). */
+function _carteSetAllViews(mode) {
+  window._carteSectionView = { suggested: mode, triangles: mode, albums: mode };
+  window._carteDecksViewMode = mode;
+  _renderCartePublicWindow();
+}
+
 function _renderCartePublicWindow() {
   const box = document.getElementById('carte-trade-public');
   if (!box) return;
@@ -3287,12 +3428,52 @@ function _renderCartePublicWindow() {
   const myProfiles = window._cardEventData?.profiles || [];
 
   if (win === 'suggested') {
+    const sv = window._carteSectionView || {};
+    const svSugg = sv.suggested || 'lista';
+    const svTri  = sv.triangles || 'lista';
+    const svAlb  = sv.albums    || (window._carteDecksViewMode || 'lista');
     const multiMine = myProfiles.length > 1;
     const f = _carteGetFilters();
+
+    // P2P matches
     const filtered = (data?.matches || [])
       .map((m, i) => ({ m, i }))
       .filter(({ m }) => _carteMatchPassesFilters(m, f));
-    const matchesHtml = filtered.length
+
+    // Triangles
+    const triangles = (data?.p2pTriangles || []);
+
+    // Proposals in corso
+    const proposalsHtml = _carteTriangleProposalsHtml(live);
+
+    // Quick links
+    const nRooms = data?.rooms?.length || 0;
+    const nPending = (data?.rooms || []).reduce((s, r) => s + (r.pending_proposals || 0), 0);
+    const quickLinks = `<div class="carte-quicklinks">
+      <button type="button" class="btn-secondary btn-sm" onclick="_openCartePublicWin('albums-mine')">👤 I tuoi mazzi</button>
+      <button type="button" class="btn-secondary btn-sm" onclick="_openCartePublicWin('rooms')">💬 Conversazioni${nPending ? ` (${nPending})` : nRooms ? ` (${nRooms})` : ''}</button>
+    </div>`;
+
+    // Master toggle
+    const allSame = (m) => [svSugg, svTri, svAlb].every(v => v === m);
+    const masterToggle = `<div class="carte-master-toggle">
+      <span class="carte-master-toggle-label">Vista sezioni:</span>
+      <div class="carte-view-toggle">
+        <button type="button" class="carte-view-btn ${allSame('lista') ? 'active' : ''}" onclick="_carteSetAllViews('lista')">≡ Lista</button>
+        <button type="button" class="carte-view-btn ${allSame('album') ? 'active' : ''}" onclick="_carteSetAllViews('album')">⊞ Album</button>
+      </div>
+    </div>`;
+
+    // Section helper per generare header + toggle individuale
+    function sectionToggle(section, current) {
+      return `<div class="carte-view-toggle" style="flex-shrink:0">
+        <button type="button" class="carte-view-btn ${current === 'lista' ? 'active' : ''}" onclick="_carteSetSectionView('${section}','lista')" title="Vista lista">≡</button>
+        <button type="button" class="carte-view-btn ${current === 'album' ? 'active' : ''}" onclick="_carteSetSectionView('${section}','album')" title="Vista album">⊞</button>
+      </div>`;
+    }
+
+    // ── Sezione 1: Scambi suggeriti ────────────────────────────────────────
+    const matchesLista = filtered.length
       ? filtered.map(({ m, i }) => `
         <div class="carte-self-row semaforo-green">
           <div class="carte-self-row-header">
@@ -3317,39 +3498,59 @@ function _renderCartePublicWindow() {
             </div>
           </div>
           ${live ? `<div class="carte-row-actions">
-            <button type="button" class="btn-secondary btn-sm" onclick="_applyFromMatch(${i})" title="Cedi subito il tuo doppione; l'altro vedrà che hai già confermato">⚡ Applica subito</button>
+            <button type="button" class="btn-secondary btn-sm" onclick="_applyFromMatch(${i})" title="Cedi subito il tuo doppione">⚡ Applica subito</button>
             <button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">💬 Proponi scambio</button>
           </div>` : ''}
         </div>`).join('')
       : `<div class="profilo-empty"><p style="color:var(--text-3)">${_carteFiltersActive()
-        ? 'Nessuno scambio suggerito con questi filtri.'
-        : 'Nessuno scambio automatico con mazzi pubblici al momento. Serve: tu hai un doppione che all’altro manca, e lui ha un doppione (stessa tipologia) che manca a te.'}</p></div>`;
-    const trianglesHtml = (data?.p2pTriangles || []).length
-      ? (data.p2pTriangles || []).map((t, i) => _carteTriangleRowHtml(t, i, { selfMode: false, live })).join('')
-      : '';
-    const nRooms = data?.rooms?.length || 0;
-    const nPending = (data?.rooms || []).reduce((s, r) => s + (r.pending_proposals || 0), 0);
-    const quickLinks = `<div style="margin-bottom:0.6rem">
-      <button type="button" class="btn-secondary btn-sm" onclick="_openCartePublicWin('albums-mine')">👤 I tuoi mazzi</button>
-      <button type="button" class="btn-secondary btn-sm" style="margin-left:0.4rem" onclick="_openCartePublicWin('rooms')">💬 Conversazioni${nPending ? ` (${nPending})` : nRooms ? ` (${nRooms})` : ''}</button>
+          ? 'Nessuno scambio suggerito con questi filtri.'
+          : 'Nessuno scambio automatico con mazzi pubblici al momento. Serve: tu hai un doppione che all’altro manca, e lui ha un doppione (stessa tipologia) che manca a te.'}</p></div>`;
+
+    const sec1 = `<div class="carte-section-block">
+      <div class="carte-section-block-head">
+        <h4 class="carte-section-block-title">🔄 Scambi suggeriti</h4>
+        ${sectionToggle('suggested', svSugg)}
+      </div>
+      <div class="carte-section-block-body">
+        ${proposalsHtml}
+        ${svSugg === 'album' ? _renderMatchesAlbumView(filtered, live, multiMine) : matchesLista}
+      </div>
     </div>`;
+
+    // ── Sezione 2: Scambi a tre ────────────────────────────────────────────
+    const trianglesLista = triangles.length
+      ? triangles.map((t, i) => _carteTriangleRowHtml(t, i, { selfMode: false, live })).join('')
+      : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessun triangolo disponibile al momento.</p></div>`;
+
+    const sec2 = `<div class="carte-section-block">
+      <div class="carte-section-block-head">
+        <h4 class="carte-section-block-title">🔀 Scambi a tre</h4>
+        ${sectionToggle('triangles', svTri)}
+      </div>
+      <div class="carte-section-block-body">
+        <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.5rem">Ciclo a 3 profili: tutti sbloccano una carta nuova. Proponi e attendi le altre due accettazioni.</p>
+        ${svTri === 'album' ? _renderTrianglesAlbumView(triangles, live) : trianglesLista}
+      </div>
+    </div>`;
+
+    // ── Sezione 3: Mazzi altri giocatori ──────────────────────────────────
+    const sec3 = `<div class="carte-section-block">
+      <div class="carte-section-block-head">
+        <h4 class="carte-section-block-title">📚 Mazzi di altri giocatori</h4>
+        ${sectionToggle('albums', svAlb)}
+      </div>
+      <div class="carte-section-block-body">
+        ${_renderAlbumsWindow(live, 'others')}
+      </div>
+    </div>`;
+
     box.innerHTML = `
-      <div class="carte-win-header" style="margin-bottom:0.2rem">
+      <div class="carte-win-header" style="margin-bottom:0.4rem">
         <h3 class="carte-win-title" style="margin:0">Scambi suggeriti</h3>
       </div>
-      <div class="carte-trade-section">
-        ${quickLinks}
-        <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.7rem">
-          Match automatici: doppione ↔ carta mancante, stessa tipologia. Usa la barra di ricerca sopra per filtrare per carta o giocatore.
-        </p>
-        ${_carteTriangleProposalsHtml(live)}
-        ${matchesHtml}
-        ${trianglesHtml ? `<h4 class="carte-win-title" style="font-size:0.95rem;margin:1rem 0 0.5rem">🔀 Scambi a tre (triangoli)</h4>
-        <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.5rem">Quando il 1↔1 non basta: ciclo a 3 profili. Proponi e attendi le altre due accettazioni.</p>
-        ${trianglesHtml}` : ''}
-      </div>
-      <h4 class="carte-win-title" style="font-size:0.95rem;margin:1.2rem 0 0.3rem;padding:0 0.1rem">📚 Mazzi di altri giocatori</h4>
-      ${_renderAlbumsWindow(live, 'others')}`;
+      ${quickLinks}
+      ${masterToggle}
+      ${sec1}${sec2}${sec3}`;
     return;
   }
 
@@ -3514,10 +3715,9 @@ function _openDeckAlbumModal(idx) {
   document.body.appendChild(modal);
 }
 
-/** Toggle tra vista lista e vista album per i deck altrui. */
+/** Toggle lista/album per deck altrui: alias di _carteSetSectionView. */
 function _carteSetDecksView(mode) {
-  window._carteDecksViewMode = mode;
-  _renderCartePublicWindow();
+  _carteSetSectionView('albums', mode);
 }
 
 /** Genera una "card visuale" per la vista album: fan delle prime carte possedute. */
@@ -3594,15 +3794,10 @@ function _renderAlbumsWindow(live, which = 'mine') {
 
   if (which === 'others') {
     const f = _carteGetFilters();
-    const viewMode = window._carteDecksViewMode || 'lista';
+    const viewMode = (window._carteSectionView?.albums) || (window._carteDecksViewMode || 'lista');
     const decks = (pub.decks || [])
       .map((d, i) => ({ d, i }))
       .filter(({ d }) => _carteDeckPassesFilters(d, f, cat));
-
-    const viewToggle = `<div class="carte-view-toggle" style="margin-bottom:0.6rem">
-      <button type="button" class="carte-view-btn ${viewMode === 'lista' ? 'active' : ''}" onclick="_carteSetDecksView('lista')" title="Vista lista">≡ Lista</button>
-      <button type="button" class="carte-view-btn ${viewMode === 'album' ? 'active' : ''}" onclick="_carteSetDecksView('album')" title="Vista album">⊞ Album</button>
-    </div>`;
 
     if (viewMode === 'album') {
       const status = _carteFiltersActive()
@@ -3610,7 +3805,6 @@ function _renderAlbumsWindow(live, which = 'mine') {
         : '';
       return `<div class="carte-trade-section">
         ${legend}
-        ${viewToggle}
         ${status}
         ${_renderAlbumsOthersGrid(decks, live, cat, myProfiles)}
       </div>`;
@@ -3689,7 +3883,6 @@ function _renderAlbumsWindow(live, which = 'mine') {
     return `
       <div class="carte-trade-section">
         ${legend}
-        ${viewToggle}
         ${statusLista}
         <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.7rem">
           Album di tutti i giocatori CoCBoard con anteprima scambi e data ultima modifica. Usa i filtri sopra per cercare per carta o giocatore.

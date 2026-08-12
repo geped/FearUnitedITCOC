@@ -5468,3 +5468,155 @@ tbody tr:last-child td { border-bottom: none; }
     .carte-deck-fan { height: 85px; }
     .carte-deck-fan-card { width: 46px; height: 56px; }
 }
+
+/* ── Carte Evento: sezioni Scambi con bordo e toggle per-section ─────────── */
+.carte-section-block {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 0.9rem;
+    overflow: hidden;
+}
+.carte-section-block-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.55rem 0.9rem;
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--border);
+    gap: 0.5rem;
+}
+.carte-section-block-title {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text);
+    font-weight: 600;
+}
+.carte-section-block-body { padding: 0.7rem 0.8rem; }
+
+/* ── Carte Evento: toggle master ─────────────────────────────────────────── */
+.carte-master-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+    flex-wrap: wrap;
+}
+.carte-master-toggle-label {
+    font-size: 0.8rem;
+    color: var(--text-3);
+    flex-shrink: 0;
+}
+
+/* ── Carte Evento: quicklinks ────────────────────────────────────────────── */
+.carte-quicklinks { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.6rem; }
+
+/* ── Carte Evento: match card (vista Album scambi suggeriti) ─────────────── */
+.carte-match-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.7rem;
+}
+.carte-match-card {
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.65rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+}
+.carte-match-card-player {
+    font-weight: 600;
+    color: var(--gold);
+    font-size: 0.8rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.carte-match-card-myprofile { font-size: 0.72rem; color: var(--text-3); }
+.carte-match-card-exchange {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0.4rem;
+    margin: 0.2rem 0;
+}
+.carte-match-card-side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    flex: 1;
+    min-width: 0;
+}
+.carte-match-card-cname {
+    font-size: 0.7rem;
+    color: var(--text-2);
+    text-align: center;
+    word-break: break-word;
+}
+.carte-match-card-label {
+    font-size: 0.65rem;
+    color: var(--text-3);
+    text-align: center;
+}
+.carte-match-card-arrow {
+    font-size: 1.1rem;
+    color: var(--text-3);
+    align-self: center;
+    flex-shrink: 0;
+}
+.carte-match-card-actions { display: flex; gap: 0.3rem; margin-top: 0.15rem; }
+.carte-match-card-actions button { flex: 1; font-size: 0.74rem; padding: 0.28rem 0.35rem; }
+
+/* ── Carte Evento: triangoli album view ──────────────────────────────────── */
+.carte-triangle-album-card { border-color: rgba(76,175,80,0.35); }
+.carte-triangle-album-cycle {
+    font-size: 0.72rem;
+    color: var(--text-3);
+    text-align: center;
+}
+.carte-triangle-album-cards {
+    display: flex;
+    gap: 0.35rem;
+    justify-content: space-around;
+}
+.carte-triangle-album-leg {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    flex: 1;
+}
+
+/* ── Profili: drag sort ──────────────────────────────────────────────────── */
+.carte-sort-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    user-select: none;
+}
+.carte-sort-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem 0.7rem;
+    cursor: grab;
+    font-size: 0.85rem;
+    transition: border-color 0.15s, background 0.15s;
+}
+.carte-sort-item:active { cursor: grabbing; }
+.carte-sort-item.is-dragging { opacity: 0.5; border-color: var(--gold); background: var(--gold-glow); }
+.carte-sort-handle { font-size: 1rem; color: var(--text-3); flex-shrink: 0; cursor: grab; }
+.carte-sort-name { color: var(--text); }
+
+@media (max-width: 480px) {
+    .carte-match-grid { grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    .carte-match-card { padding: 0.5rem; }
+    .carte-section-block-head { padding: 0.45rem 0.65rem; }
+    .carte-section-block-body { padding: 0.55rem 0.6rem; }
+}
