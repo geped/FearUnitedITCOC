@@ -192,7 +192,6 @@ async function getMatchesForProfile(admin, user, profileId) {
   const { data: publicProfiles, error: ePub } = await admin
     .from('user_coc_profiles')
     .select('id, coc_tag, username, coc_clan_name, coc_clan_badge_url, town_hall_level, user_id')
-    .eq('card_deck_public', true)
     .neq('user_id', user.id);
   if (ePub) throw ePub;
 
@@ -298,27 +297,28 @@ async function listPublicDecks(admin, user, myProfileId) {
     ? [await myProfileOr403(admin, user, myProfileId)]
     : await profilesUtil.listProfiles(admin, user.id);
   const myTags = myProfiles.map((p) => p.coc_tag);
-  const myPublicFlag = myProfiles.some((p) => p.card_deck_public === true);
-
   const { data: publicProfiles, error: e1 } = await admin
     .from('user_coc_profiles')
     .select('id, coc_tag, username, coc_clan_name, coc_clan_badge_url, town_hall_level, user_id')
-    .eq('card_deck_public', true)
     .neq('user_id', user.id);
   if (e1) throw e1;
 
   const otherTags = (publicProfiles || []).map((p) => p.coc_tag).filter((t) => !myTags.includes(t));
   const tagsToLoad = [...myTags, ...otherTags];
   const { data: collRows, error: e3 } = tagsToLoad.length
-    ? await admin.from('card_event_collections').select('coc_tag, card_key, qty_state').in('coc_tag', tagsToLoad)
+    ? await admin.from('card_event_collections').select('coc_tag, card_key, qty_state, updated_at').in('coc_tag', tagsToLoad)
     : { data: [], error: null };
   if (e3) throw e3;
 
   const collectionByTag = {};
+  const lastModifiedByTag = {};
   for (const tag of tagsToLoad) collectionByTag[tag] = {};
   for (const row of collRows || []) {
     if (!collectionByTag[row.coc_tag]) collectionByTag[row.coc_tag] = {};
     collectionByTag[row.coc_tag][row.card_key] = row.qty_state;
+    if (row.updated_at && (!lastModifiedByTag[row.coc_tag] || row.updated_at > lastModifiedByTag[row.coc_tag])) {
+      lastModifiedByTag[row.coc_tag] = row.updated_at;
+    }
   }
 
   const ownedOnly = (full) => {
@@ -331,7 +331,7 @@ async function listPublicDecks(admin, user, myProfileId) {
 
   return {
     ok: true,
-    my_public: myPublicFlag,
+    my_public: true,
     my_profiles: myProfiles.map(profilesUtil.profileToPublic),
     decks: (publicProfiles || [])
       .filter((p) => !myTags.includes(p.coc_tag))
@@ -358,6 +358,7 @@ async function listPublicDecks(admin, user, myProfileId) {
           profile: profilesUtil.profileToPublic(p),
           matches,
           collection: ownedOnly(fullColl),
+          last_modified: lastModifiedByTag[p.coc_tag] || null,
         };
       })
       .sort((a, b) => (b.matches.length || 0) - (a.matches.length || 0)),

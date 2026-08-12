@@ -26,9 +26,13 @@ function buildMessage(row) {
     : '';
 
   if (row.kind === 'match') {
+    const otherName = fmt.escapeHtml(p.other_username || p.other_coc_tag || 'Un giocatore');
+    const otherTagLine = (p.other_coc_tag && p.other_username)
+      ? `\n<i>Tag: ${fmt.escapeHtml(p.other_coc_tag)}</i>`
+      : '';
     return (
       `${fmt.DIV}\n🎴 <b>Nuovo scambio possibile!</b>\n${fmt.DIV}\n\n` +
-      `<b>${fmt.escapeHtml(p.other_username || p.other_coc_tag || 'Un giocatore')}</b> ha una carta che ti serve.${profileLine}\n\n` +
+      `<b>${otherName}</b> ha una carta che ti serve.${otherTagLine}${profileLine}\n\n` +
       `Tu cedi: <b>${give}</b>\nTu ricevi: <b>${get}</b>\n\n` +
       `Usa i bottoni qui sotto per applicare subito o proporre lo scambio in chat.`
     );

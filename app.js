@@ -1,4 +1,4 @@
-// ═══════════════════════════════════════════════════════════════════════════════
+﻿// ═══════════════════════════════════════════════════════════════════════════════
 // app.js — CoCBoard SPA  |  Fear United IT
 // ═══════════════════════════════════════════════════════════════════════════════
 // INDICE SEZIONI (Ctrl+F sul nome per navigare):
@@ -2767,13 +2767,13 @@ function _switchCarteMainTab(tab, btn) {
 }
 
 window._carteTradeSub = null; // 'self' | 'public'
-window._cartePublicWin = 'hub'; // 'hub' | 'suggested' | 'albums-hub' | 'albums-mine' | 'albums-others' | 'rooms'
+window._cartePublicWin = 'suggested'; // 'suggested' | 'albums-mine' | 'rooms'
 window._carteAlbumFilter = 'all'; // 'all' | category key
 window._carteAlbumCollapsed = window._carteAlbumCollapsed || {}; // id -> true se ridotto
 
 function _switchCarteTradeSub(sub, btn) {
   window._carteTradeSub = sub;
-  if (sub === 'public') window._cartePublicWin = 'hub';
+  if (sub === 'public') window._cartePublicWin = 'suggested';
   const selfBox = document.getElementById('carte-trade-self');
   const pubBox = document.getElementById('carte-trade-public');
   if (selfBox) selfBox.style.display = sub === 'self' ? 'block' : 'none';
@@ -2784,7 +2784,7 @@ function _switchCarteTradeSub(sub, btn) {
 }
 
 function _openCartePublicWin(win) {
-  window._cartePublicWin = win || 'hub';
+  window._cartePublicWin = (win && win !== 'hub' && win !== 'albums-hub' && win !== 'albums-others') ? win : 'suggested';
   _renderCartePublicWindow();
 }
 
@@ -2833,7 +2833,11 @@ async function loadCardTradeTab() {
     return;
   }
   if (keepSub) window._carteTradeSub = keepSub;
-  if (keepWin) window._cartePublicWin = keepWin;
+  if (keepWin && keepWin !== 'hub' && keepWin !== 'albums-hub' && keepWin !== 'albums-others') {
+    window._cartePublicWin = keepWin;
+  } else {
+    window._cartePublicWin = 'suggested';
+  }
   renderCardTradeContent();
 }
 
@@ -2979,7 +2983,9 @@ function renderCardTradeContent() {
   if (!window._carteTradeSub || (!multiProfiles && window._carteTradeSub === 'self')) {
     window._carteTradeSub = multiProfiles ? 'self' : 'public';
   }
-  if (!window._cartePublicWin) window._cartePublicWin = 'hub';
+  if (!window._cartePublicWin || window._cartePublicWin === 'hub' || window._cartePublicWin === 'albums-hub' || window._cartePublicWin === 'albums-others') {
+    window._cartePublicWin = 'suggested';
+  }
   const sub = window._carteTradeSub;
   const f = _carteGetFilters();
 
@@ -3060,7 +3066,7 @@ function renderCardTradeContent() {
   const subtabs = `
     <div class="subtab-bar" id="carte-trade-subtabs">
       ${multiProfiles ? `<button type="button" class="subtab-btn ${sub === 'self' ? 'active' : ''}" onclick="_switchCarteTradeSub('self',this)">Tra i tuoi profili</button>` : ''}
-      <button type="button" class="subtab-btn ${sub === 'public' ? 'active' : ''}" onclick="_switchCarteTradeSub('public',this)">Mazzi pubblici</button>
+      <button type="button" class="subtab-btn ${sub === 'public' ? 'active' : ''}" onclick="_switchCarteTradeSub('public',this)">Scambi suggeriti</button>
     </div>`;
 
   box.innerHTML = `
@@ -3083,7 +3089,7 @@ function renderCardTradeContent() {
   if (sub === 'public') _renderCartePublicWindow();
 }
 
-function _cartePublicWinHeader(title, backWin = 'hub') {
+function _cartePublicWinHeader(title, backWin = 'suggested') {
   return `<div class="carte-win-header">
     <button type="button" class="btn-secondary btn-sm carte-win-back" onclick="_openCartePublicWin('${escH(backWin)}')">« Indietro</button>
     <h3 class="carte-win-title">${escH(title)}</h3>
@@ -3196,68 +3202,23 @@ function _carteDeckHighlightKeys(deck, f, cat) {
   return keys;
 }
 
+function _formatLastModified(isoStr) {
+  if (!isoStr) return null;
+  try {
+    return new Date(isoStr).toLocaleString('it-IT', {
+      day: '2-digit', month: 'short', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch (_) { return null; }
+}
+
 function _renderCartePublicWindow() {
   const box = document.getElementById('carte-trade-public');
   if (!box) return;
   const data = window._cardTradeData;
   const live = window._cardEventCatalog?.settings?.live === true;
-  const win = window._cartePublicWin || 'hub';
+  const win = window._cartePublicWin || 'suggested';
   const myProfiles = window._cardEventData?.profiles || [];
-  const nDecks = window._cardPublicData?.decks?.length || 0;
-
-  if (win === 'hub') {
-    const nMatch = data?.matches?.length || 0;
-    const nRooms = data?.rooms?.length || 0;
-    const nPending = (data?.rooms || []).reduce((s, r) => s + (r.pending_proposals || 0), 0);
-    box.innerHTML = `
-      <div class="carte-win-hub">
-        <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.8rem">Scegli una sezione. Puoi tornare indietro in ogni momento.</p>
-        <button type="button" class="carte-win-card" onclick="_openCartePublicWin('suggested')">
-          <span class="carte-win-card-icon">🔄</span>
-          <span class="carte-win-card-body">
-            <strong>Scambi suggeriti con altri</strong>
-            <small>${nMatch ? `${nMatch} scambio${nMatch === 1 ? '' : 'i'} automatico${nMatch === 1 ? '' : 'i'}` : 'Nessun match al momento'}</small>
-          </span>
-        </button>
-        <button type="button" class="carte-win-card" onclick="_openCartePublicWin('albums-hub')">
-          <span class="carte-win-card-icon">📚</span>
-          <span class="carte-win-card-body">
-            <strong>Mazzi pubblici</strong>
-            <small>I tuoi mazzi · Mazzi di altri (${nDecks})</small>
-          </span>
-        </button>
-        <button type="button" class="carte-win-card" onclick="_openCartePublicWin('rooms')">
-          <span class="carte-win-card-icon">💬</span>
-          <span class="carte-win-card-body">
-            <strong>Le tue conversazioni</strong>
-            <small>${nRooms ? `${nRooms} chat${nPending ? ` · ${nPending} proposte` : ''}` : 'Nessuna conversazione ancora'}</small>
-          </span>
-        </button>
-      </div>`;
-    return;
-  }
-
-  if (win === 'albums-hub') {
-    box.innerHTML = `
-      ${_cartePublicWinHeader('Mazzi pubblici', 'hub')}
-      <div class="carte-win-hub">
-        <button type="button" class="carte-win-card" onclick="_openCartePublicWin('albums-mine')">
-          <span class="carte-win-card-icon">👤</span>
-          <span class="carte-win-card-body">
-            <strong>I tuoi mazzi</strong>
-            <small>${myProfiles.length} profilo${myProfiles.length === 1 ? '' : 'i'} · toggle pubblico/privato</small>
-          </span>
-        </button>
-        <button type="button" class="carte-win-card" onclick="_openCartePublicWin('albums-others')">
-          <span class="carte-win-card-icon">🌐</span>
-          <span class="carte-win-card-body">
-            <strong>Mazzi di altri giocatori</strong>
-            <small>${nDecks ? `${nDecks} mazzo${nDecks === 1 ? '' : 'i'} pubblico${nDecks === 1 ? '' : 'i'}` : 'Nessun mazzo altrui per ora'}</small>
-          </span>
-        </button>
-      </div>`;
-    return;
-  }
 
   if (win === 'suggested') {
     const multiMine = myProfiles.length > 1;
@@ -3300,16 +3261,29 @@ function _renderCartePublicWindow() {
     const trianglesHtml = (data?.p2pTriangles || []).length
       ? (data.p2pTriangles || []).map((t, i) => _carteTriangleRowHtml(t, i, { selfMode: false, live })).join('')
       : '';
-    box.innerHTML = `${_cartePublicWinHeader('Scambi suggeriti con altri')}<div class="carte-trade-section">
-      <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.7rem">
-        Stesse regole di «Tra i tuoi profili», ma tra account diversi: solo doppione ↔ carta mancante, stessa tipologia. Usa la barra ricerca sopra per filtrare per carta o giocatore.
-      </p>
-      ${_carteTriangleProposalsHtml(live)}
-      ${matchesHtml}
-      ${trianglesHtml ? `<h4 class="carte-win-title" style="font-size:0.95rem;margin:1rem 0 0.5rem">🔀 Scambi a tre (triangoli)</h4>
-      <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.5rem">Quando il 1↔1 non basta: ciclo a 3 profili. Proponi e attendi le altre due accettazioni.</p>
-      ${trianglesHtml}` : ''}
+    const nRooms = data?.rooms?.length || 0;
+    const nPending = (data?.rooms || []).reduce((s, r) => s + (r.pending_proposals || 0), 0);
+    const quickLinks = `<div style="margin-bottom:0.6rem">
+      <button type="button" class="btn-secondary btn-sm" onclick="_openCartePublicWin('albums-mine')">👤 I tuoi mazzi</button>
+      <button type="button" class="btn-secondary btn-sm" style="margin-left:0.4rem" onclick="_openCartePublicWin('rooms')">💬 Conversazioni${nPending ? ` (${nPending})` : nRooms ? ` (${nRooms})` : ''}</button>
     </div>`;
+    box.innerHTML = `
+      <div class="carte-win-header" style="margin-bottom:0.2rem">
+        <h3 class="carte-win-title" style="margin:0">Scambi suggeriti</h3>
+      </div>
+      <div class="carte-trade-section">
+        ${quickLinks}
+        <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.7rem">
+          Match automatici: doppione ↔ carta mancante, stessa tipologia. Usa la barra di ricerca sopra per filtrare per carta o giocatore.
+        </p>
+        ${_carteTriangleProposalsHtml(live)}
+        ${matchesHtml}
+        ${trianglesHtml ? `<h4 class="carte-win-title" style="font-size:0.95rem;margin:1rem 0 0.5rem">🔀 Scambi a tre (triangoli)</h4>
+        <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.5rem">Quando il 1↔1 non basta: ciclo a 3 profili. Proponi e attendi le altre due accettazioni.</p>
+        ${trianglesHtml}` : ''}
+      </div>
+      <h4 class="carte-win-title" style="font-size:0.95rem;margin:1.2rem 0 0.3rem;padding:0 0.1rem">📚 Mazzi di altri giocatori</h4>
+      ${_renderAlbumsWindow(live, 'others')}`;
     return;
   }
 
@@ -3324,21 +3298,17 @@ function _renderCartePublicWindow() {
           </button>`;
         }).join('')
       : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuna conversazione ancora.</p></div>`;
-    box.innerHTML = `${_cartePublicWinHeader('Le tue conversazioni')}<div class="carte-trade-section">${roomsHtml}</div>`;
+    box.innerHTML = `${_cartePublicWinHeader('Le tue conversazioni', 'suggested')}<div class="carte-trade-section">${roomsHtml}</div>`;
     return;
   }
 
   if (win === 'albums-mine') {
-    box.innerHTML = `${_cartePublicWinHeader('I tuoi mazzi', 'albums-hub')}${_renderAlbumsWindow(live, 'mine')}`;
-    return;
-  }
-  if (win === 'albums-others') {
-    box.innerHTML = `${_cartePublicWinHeader('Mazzi di altri giocatori', 'albums-hub')}${_renderAlbumsWindow(live, 'others')}`;
+    box.innerHTML = `${_cartePublicWinHeader('I tuoi mazzi', 'suggested')}${_renderAlbumsWindow(live, 'mine')}`;
     return;
   }
 
-  // Compat: vecchio 'albums' → hub album
-  window._cartePublicWin = 'albums-hub';
+  // Fallback → scambi suggeriti
+  window._cartePublicWin = 'suggested';
   _renderCartePublicWindow();
 }
 
@@ -3485,11 +3455,12 @@ function _renderAlbumsWindow(live, which = 'mine') {
                 ${deckTriangles.slice(0, 3).map(({ t, ti }) => _carteTriangleRowHtml(t, ti, { selfMode: false, live })).join('')}` : ''}
               </div>`
             : `<div class="carte-album-matches carte-album-matches-empty">${_carteFiltersActive() ? 'Nessuno scambio automatico con questi filtri.' : 'Nessuno scambio automatico con questo mazzo (serve doppione↔mancante, stessa tipologia).'}</div>`;
+          const lastModStr = d.last_modified ? _formatLastModified(d.last_modified) : null;
           return `<div class="carte-album-card ${highlightKeys.size ? 'is-search-relevant' : ''}">
             <div class="carte-album-card-head">
               <div class="carte-album-card-title">
                 <strong>${escH(p.username || p.coc_tag)}</strong>
-                <span class="carte-album-card-meta">${found}/${total}${p.coc_clan_name ? ` · ${escH(p.coc_clan_name)}` : ''}${n ? ` · 🔄 ${n}` : ''}</span>
+                <span class="carte-album-card-meta">${found}/${total}${p.coc_clan_name ? ` · ${escH(p.coc_clan_name)}` : ''}${n ? ` · 🔄 ${n}` : ''}${lastModStr ? ` · agg. ${escH(lastModStr)}` : ''}</span>
               </div>
               <button type="button" class="btn-secondary btn-sm" onclick="_toggleAlbumCollapsed('${escH(albumId)}')">${isCollapsed ? 'Espandi' : 'Riduci'}</button>
               ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_openPublicDeck(${i})">💬 Chat</button>` : ''}
@@ -3500,7 +3471,7 @@ function _renderAlbumsWindow(live, which = 'mine') {
             </div>
           </div>`;
         }).join('')
-      : `<div class="profilo-empty"><p style="color:var(--text-3)">${_carteFiltersActive() ? 'Nessun mazzo pubblico corrisponde ai filtri.' : 'Nessun altro utente ha reso pubblico il proprio mazzo per ora.'}</p></div>`;
+      : `<div class="profilo-empty"><p style="color:var(--text-3)">${_carteFiltersActive() ? 'Nessun mazzo corrisponde ai filtri.' : 'Nessun altro utente ha ancora inserito carte nella propria collezione.'}</p></div>`;
     const status = _carteFiltersActive()
       ? `<div class="carte-search-status">${decks.length} mazzo${decks.length === 1 ? '' : 'i'} con i filtri attivi · album evidenziato sulla tipologia cercata</div>`
       : '';
@@ -3521,18 +3492,12 @@ function _renderAlbumsWindow(live, which = 'mine') {
     const coll = myCollections[p.coc_tag] || {};
     const found = cat ? cat.cards.filter(c => (coll[c.key] || 0) >= 1).length : 0;
     const total = cat?.total_cards || 0;
-    const isPub = p.card_deck_public === true;
     return `<div class="carte-album-card">
       <div class="carte-album-card-head">
         <div class="carte-album-card-title">
           <strong>${escH(p.username || p.coc_tag)}</strong>
-          <span class="carte-album-card-meta">${found}/${total} · ${isPub ? '🌐 Pubblico' : '🔒 Privato'}</span>
+          <span class="carte-album-card-meta">${found}/${total} carte · 🌐 Mazzo pubblico</span>
         </div>
-        <label class="carte-public-toggle-label carte-album-toggle">
-          <input type="checkbox" ${isPub ? 'checked' : ''} ${live ? '' : 'disabled'}
-            onchange="_toggleProfileDeckPublic('${escH(p.id)}', this.checked)">
-          Pubblico
-        </label>
         <button type="button" class="btn-secondary btn-sm" onclick="_toggleAlbumCollapsed('${escH(albumId)}')">${isCollapsed ? 'Espandi' : 'Riduci'}</button>
       </div>
       <div class="carte-album-card-body ${isCollapsed ? 'is-collapsed' : ''}">

@@ -221,7 +221,6 @@ async function getP2pTriangles(admin, user) {
   const { data: publics, error: e2 } = await admin
     .from('user_coc_profiles')
     .select('*')
-    .eq('card_deck_public', true)
     .neq('user_id', user.id);
   if (e2) throw e2;
   if (!publics?.length) return { ok: true, triangles: [] };
