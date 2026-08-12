@@ -34,6 +34,9 @@ function enrichMeta(obj, keys) {
  * Trova cicli A→C / B→A / C→B tra una lista di profili con collezioni.
  * Dedup canonico per id profilo ordinati + carte.
  * Preferenza: prefer_score = numero di lati con qty≥3 (0..3), sort desc.
+ * Regola aggiornata: il ricevente può già avere la carta che riceve (aggiunge al conteggio).
+ * Chi cede deve avere qty≥2 (mantiene sempre almeno 1 copia).
+ * Il ciclo è mostrato se almeno un partecipante riceve una carta che non possiede ancora.
  */
 function computeTriangleCycles(profiles) {
   // profiles: [{ id, coc_tag, user_id, username, ... , collection: {key:qty} }]
@@ -49,24 +52,29 @@ function computeTriangleCycles(profiles) {
         const A = list[i];
         const B = list[j];
         const C = list[k];
-        // Canonical orientation: smallest profile id must be A among rotated forms
-        // We'll generate all and dedupe by sorted ids + sorted cards later.
 
         for (const cardA of CARD_EVENT_CATALOG) {
           if (qtyOf(A.collection, cardA.key) < 2) continue;
-          if (qtyOf(C.collection, cardA.key) !== 0) continue;
+          // C può già avere cardA (riceve un doppione): no check
 
           for (const cardB of CARD_EVENT_CATALOG) {
             if (cardB.category !== cardA.category) continue;
             if (cardB.key === cardA.key) continue;
             if (qtyOf(B.collection, cardB.key) < 2) continue;
-            if (qtyOf(A.collection, cardB.key) !== 0) continue;
+            // A può già avere cardB: no check
 
             for (const cardC of CARD_EVENT_CATALOG) {
               if (cardC.category !== cardA.category) continue;
               if (cardC.key === cardA.key || cardC.key === cardB.key) continue;
               if (qtyOf(C.collection, cardC.key) < 2) continue;
-              if (qtyOf(B.collection, cardC.key) !== 0) continue;
+              // B può già avere cardC: no check
+
+              // Mostra solo cicli in cui almeno un partecipante riceve una carta che non possiede
+              const anyUnlock =
+                qtyOf(C.collection, cardA.key) === 0 ||
+                qtyOf(A.collection, cardB.key) === 0 ||
+                qtyOf(B.collection, cardC.key) === 0;
+              if (!anyUnlock) continue;
 
               const prefer =
                 (qtyOf(A.collection, cardA.key) >= 3 ? 1 : 0) +
@@ -124,7 +132,9 @@ function computeQuadCycles(profiles, maxCycles = 20) {
 
   const byId = Object.fromEntries(list.map((p) => [p.id, p]));
 
-  // Costruisci grafo diretto: edgesFrom[id] = [{to, card, category}]
+  // Costruisci grafo diretto: edgesFrom[id] = [{to, card, category, is_new}]
+  // A→B: A ha qty≥2 di card; B può già averla (is_new=false) oppure no (is_new=true).
+  // Il ciclo è mostrato solo se almeno un arco ha is_new=true (almeno uno sblocca).
   const edgesFrom = {};
   for (const A of list) {
     edgesFrom[A.id] = [];
@@ -132,8 +142,13 @@ function computeQuadCycles(profiles, maxCycles = 20) {
       if (qtyOf(A.collection, card.key) < 2) continue;
       for (const B of list) {
         if (B.id === A.id) continue;
-        if (qtyOf(B.collection, card.key) !== 0) continue;
-        edgesFrom[A.id].push({ to: B.id, card: card.key, category: card.category });
+        // B può già avere la carta: è un doppione, ma l'edge è valido
+        edgesFrom[A.id].push({
+          to: B.id,
+          card: card.key,
+          category: card.category,
+          is_new: qtyOf(B.collection, card.key) === 0,
+        });
       }
     }
   }
@@ -158,6 +173,9 @@ function computeQuadCycles(profiles, maxCycles = 20) {
             if (e4.to !== A.id) continue;
             if (e4.category !== e1.category) continue;
             if (e4.card === e1.card || e4.card === e2.card || e4.card === e3.card) continue;
+
+            // Almeno un partecipante deve ricevere una carta che non possiede ancora
+            if (!e1.is_new && !e2.is_new && !e3.is_new && !e4.is_new) continue;
 
             const B = byId[e1.to];
             const C = byId[e2.to];
@@ -422,9 +440,7 @@ async function validateCycleStillValid(admin, profileA, profileB, profileC, card
   if (qtyOf(A.collection, cardA) < 2) throw err(400, `Il profilo A non ha più il doppione (${cardA}).`);
   if (qtyOf(B.collection, cardB) < 2) throw err(400, `Il profilo B non ha più il doppione (${cardB}).`);
   if (qtyOf(C.collection, cardC) < 2) throw err(400, `Il profilo C non ha più il doppione (${cardC}).`);
-  if (qtyOf(C.collection, cardA) !== 0) throw err(400, 'Il profilo C possiede già la carta che riceverebbe.');
-  if (qtyOf(A.collection, cardB) !== 0) throw err(400, 'Il profilo A possiede già la carta che riceverebbe.');
-  if (qtyOf(B.collection, cardC) !== 0) throw err(400, 'Il profilo B possiede già la carta che riceverebbe.');
+  // I riceventi possono già avere la carta: la ricevono come doppione (aumenta il conteggio).
   const ca = CARD_BY_KEY.get(cardA);
   const cb = CARD_BY_KEY.get(cardB);
   const cc = CARD_BY_KEY.get(cardC);
