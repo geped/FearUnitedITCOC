@@ -1,4 +1,62 @@
 -- Evento "Clash of Cards" — fix: il ricevente può già possedere la carta ceduta
+-- ══════════════════════════════════════════════════════════
+-- 0) find_self_card_matches — self trade discovery
+--    Sostituisce la versione originale che usava INNER JOIN su qty_state=0
+--    (filtrava i match dove uno dei due aveva già la carta).
+--    La nuova versione usa LEFT JOIN + flag a_already_has_target / b_already_has_target.
+--    ATTENZIONE: la firma cambia (colonne extra) → va prima eliminata.
+-- ══════════════════════════════════════════════════════════
+DROP FUNCTION IF EXISTS public.find_self_card_matches(UUID);
+
+CREATE OR REPLACE FUNCTION public.find_self_card_matches(p_user_id UUID)
+RETURNS TABLE (
+    profile_a            UUID,
+    coc_tag_a            TEXT,
+    profile_b            UUID,
+    coc_tag_b            TEXT,
+    card_a_to_b          TEXT,
+    card_b_to_a          TEXT,
+    category             TEXT,
+    a_already_has_target BOOLEAN,
+    b_already_has_target BOOLEAN
+)
+LANGUAGE sql STABLE
+SET search_path = public
+AS $$
+  WITH mine AS (
+    SELECT id, coc_tag FROM public.user_coc_profiles WHERE user_id = p_user_id
+  )
+  SELECT DISTINCT
+    a.id AS profile_a, a.coc_tag AS coc_tag_a,
+    b.id AS profile_b, b.coc_tag AS coc_tag_b,
+    ca.card_key AS card_a_to_b,
+    cb.card_key AS card_b_to_a,
+    ca.category AS category,
+    COALESCE(a_existing.qty_state, 0) >= 1 AS a_already_has_target,
+    COALESCE(b_existing.qty_state, 0) >= 1 AS b_already_has_target
+  FROM mine a
+  JOIN mine b ON b.coc_tag <> a.coc_tag
+  JOIN public.card_event_collections ca
+    ON ca.coc_tag = a.coc_tag AND ca.qty_state >= 2
+  JOIN public.card_event_collections cb
+    ON cb.coc_tag = b.coc_tag AND cb.qty_state >= 2
+   AND cb.category = ca.category AND cb.card_key <> ca.card_key
+  LEFT JOIN public.card_event_collections a_existing
+    ON a_existing.coc_tag = a.coc_tag AND a_existing.card_key = cb.card_key
+  LEFT JOIN public.card_event_collections b_existing
+    ON b_existing.coc_tag = b.coc_tag AND b_existing.card_key = ca.card_key
+  WHERE a.id < b.id
+    AND (
+      COALESCE(a_existing.qty_state, 0) = 0
+      OR COALESCE(b_existing.qty_state, 0) = 0
+    );
+$$;
+
+COMMENT ON FUNCTION public.find_self_card_matches(UUID) IS
+  'Trova carte scambiabili tra profili dello stesso account. Mostra scambi dove almeno un lato riceve una carta nuova (verde) oppure entrambi ricevono qualcosa di già posseduto (giallo). Richiede qty>=2 per cedere; il ricevente può già avere la carta.';
+
+
+-- Evento "Clash of Cards" — fix: il ricevente può già possedere la carta ceduta
 -- (aggiunge al conteggio anziché sbloccarla da 0).
 -- Allineato alla regola del gioco: solo chi PROPONE deve beneficiare (ricevere
 -- una carta che non ha), ma chi accetta può ricevere un doppione.
