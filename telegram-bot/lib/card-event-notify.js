@@ -14,6 +14,7 @@
 
 const { Markup } = require('telegraf');
 const fmt = require('./format');
+const notifyPrefs = require('../../api/_utils/card-notify-prefs');
 
 const BATCH_SIZE = 25;
 
@@ -157,6 +158,18 @@ async function runCardEventNotifications(bot, sb) {
   const sentIds = [];
   for (const row of rows) {
     try {
+      if (row.kind === 'match') {
+        const prefs = await sb.getCardNotifyPrefs(row.user_id);
+        const p = row.payload || {};
+        if (!notifyPrefs.shouldNotifyMatch(prefs, {
+          iUnlock: p.i_unlock === true,
+          theyUnlock: p.they_unlock === true,
+          sameClan: notifyPrefs.sameClanName(p.my_clan_name, p.other_clan_name),
+        })) {
+          sentIds.push(row.id);
+          continue;
+        }
+      }
       const telegramUserId = await sb.getTelegramUserIdForSupabaseUser(row.user_id);
       if (telegramUserId) {
         const kb = buildKeyboard(row);

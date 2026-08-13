@@ -2512,6 +2512,95 @@ function _closeCarteFiltersModal() {
   document.getElementById('carte-filters-modal')?.remove();
 }
 
+const CARTE_NOTIFY_DEFAULT = {
+  matches_enabled: false,
+  matches_all: false,
+  matches_unlock_me: false,
+  matches_mutual: false,
+  matches_same_clan: false,
+};
+
+function _carteNotifyPrefs() {
+  return window._carteNotifyPrefs || { ...CARTE_NOTIFY_DEFAULT };
+}
+
+function _openCarteNotifyModal() {
+  window._carteNotifyModalOpen = true;
+  void _renderCarteNotifyModal(true);
+}
+
+function _closeCarteNotifyModal() {
+  window._carteNotifyModalOpen = false;
+  document.getElementById('carte-notify-modal')?.remove();
+}
+
+function _carteNotifyRowHtml(key, title, hint, on, disabled) {
+  return `<button type="button" class="carte-notify-row ${on ? 'is-on' : ''} ${disabled ? 'is-disabled' : ''}"
+      onclick="_carteToggleNotifyPref('${key}')" ${disabled ? 'disabled' : ''}>
+    <span class="carte-notify-row-text">
+      <span class="carte-notify-row-title">${escH(title)}</span>
+      <span class="carte-notify-row-hint">${escH(hint)}</span>
+    </span>
+    <span class="carte-notify-switch">${on ? 'ON' : 'OFF'}</span>
+  </button>`;
+}
+
+async function _renderCarteNotifyModal(loadRemote) {
+  if (!window._carteNotifyModalOpen) return;
+  if (loadRemote) {
+    try {
+      const data = await cardsApi('cards-notify-prefs');
+      window._carteNotifyPrefs = { ...CARTE_NOTIFY_DEFAULT, ...(data.prefs || {}) };
+    } catch (e) {
+      window._carteNotifyPrefs = { ...CARTE_NOTIFY_DEFAULT };
+    }
+  }
+  const p = _carteNotifyPrefs();
+  const masterOff = !p.matches_enabled;
+  let overlay = document.getElementById('carte-notify-modal');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'carte-notify-modal';
+    overlay.className = 'modal-overlay';
+    overlay.style.cssText = 'display:flex;z-index:2200';
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) _closeCarteNotifyModal(); });
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML = `
+    <div class="modal-box carte-notify-modal-box" role="dialog" aria-labelledby="carte-notify-title">
+      <div class="modal-header">
+        <h3 id="carte-notify-title" style="margin:0;font-size:1rem">Avvisi scambi</h3>
+        <button type="button" class="modal-close" onclick="_closeCarteNotifyModal()" aria-label="Chiudi">✕</button>
+      </div>
+      <div class="modal-body carte-filters-modal-body">
+        <p class="carte-notify-lead">Gli avvisi di nuovi scambi possibili sono spenti di default. Proposte, messaggi in chat e scambi completati arrivano sempre sul bot.</p>
+        ${_carteNotifyRowHtml('matches_enabled', 'Avvisi scambi possibili', 'Master: attiva o spegne tutti gli avvisi di match.', p.matches_enabled, false)}
+        <div class="carte-notify-group">
+          ${_carteNotifyRowHtml('matches_all', 'Tutti i match pubblici', 'Come gli avvisi precedenti: ogni nuovo scambio suggerito.', p.matches_all, masterOff)}
+          ${_carteNotifyRowHtml('matches_unlock_me', 'Solo se sblocco io', 'Solo quando ricevi una carta che ti manca.', p.matches_unlock_me, masterOff)}
+          ${_carteNotifyRowHtml('matches_mutual', 'Solo scambi reciproci', 'Solo se sbloccate una carta nuova entrambi.', p.matches_mutual, masterOff)}
+          ${_carteNotifyRowHtml('matches_same_clan', 'Solo il mio clan', 'Solo match con giocatori dello stesso clan.', p.matches_same_clan, masterOff)}
+        </div>
+      </div>
+    </div>`;
+}
+
+async function _carteToggleNotifyPref(key) {
+  const p = { ..._carteNotifyPrefs() };
+  if (!(key in CARTE_NOTIFY_DEFAULT)) return;
+  p[key] = !p[key];
+  if (key !== 'matches_enabled' && p[key]) p.matches_enabled = true;
+  window._carteNotifyPrefs = p;
+  _renderCarteNotifyModal(false);
+  try {
+    const data = await cardsApi('cards-notify-prefs', { method: 'POST', body: p });
+    window._carteNotifyPrefs = { ...CARTE_NOTIFY_DEFAULT, ...(data.prefs || p) };
+    _renderCarteNotifyModal(false);
+  } catch (e) {
+    _carteInlineNotice(e.message || 'Impossibile salvare gli avvisi.');
+  }
+}
+
 function _renderCarteFiltersModal() {
   const extras = window._carteFiltersShowTradeExtras === true;
   let overlay = document.getElementById('carte-filters-modal');

@@ -708,7 +708,8 @@ module.exports = async (req, res) => {
           type === 'cards-triangle-propose' ||
           type === 'cards-triangle-respond' ||
           type === 'cards-triangle-self-apply' ||
-          type === 'cards-triangle-proposals'
+          type === 'cards-triangle-proposals' ||
+          type === 'cards-notify-prefs'
         ) {
             const cardEvent = require('./_utils/card-event');
             const cardTrades = require('./_utils/card-trades');
@@ -949,6 +950,19 @@ module.exports = async (req, res) => {
                     return res.status(200).json(data);
                 }
 
+                if (type === 'cards-notify-prefs') {
+                    const notifyPrefs = require('./_utils/card-notify-prefs');
+                    if (req.method === 'GET') {
+                        const prefs = await notifyPrefs.getPrefs(admin, user.id);
+                        return res.status(200).json({ ok: true, prefs });
+                    }
+                    if (req.method === 'POST') {
+                        const data = await notifyPrefs.savePrefs(admin, user.id, req.body || {});
+                        return res.status(200).json(data);
+                    }
+                    return res.status(405).json({ error: 'Metodo non consentito.' });
+                }
+
                 if (type === 'cards-triangle-self-apply') {
                     if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
                     const body = req.body || {};
@@ -969,7 +983,7 @@ module.exports = async (req, res) => {
         } else {
             return res.status(400).json({
                 error:
-                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, password-reset-request, password-reset-confirm, cards-catalog, cards-get, cards-save, cards-matches, cards-self-matches, cards-rooms, cards-room-open, cards-room-detail, cards-room-send, cards-propose, cards-commit, cards-respond, cards-self-apply, cards-trade-log, cards-public-list, cards-public-toggle, cards-triangles, cards-triangles-self, cards-triangle-propose, cards-triangle-respond, cards-triangle-self-apply, cards-triangle-proposals',
+                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, password-reset-request, password-reset-confirm, cards-catalog, cards-get, cards-save, cards-matches, cards-self-matches, cards-rooms, cards-room-open, cards-room-detail, cards-room-send, cards-propose, cards-commit, cards-respond, cards-self-apply, cards-trade-log, cards-public-list, cards-public-toggle, cards-triangles, cards-triangles-self, cards-triangle-propose, cards-triangle-respond, cards-triangle-self-apply, cards-triangle-proposals, cards-notify-prefs',
             });
         }
         const r = await fetch(`${proxyUrl}${proxyPath}`, {

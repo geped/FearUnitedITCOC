@@ -190,6 +190,7 @@ function setup(bot, deps) {
     }
     rows.push([Markup.button.callback('📋 La mia collezione', 'cards:coll')]);
     rows.push([Markup.button.callback('🔄 Scambi', 'cards:tr')]);
+    rows.push([Markup.button.callback('🔔 Avvisi scambi', 'cards:nt')]);
     if (admin) {
       rows.push([
         Markup.button.callback(
@@ -235,6 +236,66 @@ function setup(bot, deps) {
       const st = await ensureState(sb, tauth, ctx.from.id);
       await cardsApi.adminToggle(st.token, !(st.catalog.settings?.enabled === true));
       await openHub(ctx, { forceReload: true });
+    });
+  });
+
+  const NT_ON = '✅';
+  const NT_OFF = '⚪';
+  const NT_FLAGS = [
+    { key: 'matches_all', label: 'Tutti i match pubblici' },
+    { key: 'matches_unlock_me', label: 'Solo se sblocco io' },
+    { key: 'matches_mutual', label: 'Solo scambi reciproci' },
+    { key: 'matches_same_clan', label: 'Solo il mio clan' },
+  ];
+
+  async function openNotifyPrefs(ctx) {
+    const st = await ensureState(sb, tauth, ctx.from.id);
+    const data = await cardsApi.getNotifyPrefs(st.token);
+    const p = data.prefs || {};
+    const tog = (v) => (v === true ? NT_ON : NT_OFF);
+    const lines = [
+      `${fmt.DIV}`,
+      '🔔 <b>Avvisi scambi possibili</b>',
+      fmt.DIV,
+      '',
+      'Di default sono <b>spenti</b>. Proposte, messaggi in chat e scambi completati arrivano sempre.',
+      '',
+      `${tog(p.matches_enabled)} Avvisi: <b>${p.matches_enabled ? 'attivi' : 'spenti'}</b>`,
+    ];
+    if (p.matches_enabled) {
+      if (p.matches_all) {
+        lines.push('', 'Ricevi ogni nuovo match pubblico (come prima).');
+      } else {
+        lines.push('', 'Ricevi un avviso se vale almeno uno dei tipi attivi sotto.');
+      }
+    }
+    const rows = [
+      [Markup.button.callback(`${tog(p.matches_enabled)} Avvisi scambi`, 'cards:nt:matches_enabled')],
+    ];
+    for (const f of NT_FLAGS) {
+      rows.push([Markup.button.callback(`${tog(p[f.key])} ${f.label}`, `cards:nt:${f.key}`)]);
+    }
+    rows.push([Markup.button.callback('« Carte', 'cards:home')]);
+    await renderView(ctx, lines.join('\n'), Markup.inlineKeyboard(rows));
+  }
+
+  bot.action('cards:nt', async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, () => openNotifyPrefs(ctx));
+  });
+
+  bot.action(/^cards:nt:(matches_enabled|matches_all|matches_unlock_me|matches_mutual|matches_same_clan)$/, async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, async () => {
+      const key = ctx.match[1];
+      const st = await ensureState(sb, tauth, ctx.from.id);
+      const cur = (await cardsApi.getNotifyPrefs(st.token)).prefs || {};
+      const patch = { ...cur, [key]: !cur[key] };
+      if (key !== 'matches_enabled' && patch[key] === true) patch.matches_enabled = true;
+      await cardsApi.saveNotifyPrefs(st.token, patch);
+      await openNotifyPrefs(ctx);
     });
   });
 

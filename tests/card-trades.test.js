@@ -34,6 +34,17 @@ function fakeUser(id) {
   return { id };
 }
 
+function enableAllMatchNotify(admin, userIds = [USER_A, USER_B]) {
+  admin.db.tables.card_event_notify_prefs = userIds.map((user_id) => ({
+    user_id,
+    matches_enabled: true,
+    matches_all: true,
+    matches_unlock_me: false,
+    matches_mutual: false,
+    matches_same_clan: false,
+  }));
+}
+
 describe('card-trades: getOrCreateRoom', () => {
   it('rifiuta la creazione di una stanza p2p tra profili dello stesso account', async () => {
     const admin = seedBase();
@@ -485,6 +496,7 @@ describe('card-trades: notifiche outbox (bot Telegram)', () => {
 
   it('notifyMatchesForTag accoda notifiche "match" per entrambi i lati senza duplicati', async () => {
     const admin = seedBase();
+    enableAllMatchNotify(admin);
     await cardTrades.notifyMatchesForTag(admin, '#AAA1');
     let outbox = admin.db.tables.card_event_notify_outbox || [];
     assert.equal(outbox.length, 2);
@@ -504,6 +516,7 @@ describe('card-trades: notifiche outbox (bot Telegram)', () => {
 
   it('notifyMatchesForTag accoda anche match unilaterali (solo un lato sblocca)', async () => {
     const admin = seedBase();
+    enableAllMatchNotify(admin);
     const barb = admin.db.tables.card_event_collections.find(
       (r) => r.coc_tag === '#BBB1' && r.card_key === 'elx_barbarian',
     );
@@ -515,6 +528,43 @@ describe('card-trades: notifiche outbox (bot Telegram)', () => {
     const forB = outbox.find((r) => r.user_id === USER_B);
     assert.equal(forA.payload.i_unlock, true);
     assert.equal(forB.payload.i_unlock, false);
+  });
+
+  it('notifyMatchesForTag non accoda nulla se le preferenze sono disattivate (default)', async () => {
+    const admin = seedBase();
+    await cardTrades.notifyMatchesForTag(admin, '#AAA1');
+    const outbox = (admin.db.tables.card_event_notify_outbox || []).filter((r) => r.kind === 'match');
+    assert.equal(outbox.length, 0);
+  });
+
+  it('notifyMatchesForTag con solo unlock_me avvisa solo chi sblocca', async () => {
+    const admin = seedBase();
+    const barb = admin.db.tables.card_event_collections.find(
+      (r) => r.coc_tag === '#BBB1' && r.card_key === 'elx_barbarian',
+    );
+    barb.qty_state = 1;
+    admin.db.tables.card_event_notify_prefs = [
+      { user_id: USER_A, matches_enabled: true, matches_all: false, matches_unlock_me: true, matches_mutual: false, matches_same_clan: false },
+      { user_id: USER_B, matches_enabled: true, matches_all: false, matches_unlock_me: true, matches_mutual: false, matches_same_clan: false },
+    ];
+    await cardTrades.notifyMatchesForTag(admin, '#AAA1');
+    const outbox = (admin.db.tables.card_event_notify_outbox || []).filter((r) => r.kind === 'match');
+    assert.equal(outbox.length, 1);
+    assert.equal(outbox[0].user_id, USER_A);
+    assert.equal(outbox[0].payload.i_unlock, true);
+  });
+
+  it('notifyMatchesForTag con solo same_clan ignora giocatori di altri clan', async () => {
+    const admin = seedBase();
+    admin.db.tables.user_coc_profiles.find((p) => p.id === 'p-a1').coc_clan_name = 'Fear United';
+    admin.db.tables.user_coc_profiles.find((p) => p.id === 'p-b1').coc_clan_name = 'Altro Clan';
+    admin.db.tables.card_event_notify_prefs = [
+      { user_id: USER_A, matches_enabled: true, matches_all: false, matches_unlock_me: false, matches_mutual: false, matches_same_clan: true },
+      { user_id: USER_B, matches_enabled: true, matches_all: false, matches_unlock_me: false, matches_mutual: false, matches_same_clan: true },
+    ];
+    await cardTrades.notifyMatchesForTag(admin, '#AAA1');
+    const outbox = (admin.db.tables.card_event_notify_outbox || []).filter((r) => r.kind === 'match');
+    assert.equal(outbox.length, 0);
   });
 });
 

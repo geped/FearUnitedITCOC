@@ -4306,6 +4306,46 @@ tbody tr:last-child td { border-bottom: none; }
     flex-direction: column;
     gap: 0.7rem;
 }
+.carte-notify-open-btn { flex-shrink: 0; }
+.carte-notify-modal-box { max-width: 440px; }
+.carte-notify-lead {
+    font-size: 0.78rem;
+    color: var(--text-3);
+    line-height: 1.4;
+    margin: 0;
+}
+.carte-notify-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.8rem;
+    width: 100%;
+    text-align: left;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.7rem 0.8rem;
+    color: inherit;
+    cursor: pointer;
+}
+.carte-notify-row:hover { border-color: var(--gold); }
+.carte-notify-row.is-on { border-color: rgba(201,169,98,0.45); background: var(--gold-glow); }
+.carte-notify-row.is-disabled { opacity: 0.55; }
+.carte-notify-row-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.carte-notify-row-title { color: var(--text); font-size: 0.82rem; }
+.carte-notify-row-hint { color: var(--text-3); font-size: 0.7rem; line-height: 1.3; }
+.carte-notify-switch {
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    color: var(--text-3);
+    padding-top: 0.1rem;
+}
+.carte-notify-row.is-on .carte-notify-switch { color: var(--gold); }
+.carte-notify-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
 
 .carte-search-bar {
     display: flex;

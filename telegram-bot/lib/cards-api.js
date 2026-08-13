@@ -162,6 +162,14 @@ async function triangleSelfApply(accessToken, body) {
   return callCards('cards-triangle-self-apply', accessToken, { method: 'POST', body });
 }
 
+async function getNotifyPrefs(accessToken) {
+  return callCards('cards-notify-prefs', accessToken, { method: 'GET' });
+}
+
+async function saveNotifyPrefs(accessToken, prefs) {
+  return callCards('cards-notify-prefs', accessToken, { method: 'POST', body: prefs });
+}
+
 module.exports = {
   catalog,
   getCollection,
@@ -186,4 +194,6 @@ module.exports = {
   trianglePropose,
   triangleRespond,
   triangleSelfApply,
+  getNotifyPrefs,
+  saveNotifyPrefs,
 };

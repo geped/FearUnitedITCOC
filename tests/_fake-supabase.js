@@ -83,7 +83,7 @@ class QueryBuilder {
           out.push(row);
         }
       }
-      if (this._single) return { data: out[0], error: null };
+      if (this._maybeSingle || this._single) return { data: out[0] || null, error: null };
       return { data: out, error: null };
     }
 

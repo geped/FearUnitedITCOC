@@ -1205,6 +1205,18 @@ async function getCardNotificationById(id) {
   return data || null;
 }
 
+async function getCardNotifyPrefs(userId) {
+  const client = sb();
+  if (!client || !userId) return null;
+  const { data, error } = await client
+    .from('card_event_notify_prefs')
+    .select('*')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) return null;
+  return data || null;
+}
+
 async function markCardNotificationsSent(ids) {
   const client = sb();
   if (!client || !ids?.length) return;
@@ -1301,6 +1313,7 @@ module.exports = {
   getUsageDailyStats,
   listPendingCardNotifications,
   getCardNotificationById,
+  getCardNotifyPrefs,
   markCardNotificationsSent,
   getTelegramUserIdForSupabaseUser,
 };

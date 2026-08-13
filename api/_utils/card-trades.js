@@ -10,6 +10,7 @@
 const profilesUtil = require('./user-profiles');
 const cardEvent = require('./card-event');
 const { CARD_BY_KEY, CARD_EVENT_CATALOG } = require('./card-event-catalog');
+const notifyPrefs = require('./card-notify-prefs');
 
 function err(status, message, code) {
   const e = new Error(message);
@@ -171,22 +172,37 @@ async function notifyMatchesForTag(admin, cocTag) {
       collByTag[row.coc_tag][row.card_key] = row.qty_state;
     }
 
+    const prefsMap = await notifyPrefs.getPrefsMap(admin, [me.user_id, ...others.map((p) => p.user_id)]);
     const myColl = collByTag[me.coc_tag] || {};
     for (const other of others) {
       const pair = computeP2pMatches(myColl, collByTag[other.coc_tag] || {});
+      if (!pair.length) continue;
+      const clanMate = notifyPrefs.sameClanName(me.coc_clan_name, other.coc_clan_name);
       for (const m of pair) {
-        await queueNotification(admin, {
-          userId: me.user_id,
-          kind: 'match',
-          dedupeKey: `${me.coc_tag}|${other.coc_tag}|${m.card_give}|${m.card_get}`,
-          payload: matchNotifyPayload(me, other, m.card_give, m.card_get, m.i_unlock, m.they_unlock),
-        });
-        await queueNotification(admin, {
-          userId: other.user_id,
-          kind: 'match',
-          dedupeKey: `${other.coc_tag}|${me.coc_tag}|${m.card_get}|${m.card_give}`,
-          payload: matchNotifyPayload(other, me, m.card_get, m.card_give, m.they_unlock, m.i_unlock),
-        });
+        if (notifyPrefs.shouldNotifyMatch(prefsMap[me.user_id], {
+          iUnlock: m.i_unlock === true,
+          theyUnlock: m.they_unlock === true,
+          sameClan: clanMate,
+        })) {
+          await queueNotification(admin, {
+            userId: me.user_id,
+            kind: 'match',
+            dedupeKey: `${me.coc_tag}|${other.coc_tag}|${m.card_give}|${m.card_get}`,
+            payload: matchNotifyPayload(me, other, m.card_give, m.card_get, m.i_unlock, m.they_unlock),
+          });
+        }
+        if (notifyPrefs.shouldNotifyMatch(prefsMap[other.user_id], {
+          iUnlock: m.they_unlock === true,
+          theyUnlock: m.i_unlock === true,
+          sameClan: clanMate,
+        })) {
+          await queueNotification(admin, {
+            userId: other.user_id,
+            kind: 'match',
+            dedupeKey: `${other.coc_tag}|${me.coc_tag}|${m.card_get}|${m.card_give}`,
+            payload: matchNotifyPayload(other, me, m.card_get, m.card_give, m.they_unlock, m.i_unlock),
+          });
+        }
       }
     }
   } catch (_) {
