@@ -17,24 +17,41 @@ const fmt = require('./format');
 
 const BATCH_SIZE = 25;
 
+function playerIdentityHtml(username, tag, clan) {
+  const name = fmt.escapeHtml(username || tag || 'Un giocatore');
+  const extras = [tag, clan].filter(Boolean).map((s) => fmt.escapeHtml(String(s)));
+  if (!extras.length) return `<b>${name}</b>`;
+  return `<b>${name}</b> <i>(${extras.join(' · ')})</i>`;
+}
+
 function buildMessage(row) {
   const p = row.payload || {};
   const give = fmt.escapeHtml(p.card_give_name || p.card_give || '?');
   const get = fmt.escapeHtml(p.card_get_name || p.card_get || '?');
+  const otherId = playerIdentityHtml(p.other_username, p.other_coc_tag, p.other_clan_name);
+  const myId = playerIdentityHtml(p.my_username, p.my_coc_tag, p.my_clan_name);
   const profileLine = p.my_coc_tag
-    ? `\n<i>Con il profilo: ${fmt.escapeHtml(p.my_coc_tag)}</i>`
+    ? `\n<i>Con il profilo: ${fmt.escapeHtml(p.my_coc_tag)}${p.my_username ? ` · ${fmt.escapeHtml(p.my_username)}` : ''}${p.my_clan_name ? ` · ${fmt.escapeHtml(p.my_clan_name)}` : ''}</i>`
     : '';
 
   if (row.kind === 'match') {
-    const otherName = fmt.escapeHtml(p.other_username || p.other_coc_tag || 'Un giocatore');
-    const otherTagLine = (p.other_coc_tag && p.other_username)
-      ? `\n<i>Tag: ${fmt.escapeHtml(p.other_coc_tag)}</i>`
-      : '';
+    const iUnlock = p.i_unlock !== false;
+    if (iUnlock) {
+      return (
+        `${fmt.DIV}\n🎴 <b>Nuovo scambio possibile!</b>\n${fmt.DIV}\n\n` +
+        `${otherId} ha una carta che ti serve.\n\n` +
+        `Con il tuo profilo: ${myId}\n\n` +
+        `Tu cedi: <b>${give}</b>\nTu ricevi: <b>${get}</b>\n\n` +
+        `Usa i bottoni qui sotto per applicare subito o proporre lo scambio in chat.`
+      );
+    }
     return (
       `${fmt.DIV}\n🎴 <b>Nuovo scambio possibile!</b>\n${fmt.DIV}\n\n` +
-      `<b>${otherName}</b> ha una carta che ti serve.${otherTagLine}${profileLine}\n\n` +
-      `Tu cedi: <b>${give}</b>\nTu ricevi: <b>${get}</b>\n\n` +
-      `Usa i bottoni qui sotto per applicare subito o proporre lo scambio in chat.`
+      `${otherId} può sbloccare una carta scambiando con te.\n\n` +
+      `Con il tuo profilo: ${myId}\n\n` +
+      `Tu daresti: <b>${give}</b> (ti resta almeno 1 copia)\n` +
+      `Tu riceveresti: <b>${get}</b> (già nel mazzo)\n\n` +
+      `Solo chi sblocca una carta nuova può proporre lo scambio: attendi la sua proposta oppure aprilo dal sito.`
     );
   }
   if (row.kind === 'message') {
@@ -97,10 +114,14 @@ function buildKeyboard(row) {
   const p = row.payload || {};
   const rows = [];
   if (row.kind === 'match') {
-    rows.push([
-      Markup.button.callback('⚡ Applica subito', `cards:nmatch:${row.id}:apply`),
-      Markup.button.callback('💬 Proponi', `cards:nmatch:${row.id}:propose`),
-    ]);
+    if (p.i_unlock !== false) {
+      rows.push([
+        Markup.button.callback('⚡ Applica subito', `cards:nmatch:${row.id}:apply`),
+        Markup.button.callback('💬 Proponi', `cards:nmatch:${row.id}:propose`),
+      ]);
+    } else {
+      rows.push([Markup.button.callback('🎴 Apri carte', 'cards:menu')]);
+    }
   } else if (row.kind === 'proposal' && p.room_id) {
     rows.push([Markup.button.callback('💬 Apri chat', `cards:room:${p.room_id}`)]);
   } else if (row.kind === 'committed' && p.room_id) {

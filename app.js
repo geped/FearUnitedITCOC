@@ -2029,12 +2029,16 @@ function _openCarteProfileSortModal(profiles) {
         <h3 style="font-size:1rem;margin:0">↕ Ordina profili CoC</h3>
         <button type="button" class="modal-close" onclick="document.getElementById('carte-profile-sort-modal')?.remove()">✕</button>
       </div>
-      <p style="font-size:0.8rem;color:var(--text-3);margin:0 0 0.7rem">Trascina per riordinare. L'ordine si applica ai profili in "Carte Evento".</p>
+      <p style="font-size:0.8rem;color:var(--text-3);margin:0 0 0.7rem">Trascina con il dito o usa ▲ ▼. L'ordine resta salvato su questo dispositivo.</p>
       <div id="carte-profile-sort-list" class="carte-sort-list">
         ${sorted.map(p => `
-          <div class="carte-sort-item" draggable="true" data-tag="${escH(p.coc_tag)}">
-            <span class="carte-sort-handle">⠿</span>
+          <div class="carte-sort-item" data-tag="${escH(p.coc_tag)}">
+            <span class="carte-sort-handle" aria-hidden="true">⠿</span>
             <span class="carte-sort-name">${escH(p.username || p.coc_tag)}</span>
+            <span class="carte-sort-move-btns">
+              <button type="button" class="carte-sort-move" data-dir="up" title="Sposta su">▲</button>
+              <button type="button" class="carte-sort-move" data-dir="down" title="Sposta giù">▼</button>
+            </span>
           </div>`).join('')}
       </div>
       <div class="carte-row-actions" style="margin-top:0.8rem">
@@ -2051,26 +2055,52 @@ function _initCarteProfileSortDrag() {
   const list = document.getElementById('carte-profile-sort-list');
   if (!list) return;
   let dragSrc = null;
-  list.querySelectorAll('.carte-sort-item').forEach((item) => {
-    item.addEventListener('dragstart', (e) => {
-      dragSrc = item;
-      e.dataTransfer.effectAllowed = 'move';
-      item.classList.add('is-dragging');
-    });
-    item.addEventListener('dragend', () => item.classList.remove('is-dragging'));
-    item.addEventListener('dragover', (e) => {
+
+  function moveItem(item, dir) {
+    if (dir === 'up' && item.previousElementSibling) {
+      list.insertBefore(item, item.previousElementSibling);
+    } else if (dir === 'down' && item.nextElementSibling) {
+      list.insertBefore(item.nextElementSibling, item);
+    }
+  }
+
+  list.querySelectorAll('.carte-sort-move').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
       e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      if (!dragSrc || dragSrc === item) return;
-      const rect = item.getBoundingClientRect();
-      if (e.clientY < rect.top + rect.height / 2) {
-        list.insertBefore(dragSrc, item);
-      } else {
-        list.insertBefore(dragSrc, item.nextSibling);
-      }
+      e.stopPropagation();
+      const item = btn.closest('.carte-sort-item');
+      if (item) moveItem(item, btn.dataset.dir);
     });
   });
-  list.addEventListener('drop', (e) => e.preventDefault());
+
+  list.querySelectorAll('.carte-sort-item').forEach((item) => {
+    item.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('button')) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      dragSrc = item;
+      item.classList.add('is-dragging');
+      item.setPointerCapture(e.pointerId);
+    });
+    item.addEventListener('pointermove', (e) => {
+      if (!dragSrc) return;
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const over = el && el.closest ? el.closest('.carte-sort-item') : null;
+      if (!over || over === dragSrc || over.parentElement !== list) return;
+      const rect = over.getBoundingClientRect();
+      if (e.clientY < rect.top + rect.height / 2) list.insertBefore(dragSrc, over);
+      else list.insertBefore(dragSrc, over.nextSibling);
+    });
+    item.addEventListener('pointerup', () => {
+      if (!dragSrc) return;
+      dragSrc.classList.remove('is-dragging');
+      dragSrc = null;
+    });
+    item.addEventListener('pointercancel', () => {
+      if (!dragSrc) return;
+      dragSrc.classList.remove('is-dragging');
+      dragSrc = null;
+    });
+  });
 }
 
 function _saveCarteProfileSortOrder() {
@@ -2949,9 +2979,51 @@ function _switchCarteMainTab(tab, btn) {
 }
 
 window._carteTradeSub = null; // 'self' | 'public'
-window._cartePublicWin = 'suggested'; // 'suggested' | 'albums-mine' | 'rooms'
+window._cartePublicWin = 'suggested'; // 'suggested' | 'rooms'
 window._carteAlbumFilter = 'all'; // 'all' | category key
 window._carteAlbumCollapsed = window._carteAlbumCollapsed || {}; // id -> true se ridotto
+window._carteCyclesEnabled = false;
+
+function _carteShowLoading(msg) {
+  document.getElementById('carte-loading-overlay')?.remove();
+  const el = document.createElement('div');
+  el.id = 'carte-loading-overlay';
+  el.className = 'modal-overlay';
+  el.style.cssText = 'display:flex;z-index:2100';
+  el.innerHTML = `<div class="modal-box carte-loading-box">
+    <div class="carte-loading-spinner" aria-hidden="true"></div>
+    <p>${escH(msg || 'Caricamento…')}</p>
+  </div>`;
+  document.body.appendChild(el);
+}
+
+function _carteHideLoading() {
+  document.getElementById('carte-loading-overlay')?.remove();
+}
+
+function _carteWaitPaint() {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+  });
+}
+
+function _cartePlayerLine(p) {
+  if (!p) return '—';
+  const name = p.username || p.coc_tag || '—';
+  const bits = [p.coc_tag, p.coc_clan_name].filter(Boolean);
+  return bits.length ? `${name} (${bits.join(' · ')})` : name;
+}
+
+function _carteMatchActionBtns(live, iUnlock, applyFn, proposeFn) {
+  if (!live) return '';
+  if (iUnlock) {
+    return `<div class="carte-row-actions">
+      <button type="button" class="btn-secondary btn-sm" onclick="${applyFn}" title="Cedi subito il tuo doppione">⚡ Applica subito</button>
+      <button type="button" class="btn-primary btn-sm" onclick="${proposeFn}">💬 Proponi scambio</button>
+    </div>`;
+  }
+  return `<p class="carte-qty-modal-note" style="text-align:left;margin:0.35rem 0 0">🟡 Tu ricevi un doppione: solo l’altro sblocca, quindi può proporti lui lo scambio.</p>`;
+}
 
 function _switchCarteTradeSub(sub, btn) {
   window._carteTradeSub = sub;
@@ -2966,7 +3038,7 @@ function _switchCarteTradeSub(sub, btn) {
 }
 
 function _openCartePublicWin(win) {
-  window._cartePublicWin = (win && win !== 'hub' && win !== 'albums-hub' && win !== 'albums-others') ? win : 'suggested';
+  window._cartePublicWin = (win && win !== 'hub' && win !== 'albums-hub' && win !== 'albums-others' && win !== 'albums-mine') ? win : 'suggested';
   _renderCartePublicWindow();
 }
 
@@ -2986,43 +3058,86 @@ async function loadCardTradeTab() {
   }
   const keepWin = window._cartePublicWin;
   const keepSub = window._carteTradeSub;
-  box.innerHTML = '<div class="profilo-empty"><p style="color:var(--text-3)">Caricamento…</p></div>';
+  box.innerHTML = '<div class="profilo-empty"><p style="color:var(--text-3)">Caricamento scambi…</p></div>';
+  _carteShowLoading('Caricamento scambi suggeriti…');
+  await _carteWaitPaint();
   try {
     const profiles = window._cardEventData?.profiles || [];
-    // Nessun profile_id: aggrega gli scambi suggeriti su TUTTI i profili CoC collegati
-    // (ogni match indica con quale mio profilo si applica), senza dover scegliere un
-    // profilo "attivo" a priori.
-    const [matches, selfMatches, rooms, publicDecks, p2pTriangles, p2pQuads, selfTriangles, triangleProposals] = await Promise.all([
+    // Triangoli/quad non partono in automatico: sono pesanti e bloccano il sito.
+    // L'utente li abilita a richiesta (overlay di caricamento dedicato).
+    const [matches, selfMatches, rooms, publicDecks, triangleProposals] = await Promise.all([
       cardsApi('cards-matches'),
       profiles.length > 1 ? cardsApi('cards-self-matches') : Promise.resolve({ matches: [] }),
       cardsApi('cards-rooms'),
       cardsApi('cards-public-list'),
-      cardsApi('cards-triangles'),
-      cardsApi('cards-quads'),
-      profiles.length >= 3 ? cardsApi('cards-triangles-self') : Promise.resolve({ triangles: [] }),
       cardsApi('cards-triangle-proposals'),
     ]);
     window._cardTradeData = {
       matches: matches.matches || [],
       selfMatches: selfMatches.matches || [],
       rooms: rooms.rooms || [],
-      p2pTriangles: p2pTriangles.triangles || [],
-      p2pQuads: p2pQuads.quads || [],
-      selfTriangles: selfTriangles.triangles || [],
+      p2pTriangles: [],
+      p2pQuads: [],
+      selfTriangles: [],
       triangleProposals: triangleProposals.proposals || [],
+      cyclesLoaded: false,
     };
     window._cardPublicData = { myPublic: publicDecks.my_public === true, decks: publicDecks.decks || [] };
   } catch (e) {
+    _carteHideLoading();
     box.innerHTML = `<div class="profilo-empty"><p style="color:var(--red)">Errore caricamento scambi: ${escH(e.message || '')}</p></div>`;
     return;
   }
-  if (keepSub) window._carteTradeSub = keepSub;
-  if (keepWin && keepWin !== 'hub' && keepWin !== 'albums-hub' && keepWin !== 'albums-others') {
+  _carteHideLoading();
+  window._carteCyclesEnabled = false;
+  window._carteTradeSub = keepSub || 'public';
+  if (keepWin && keepWin !== 'hub' && keepWin !== 'albums-hub' && keepWin !== 'albums-others' && keepWin !== 'albums-mine') {
     window._cartePublicWin = keepWin;
   } else {
     window._cartePublicWin = 'suggested';
   }
   renderCardTradeContent();
+}
+
+async function _carteSetCyclesEnabled(on) {
+  if (!on) {
+    window._carteCyclesEnabled = false;
+    if (window._cardTradeData) {
+      window._cardTradeData.p2pTriangles = [];
+      window._cardTradeData.p2pQuads = [];
+      window._cardTradeData.selfTriangles = [];
+      window._cardTradeData.cyclesLoaded = false;
+    }
+    _renderCartePublicWindow();
+    if (window._carteTradeSub === 'self') renderCardTradeContent();
+    return;
+  }
+  window._carteCyclesEnabled = true;
+  _carteShowLoading('Calcolo scambi a ciclo… può richiedere alcuni secondi.');
+  await _carteWaitPaint();
+  try {
+    const profiles = window._cardEventData?.profiles || [];
+    const [p2pTriangles, p2pQuads, selfTriangles] = await Promise.all([
+      cardsApi('cards-triangles'),
+      cardsApi('cards-quads'),
+      profiles.length >= 3 ? cardsApi('cards-triangles-self') : Promise.resolve({ triangles: [] }),
+    ]);
+    if (window._cardTradeData) {
+      window._cardTradeData.p2pTriangles = p2pTriangles.triangles || [];
+      window._cardTradeData.p2pQuads = p2pQuads.quads || [];
+      window._cardTradeData.selfTriangles = selfTriangles.triangles || [];
+      window._cardTradeData.cyclesLoaded = true;
+    }
+  } catch (e) {
+    window._carteCyclesEnabled = false;
+    _carteHideLoading();
+    _carteInlineNotice('❌ ' + (e.message || 'Errore calcolo cicli.'), 4000);
+    _renderCartePublicWindow();
+    return;
+  }
+  _carteHideLoading();
+  _renderCartePublicWindow();
+  if (window._carteTradeSub === 'self') renderCardTradeContent();
 }
 
 function _cardMiniImg(meta) {
@@ -3245,9 +3360,9 @@ function renderCardTradeContent() {
   const multiProfiles = (window._cardEventData?.profiles?.length || 0) > 1;
 
   if (!window._carteTradeSub || (!multiProfiles && window._carteTradeSub === 'self')) {
-    window._carteTradeSub = multiProfiles ? 'self' : 'public';
+    window._carteTradeSub = 'public';
   }
-  if (!window._cartePublicWin || window._cartePublicWin === 'hub' || window._cartePublicWin === 'albums-hub' || window._cartePublicWin === 'albums-others') {
+  if (!window._cartePublicWin || window._cartePublicWin === 'hub' || window._cartePublicWin === 'albums-hub' || window._cartePublicWin === 'albums-others' || window._cartePublicWin === 'albums-mine') {
     window._cartePublicWin = 'suggested';
   }
   const sub = window._carteTradeSub;
@@ -3323,7 +3438,7 @@ function renderCardTradeContent() {
       }).join('')
     : `<div class="profilo-empty"><p style="color:var(--text-3)">${_carteFiltersActive() ? 'Nessuno scambio tra i tuoi profili con questi filtri.' : 'Nessuno scambio disponibile tra i tuoi profili collegati.'}</p></div>`;
 
-  const selfTrianglesHtml = (data.selfTriangles || []).length
+  const selfTrianglesHtml = (window._carteCyclesEnabled && (data.selfTriangles || []).length)
     ? (data.selfTriangles || []).map((t, i) => _carteTriangleRowHtml(t, i, { selfMode: true, live })).join('')
     : '';
 
@@ -3495,10 +3610,12 @@ function _renderMatchesAlbumView(filteredMatches, live, multiMine) {
   if (!filteredMatches.length) {
     return `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio suggerito al momento.</p></div>`;
   }
-  return `<div class="carte-match-grid">${filteredMatches.map(({ m, i }) => `
+  return `<div class="carte-match-grid">${filteredMatches.map(({ m, i }) => {
+    const iUnlock = m.i_unlock !== false;
+    return `
     <div class="carte-match-card">
-      <div class="carte-match-card-player">con ${escH(m.other_profile?.username || m.other_profile?.coc_tag || '—')}</div>
-      ${multiMine ? `<div class="carte-match-card-myprofile">👤 ${escH(m.my_profile?.username || m.my_profile?.coc_tag || '—')}</div>` : ''}
+      <div class="carte-match-card-player">con ${escH(_cartePlayerLine(m.other_profile))}</div>
+      ${multiMine ? `<div class="carte-match-card-myprofile">👤 ${escH(_cartePlayerLine(m.my_profile))}</div>` : ''}
       <div class="carte-match-card-exchange">
         <div class="carte-match-card-side">
           ${_cardMiniImg(m.card_give_meta)}
@@ -3508,15 +3625,16 @@ function _renderMatchesAlbumView(filteredMatches, live, multiMine) {
         <span class="carte-match-card-arrow">⇄</span>
         <div class="carte-match-card-side">
           ${_cardMiniImg(m.card_get_meta)}
-          <span class="carte-match-card-cname">${escH(m.card_get_meta?.name_it || m.card_get)} 🟢</span>
+          <span class="carte-match-card-cname">${escH(m.card_get_meta?.name_it || m.card_get)} ${iUnlock ? '🟢' : '🟡'}</span>
           <span class="carte-match-card-label">📥 Ricevi</span>
         </div>
       </div>
-      ${live ? `<div class="carte-match-card-actions">
+      ${live && iUnlock ? `<div class="carte-match-card-actions">
         <button type="button" class="btn-secondary btn-sm" onclick="_applyFromMatch(${i})" title="Applica subito">⚡</button>
         <button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">💬 Proponi</button>
-      </div>` : ''}
-    </div>`).join('')}</div>`;
+      </div>` : (!iUnlock ? `<p class="carte-qty-modal-note" style="text-align:left;margin:0.3rem 0 0;font-size:0.72rem">🟡 Solo l’altro sblocca</p>` : '')}
+    </div>`;
+  }).join('')}</div>`;
 }
 
 /** Render vista Album per i triangoli P2P. */
@@ -3608,7 +3726,6 @@ function _renderCartePublicWindow() {
     const nRooms = data?.rooms?.length || 0;
     const nPending = (data?.rooms || []).reduce((s, r) => s + (r.pending_proposals || 0), 0);
     const quickLinks = `<div class="carte-quicklinks">
-      <button type="button" class="btn-secondary btn-sm" onclick="_openCartePublicWin('albums-mine')">👤 I tuoi mazzi</button>
       <button type="button" class="btn-secondary btn-sm" onclick="_openCartePublicWin('rooms')">💬 Conversazioni${nPending ? ` (${nPending})` : nRooms ? ` (${nRooms})` : ''}</button>
     </div>`;
 
@@ -3638,13 +3755,15 @@ function _renderCartePublicWindow() {
 
     // ── Sezione 1: Scambi suggeriti ────────────────────────────────────────
     const matchesLista = filtered.length
-      ? filtered.map(({ m, i }) => `
-        <div class="carte-self-row semaforo-green">
+      ? filtered.map(({ m, i }) => {
+          const iUnlock = m.i_unlock !== false;
+          return `
+        <div class="carte-self-row ${iUnlock ? 'semaforo-green' : 'semaforo-yellow'}">
           <div class="carte-self-row-header">
-            <span class="carte-self-row-players">con ${escH(m.other_profile?.username || m.other_profile?.coc_tag || '—')}</span>
-            <span class="carte-self-row-dot" title="Scambio utile: entrambi sbloccano una carta nuova">🟢</span>
+            <span class="carte-self-row-players">con ${escH(_cartePlayerLine(m.other_profile))}</span>
+            <span class="carte-self-row-dot" title="${iUnlock ? 'Tu sblocchi una carta nuova' : 'Tu ricevi un doppione: solo l’altro sblocca'}">${iUnlock ? '🟢' : '🟡'}</span>
           </div>
-          ${multiMine ? `<div class="carte-match-my-profile">👤 con il tuo profilo: <strong>${escH(m.my_profile?.username || m.my_profile?.coc_tag || '—')}</strong></div>` : ''}
+          ${multiMine ? `<div class="carte-match-my-profile">👤 con il tuo profilo: <strong>${escH(_cartePlayerLine(m.my_profile))}</strong></div>` : ''}
           <div class="carte-self-row-cols">
             <div class="carte-self-row-col">
               <div class="carte-self-row-col-label">📤 Cedi</div>
@@ -3657,18 +3776,16 @@ function _renderCartePublicWindow() {
               <div class="carte-self-row-col-label">📥 Ricevi</div>
               <div class="carte-self-row-item">
                 ${_cardMiniImg(m.card_get_meta)}
-                <div><div class="carte-self-row-card-name">${escH(m.card_get_meta?.name_it || m.card_get)} 🟢</div><div class="carte-self-row-sub">carta nuova per te</div></div>
+                <div><div class="carte-self-row-card-name">${escH(m.card_get_meta?.name_it || m.card_get)} ${iUnlock ? '🟢' : '🟡'}</div><div class="carte-self-row-sub">${iUnlock ? 'carta nuova per te' : 'già nel tuo mazzo'}</div></div>
               </div>
             </div>
           </div>
-          ${live ? `<div class="carte-row-actions">
-            <button type="button" class="btn-secondary btn-sm" onclick="_applyFromMatch(${i})" title="Cedi subito il tuo doppione">⚡ Applica subito</button>
-            <button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">💬 Proponi scambio</button>
-          </div>` : ''}
-        </div>`).join('')
+          ${_carteMatchActionBtns(live, iUnlock, `_applyFromMatch(${i})`, `_proposeFromMatch(${i})`)}
+        </div>`;
+        }).join('')
       : `<div class="profilo-empty"><p style="color:var(--text-3)">${_carteFiltersActive()
           ? 'Nessuno scambio suggerito con questi filtri.'
-          : 'Nessuno scambio automatico con mazzi pubblici al momento. Serve: tu hai un doppione che all’altro manca, e lui ha un doppione (stessa tipologia) che manca a te.'}</p></div>`;
+          : 'Nessuno scambio automatico al momento. Serve: tu hai un doppione e l’altro ha un doppione della stessa tipologia, e almeno uno dei due sblocca una carta nuova.'}</p></div>`;
 
     const sec1 = `<div class="carte-section-block">
       ${sectionHead('suggested', '🔄 Scambi suggeriti', svSugg, colSugg)}
@@ -3679,6 +3796,7 @@ function _renderCartePublicWindow() {
     </div>`;
 
     // ── Sezione 2: Scambi a ciclo (triangoli + catene a 4) ────────────────
+    const cyclesOn = window._carteCyclesEnabled === true;
     const trianglesLista = triangles.length
       ? triangles.map((t, i) => _carteTriangleRowHtml(t, i, { selfMode: false, live })).join('')
       : `<div class="profilo-empty"><p style="color:var(--text-3)">Nessun triangolo disponibile al momento.</p></div>`;
@@ -3691,12 +3809,21 @@ function _renderCartePublicWindow() {
       ${_renderTrianglesAlbumView(triangles, live)}
       ${quads.length ? `<h5 style="margin:0.6rem 0 0.3rem;font-size:0.85rem;color:var(--text-3)">🔗 Catene a 4</h5>${_renderQuadsAlbumView(quads, live)}` : ''}`;
 
+    const cyclesDisabledBody = `<div class="carte-section-block-body">
+      <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.6rem">Gli scambi a 3 e 4 giocatori sono disattivati di default perché il calcolo è pesante. Attivali solo quando ti servono: i match vengono calcolati in quel momento.</p>
+      <button type="button" class="btn-primary btn-sm" onclick="_carteSetCyclesEnabled(true)">▶️ Abilita scambi a ciclo</button>
+    </div>`;
+    const cyclesEnabledBody = `<div class="carte-section-block-body">
+      <div style="display:flex;flex-wrap:wrap;gap:0.4rem;align-items:center;margin-bottom:0.5rem">
+        <p class="carte-qty-modal-note" style="text-align:left;margin:0;flex:1">Ciclo a 3 o 4 profili. Proponi e attendi le altre accettazioni.</p>
+        <button type="button" class="btn-secondary btn-sm" onclick="_carteSetCyclesEnabled(false)">Disattiva</button>
+      </div>
+      ${svTri === 'album' ? trianglesAlbumView : trianglesBody}
+    </div>`;
+
     const sec2 = `<div class="carte-section-block">
       ${sectionHead('triangles', '🔀 Scambi a ciclo (3-4 giocatori)', svTri, colTri)}
-      ${colTri ? '' : `<div class="carte-section-block-body">
-        <p class="carte-qty-modal-note" style="text-align:left;margin-bottom:0.5rem">Ciclo a 3 o 4 profili: tutti sbloccano una carta nuova. Proponi e attendi le altre accettazioni.</p>
-        ${svTri === 'album' ? trianglesAlbumView : trianglesBody}
-      </div>`}
+      ${colTri ? '' : (cyclesOn ? cyclesEnabledBody : cyclesDisabledBody)}
     </div>`;
 
     // ── Sezione 3: Mazzi altri giocatori ──────────────────────────────────
@@ -3733,7 +3860,8 @@ function _renderCartePublicWindow() {
   }
 
   if (win === 'albums-mine') {
-    box.innerHTML = `${_cartePublicWinHeader('I tuoi mazzi', 'suggested')}${_renderAlbumsWindow(live, 'mine')}`;
+    window._cartePublicWin = 'suggested';
+    _renderCartePublicWindow();
     return;
   }
 
@@ -3931,7 +4059,7 @@ function _renderAlbumsOthersGrid(decks, live, cat, myProfiles) {
       </button>
       <div class="carte-deck-card-actions">
         ${live ? `<button type="button" class="btn-primary btn-sm" onclick="_openPublicDeck(${i})">💬 Chat</button>` : ''}
-        ${(live && filteredMatches.length) ? `<button type="button" class="btn-secondary btn-sm" onclick="_proposeFromPublicDeck(${i},${(d.matches||[]).indexOf(filteredMatches[0])})">⚡ Proponi</button>` : ''}
+        ${(live && filteredMatches.some((m) => m.i_unlock !== false)) ? `<button type="button" class="btn-secondary btn-sm" onclick="_proposeFromPublicDeck(${i},${(d.matches||[]).indexOf(filteredMatches.find((m) => m.i_unlock !== false))})">⚡ Proponi</button>` : ''}
         <button type="button" class="btn-secondary btn-sm" onclick="_openDeckAlbumModal(${i})" title="Visualizza album">📚 Album</button>
       </div>
     </div>`;
@@ -4012,10 +4140,10 @@ function _renderAlbumsWindow(live, which = 'mine') {
                         <span>${escH(m.card_get_meta?.name_it || m.card_get)}</span>
                       </div>
                     </div>
-                    ${live ? `<div class="carte-row-actions">
+                    ${live && m.i_unlock !== false ? `<div class="carte-row-actions">
                       <button type="button" class="btn-secondary btn-sm" onclick="_applyFromPublicDeck(${i},${mi})" title="Cedi subito il tuo doppione; l'altro vedrà che hai già confermato">⚡ Applica subito</button>
                       <button type="button" class="btn-primary btn-sm" onclick="_proposeFromPublicDeck(${i},${mi})">💬 Proponi scambio</button>
-                    </div>` : ''}
+                    </div>` : (m.i_unlock === false ? `<p class="carte-qty-modal-note" style="text-align:left;margin:0.3rem 0 0">🟡 Solo l’altro sblocca: può proporti lui.</p>` : '')}
                   </div>`;
                 }).join('')}
                 ${n > 6 ? `<div class="carte-qty-modal-note" style="text-align:left;margin:0.35rem 0 0">+${n - 6} altri — apri chat o «Scambi suggeriti».</div>` : ''}` : ''}
@@ -4124,6 +4252,10 @@ async function _proposeFromPublicDeck(deckIdx, matchIdx, commitNow = false) {
   const deck = window._cardPublicData?.decks?.[deckIdx];
   const m = deck?.matches?.[matchIdx];
   if (!deck || !m) return;
+  if (m.i_unlock === false) {
+    _carteInlineNotice('Solo chi sblocca una carta nuova può proporre lo scambio.', 3500);
+    return;
+  }
   // Ogni match indica con quale mio profilo si applica (aggregato su tutti i profili collegati).
   const profileId = m.my_profile?.id || _activeCardProfileId();
   if (!profileId) return;
@@ -4199,6 +4331,10 @@ function _applySuggested(idx) {
 async function _proposeFromMatch(idx, commitNow = false) {
   const m = window._cardTradeData?.matches?.[idx];
   if (!m) return;
+  if (m.i_unlock === false) {
+    _carteInlineNotice('Solo chi sblocca una carta nuova può proporre lo scambio.', 3500);
+    return;
+  }
   // Ogni match indica con quale mio profilo si applica (aggregato su tutti i profili collegati).
   const profileId = m.my_profile?.id || _activeCardProfileId();
   if (!profileId) return;

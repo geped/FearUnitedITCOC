@@ -388,15 +388,12 @@ describe('card-trades: mazzi pubblici', () => {
     assert.equal(res.decks[0].matches[0].card_give, 'elx_barbarian');
   });
 
-  it('getMatchesForProfile restituisce solo match con mazzi pubblici', async () => {
+  it('getMatchesForProfile mostra i match di tutti i mazzi (ogni mazzo è pubblico)', async () => {
     const admin = seedBase();
-    // Senza mazzo pubblico: nessun match suggerito
-    let res = await cardTrades.getMatchesForProfile(admin, fakeUser(USER_A), 'p-a1');
-    assert.equal(res.matches.length, 0);
-    await cardTrades.setProfilePublic(admin, fakeUser(USER_B), 'p-b1', true);
-    res = await cardTrades.getMatchesForProfile(admin, fakeUser(USER_A), 'p-a1');
+    const res = await cardTrades.getMatchesForProfile(admin, fakeUser(USER_A), 'p-a1');
     assert.equal(res.matches.length, 1);
     assert.equal(res.matches[0].other_profile.coc_tag, '#BBB1');
+    assert.equal(res.matches[0].i_unlock, true);
   });
 
   it('computeP2pMatches: stessa categoria, doppione vs mancante', () => {
@@ -405,6 +402,35 @@ describe('card-trades: mazzi pubblici', () => {
       { elx_archer: 2 },
     );
     assert.ok(matches.some((m) => m.card_give === 'elx_barbarian' && m.card_get === 'elx_archer'));
+    const hit = matches.find((m) => m.card_give === 'elx_barbarian' && m.card_get === 'elx_archer');
+    assert.equal(hit.i_unlock, true);
+    assert.equal(hit.they_unlock, true);
+  });
+
+  it('computeP2pMatches: visibile anche se solo l\'altro sblocca (io ricevo doppione)', () => {
+    const matches = cardTrades.computeP2pMatches(
+      { elx_barbarian: 2, elx_archer: 1 },
+      { elx_archer: 2 },
+    );
+    const hit = matches.find((m) => m.card_give === 'elx_barbarian' && m.card_get === 'elx_archer');
+    assert.ok(hit, 'il match deve apparire anche se io ho già arciere');
+    assert.equal(hit.i_unlock, false);
+    assert.equal(hit.they_unlock, true);
+  });
+
+  it('getMatchesForProfile mostra il match a entrambi i lati (anche se uno riceve doppione)', async () => {
+    const admin = seedBase();
+    // Bob possiede già Barbaro: Alice sblocca Arciere, Bob riceve un doppione Barbaro.
+    const barb = admin.db.tables.card_event_collections.find(
+      (r) => r.coc_tag === '#BBB1' && r.card_key === 'elx_barbarian',
+    );
+    barb.qty_state = 1;
+    const fromAlice = await cardTrades.getMatchesForProfile(admin, fakeUser(USER_A), 'p-a1');
+    assert.equal(fromAlice.matches.length, 1);
+    assert.equal(fromAlice.matches[0].i_unlock, true);
+    assert.equal(fromAlice.matches[0].they_unlock, false);
+    const fromBob = await cardTrades.getMatchesForProfile(admin, fakeUser(USER_B), 'p-b1');
+    assert.ok(fromBob.matches.some((m) => m.card_give === 'elx_archer' && m.card_get === 'elx_barbarian' && m.i_unlock === false));
   });
 
   it('listPublicDecks include il "post" con la collezione completa del mazzo pubblicato', async () => {
@@ -416,10 +442,10 @@ describe('card-trades: mazzi pubblici', () => {
     assert.deepEqual(res.decks[0].collection, { elx_archer: 2 });
   });
 
-  it('my_public riflette lo stato del profilo attivo', async () => {
+  it('my_public è sempre true: ogni mazzo è pubblico', async () => {
     const admin = seedBase();
     const before = await cardTrades.listPublicDecks(admin, fakeUser(USER_A), 'p-a1');
-    assert.equal(before.my_public, false);
+    assert.equal(before.my_public, true);
     await cardTrades.setProfilePublic(admin, fakeUser(USER_A), 'p-a1', true);
     const after = await cardTrades.listPublicDecks(admin, fakeUser(USER_A), 'p-a1');
     assert.equal(after.my_public, true);
@@ -459,21 +485,36 @@ describe('card-trades: notifiche outbox (bot Telegram)', () => {
 
   it('notifyMatchesForTag accoda notifiche "match" per entrambi i lati senza duplicati', async () => {
     const admin = seedBase();
-    admin.db.rpcStubs = {
-      find_card_matches: [
-        { other_coc_tag: '#BBB1', card_give: 'elx_barbarian', card_get: 'elx_archer', category: 'elixir' },
-      ],
-    };
     await cardTrades.notifyMatchesForTag(admin, '#AAA1');
     let outbox = admin.db.tables.card_event_notify_outbox || [];
     assert.equal(outbox.length, 2);
-    assert.ok(outbox.some((r) => r.user_id === USER_A && r.payload.other_coc_tag === '#BBB1'));
-    assert.ok(outbox.some((r) => r.user_id === USER_B && r.payload.other_coc_tag === '#AAA1'));
+    const forA = outbox.find((r) => r.user_id === USER_A);
+    const forB = outbox.find((r) => r.user_id === USER_B);
+    assert.ok(forA && forA.payload.other_coc_tag === '#BBB1');
+    assert.ok(forB && forB.payload.other_coc_tag === '#AAA1');
+    assert.equal(forA.payload.i_unlock, true);
+    assert.equal(forB.payload.i_unlock, true);
+    assert.equal(forA.payload.my_coc_tag, '#AAA1');
+    assert.equal(forA.payload.other_username, 'Bob');
 
-    // Richiamandola di nuovo con lo stesso match non deve duplicare (dedupe_key).
     await cardTrades.notifyMatchesForTag(admin, '#AAA1');
     outbox = admin.db.tables.card_event_notify_outbox || [];
     assert.equal(outbox.length, 2, 'nessuna riga duplicata per lo stesso match');
+  });
+
+  it('notifyMatchesForTag accoda anche match unilaterali (solo un lato sblocca)', async () => {
+    const admin = seedBase();
+    const barb = admin.db.tables.card_event_collections.find(
+      (r) => r.coc_tag === '#BBB1' && r.card_key === 'elx_barbarian',
+    );
+    barb.qty_state = 1;
+    await cardTrades.notifyMatchesForTag(admin, '#AAA1');
+    const outbox = (admin.db.tables.card_event_notify_outbox || []).filter((r) => r.kind === 'match');
+    assert.equal(outbox.length, 2);
+    const forA = outbox.find((r) => r.user_id === USER_A);
+    const forB = outbox.find((r) => r.user_id === USER_B);
+    assert.equal(forA.payload.i_unlock, true);
+    assert.equal(forB.payload.i_unlock, false);
   });
 });
 

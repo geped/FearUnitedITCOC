@@ -141,13 +141,18 @@ async function saveCardState(admin, user, { cocTag, cardKey, qtyState }) {
 
   // Best-effort, non blocca la risposta se fallisce: require lazy per evitare un
   // ciclo di dipendenza (card-trades.js richiede questo file per CARD_BY_KEY).
+  // Isolati: un fallimento (es. timeout sui triangoli) non deve bloccare le
+  // notifiche match, altrimenti il bot smette di avvisare gli scambi suggeriti.
   try {
     const cardTrades = require('./card-trades');
-    const cardTriangles = require('./card-triangles');
-    // Se la collezione cambia, eventuali proposte pending non più valide (una carta
-    // in meno/in più rispetto a quando erano state create) vanno auto-invalidate.
     await cardTrades.revalidateProposalsForTag(admin, cocTag);
+  } catch (_) {}
+  try {
+    const cardTriangles = require('./card-triangles');
     await cardTriangles.revalidateTrianglesForTag(admin, cocTag);
+  } catch (_) {}
+  try {
+    const cardTrades = require('./card-trades');
     await cardTrades.notifyMatchesForTag(admin, cocTag);
   } catch (_) {}
 

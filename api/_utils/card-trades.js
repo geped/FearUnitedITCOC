@@ -33,18 +33,21 @@ function computeP2pMatches(myColl, otherColl) {
   const out = [];
   for (const give of CARD_EVENT_CATALOG) {
     if (qty(mine, give.key) < 2) continue;
-    // NB: non si verifica se l'altro ha già la carta che cediamo:
-    // l'altro può ricevere doppioni (aumenta il suo conteggio).
-    // Solo chi propone deve beneficiare (vedere sotto: qty(mine,get)==0).
     for (const get of CARD_EVENT_CATALOG) {
       if (get.category !== give.category) continue;
       if (get.key === give.key) continue;
       if (qty(other, get.key) < 2) continue;
-      if (qty(mine, get.key) >= 1) continue; // io la possiedo già → non beneficio
+      const iUnlock = qty(mine, get.key) === 0;
+      const theyUnlock = qty(other, give.key) === 0;
+      // Mostra il match se almeno uno sblocca. Chi già possiede riceve un doppione.
+      // Solo chi sblocca (i_unlock) può proporre: il gioco vieta di scambiare senza beneficio.
+      if (!iUnlock && !theyUnlock) continue;
       out.push({
         card_give: give.key,
         card_get: get.key,
         category: give.category,
+        i_unlock: iUnlock,
+        they_unlock: theyUnlock,
       });
     }
   }
@@ -121,54 +124,70 @@ async function profileUserId(admin, profileId) {
  * (i dati del match dalla prospettiva di A bastano per costruire anche quella di B,
  * evitando una seconda chiamata RPC per ogni avversario).
  */
+function matchNotifyPayload(me, other, cardGive, cardGet, iUnlock, theyUnlock) {
+  const giveMeta = cardMeta(cardGive);
+  const getMeta = cardMeta(cardGet);
+  return {
+    my_profile_id: me.id,
+    my_coc_tag: me.coc_tag,
+    my_username: me.username || null,
+    my_clan_name: me.coc_clan_name || null,
+    other_coc_tag: other.coc_tag,
+    other_username: other.username || null,
+    other_clan_name: other.coc_clan_name || null,
+    card_give: cardGive,
+    card_get: cardGet,
+    card_give_name: giveMeta?.name_it,
+    card_get_name: getMeta?.name_it,
+    i_unlock: iUnlock === true,
+    they_unlock: theyUnlock === true,
+  };
+}
+
 async function notifyMatchesForTag(admin, cocTag) {
   try {
-    const { data: matches, error } = await admin.rpc('find_card_matches', { p_coc_tag: cocTag });
-    if (error || !matches?.length) return;
-    const { data: me } = await admin.from('user_coc_profiles').select('id, user_id, username, coc_tag').eq('coc_tag', cocTag).maybeSingle();
+    const { data: me } = await admin
+      .from('user_coc_profiles')
+      .select('id, user_id, username, coc_tag, coc_clan_name')
+      .eq('coc_tag', cocTag)
+      .maybeSingle();
     if (!me) return;
-    const otherTags = [...new Set(matches.map((m) => m.other_coc_tag))];
+
     const { data: others } = await admin
       .from('user_coc_profiles')
-      .select('id, user_id, username, coc_tag')
-      .in('coc_tag', otherTags);
-    const otherByTag = Object.fromEntries((others || []).map((p) => [p.coc_tag, p]));
+      .select('id, user_id, username, coc_tag, coc_clan_name')
+      .neq('user_id', me.user_id);
+    if (!others?.length) return;
 
-    for (const m of matches) {
-      const other = otherByTag[m.other_coc_tag];
-      if (!other) continue;
-      const giveMeta = cardMeta(m.card_give);
-      const getMeta = cardMeta(m.card_get);
-      await queueNotification(admin, {
-        userId: me.user_id,
-        kind: 'match',
-        dedupeKey: `${me.coc_tag}|${other.coc_tag}|${m.card_give}|${m.card_get}`,
-        payload: {
-          my_profile_id: me.id,
-          my_coc_tag: me.coc_tag,
-          other_coc_tag: other.coc_tag,
-          other_username: other.username,
-          card_give: m.card_give,
-          card_get: m.card_get,
-          card_give_name: giveMeta?.name_it,
-          card_get_name: getMeta?.name_it,
-        },
-      });
-      await queueNotification(admin, {
-        userId: other.user_id,
-        kind: 'match',
-        dedupeKey: `${other.coc_tag}|${me.coc_tag}|${m.card_get}|${m.card_give}`,
-        payload: {
-          my_profile_id: other.id,
-          my_coc_tag: other.coc_tag,
-          other_coc_tag: me.coc_tag,
-          other_username: me.username,
-          card_give: m.card_get,
-          card_get: m.card_give,
-          card_give_name: getMeta?.name_it,
-          card_get_name: giveMeta?.name_it,
-        },
-      });
+    const tags = [me.coc_tag, ...others.map((p) => p.coc_tag).filter(Boolean)];
+    const { data: collRows } = await admin
+      .from('card_event_collections')
+      .select('coc_tag, card_key, qty_state')
+      .in('coc_tag', tags);
+    const collByTag = {};
+    for (const tag of tags) collByTag[tag] = {};
+    for (const row of collRows || []) {
+      if (!collByTag[row.coc_tag]) collByTag[row.coc_tag] = {};
+      collByTag[row.coc_tag][row.card_key] = row.qty_state;
+    }
+
+    const myColl = collByTag[me.coc_tag] || {};
+    for (const other of others) {
+      const pair = computeP2pMatches(myColl, collByTag[other.coc_tag] || {});
+      for (const m of pair) {
+        await queueNotification(admin, {
+          userId: me.user_id,
+          kind: 'match',
+          dedupeKey: `${me.coc_tag}|${other.coc_tag}|${m.card_give}|${m.card_get}`,
+          payload: matchNotifyPayload(me, other, m.card_give, m.card_get, m.i_unlock, m.they_unlock),
+        });
+        await queueNotification(admin, {
+          userId: other.user_id,
+          kind: 'match',
+          dedupeKey: `${other.coc_tag}|${me.coc_tag}|${m.card_get}|${m.card_give}`,
+          payload: matchNotifyPayload(other, me, m.card_get, m.card_give, m.they_unlock, m.i_unlock),
+        });
+      }
     }
   } catch (_) {
     // best-effort
@@ -226,6 +245,8 @@ async function getMatchesForProfile(admin, user, profileId) {
               card_give: m.card_give,
               card_get: m.card_get,
               category: m.category,
+              i_unlock: m.i_unlock !== false,
+              they_unlock: m.they_unlock === true,
             },
             ['card_give', 'card_get'],
           ),
@@ -351,6 +372,8 @@ async function listPublicDecks(admin, user, myProfileId) {
                   card_give: m.card_give,
                   card_get: m.card_get,
                   category: m.category,
+                  i_unlock: m.i_unlock !== false,
+                  they_unlock: m.they_unlock === true,
                 },
                 ['card_give', 'card_get'],
               ),
