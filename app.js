@@ -3211,7 +3211,7 @@ function _renderQuadsAlbumView(quads, live) {
     const nB = escH(q.profile_b?.username || q.profile_b?.coc_tag || 'B');
     const nC = escH(q.profile_c?.username || q.profile_c?.coc_tag || 'C');
     const nD = escH(q.profile_d?.username || q.profile_d?.coc_tag || 'D');
-    return `<div class="carte-match-card carte-triangle-album-card carte-match-card-wide">
+    return `<div class="carte-match-card carte-match-album-card carte-triangle-album-card carte-match-card-wide">
       <div class="carte-match-card-player">🔗 Catena a 4</div>
       <div class="carte-triangle-album-cycle">${nA} → ${nB} → ${nC} → ${nD}</div>
       <div class="carte-triangle-album-cards">
@@ -3613,7 +3613,7 @@ function _renderMatchesAlbumView(filteredMatches, live, multiMine) {
   return `<div class="carte-match-grid">${filteredMatches.map(({ m, i }) => {
     const iUnlock = m.i_unlock !== false;
     return `
-    <div class="carte-match-card">
+    <div class="carte-match-card carte-match-album-card">
       <div class="carte-match-card-player">con ${escH(_cartePlayerLine(m.other_profile))}</div>
       ${multiMine ? `<div class="carte-match-card-myprofile">👤 ${escH(_cartePlayerLine(m.my_profile))}</div>` : ''}
       <div class="carte-match-card-exchange">
@@ -3644,7 +3644,7 @@ function _renderTrianglesAlbumView(triangles, live) {
     const nA = escH(t.profile_a?.username || t.profile_a?.coc_tag || 'A');
     const nB = escH(t.profile_b?.username || t.profile_b?.coc_tag || 'B');
     const nC = escH(t.profile_c?.username || t.profile_c?.coc_tag || 'C');
-    return `<div class="carte-match-card carte-triangle-album-card">
+    return `<div class="carte-match-card carte-match-album-card carte-triangle-album-card">
       <div class="carte-match-card-player">🔀 Triangolo</div>
       <div class="carte-triangle-album-cycle">${nA} → ${nC} → ${nB} → ${nA}</div>
       <div class="carte-triangle-album-cards">

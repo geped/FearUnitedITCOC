@@ -5535,34 +5535,53 @@ tbody tr:last-child td { border-bottom: none; }
 /* ── Carte Evento: match card (vista Album scambi suggeriti) ─────────────── */
 .carte-match-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 0.7rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+    gap: 0.75rem;
+    align-items: stretch;
 }
-.carte-match-card {
+.carte-match-grid .carte-match-card,
+.carte-match-album-card {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    margin-bottom: 0;
     background: var(--bg-3);
     border: 1px solid var(--border);
     border-radius: 10px;
-    padding: 0.65rem;
-    display: flex;
-    flex-direction: column;
+    padding: 0.7rem;
     gap: 0.4rem;
     font-size: 0.82rem;
+    box-sizing: border-box;
 }
 .carte-match-card-player {
     font-weight: 600;
     color: var(--gold);
     font-size: 0.8rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    min-width: 0;
 }
-.carte-match-card-myprofile { font-size: 0.72rem; color: var(--text-3); }
+.carte-match-card-myprofile {
+    font-size: 0.72rem;
+    color: var(--text-3);
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    min-width: 0;
+}
 .carte-match-card-exchange {
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    gap: 0.4rem;
+    gap: 0.35rem;
     margin: 0.2rem 0;
+    min-width: 0;
 }
 .carte-match-card-side {
     display: flex;
@@ -5576,7 +5595,9 @@ tbody tr:last-child td { border-bottom: none; }
     font-size: 0.7rem;
     color: var(--text-2);
     text-align: center;
+    overflow-wrap: anywhere;
     word-break: break-word;
+    max-width: 100%;
 }
 .carte-match-card-label {
     font-size: 0.65rem;
@@ -5589,8 +5610,13 @@ tbody tr:last-child td { border-bottom: none; }
     align-self: center;
     flex-shrink: 0;
 }
-.carte-match-card-actions { display: flex; gap: 0.3rem; margin-top: 0.15rem; }
-.carte-match-card-actions button { flex: 1; font-size: 0.74rem; padding: 0.28rem 0.35rem; }
+.carte-match-card-actions { display: flex; gap: 0.3rem; margin-top: 0.15rem; min-width: 0; }
+.carte-match-card-actions button { flex: 1; min-width: 0; font-size: 0.74rem; padding: 0.28rem 0.35rem; }
+.carte-match-grid .carte-qty-modal-note {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    min-width: 0;
+}
 
 /* ── Carte Evento: triangoli album view ──────────────────────────────────── */
 .carte-triangle-album-card { border-color: rgba(76,175,80,0.35); }
@@ -5669,8 +5695,9 @@ tbody tr:last-child td { border-bottom: none; }
 @keyframes carte-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 480px) {
-    .carte-match-grid { grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-    .carte-match-card { padding: 0.5rem; }
+    .carte-match-grid { grid-template-columns: 1fr; gap: 0.55rem; }
+    .carte-match-grid .carte-match-card { padding: 0.6rem; }
+    .carte-match-card-wide { grid-column: span 1; }
     .carte-section-block-head { padding: 0.45rem 0.65rem; }
     .carte-section-block-body { padding: 0.55rem 0.6rem; }
 }
