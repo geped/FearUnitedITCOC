@@ -3754,28 +3754,30 @@ function _renderMatchesAlbumView(filteredMatches, live, multiMine) {
     const iUnlock = m.i_unlock !== false;
     const otherName = _cartePlayerShort(m.other_profile);
     const myName = _cartePlayerShort(m.my_profile);
+    const clan = m.other_profile?.coc_clan_name || '';
+    const giveName = m.card_give_meta?.name_it || m.card_give || '—';
+    const getName = m.card_get_meta?.name_it || m.card_get || '—';
     return `
-    <div class="carte-match-card carte-match-album-card" title="${escH(_cartePlayerLine(m.other_profile))}">
-      <div class="carte-match-card-player">${escH(otherName)}</div>
-      ${multiMine ? `<div class="carte-match-card-myprofile">👤 ${escH(myName)}</div>` : ''}
-      <div class="carte-match-card-exchange">
-        <div class="carte-match-card-side">
-          ${_cardMiniImg(m.card_give_meta, 'carte-album-troop-img')}
-          <span class="carte-match-card-cname">${escH(m.card_give_meta?.name_it || m.card_give)}</span>
-          <span class="carte-match-card-label">Cedi</span>
-        </div>
-        <span class="carte-match-card-arrow">⇄</span>
-        <div class="carte-match-card-side">
-          ${_cardMiniImg(m.card_get_meta, 'carte-album-troop-img')}
-          <span class="carte-match-card-cname">${escH(m.card_get_meta?.name_it || m.card_get)}</span>
-          <span class="carte-match-card-label">Ricevi ${iUnlock ? '🟢' : '🟡'}</span>
-        </div>
+    <article class="carte-album-tile ${iUnlock ? 'is-unlock' : 'is-other'}" title="${escH(_cartePlayerLine(m.other_profile))}">
+      <header class="carte-album-tile-head">
+        <span class="carte-album-tile-name">${escH(otherName)}</span>
+        ${clan ? `<span class="carte-album-tile-clan">${escH(clan)}</span>` : ''}
+        ${multiMine ? `<span class="carte-album-tile-mine">tu: ${escH(myName)}</span>` : ''}
+      </header>
+      <div class="carte-album-tile-art">
+        <div class="carte-album-portrait">${_cardMiniImg(m.card_give_meta, 'carte-album-troop-img')}</div>
+        <div class="carte-album-swap" aria-hidden="true">⇄</div>
+        <div class="carte-album-portrait is-get">${_cardMiniImg(m.card_get_meta, 'carte-album-troop-img')}</div>
+        <span class="carte-album-slot-lbl">Cedi</span>
+        <span class="carte-album-slot-lbl is-get">Ricevi</span>
+        <span class="carte-album-slot-name">${escH(giveName)}</span>
+        <span class="carte-album-slot-name is-get">${escH(getName)}</span>
       </div>
-      ${live && iUnlock ? `<div class="carte-match-card-actions">
-        <button type="button" class="btn-secondary btn-sm" onclick="_applyFromMatch(${i})">Applica</button>
-        <button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">Proponi</button>
-      </div>` : (!iUnlock ? `<p class="carte-qty-modal-note carte-album-other-note">Solo l’altro</p>` : '')}
-    </div>`;
+      ${live && iUnlock ? `<footer class="carte-album-tile-actions">
+        <button type="button" class="carte-album-btn carte-album-btn-ghost" onclick="_applyFromMatch(${i})">Applica</button>
+        <button type="button" class="carte-album-btn carte-album-btn-gold" onclick="_proposeFromMatch(${i})">Proponi</button>
+      </footer>` : (!iUnlock ? `<footer class="carte-album-tile-note">Solo l’altro sblocca</footer>` : '')}
+    </article>`;
   }).join('')}</div>`;
 }
 

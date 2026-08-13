@@ -5570,8 +5570,198 @@ tbody tr:last-child td { border-bottom: none; }
         gap: 0.65rem;
     }
 }
-.carte-match-grid .carte-match-card,
-.carte-match-album-card {
+.carte-album-tile {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    aspect-ratio: 7 / 10;
+    overflow: hidden;
+    box-sizing: border-box;
+    padding: 0;
+    border-radius: 8px;
+    border: 1px solid var(--border-2);
+    background:
+        linear-gradient(180deg, rgba(201,169,98,0.12) 0%, transparent 26%),
+        linear-gradient(180deg, var(--bg-3) 0%, var(--bg) 100%);
+    box-shadow:
+        inset 0 0 0 1px rgba(201,169,98,0.10),
+        inset 0 1px 0 rgba(201,169,98,0.22),
+        0 6px 16px rgba(0,0,0,0.38);
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.12s;
+}
+.carte-album-tile.is-unlock { border-color: rgba(201,169,98,0.55); }
+.carte-album-tile.is-other { border-color: rgba(201,169,98,0.22); }
+@media (hover: hover) {
+    .carte-album-tile:hover {
+        border-color: var(--gold);
+        transform: translateY(-2px);
+        box-shadow:
+            inset 0 0 0 1px rgba(201,169,98,0.18),
+            inset 0 1px 0 rgba(201,169,98,0.32),
+            0 10px 20px rgba(0,0,0,0.48);
+    }
+}
+.carte-album-tile-head {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.04rem;
+    padding: 0.42rem 0.4rem 0.34rem;
+    background: linear-gradient(180deg, rgba(201,169,98,0.16), rgba(201,169,98,0.03));
+    border-bottom: 1px solid rgba(201,169,98,0.24);
+    min-width: 0;
+}
+.carte-album-tile-name {
+    font-size: 0.62rem;
+    color: var(--gold);
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    line-height: 1.2;
+}
+.carte-album-tile-clan,
+.carte-album-tile-mine {
+    font-family: var(--font-mono);
+    font-size: 0.5rem;
+    color: var(--text-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    line-height: 1.2;
+}
+.carte-album-tile-art {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 22px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto auto;
+    align-items: center;
+    justify-items: center;
+    column-gap: 0.08rem;
+    row-gap: 0.12rem;
+    padding: 0.42rem 0.28rem 0.18rem;
+    min-height: 0;
+}
+.carte-album-portrait {
+    grid-row: 1;
+    grid-column: 1;
+    width: 86%;
+    max-width: 78px;
+    aspect-ratio: 4 / 5;
+    height: auto;
+    align-self: end;
+    border-radius: 6px;
+    border: 1px solid rgba(201,169,98,0.42);
+    background:
+        radial-gradient(ellipse at 50% 28%, rgba(201,169,98,0.20), transparent 68%),
+        var(--bg);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.4), 0 4px 10px rgba(0,0,0,0.42);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+.carte-album-portrait.is-get {
+    grid-column: 3;
+    border-color: rgba(39,174,96,0.5);
+    box-shadow: inset 0 0 0 1px rgba(39,174,96,0.14), 0 4px 10px rgba(0,0,0,0.42);
+}
+.carte-album-tile.is-other .carte-album-portrait.is-get {
+    border-color: rgba(201,169,98,0.28);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,0.4), 0 4px 10px rgba(0,0,0,0.42);
+}
+.carte-album-troop-img,
+.carte-album-portrait .carte-trade-card-icon {
+    width: 82%;
+    height: 82%;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 5px rgba(0,0,0,0.55));
+}
+.carte-album-slot-lbl {
+    grid-row: 2;
+    grid-column: 1;
+    font-size: 0.48rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    line-height: 1;
+}
+.carte-album-slot-lbl.is-get { grid-column: 3; }
+.carte-album-slot-name {
+    grid-row: 3;
+    grid-column: 1;
+    font-size: 0.54rem;
+    color: var(--text-2);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    line-height: 1.15;
+    padding: 0 0.12rem;
+}
+.carte-album-slot-name.is-get { grid-column: 3; }
+.carte-album-swap {
+    grid-row: 1;
+    grid-column: 2;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid rgba(201,169,98,0.5);
+    background: var(--bg-2);
+    color: var(--gold);
+    font-size: 0.72rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+    z-index: 1;
+}
+.carte-album-tile-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.28rem;
+    padding: 0.3rem 0.32rem 0.38rem;
+    border-top: 1px solid rgba(201,169,98,0.16);
+    background: rgba(0,0,0,0.22);
+}
+.carte-album-btn {
+    font-family: var(--font-ui);
+    font-size: 0.52rem;
+    letter-spacing: 0.02em;
+    padding: 0.34rem 0.12rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    white-space: nowrap;
+    line-height: 1.1;
+}
+.carte-album-btn-ghost {
+    background: var(--bg-3);
+    border: 1px solid var(--border-2);
+    color: var(--text-2);
+}
+.carte-album-btn-ghost:hover { color: var(--text); }
+.carte-album-btn-ghost:active { transform: scale(0.97); }
+.carte-album-btn-gold {
+    background: var(--gold);
+    border: none;
+    color: var(--bg);
+}
+.carte-album-btn-gold:hover { opacity: 0.9; }
+.carte-album-btn-gold:active { transform: scale(0.97); }
+.carte-album-tile-note {
+    text-align: center;
+    font-size: 0.5rem;
+    color: var(--text-3);
+    padding: 0.34rem 0.3rem 0.42rem;
+    border-top: 1px solid rgba(201,169,98,0.12);
+    line-height: 1.25;
+}
+
+/* ── Carte Evento: triangoli / catene in vista Album ─────────────────────── */
+.carte-match-grid .carte-match-album-card {
     display: flex;
     flex-direction: column;
     flex-wrap: nowrap;
@@ -5580,63 +5770,26 @@ tbody tr:last-child td { border-bottom: none; }
     max-width: 100%;
     overflow: hidden;
     margin-bottom: 0;
-    background: var(--bg-3);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 0.4rem 0.35rem 0.35rem;
-    gap: 0.2rem;
+    background:
+        linear-gradient(180deg, rgba(201,169,98,0.08) 0%, transparent 30%),
+        var(--bg-3);
+    border: 1px solid var(--border-2);
+    border-radius: 8px;
+    padding: 0.45rem 0.4rem 0.4rem;
+    gap: 0.28rem;
     font-size: 0.7rem;
     box-sizing: border-box;
+    box-shadow: inset 0 1px 0 rgba(201,169,98,0.14), 0 6px 14px rgba(0,0,0,0.32);
 }
-.carte-match-album-card {
-    aspect-ratio: 7 / 10;
-    justify-content: space-between;
-}
-.carte-match-card-player {
-    font-weight: 600;
-    color: var(--gold);
+.carte-match-album-card .carte-match-card-player {
     font-size: 0.62rem;
-    line-height: 1.2;
+    color: var(--gold);
+    text-align: center;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    min-width: 0;
-    text-align: center;
 }
-.carte-match-card-myprofile {
-    font-size: 0.55rem;
-    color: var(--text-3);
-    line-height: 1.2;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
-    text-align: center;
-}
-.carte-match-card-exchange {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.15rem;
-    margin: 0;
-    min-width: 0;
-    flex: 1;
-}
-.carte-match-card-side {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.08rem;
-    flex: 1;
-    min-width: 0;
-}
-.carte-album-troop-img,
-.carte-match-album-card .carte-trade-card-icon {
-    width: 46px;
-    height: 46px;
-    object-fit: contain;
-}
-.carte-match-card-cname {
+.carte-match-album-card .carte-match-card-cname {
     font-size: 0.55rem;
     color: var(--text-2);
     text-align: center;
@@ -5645,40 +5798,11 @@ tbody tr:last-child td { border-bottom: none; }
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.carte-match-card-label {
+.carte-match-album-card .carte-match-card-label {
     font-size: 0.5rem;
     color: var(--text-3);
     text-align: center;
 }
-.carte-match-card-arrow {
-    font-size: 0.85rem;
-    color: var(--text-3);
-    align-self: center;
-    flex-shrink: 0;
-}
-.carte-match-card-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 0.18rem;
-    margin-top: 0;
-    min-width: 0;
-}
-.carte-match-card-actions button {
-    width: 100%;
-    flex: 0 0 auto;
-    min-width: 0;
-    font-size: 0.6rem;
-    padding: 0.22rem 0.3rem;
-    white-space: nowrap;
-}
-.carte-album-other-note {
-    text-align: center !important;
-    margin: 0 !important;
-    font-size: 0.52rem !important;
-    line-height: 1.2;
-}
-
-/* ── Carte Evento: triangoli album view ──────────────────────────────────── */
 .carte-triangle-album-card { border-color: rgba(76,175,80,0.35); }
 .carte-match-card-wide { grid-column: span 2; }
 .carte-triangle-album-cycle {
@@ -5757,8 +5881,7 @@ tbody tr:last-child td { border-bottom: none; }
 @media (max-width: 480px) {
     .carte-match-grid { gap: 0.4rem; }
     .carte-match-album-card { padding: 0.32rem 0.28rem 0.28rem; }
-    .carte-album-troop-img,
-    .carte-match-album-card .carte-trade-card-icon { width: 40px; height: 40px; }
+    .carte-triangle-album-card .carte-trade-card-icon { width: 40px; height: 40px; }
     .carte-match-card-wide { grid-column: span 1; }
     .carte-section-block-head { padding: 0.45rem 0.65rem; }
     .carte-section-block-body { padding: 0.55rem 0.6rem; }
