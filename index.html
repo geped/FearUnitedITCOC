@@ -29,7 +29,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20260808f">
+    <link rel="stylesheet" href="style.css?v=20260813a">
 </head>
 <body>
 
@@ -811,7 +811,7 @@
                         <h2>🎴 Clash of Cards <span class="event-badge-mini">Evento temporaneo</span></h2>
                         <p class="page-sub" id="carte-event-sub">Segna manualmente le carte che possiedi per trovare scambi con altri giocatori.</p>
                     </div>
-                    <button type="button" class="btn-secondary btn-sm carte-notify-open-btn" onclick="_openCarteNotifyModal()">🔔 Avvisi</button>
+                    <button type="button" class="btn-secondary btn-sm carte-notify-open-btn" id="carte-notify-open-btn" onclick="_openCarteNotifyModal()">🔔 Avvisi <span id="carte-notify-btn-state" class="carte-notify-btn-state is-off">spenti</span></button>
                 </div>
                 <div id="carte-profile-picker" class="carte-profile-picker" style="display:none"></div>
                 <div class="subtab-bar">
@@ -885,7 +885,7 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="supabase-config.js"></script>
-<script src="app.js?v=20260808h"></script>
+<script src="app.js?v=20260813a"></script>
 
 <!-- ─── MODAL BONUS ───────────────────────────────────────────────────────── -->
 <div id="bonus-modal-overlay" class="modal-overlay" style="display:none" onclick="closeBonusModalIfOutside(event)">

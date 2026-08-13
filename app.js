@@ -1925,6 +1925,7 @@ async function loadCardEventTab() {
   }
   renderCardEventProfilePicker();
   renderCardEventContent();
+  void _loadCarteNotifyPrefs();
   const tradeBox = document.getElementById('carte-trade-content');
   if (tradeBox && tradeBox.style.display !== 'none') loadCardTradeTab();
   maybeShowCarteTutorial();
@@ -2524,6 +2525,37 @@ function _carteNotifyPrefs() {
   return window._carteNotifyPrefs || { ...CARTE_NOTIFY_DEFAULT };
 }
 
+function _carteNotifyStatusLabel(prefs) {
+  const p = prefs || _carteNotifyPrefs();
+  if (!p.matches_enabled) return { short: 'spenti', long: 'Spenti', on: false };
+  const bits = [];
+  if (p.matches_all) bits.push('tutti');
+  if (p.matches_unlock_me) bits.push('io sblocco');
+  if (p.matches_mutual) bits.push('reciproci');
+  if (p.matches_same_clan) bits.push('clan');
+  return { short: 'attivi', long: bits.length ? `Attivi · ${bits.join(', ')}` : 'Attivi', on: true };
+}
+
+function _updateCarteNotifyBtnState() {
+  const el = document.getElementById('carte-notify-btn-state');
+  if (!el) return;
+  const st = _carteNotifyStatusLabel();
+  el.textContent = st.short;
+  el.className = `carte-notify-btn-state ${st.on ? 'is-on' : 'is-off'}`;
+  el.title = st.long;
+}
+
+async function _loadCarteNotifyPrefs() {
+  try {
+    const data = await cardsApi('cards-notify-prefs');
+    window._carteNotifyPrefs = { ...CARTE_NOTIFY_DEFAULT, ...(data.prefs || {}) };
+  } catch (_) {
+    if (!window._carteNotifyPrefs) window._carteNotifyPrefs = { ...CARTE_NOTIFY_DEFAULT };
+  }
+  _updateCarteNotifyBtnState();
+  return _carteNotifyPrefs();
+}
+
 function _openCarteNotifyModal() {
   window._carteNotifyModalOpen = true;
   void _renderCarteNotifyModal(true);
@@ -2535,28 +2567,36 @@ function _closeCarteNotifyModal() {
 }
 
 function _carteNotifyRowHtml(key, title, hint, on, disabled) {
-  return `<button type="button" class="carte-notify-row ${on ? 'is-on' : ''} ${disabled ? 'is-disabled' : ''}"
+  return `<button type="button" class="carte-notify-row ${on ? 'is-on' : 'is-off'} ${disabled ? 'is-disabled' : ''}"
       onclick="_carteToggleNotifyPref('${key}')" ${disabled ? 'disabled' : ''}>
     <span class="carte-notify-row-text">
       <span class="carte-notify-row-title">${escH(title)}</span>
       <span class="carte-notify-row-hint">${escH(hint)}</span>
     </span>
-    <span class="carte-notify-switch">${on ? 'ON' : 'OFF'}</span>
+    <span class="carte-notify-switch ${on ? 'is-on' : 'is-off'}" aria-hidden="true">
+      <span class="carte-notify-switch-knob"></span>
+      <span class="carte-notify-switch-label">${on ? 'ON' : 'OFF'}</span>
+    </span>
   </button>`;
+}
+
+function _carteNotifyModalBodyHtml(p, { loading = false } = {}) {
+  const masterOff = !p.matches_enabled;
+  const st = _carteNotifyStatusLabel(p);
+  return `
+    <p class="carte-notify-lead">Gli avvisi di nuovi scambi possibili sono <b>${st.on ? 'attivi' : 'spenti'}</b>. Proposte, messaggi in chat e scambi completati arrivano sempre sul bot.</p>
+    <div class="carte-notify-status-banner ${st.on ? 'is-on' : 'is-off'}">${st.on ? '✅ Avvisi attivi' : '⚪ Avvisi spenti'}${loading ? ' · caricamento…' : ''}</div>
+    ${_carteNotifyRowHtml('matches_enabled', 'Avvisi scambi possibili', 'Master: attiva o spegne tutti gli avvisi di match.', p.matches_enabled, loading)}
+    <div class="carte-notify-group">
+      ${_carteNotifyRowHtml('matches_all', 'Tutti i match pubblici', 'Come gli avvisi precedenti: ogni nuovo scambio suggerito.', p.matches_all, masterOff || loading)}
+      ${_carteNotifyRowHtml('matches_unlock_me', 'Solo se sblocco io', 'Solo quando ricevi una carta che ti manca.', p.matches_unlock_me, masterOff || loading)}
+      ${_carteNotifyRowHtml('matches_mutual', 'Solo scambi reciproci', 'Solo se sbloccate una carta nuova entrambi.', p.matches_mutual, masterOff || loading)}
+      ${_carteNotifyRowHtml('matches_same_clan', 'Solo il mio clan', 'Solo match con giocatori dello stesso clan.', p.matches_same_clan, masterOff || loading)}
+    </div>`;
 }
 
 async function _renderCarteNotifyModal(loadRemote) {
   if (!window._carteNotifyModalOpen) return;
-  if (loadRemote) {
-    try {
-      const data = await cardsApi('cards-notify-prefs');
-      window._carteNotifyPrefs = { ...CARTE_NOTIFY_DEFAULT, ...(data.prefs || {}) };
-    } catch (e) {
-      window._carteNotifyPrefs = { ...CARTE_NOTIFY_DEFAULT };
-    }
-  }
-  const p = _carteNotifyPrefs();
-  const masterOff = !p.matches_enabled;
   let overlay = document.getElementById('carte-notify-modal');
   if (!overlay) {
     overlay = document.createElement('div');
@@ -2566,23 +2606,27 @@ async function _renderCarteNotifyModal(loadRemote) {
     overlay.addEventListener('click', (e) => { if (e.target === overlay) _closeCarteNotifyModal(); });
     document.body.appendChild(overlay);
   }
-  overlay.innerHTML = `
-    <div class="modal-box carte-notify-modal-box" role="dialog" aria-labelledby="carte-notify-title">
-      <div class="modal-header">
-        <h3 id="carte-notify-title" style="margin:0;font-size:1rem">Avvisi scambi</h3>
-        <button type="button" class="modal-close" onclick="_closeCarteNotifyModal()" aria-label="Chiudi">✕</button>
-      </div>
-      <div class="modal-body carte-filters-modal-body">
-        <p class="carte-notify-lead">Gli avvisi di nuovi scambi possibili sono spenti di default. Proposte, messaggi in chat e scambi completati arrivano sempre sul bot.</p>
-        ${_carteNotifyRowHtml('matches_enabled', 'Avvisi scambi possibili', 'Master: attiva o spegne tutti gli avvisi di match.', p.matches_enabled, false)}
-        <div class="carte-notify-group">
-          ${_carteNotifyRowHtml('matches_all', 'Tutti i match pubblici', 'Come gli avvisi precedenti: ogni nuovo scambio suggerito.', p.matches_all, masterOff)}
-          ${_carteNotifyRowHtml('matches_unlock_me', 'Solo se sblocco io', 'Solo quando ricevi una carta che ti manca.', p.matches_unlock_me, masterOff)}
-          ${_carteNotifyRowHtml('matches_mutual', 'Solo scambi reciproci', 'Solo se sbloccate una carta nuova entrambi.', p.matches_mutual, masterOff)}
-          ${_carteNotifyRowHtml('matches_same_clan', 'Solo il mio clan', 'Solo match con giocatori dello stesso clan.', p.matches_same_clan, masterOff)}
+  const paint = (prefs, loading) => {
+    overlay.innerHTML = `
+      <div class="modal-box carte-notify-modal-box" role="dialog" aria-labelledby="carte-notify-title">
+        <div class="modal-header">
+          <h3 id="carte-notify-title" style="margin:0;font-size:1rem">Avvisi scambi</h3>
+          <button type="button" class="modal-close" onclick="_closeCarteNotifyModal()" aria-label="Chiudi">✕</button>
         </div>
-      </div>
-    </div>`;
+        <div class="modal-body carte-filters-modal-body">
+          ${_carteNotifyModalBodyHtml(prefs, { loading })}
+        </div>
+      </div>`;
+  };
+  // Mostra subito la finestra (anche prima della risposta API), altrimenti il click sembra morto.
+  paint(_carteNotifyPrefs(), !!loadRemote);
+  if (loadRemote) {
+    await _loadCarteNotifyPrefs();
+    if (!window._carteNotifyModalOpen) return;
+    paint(_carteNotifyPrefs(), false);
+  } else {
+    _updateCarteNotifyBtnState();
+  }
 }
 
 async function _carteToggleNotifyPref(key) {
@@ -2600,6 +2644,10 @@ async function _carteToggleNotifyPref(key) {
     _carteInlineNotice(e.message || 'Impossibile salvare gli avvisi.');
   }
 }
+
+window._openCarteNotifyModal = _openCarteNotifyModal;
+window._closeCarteNotifyModal = _closeCarteNotifyModal;
+window._carteToggleNotifyPref = _carteToggleNotifyPref;
 
 function _renderCarteFiltersModal() {
   const extras = window._carteFiltersShowTradeExtras === true;

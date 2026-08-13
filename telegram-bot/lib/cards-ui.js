@@ -253,28 +253,33 @@ function setup(bot, deps) {
     const data = await cardsApi.getNotifyPrefs(st.token);
     const p = data.prefs || {};
     const tog = (v) => (v === true ? NT_ON : NT_OFF);
+    const masterOn = p.matches_enabled === true;
     const lines = [
       `${fmt.DIV}`,
       '🔔 <b>Avvisi scambi possibili</b>',
       fmt.DIV,
       '',
-      'Di default sono <b>spenti</b>. Proposte, messaggi in chat e scambi completati arrivano sempre.',
+      masterOn ? '✅ Stato attuale: <b>ATTIVI</b>' : '⚪ Stato attuale: <b>SPENTI</b>',
       '',
-      `${tog(p.matches_enabled)} Avvisi: <b>${p.matches_enabled ? 'attivi' : 'spenti'}</b>`,
+      'Di default sono spenti. Proposte, messaggi in chat e scambi completati arrivano sempre.',
+      '',
+      'Tocca un bottone per attivare/disattivare:',
     ];
-    if (p.matches_enabled) {
-      if (p.matches_all) {
-        lines.push('', 'Ricevi ogni nuovo match pubblico (come prima).');
-      } else {
-        lines.push('', 'Ricevi un avviso se vale almeno uno dei tipi attivi sotto.');
-      }
+    if (masterOn) {
+      const bits = [];
+      if (p.matches_all) bits.push('tutti i match');
+      if (p.matches_unlock_me) bits.push('solo se sblocco io');
+      if (p.matches_mutual) bits.push('reciproci');
+      if (p.matches_same_clan) bits.push('solo clan');
+      if (bits.length) lines.push('', `Filtri attivi: <i>${escapeHtml(bits.join(', '))}</i>`);
     }
     const rows = [
-      [Markup.button.callback(`${tog(p.matches_enabled)} Avvisi scambi`, 'cards:nt:matches_enabled')],
+      [Markup.button.callback(`${tog(masterOn)} Master avvisi (${masterOn ? 'ON' : 'OFF'})`, 'cards:nt:matches_enabled')],
     ];
     for (const f of NT_FLAGS) {
       rows.push([Markup.button.callback(`${tog(p[f.key])} ${f.label}`, `cards:nt:${f.key}`)]);
     }
+    rows.push([Markup.button.callback('« Scambi', 'cards:tr')]);
     rows.push([Markup.button.callback('« Carte', 'cards:home')]);
     await renderView(ctx, lines.join('\n'), Markup.inlineKeyboard(rows));
   }
@@ -469,6 +474,7 @@ function setup(bot, deps) {
     rows.push([Markup.button.callback('📋 Proposte triangolo', 'cards:tr:triprop')]);
     rows.push([Markup.button.callback('🌐 Mazzi pubblici', 'cards:tr:pub')]);
     rows.push([Markup.button.callback('💬 Le mie stanze', 'cards:tr:rooms')]);
+    rows.push([Markup.button.callback('🔔 Avvisi scambi', 'cards:nt')]);
     rows.push([Markup.button.callback('« Carte', 'cards:home')]);
     await renderView(ctx, text, Markup.inlineKeyboard(rows));
   }
