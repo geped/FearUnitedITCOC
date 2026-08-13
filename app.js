@@ -2361,6 +2361,7 @@ function _carteApplyFiltersUi() {
   } else {
     renderCardEventContent();
   }
+  if (window._carteFiltersModalOpen) _renderCarteFiltersModal();
   const caret = window._carteSearchCaret;
   if (caret) {
     const id = caret.which === 'player' ? 'carte-filter-player' : 'carte-filter-q';
@@ -2372,15 +2373,34 @@ function _carteApplyFiltersUi() {
   }
 }
 
-function _carteSearchBarHtml({ showTradeExtras = false } = {}) {
+function _carteFilterSummaryText() {
+  const f = _carteGetFilters();
+  const shortLabel = {
+    elixir: 'Elisir',
+    dark_elixir: 'Elisir nero',
+    builder_base: 'Builder',
+    super_troop: 'Super truppe',
+  };
+  const bits = [];
+  if (f.q) bits.push(`“${f.q}”`);
+  if (f.category !== 'all') bits.push(shortLabel[f.category] || f.category);
+  if (f.qty !== 'all') bits.push({ '0': 'Mancanti', '1': 'Possedute', '2': 'Doppioni' }[f.qty] || f.qty);
+  if (f.direction !== 'any') bits.push(f.direction === 'give' ? 'Cedere' : 'Ricevere');
+  if (f.onlyTradable) bits.push('Scambiabili');
+  if (f.onlyMatches) bits.push('Solo match');
+  if (f.playerQ) bits.push(`Giocatore: ${f.playerQ}`);
+  if (f.unlockMe === false) bits.push('Solo l’altro sblocca');
+  else if (f.unlockOther === true) bits.push('Anche l’altro sblocca');
+  if (f.playerTags && f.playerTags.length) {
+    const partners = _carteTradePartnerOptions();
+    bits.push(f.playerTags.map((t) => partners.find((p) => p.tag === t)?.name || t).join(', '));
+  }
+  return bits.length ? bits.join(' · ') : '';
+}
+
+function _carteFiltersFormHtml(showTradeExtras) {
   const f = _carteGetFilters();
   const cat = window._cardEventCatalog;
-  const active = _carteFiltersActive();
-  // Sempre collapsed di default; l'utente lo espande manualmente se vuole filtrare
-  if (window._carteFiltersCollapsed == null) {
-    window._carteFiltersCollapsed = true;
-  }
-  const collapsed = window._carteFiltersCollapsed === true;
   const shortLabel = {
     elixir: 'Elisir',
     dark_elixir: 'Elisir nero',
@@ -2401,24 +2421,6 @@ function _carteSearchBarHtml({ showTradeExtras = false } = {}) {
   ].map(([v, lab]) =>
     `<button type="button" class="carte-album-filter-btn ${f.qty === v && !f.onlyTradable ? 'active' : ''}" onclick="_carteSetFilter('qty','${v}')">${lab}</button>`
   ).join('');
-
-  const summaryBits = [];
-  if (f.q) summaryBits.push(`“${f.q}”`);
-  if (f.category !== 'all') summaryBits.push(shortLabel[f.category] || f.category);
-  if (f.qty !== 'all') summaryBits.push({ '0': 'Mancanti', '1': 'Possedute', '2': 'Doppioni' }[f.qty] || f.qty);
-  if (f.direction !== 'any') summaryBits.push(f.direction === 'give' ? 'Cedere' : 'Ricevere');
-  if (f.onlyTradable) summaryBits.push('Scambiabili');
-  if (f.onlyMatches) summaryBits.push('Solo match');
-  if (f.playerQ) summaryBits.push(`Giocatore: ${f.playerQ}`);
-  if (f.unlockMe === false) summaryBits.push('Solo l’altro sblocca');
-  else if (f.unlockOther === true) summaryBits.push('Anche l’altro sblocca');
-  if (f.playerTags && f.playerTags.length) {
-    const partners = _carteTradePartnerOptions();
-    const names = f.playerTags.map((t) => partners.find((p) => p.tag === t)?.name || t);
-    summaryBits.push(names.join(', '));
-  }
-  const summary = summaryBits.length ? summaryBits.map(escH).join(' · ') : 'Nessun filtro attivo';
-
   const partners = showTradeExtras ? _carteTradePartnerOptions() : [];
   const selectedTag = (f.playerTags && f.playerTags.length === 1) ? f.playerTags[0] : '';
   const playerMenu = showTradeExtras && partners.length ? `
@@ -2445,18 +2447,7 @@ function _carteSearchBarHtml({ showTradeExtras = false } = {}) {
             <button type="button" class="carte-album-filter-btn ${f.unlockOther === true ? 'active' : ''}" onclick="_carteToggleUnlockFilter('other')">Includi: solo l’altro</button>
           </div>
         </div>` : '';
-
   return `
-    <div class="carte-search-bar ${collapsed ? 'is-collapsed' : ''}">
-      <div class="carte-search-toggle-row">
-        <button type="button" class="carte-search-toggle" onclick="_carteToggleFiltersCollapsed()" aria-expanded="${collapsed ? 'false' : 'true'}">
-          ${collapsed ? '▾ Mostra filtri' : '▴ Nascondi filtri'}
-          ${active ? `<span class="carte-search-toggle-badge">attivi</span>` : ''}
-        </button>
-        ${collapsed ? `<span class="carte-search-collapsed-summary">${summary}</span>` : ''}
-        ${collapsed && active ? `<button type="button" class="btn-secondary btn-sm carte-search-reset" onclick="_carteResetFilters()">✕</button>` : ''}
-      </div>
-      <div class="carte-search-body">
         <div class="carte-search-row">
           <label class="carte-search-field carte-search-grow">
             <span class="carte-search-label">Cerca carta</span>
@@ -2472,12 +2463,14 @@ function _carteSearchBarHtml({ showTradeExtras = false } = {}) {
               oninput="_carteOnSearchInput(this,'player')">
           </label>
           ${playerMenu}` : ''}
+        </div>
+        <div class="carte-search-chip-block">
+          <span class="carte-search-label">Verso scambio</span>
           <div class="carte-search-seg" role="group" aria-label="Verso scambio">
             <button type="button" class="carte-search-seg-btn ${f.direction === 'any' ? 'active' : ''}" onclick="_carteSetFilter('direction','any')">Entrambi</button>
             <button type="button" class="carte-search-seg-btn ${f.direction === 'give' ? 'active' : ''}" onclick="_carteSetFilter('direction','give')">Cedere</button>
             <button type="button" class="carte-search-seg-btn ${f.direction === 'get' ? 'active' : ''}" onclick="_carteSetFilter('direction','get')">Ricevere</button>
           </div>
-          <button type="button" class="btn-secondary btn-sm carte-search-reset" ${active ? '' : 'disabled'} onclick="_carteResetFilters()">✕ Reset</button>
         </div>
         <div class="carte-search-chip-block">
           <span class="carte-search-label">Tipologia</span>
@@ -2492,19 +2485,54 @@ function _carteSearchBarHtml({ showTradeExtras = false } = {}) {
           </div>
         </div>
         ${unlockChips}
-        ${playerChips}
-      </div>
+        ${playerChips}`;
+}
+
+function _carteSearchBarHtml({ showTradeExtras = false } = {}) {
+  window._carteFiltersShowTradeExtras = showTradeExtras === true;
+  const active = _carteFiltersActive();
+  const summary = _carteFilterSummaryText();
+  return `
+    <div class="carte-filter-toolbar">
+      <button type="button" class="btn-secondary btn-sm carte-filter-open-btn" onclick="_openCarteFiltersModal()">
+        Filtri${active ? `<span class="carte-search-toggle-badge">attivi</span>` : ''}
+      </button>
+      <button type="button" class="btn-secondary btn-sm" ${active ? '' : 'disabled'} onclick="_carteResetFilters()">Reset</button>
+      ${summary ? `<span class="carte-filter-summary">${escH(summary)}</span>` : ''}
     </div>`;
 }
 
-function _carteToggleFiltersCollapsed() {
-  window._carteFiltersCollapsed = !(window._carteFiltersCollapsed === true);
-  const trade = document.getElementById('carte-trade-content');
-  if (trade && trade.style.display !== 'none') {
-    renderCardTradeContent();
-  } else {
-    renderCardEventContent();
+function _openCarteFiltersModal() {
+  window._carteFiltersModalOpen = true;
+  _renderCarteFiltersModal();
+}
+
+function _closeCarteFiltersModal() {
+  window._carteFiltersModalOpen = false;
+  document.getElementById('carte-filters-modal')?.remove();
+}
+
+function _renderCarteFiltersModal() {
+  const extras = window._carteFiltersShowTradeExtras === true;
+  let overlay = document.getElementById('carte-filters-modal');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'carte-filters-modal';
+    overlay.className = 'modal-overlay';
+    overlay.style.cssText = 'display:flex;z-index:2200';
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) _closeCarteFiltersModal(); });
+    document.body.appendChild(overlay);
   }
+  overlay.innerHTML = `
+    <div class="modal-box carte-filters-modal-box" role="dialog" aria-labelledby="carte-filters-title">
+      <div class="modal-header">
+        <h3 id="carte-filters-title" style="margin:0;font-size:1rem">Filtri</h3>
+        <button type="button" class="modal-close" onclick="_closeCarteFiltersModal()" aria-label="Chiudi">✕</button>
+      </div>
+      <div class="modal-body carte-filters-modal-body">
+        ${_carteFiltersFormHtml(extras)}
+      </div>
+    </div>`;
 }
 
 function _renderCollectionCatGrid(cardsInCat, coll, hitKeys, searching, hitsLen, readOnly) {
@@ -3104,6 +3132,11 @@ function _cartePlayerLine(p) {
   return bits.length ? `${name} (${bits.join(' · ')})` : name;
 }
 
+function _cartePlayerShort(p) {
+  if (!p) return '—';
+  return p.username || p.coc_tag || '—';
+}
+
 function _carteMatchActionBtns(live, iUnlock, applyFn, proposeFn) {
   if (!live) return '';
   if (iUnlock) {
@@ -3230,9 +3263,10 @@ async function _carteSetCyclesEnabled(on) {
   if (window._carteTradeSub === 'self') renderCardTradeContent();
 }
 
-function _cardMiniImg(meta) {
+function _cardMiniImg(meta, extraClass = '') {
   if (!meta) return '';
-  return `<img src="${escH(meta.icon_url)}" alt="${escH(meta.name_it)}" class="carte-trade-card-icon" loading="lazy" onerror="this.style.visibility='hidden'">`;
+  const cls = extraClass ? `carte-trade-card-icon ${extraClass}` : 'carte-trade-card-icon';
+  return `<img src="${escH(meta.icon_url)}" alt="${escH(meta.name_it)}" class="${cls}" loading="lazy" onerror="this.style.visibility='hidden'">`;
 }
 
 function _carteTriangleRowHtml(t, idx, { selfMode = false, live = false } = {}) {
@@ -3718,27 +3752,29 @@ function _renderMatchesAlbumView(filteredMatches, live, multiMine) {
   }
   return `<div class="carte-match-grid">${filteredMatches.map(({ m, i }) => {
     const iUnlock = m.i_unlock !== false;
+    const otherName = _cartePlayerShort(m.other_profile);
+    const myName = _cartePlayerShort(m.my_profile);
     return `
-    <div class="carte-match-card carte-match-album-card">
-      <div class="carte-match-card-player">con ${escH(_cartePlayerLine(m.other_profile))}</div>
-      ${multiMine ? `<div class="carte-match-card-myprofile">👤 ${escH(_cartePlayerLine(m.my_profile))}</div>` : ''}
+    <div class="carte-match-card carte-match-album-card" title="${escH(_cartePlayerLine(m.other_profile))}">
+      <div class="carte-match-card-player">${escH(otherName)}</div>
+      ${multiMine ? `<div class="carte-match-card-myprofile">👤 ${escH(myName)}</div>` : ''}
       <div class="carte-match-card-exchange">
         <div class="carte-match-card-side">
-          ${_cardMiniImg(m.card_give_meta)}
+          ${_cardMiniImg(m.card_give_meta, 'carte-album-troop-img')}
           <span class="carte-match-card-cname">${escH(m.card_give_meta?.name_it || m.card_give)}</span>
-          <span class="carte-match-card-label">📤 Cedi</span>
+          <span class="carte-match-card-label">Cedi</span>
         </div>
         <span class="carte-match-card-arrow">⇄</span>
         <div class="carte-match-card-side">
-          ${_cardMiniImg(m.card_get_meta)}
-          <span class="carte-match-card-cname">${escH(m.card_get_meta?.name_it || m.card_get)} ${iUnlock ? '🟢' : '🟡'}</span>
-          <span class="carte-match-card-label">📥 Ricevi</span>
+          ${_cardMiniImg(m.card_get_meta, 'carte-album-troop-img')}
+          <span class="carte-match-card-cname">${escH(m.card_get_meta?.name_it || m.card_get)}</span>
+          <span class="carte-match-card-label">Ricevi ${iUnlock ? '🟢' : '🟡'}</span>
         </div>
       </div>
       ${live && iUnlock ? `<div class="carte-match-card-actions">
-        <button type="button" class="btn-secondary btn-sm" onclick="_applyFromMatch(${i})" title="Applica subito">⚡ Applica subito</button>
-        <button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">💬 Proponi</button>
-      </div>` : (!iUnlock ? `<p class="carte-qty-modal-note" style="text-align:left;margin:0.3rem 0 0;font-size:0.72rem">🟡 Solo l’altro sblocca</p>` : '')}
+        <button type="button" class="btn-secondary btn-sm" onclick="_applyFromMatch(${i})">Applica</button>
+        <button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">Proponi</button>
+      </div>` : (!iUnlock ? `<p class="carte-qty-modal-note carte-album-other-note">Solo l’altro</p>` : '')}
     </div>`;
   }).join('')}</div>`;
 }
