@@ -5610,8 +5610,8 @@ tbody tr:last-child td { border-bottom: none; }
     align-self: center;
     flex-shrink: 0;
 }
-.carte-match-card-actions { display: flex; gap: 0.3rem; margin-top: 0.15rem; min-width: 0; }
-.carte-match-card-actions button { flex: 1; min-width: 0; font-size: 0.74rem; padding: 0.28rem 0.35rem; }
+.carte-match-card-actions { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.15rem; min-width: 0; }
+.carte-match-card-actions button { flex: 1 1 auto; min-width: 0; font-size: 0.72rem; padding: 0.32rem 0.4rem; white-space: nowrap; }
 .carte-match-grid .carte-qty-modal-note {
     overflow-wrap: anywhere;
     word-break: break-word;

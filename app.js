@@ -2195,9 +2195,16 @@ function _carteGetFilters() {
       onlyTradable: false,
       onlyMatches: false,
       playerQ: '',
+      unlockMe: true,
+      unlockOther: false,
+      playerTags: [],
     };
   }
-  return window._carteSearchFilters;
+  const f = window._carteSearchFilters;
+  if (f.unlockMe == null) f.unlockMe = true;
+  if (f.unlockOther == null) f.unlockOther = false;
+  if (!Array.isArray(f.playerTags)) f.playerTags = [];
+  return f;
 }
 
 function _carteNormSearch(s) {
@@ -2256,7 +2263,10 @@ function _carteFiltersActive() {
     f.qty !== 'all' ||
     f.onlyTradable ||
     f.onlyMatches ||
-    f.playerQ
+    f.playerQ ||
+    f.unlockMe === false ||
+    f.unlockOther === true ||
+    (f.playerTags && f.playerTags.length)
   );
 }
 
@@ -2269,8 +2279,54 @@ function _carteResetFilters() {
     onlyTradable: false,
     onlyMatches: false,
     playerQ: '',
+    unlockMe: true,
+    unlockOther: false,
+    playerTags: [],
   };
   window._carteAlbumFilter = 'all';
+  _carteApplyFiltersUi();
+}
+
+function _carteToggleUnlockFilter(which) {
+  const f = _carteGetFilters();
+  if (which === 'me') f.unlockMe = f.unlockMe === false;
+  else f.unlockOther = !f.unlockOther;
+  if (f.unlockMe === false && f.unlockOther !== true) {
+    if (which === 'me') f.unlockOther = true;
+    else f.unlockMe = true;
+  }
+  _carteApplyFiltersUi();
+}
+
+function _carteTradePartnerOptions() {
+  const seen = new Map();
+  for (const m of window._cardTradeData?.matches || []) {
+    const p = m.other_profile;
+    if (!p?.coc_tag) continue;
+    const tag = String(p.coc_tag).toUpperCase();
+    if (!seen.has(tag)) {
+      seen.set(tag, { tag, name: p.username || p.coc_tag, clan: p.coc_clan_name || '' });
+    }
+  }
+  return [...seen.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), 'it'));
+}
+
+function _carteSetPlayerFilter(tag) {
+  const f = _carteGetFilters();
+  const t = String(tag || '').toUpperCase();
+  f.playerTags = t ? [t] : [];
+  _carteApplyFiltersUi();
+}
+
+function _carteTogglePlayerTag(tag) {
+  const f = _carteGetFilters();
+  const t = String(tag || '').toUpperCase();
+  if (!t) f.playerTags = [];
+  else {
+    const i = f.playerTags.indexOf(t);
+    if (i >= 0) f.playerTags.splice(i, 1);
+    else f.playerTags.push(t);
+  }
   _carteApplyFiltersUi();
 }
 
@@ -2354,7 +2410,41 @@ function _carteSearchBarHtml({ showTradeExtras = false } = {}) {
   if (f.onlyTradable) summaryBits.push('Scambiabili');
   if (f.onlyMatches) summaryBits.push('Solo match');
   if (f.playerQ) summaryBits.push(`Giocatore: ${f.playerQ}`);
+  if (f.unlockMe === false) summaryBits.push('Solo l’altro sblocca');
+  else if (f.unlockOther === true) summaryBits.push('Anche l’altro sblocca');
+  if (f.playerTags && f.playerTags.length) {
+    const partners = _carteTradePartnerOptions();
+    const names = f.playerTags.map((t) => partners.find((p) => p.tag === t)?.name || t);
+    summaryBits.push(names.join(', '));
+  }
   const summary = summaryBits.length ? summaryBits.map(escH).join(' · ') : 'Nessun filtro attivo';
+
+  const partners = showTradeExtras ? _carteTradePartnerOptions() : [];
+  const selectedTag = (f.playerTags && f.playerTags.length === 1) ? f.playerTags[0] : '';
+  const playerMenu = showTradeExtras && partners.length ? `
+          <label class="carte-search-field carte-search-grow">
+            <span class="carte-search-label">Giocatore</span>
+            <select class="carte-search-select" onchange="_carteSetPlayerFilter(this.value)" aria-label="Scegli giocatore per lo scambio">
+              <option value="" ${!f.playerTags.length ? 'selected' : ''}>Tutti i giocatori</option>
+              ${partners.map((p) => `<option value="${escH(p.tag)}" ${selectedTag === p.tag ? 'selected' : ''}>${escH(p.name)}${p.clan ? ` · ${escH(p.clan)}` : ''} (${escH(p.tag)})</option>`).join('')}
+            </select>
+          </label>` : '';
+  const playerChips = showTradeExtras && partners.length > 1 ? `
+        <div class="carte-search-chip-block">
+          <span class="carte-search-label">Includi giocatori</span>
+          <div class="carte-album-filters">
+            <button type="button" class="carte-album-filter-btn ${!f.playerTags.length ? 'active' : ''}" onclick="_carteSetPlayerFilter('')">Tutti</button>
+            ${partners.map((p) => `<button type="button" class="carte-album-filter-btn ${f.playerTags.includes(p.tag) ? 'active' : ''}" onclick="_carteTogglePlayerTag('${escH(p.tag)}')">${escH(p.name)}</button>`).join('')}
+          </div>
+        </div>` : '';
+  const unlockChips = showTradeExtras ? `
+        <div class="carte-search-chip-block">
+          <span class="carte-search-label">Chi sblocca</span>
+          <div class="carte-album-filters">
+            <button type="button" class="carte-album-filter-btn ${f.unlockMe !== false ? 'active' : ''}" onclick="_carteToggleUnlockFilter('me')">Includi: io sblocco</button>
+            <button type="button" class="carte-album-filter-btn ${f.unlockOther === true ? 'active' : ''}" onclick="_carteToggleUnlockFilter('other')">Includi: solo l’altro</button>
+          </div>
+        </div>` : '';
 
   return `
     <div class="carte-search-bar ${collapsed ? 'is-collapsed' : ''}">
@@ -2376,11 +2466,12 @@ function _carteSearchBarHtml({ showTradeExtras = false } = {}) {
           </label>
           ${showTradeExtras ? `
           <label class="carte-search-field carte-search-grow">
-            <span class="carte-search-label">Giocatore / mazzo</span>
+            <span class="carte-search-label">Cerca giocatore</span>
             <input type="search" id="carte-filter-player" class="carte-search-input" placeholder="username o tag…"
               value="${escH(f.playerQ)}" autocomplete="off"
               oninput="_carteOnSearchInput(this,'player')">
-          </label>` : ''}
+          </label>
+          ${playerMenu}` : ''}
           <div class="carte-search-seg" role="group" aria-label="Verso scambio">
             <button type="button" class="carte-search-seg-btn ${f.direction === 'any' ? 'active' : ''}" onclick="_carteSetFilter('direction','any')">Entrambi</button>
             <button type="button" class="carte-search-seg-btn ${f.direction === 'give' ? 'active' : ''}" onclick="_carteSetFilter('direction','give')">Cedere</button>
@@ -2400,19 +2491,18 @@ function _carteSearchBarHtml({ showTradeExtras = false } = {}) {
             ${showTradeExtras ? `<button type="button" class="carte-album-filter-btn ${f.onlyMatches ? 'active' : ''}" onclick="_carteSetFilter('onlyMatches', ${f.onlyMatches ? 'false' : 'true'})">Solo match</button>` : ''}
           </div>
         </div>
+        ${unlockChips}
+        ${playerChips}
       </div>
     </div>`;
 }
 
 function _carteToggleFiltersCollapsed() {
   window._carteFiltersCollapsed = !(window._carteFiltersCollapsed === true);
-  // Re-render della vista attiva
   const trade = document.getElementById('carte-trade-content');
-  const coll = document.getElementById('carte-content');
   if (trade && trade.style.display !== 'none') {
-    if (window._carteTradeSub === 'public') _renderCartePublicWindow();
-    else renderCardTradeContent();
-  } else if (coll) {
+    renderCardTradeContent();
+  } else {
     renderCardEventContent();
   }
 }
@@ -3477,8 +3567,16 @@ function _cartePublicWinHeader(title, backWin = 'suggested') {
 
 /** Filtra un match P2P (tu cedi card_give / ricevi card_get) rispetto ai filtri correnti. */
 function _carteMatchPassesFilters(m, f) {
+  const iUnlock = m.i_unlock !== false;
+  if (iUnlock && f.unlockMe === false) return false;
+  if (!iUnlock && f.unlockOther !== true) return false;
+  const tags = f.playerTags || [];
+  if (tags.length) {
+    const tag = String(m.other_profile?.coc_tag || '').toUpperCase();
+    if (!tags.includes(tag)) return false;
+  }
   if (f.playerQ) {
-    const hay = _carteNormSearch([m.other_profile?.username, m.other_profile?.coc_tag, m.my_profile?.username, m.my_profile?.coc_tag].filter(Boolean).join(' '));
+    const hay = _carteNormSearch([m.other_profile?.username, m.other_profile?.coc_tag, m.other_profile?.coc_clan_name, m.my_profile?.username, m.my_profile?.coc_tag].filter(Boolean).join(' '));
     if (!hay.includes(_carteNormSearch(f.playerQ))) return false;
   }
   if (f.category !== 'all') {
@@ -3504,6 +3602,10 @@ function _carteMatchPassesFilters(m, f) {
 /** Un mazzo pubblico è rilevante per i filtri (giocatore / carta / match). */
 function _carteDeckPassesFilters(deck, f, cat) {
   const p = deck.profile || {};
+  if (f.playerTags && f.playerTags.length) {
+    const tag = String(p.coc_tag || '').toUpperCase();
+    if (!f.playerTags.includes(tag)) return false;
+  }
   if (f.playerQ) {
     const hay = _carteNormSearch([p.username, p.coc_tag, p.coc_clan_name].filter(Boolean).join(' '));
     if (!hay.includes(_carteNormSearch(f.playerQ))) return false;
@@ -3608,7 +3710,11 @@ function _carteToggleSectionCollapsed(section) {
 
 function _renderMatchesAlbumView(filteredMatches, live, multiMine) {
   if (!filteredMatches.length) {
-    return `<div class="profilo-empty"><p style="color:var(--text-3)">Nessuno scambio suggerito al momento.</p></div>`;
+    const f = _carteGetFilters();
+    const msg = _carteFiltersActive()
+      ? 'Nessuno scambio suggerito con questi filtri.'
+      : 'Nessuno scambio in cui tu sblocchi una carta. Apri i filtri e attiva «Includi: solo l’altro» per vedere i match in cui sblocca l’altro giocatore.';
+    return `<div class="profilo-empty"><p style="color:var(--text-3)">${msg}</p></div>`;
   }
   return `<div class="carte-match-grid">${filteredMatches.map(({ m, i }) => {
     const iUnlock = m.i_unlock !== false;
@@ -3630,7 +3736,7 @@ function _renderMatchesAlbumView(filteredMatches, live, multiMine) {
         </div>
       </div>
       ${live && iUnlock ? `<div class="carte-match-card-actions">
-        <button type="button" class="btn-secondary btn-sm" onclick="_applyFromMatch(${i})" title="Applica subito">⚡</button>
+        <button type="button" class="btn-secondary btn-sm" onclick="_applyFromMatch(${i})" title="Applica subito">⚡ Applica subito</button>
         <button type="button" class="btn-primary btn-sm" onclick="_proposeFromMatch(${i})">💬 Proponi</button>
       </div>` : (!iUnlock ? `<p class="carte-qty-modal-note" style="text-align:left;margin:0.3rem 0 0;font-size:0.72rem">🟡 Solo l’altro sblocca</p>` : '')}
     </div>`;
@@ -3785,7 +3891,7 @@ function _renderCartePublicWindow() {
         }).join('')
       : `<div class="profilo-empty"><p style="color:var(--text-3)">${_carteFiltersActive()
           ? 'Nessuno scambio suggerito con questi filtri.'
-          : 'Nessuno scambio automatico al momento. Serve: tu hai un doppione e l’altro ha un doppione della stessa tipologia, e almeno uno dei due sblocca una carta nuova.'}</p></div>`;
+          : 'Nessuno scambio in cui tu sblocchi una carta. Apri i filtri e attiva «Includi: solo l’altro» per vedere i match in cui sblocca l’altro giocatore.'}</p></div>`;
 
     const sec1 = `<div class="carte-section-block">
       ${sectionHead('suggested', '🔄 Scambi suggeriti', svSugg, colSugg)}
