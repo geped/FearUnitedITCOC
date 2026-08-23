@@ -997,6 +997,22 @@ module.exports = async (req, res) => {
                 'Errore proxy CoC';
             data.error = typeof msg === 'string' ? msg : JSON.stringify(data);
         }
+        if (r.ok) {
+            // Cache condivisa sulla CDN Edge Vercel per assorbire richieste ripetute
+            // (sito/bot/Mini App) senza richiamare il proxy Render ogni volta.
+            const CACHE_SECONDS_BY_TYPE = {
+                'player': 30,
+                'search-clans': 120,
+                'rankings': 600,
+                'locations': 86400,
+                'current-war': 15,
+                'capital-raids': 60,
+            };
+            const maxAge = CACHE_SECONDS_BY_TYPE[type];
+            if (maxAge) {
+                res.setHeader('Cache-Control', `public, max-age=0, s-maxage=${maxAge}, stale-while-revalidate=${maxAge * 4}`);
+            }
+        }
         res.status(r.status).json(data);
     } catch (err) {
         res.status(500).json({ error: err.message });

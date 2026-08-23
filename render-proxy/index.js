@@ -1,9 +1,13 @@
 const express = require('express');
+const compression = require('compression');
 const { createClient } = require('@supabase/supabase-js');
 const WebSocket = require('ws');
 const { accumulateCwlGroupStandings, normClanTag: normClanTagShared } = require('../shared/cwl-group-standings');
 
 const app = express();
+// Riduce la banda in uscita (outbound, quella a pagamento su Render) comprimendo
+// le risposte JSON (spesso 70-85% più piccole) verso Vercel/bot/Mini App.
+app.use(compression());
 app.use(express.json());
 
 // Clan tag viene passato come parametro da ogni richiesta — nessun valore hardcoded
