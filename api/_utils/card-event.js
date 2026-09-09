@@ -93,6 +93,57 @@ async function getCollectionsForUser(admin, userId) {
   };
 }
 
+function collectionHasCards(coll) {
+  return Object.values(coll || {}).some((q) => Number(q) >= 1);
+}
+
+/**
+ * Collezione visibile sul profilo di un giocatore.
+ * Default nascosta: se card_deck_public è false, gli altri non vedono nulla
+ * (né se ha una collezione). Il proprietario la vede sempre.
+ */
+async function getPublicCollectionByTag(admin, playerTag, viewerUserId) {
+  const tag = profilesUtil.normalizeTag(playerTag);
+  if (!tag) {
+    const e = new Error('Tag giocatore non valido.');
+    e.status = 400;
+    throw e;
+  }
+
+  const { data: profile, error } = await admin
+    .from('user_coc_profiles')
+    .select('*')
+    .eq('coc_tag', tag)
+    .maybeSingle();
+  if (error) throw error;
+  if (!profile) return { ok: true, found: false, public: false };
+
+  const isOwner = !!(viewerUserId && profile.user_id === viewerUserId);
+  const { data: rows, error: e2 } = await admin
+    .from('card_event_collections')
+    .select('card_key, qty_state')
+    .eq('coc_tag', tag);
+  if (e2) throw e2;
+
+  const collection = {};
+  for (const row of rows || []) collection[row.card_key] = row.qty_state;
+  const hasCollection = collectionHasCards(collection);
+
+  if (!isOwner && profile.card_deck_public !== true) {
+    return { ok: true, found: true, public: false };
+  }
+
+  return {
+    ok: true,
+    found: true,
+    public: profile.card_deck_public === true,
+    is_owner: isOwner,
+    has_collection: hasCollection,
+    profile: profilesUtil.profileToPublic(profile),
+    collection: hasCollection || isOwner ? collection : {},
+  };
+}
+
 async function saveCardState(admin, user, { cocTag, cardKey, qtyState }) {
   const card = CARD_BY_KEY.get(cardKey);
   if (!card) {
@@ -165,5 +216,7 @@ module.exports = {
   isEventLive,
   catalogPayload,
   getCollectionsForUser,
+  getPublicCollectionByTag,
+  collectionHasCards,
   saveCardState,
 };

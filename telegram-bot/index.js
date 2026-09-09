@@ -117,9 +117,18 @@ async function replyTransient(ctx, text, extra = {}, delayMs = TEMP_MSG_DELETE_M
   return sent;
 }
 
-const WELCOME_IMAGE_PATH   = path.join(__dirname, 'assets', 'benvenuto.png');
-const CWL_HEADER_IMAGE_PATH = path.join(__dirname, 'assets', 'cwl_live.jpeg');
-const WAR_HEADER_IMAGE_PATH = path.join(__dirname, 'assets', 'war_live.jpeg');
+const WELCOME_IMAGE_PATH   = path.join(__dirname, 'assets', 'benvenuto.webp');
+const CWL_HEADER_IMAGE_PATH = path.join(__dirname, 'assets', 'cwl_live.webp');
+const WAR_HEADER_IMAGE_PATH = path.join(__dirname, 'assets', 'war_live.webp');
+/** Fallback PNG/JPEG se webp non ancora generato in deploy. */
+const WELCOME_IMAGE_FALLBACK   = path.join(__dirname, 'assets', 'benvenuto.png');
+const CWL_HEADER_IMAGE_FALLBACK = path.join(__dirname, 'assets', 'cwl_live.jpeg');
+const WAR_HEADER_IMAGE_FALLBACK = path.join(__dirname, 'assets', 'war_live.jpeg');
+const tgPhotoCache = require('./lib/telegram-photo-cache');
+
+function resolveBotAssetPath(preferred, fallback) {
+  return fs.existsSync(preferred) ? preferred : fallback;
+}
 
 /** URL della guida interna (guida.html sul sito). Null se env non configurato. */
 function guideUrl() {
@@ -1599,11 +1608,13 @@ async function sendGuestMenu(ctx) {
       _trackMenuMsg(ctx.chat?.id, m?.message_id);
     }
   } else {
-    if (!group && fs.existsSync(WELCOME_IMAGE_PATH)) {
-      const photoMsg = await ctx.replyWithPhoto(
-        { source: fs.createReadStream(WELCOME_IMAGE_PATH) },
-        { parse_mode: 'HTML' }
-      ).catch(() => null);
+    if (!group && fs.existsSync(resolveBotAssetPath(WELCOME_IMAGE_PATH, WELCOME_IMAGE_FALLBACK))) {
+      const photoMsg = await tgPhotoCache.replyWithCachedPhoto(
+        ctx,
+        'welcome',
+        resolveBotAssetPath(WELCOME_IMAGE_PATH, WELCOME_IMAGE_FALLBACK),
+        { parse_mode: 'HTML' },
+      );
       if (photoMsg?.message_id && ctx.from?.id != null) {
         privateUi.notePrivateUiMessage(ctx.from.id, photoMsg.message_id);
       }
@@ -1763,7 +1774,7 @@ async function mainMenuKeyboard(ctx, user, hasClanTag, clanTag, clanName) {
   }
   if (!grp) {
     rows.push([Markup.button.callback('💬 Community', 'comm_hub')]);
-    rows.push([Markup.button.callback('🎴 Carte scambio', 'cards')]);
+    if (user) rows.push([Markup.button.callback('👤 Il mio profilo', 'me')]);
   }
   rows.push([
     Markup.button.callback('🔍 Cerca', 'nav_search'),
@@ -4851,12 +4862,12 @@ function setupBot(bot) {
       return;
     }
     clearCwlFocus(ctx.from?.id);
-    if (ctx.chat?.type === 'private' && ctx.from?.id != null && fs.existsSync(CWL_HEADER_IMAGE_PATH)) {
-      const hdr = await ctx.replyWithPhoto(
-        { source: fs.createReadStream(CWL_HEADER_IMAGE_PATH) },
-        { parse_mode: 'HTML' }
-      ).catch(() => null);
-      if (hdr?.message_id) privateUi.notePrivateUiMessage(ctx.from.id, hdr.message_id);
+    if (ctx.chat?.type === 'private' && ctx.from?.id != null) {
+      const cwlImg = resolveBotAssetPath(CWL_HEADER_IMAGE_PATH, CWL_HEADER_IMAGE_FALLBACK);
+      if (fs.existsSync(cwlImg)) {
+        const hdr = await tgPhotoCache.replyWithCachedPhoto(ctx, 'cwl_header', cwlImg, { parse_mode: 'HTML' });
+        if (hdr?.message_id) privateUi.notePrivateUiMessage(ctx.from.id, hdr.message_id);
+      }
     }
     const { text, kb } = await loadAndShowCwl(ctx, clanTag, { view: 'lg', pPage: 0, rIdx: 0 }, { homeTag: clanTag });
     await editOrReplyCwl(ctx, text, kb);
@@ -5862,12 +5873,12 @@ function setupBot(bot) {
     await answerCbLoading(ctx);
     const clanTag = await resolveEffectiveClanTag(ctx);
     if (!clanTag) { await ctx.answerCbQuery('Nessun clan collegato').catch(() => {}); return; }
-    if (ctx.chat?.type === 'private' && ctx.from?.id != null && fs.existsSync(WAR_HEADER_IMAGE_PATH)) {
-      const hdr = await ctx.replyWithPhoto(
-        { source: fs.createReadStream(WAR_HEADER_IMAGE_PATH) },
-        { parse_mode: 'HTML' }
-      ).catch(() => null);
-      if (hdr?.message_id) privateUi.notePrivateUiMessage(ctx.from.id, hdr.message_id);
+    if (ctx.chat?.type === 'private' && ctx.from?.id != null) {
+      const warImg = resolveBotAssetPath(WAR_HEADER_IMAGE_PATH, WAR_HEADER_IMAGE_FALLBACK);
+      if (fs.existsSync(warImg)) {
+        const hdr = await tgPhotoCache.replyWithCachedPhoto(ctx, 'war_header', warImg, { parse_mode: 'HTML' });
+        if (hdr?.message_id) privateUi.notePrivateUiMessage(ctx.from.id, hdr.message_id);
+      }
     }
     const { text, kb } = await loadAndShowWarLive(ctx, clanTag, { view: 'ov', pPage: 0, side: 'us' });
     try { await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb }); }
@@ -5931,10 +5942,16 @@ function setupBot(bot) {
     }
     const data = await api.lookupPlayer(tag);
     const text = fmt.formatPlayerSummary(data);
+    const rows = [];
+    if (!isLinkedChatContext(ctx)) {
+      rows.push([Markup.button.callback('🎴 Eventi', 'cards')]);
+    }
+    rows.push([Markup.button.callback('« Indietro', 'clan_home'), Markup.button.callback('« Menù', 'menu')]);
+    const kb = Markup.inlineKeyboard(rows);
     try {
-      await ctx.editMessageText(text, { parse_mode: 'HTML', ...clanBackKb() });
+      await ctx.editMessageText(text, { parse_mode: 'HTML', ...kb });
     } catch (_) {
-      await ctx.reply(text, { parse_mode: 'HTML', ...clanBackKb() });
+      await ctx.reply(text, { parse_mode: 'HTML', ...kb });
     }
   });
 

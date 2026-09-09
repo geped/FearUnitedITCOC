@@ -1,3 +1,2 @@
-node_modules
-.env
-.env.local
+# file_id Telegram generati a runtime — opzionale committare dopo primo upload in prod
+telegram-photo-cache.json

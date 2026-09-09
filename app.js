@@ -38,7 +38,7 @@ const db = window.sb;
   try {
     const p = new URLSearchParams(window.location.search);
     const ot = p.get('open_tab');
-    const allowed = new Set(['members', 'cerca', 'cwl', 'cwl_warlog', 'login', 'warlog', 'profilo', 'rankings', 'bonus', 'botadmin']);
+    const allowed = new Set(['members', 'cerca', 'cwl', 'cwl_warlog', 'login', 'warlog', 'profilo', 'rankings', 'bonus', 'botadmin', 'carte']);
     const clanFromQ = p.get('clan_tag') || p.get('clanTag');
     if (clanFromQ && String(clanFromQ).trim()) {
       let t = String(clanFromQ).trim().toUpperCase();
@@ -118,8 +118,9 @@ function rankLeagueBadgeHtml(league, opts) {
   const titleEsc = nameEn.replace(/"/g, '&quot;').replace(/</g, '');
   const apiUrl = league.iconUrls && (league.iconUrls.large || league.iconUrls.medium || league.iconUrls.small);
   const localFile = LEAGUE_BADGE_MAP[nameEn] || LEAGUE_BADGE_MAP[nameEn.replace(/\s+\d+$/, '')];
-  const localPath = localFile ? `leagues/${localFile}.png` : '';
-  const fbAttr = localPath ? ` data-league-fb="${localPath.replace(/"/g, '&quot;')}"` : '';
+  const localPath = localFile ? `leagues/${localFile}.webp` : '';
+  const localFb = localFile ? `leagues/${localFile}.png` : '';
+  const fbAttr = localFb ? ` data-league-fb="${localFb.replace(/"/g, '&quot;')}"` : '';
 
   if (apiUrl) {
     return `<img src="${apiUrl}" alt="" class="${imgClass}" loading="lazy" decoding="async"${fbAttr} title="${titleEsc}" onerror="_rankLeagueImgErr(this)">`;
@@ -251,6 +252,8 @@ function _cocUnitIconUrl(u) {
 function _unitImgFallbackUrls(u, category) {
   const name = u?.name;
   const out = [];
+  const localWebp = getLocalUnitWebpPath(name, category);
+  if (localWebp) out.push(localWebp);
   const loc = UNIT_LOCAL_IMAGE && UNIT_LOCAL_IMAGE[name];
   if (loc) {
     const p = String(loc).replace(/^\//, '');
@@ -807,7 +810,7 @@ function renderClanDetails(info, div) {
   const leagueBadgeFile = leagueNameEn ? LEAGUE_BADGE_MAP[leagueNameEn] : null;
   const leagueHtml = leagueNameIt
     ? `<div class="clan-detail-item">
-        ${leagueBadgeFile ? `<img src="leagues/${leagueBadgeFile}.png" alt="${leagueNameIt}" class="clan-detail-league-badge">` : SVG_TROPHY}
+        ${leagueBadgeFile ? `<img src="leagues/${leagueBadgeFile}.webp" alt="${leagueNameIt}" class="clan-detail-league-badge" onerror="this.onerror=null;this.src='leagues/${leagueBadgeFile}.png'">` : SVG_TROPHY}
         <span>${leagueNameIt}</span>
        </div>`
     : '';
@@ -1227,7 +1230,7 @@ function renderProfilesModal(state, { gate = false } = {}) {
   if (!gate && (state.profiles || []).length > 1) {
     const sortBtn = document.createElement('button');
     sortBtn.className = 'btn-logout btn-sm';
-    sortBtn.textContent = '↕ Ordina profili (Carte Evento)';
+    sortBtn.textContent = '↕ Ordina profili (Eventi)';
     sortBtn.onclick = () => _openCarteProfileSortModal(state.profiles);
     actions.appendChild(sortBtn);
   }
@@ -1606,8 +1609,8 @@ async function showApp(sessionUser) {
       : 'none';
   });
 
-  // Evento Clash of Cards: mostra la tab solo se attivo (o se admin, per gestirlo)
-  initCardEventTabVisibility(isAdmin).catch(() => {});
+  // Evento Clash of Cards: la tab macro è archiviata in Profilo → Eventi
+  initCardEventTabVisibility().catch(() => {});
 
   // Imposta stagione bonus al mese corrente
   const seasonInput = document.getElementById('bonus-season');
@@ -1758,7 +1761,6 @@ const TAB_TITLES = {
   cerca:     'Cerca',
   rankings:  'Classifiche',
   admin:     'Pannello Admin',
-  carte:     'Clash of Cards',
 };
 
 const BNAV_ALTRO_TABS = new Set(['cerca', 'rankings', 'admin']);
@@ -1811,6 +1813,10 @@ function wireBnavAltroOnce() {
 function activateTab(tabId) {
   // botadmin deep-links redirect to unified admin tab (bot panel)
   if (tabId === 'botadmin') { tabId = 'admin'; window._adminOpenPanel = 'bot'; }
+  if (tabId === 'carte') {
+    tabId = 'profilo';
+    window._openProfiloEvents = true;
+  }
   if (!tabId) return;
   // Senza clan: Clan / Registri / Bonus non disponibili
   if (!window._userClanTag && (tabId === 'members' || tabId === 'warlog' || tabId === 'cwl')) {
@@ -1841,10 +1847,16 @@ function activateTab(tabId) {
   }
   if (tabId === 'warlog') setTimeout(loadWarLog, 80);
   if (tabId === 'cwl') setTimeout(loadAssignBonus, 80);
-  if (tabId === 'profilo') setTimeout(loadProfile, 80);
+  if (tabId === 'profilo') setTimeout(() => {
+    loadProfile();
+    if (window._openProfiloEvents) {
+      window._openProfiloEvents = false;
+      const btn = document.querySelector('#profilo-main-subtabs .subtab-btn[onclick*="events"]');
+      switchProfiloTab('events', btn);
+    }
+  }, 80);
   if (tabId === 'rankings') { setTimeout(loadRankings, 80); setTimeout(renderFavoriti, 80); _detectUserCountry(); }
   if (tabId === 'cerca') setTimeout(renderFavoriti, 80);
-  if (tabId === 'carte') setTimeout(loadCardEventTab, 80);
 }
 
 function switchAdminPanel(panel, btn) {
@@ -1886,17 +1898,14 @@ const CARTE_CAT_BORDER = {
   super_troop: 'cat-border-super',
 };
 
-async function initCardEventTabVisibility(isAdmin) {
+async function initCardEventTabVisibility() {
   try {
     const headers = await authBearerHeaders().catch(() => ({ Accept: 'application/json' }));
     const r = await fetch('/api/lookup?type=cards-catalog', { headers });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j.ok) return;
     window._cardEventCatalog = j;
-    const show = j.settings?.live === true || isAdmin === true;
-    document.querySelectorAll('.carte-event-tab').forEach(el => {
-      el.style.display = show ? (el.classList.contains('bnav-btn') ? 'flex' : 'inline-block') : 'none';
-    });
+    document.querySelectorAll('.carte-event-tab').forEach(el => { el.style.display = 'none'; });
   } catch (_) {}
 }
 
@@ -1926,9 +1935,28 @@ async function loadCardEventTab() {
   renderCardEventProfilePicker();
   renderCardEventContent();
   void _loadCarteNotifyPrefs();
+  _syncCarteArchiveChrome();
   const tradeBox = document.getElementById('carte-trade-content');
   if (tradeBox && tradeBox.style.display !== 'none') loadCardTradeTab();
-  maybeShowCarteTutorial();
+  if (window._cardEventCatalog?.settings?.live === true) maybeShowCarteTutorial();
+}
+
+function _cardCollectionHasCards(coll) {
+  return Object.values(coll || {}).some(q => Number(q) >= 1);
+}
+
+function _syncCarteArchiveChrome() {
+  const live = window._cardEventCatalog?.settings?.live === true;
+  const subtabs = document.getElementById('carte-main-subtabs');
+  const notifyBtn = document.getElementById('carte-notify-open-btn');
+  if (subtabs) subtabs.style.display = live ? '' : 'none';
+  if (notifyBtn) notifyBtn.style.display = live ? '' : 'none';
+  if (!live) {
+    const coll = document.getElementById('carte-content');
+    const trade = document.getElementById('carte-trade-content');
+    if (coll) coll.style.display = 'block';
+    if (trade) trade.style.display = 'none';
+  }
 }
 
 const CARTE_TUTORIAL_KEY = 'cocboard_carte_tutorial_v1';
@@ -2700,7 +2728,7 @@ function renderCardEventContent() {
   const subEl = document.getElementById('carte-event-sub');
   if (subEl) {
     if (!cat.settings?.live) {
-      subEl.innerHTML = `⚠️ Evento terminato o disattivato: la sezione è in sola lettura.`;
+      subEl.innerHTML = `Archivio evento terminato: la collezione è in sola lettura.`;
     } else {
       const endsAt = cat.settings?.ends_at ? new Date(cat.settings.ends_at) : null;
       subEl.textContent = endsAt
@@ -2711,6 +2739,8 @@ function renderCardEventContent() {
 
   const tag = window._cardEventActiveTag;
   const coll = (data.collections && tag && data.collections[tag]) || {};
+  const hasCollection = _cardCollectionHasCards(coll);
+  const live = cat.settings?.live === true;
   const f = _carteGetFilters();
   const hits = tag ? _carteFindHitsForActiveProfile() : [];
   const hitKeys = new Set(hits.map((c) => c.key));
@@ -2807,16 +2837,40 @@ function renderCardEventContent() {
 
   const noProfile = !tag ? `<div class="profilo-empty"><p style="color:var(--text-3)">Nessun profilo CoC collegato al tuo account: collega un villaggio da "Profili" per usare questa sezione.</p></div>` : '';
   const hasAnyProfile = (data.profiles || []).length > 0;
+  const activeProfile = (data.profiles || []).find(p => p.coc_tag === tag);
+  const isPublic = activeProfile?.card_deck_public === true;
+
+  if (!live && !hasCollection) {
+    box.innerHTML = `
+      ${noProfile || `<div class="profilo-empty">
+        <p>L'evento Clash of Cards è terminato.</p>
+        <p style="font-size:0.82rem;color:var(--text-3)">Non hai una collezione salvata, quindi non è più possibile creare o modificare un mazzo. I prossimi eventi appariranno in questa sezione.</p>
+      </div>`}
+      ${window._userRole === 'admin' ? renderCardEventAdminToggle(cat.settings) : ''}
+    `;
+    return;
+  }
+
+  const privacyHtml = hasCollection && activeProfile ? `
+    <div class="carte-privacy-row">
+      <span>Visibilità collezione:</span>
+      <span class="carte-privacy-state ${isPublic ? 'is-on' : 'is-off'}">${isPublic ? '🌐 Pubblica' : '🔒 Nascosta'}</span>
+      <button type="button" class="btn-secondary btn-sm" onclick="_toggleProfileDeckPublic('${escH(activeProfile.id)}', ${isPublic ? 'false' : 'true'})">
+        ${isPublic ? 'Rendi nascosta' : 'Rendi pubblica'}
+      </button>
+      <p class="carte-privacy-hint">Di default la collezione è nascosta. Se la rendi pubblica, altri utenti potranno vederla aprendo il tuo profilo.</p>
+    </div>` : '';
 
   box.innerHTML = `
+    ${privacyHtml}
     <div class="carte-total-row">
       <div class="carte-total-counter">Carte trovate: <strong>${totalFound}/${cat.total_cards}</strong></div>
       <div class="carte-total-actions">
-        ${hasAnyProfile ? `<button type="button" class="btn-secondary btn-sm" onclick="_openCarteShareDupes()" title="Condividi lista doppioni">📋 Doppioni</button>` : ''}
-        <button type="button" class="btn-secondary btn-sm carte-tutorial-inline-btn" onclick="_openCarteTutorial(true)" title="Guida e tutorial">?</button>
+        ${hasAnyProfile && hasCollection ? `<button type="button" class="btn-secondary btn-sm" onclick="_openCarteShareDupes()" title="Condividi lista doppioni">📋 Doppioni</button>` : ''}
+        ${live ? `<button type="button" class="btn-secondary btn-sm carte-tutorial-inline-btn" onclick="_openCarteTutorial(true)" title="Guida e tutorial">?</button>` : ''}
       </div>
     </div>
-    ${_carteSearchBarHtml({ showTradeExtras: false })}
+    ${live ? _carteSearchBarHtml({ showTradeExtras: false }) : ''}
     ${statusHtml}
     ${hitsStrip}
     ${noProfile}
@@ -3228,7 +3282,7 @@ async function cardsApi(type, { method = 'GET', body = null, params = null } = {
 function _switchCarteMainTab(tab, btn) {
   document.getElementById('carte-content').style.display = tab === 'collezione' ? 'block' : 'none';
   document.getElementById('carte-trade-content').style.display = tab === 'scambi' ? 'block' : 'none';
-  document.querySelectorAll('#tab-carte > .subtab-bar .subtab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#carte-main-subtabs .subtab-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   if (tab === 'scambi') loadCardTradeTab();
 }
@@ -4505,6 +4559,7 @@ async function _toggleProfileDeckPublic(profileId, isPublic) {
     // Ricarica lista altrui non serve; aggiorna solo lo stato locale e ri-render
     window._cartePublicWin = 'albums-mine';
     _renderCartePublicWindow();
+    renderCardEventContent();
   } catch (e) {
     alert(e.message || 'Errore aggiornamento visibilità mazzo.');
     window._cartePublicWin = 'albums-mine';
@@ -5102,10 +5157,10 @@ async function loadMembers() {
   renderMembers(active, exPlayers);
 }
 
-// Ritorna il percorso immagine TH — usa webp (th/) per livelli 1-18, png per 19+
+// Ritorna il percorso immagine TH — webp preferito, png come fallback onerror
 function thImgSrc(level) {
   const n = String(level).padStart(2, "0");
-  return level <= 18 ? `th/level_${n}.webp` : `th/level_${n}.png`;
+  return `th/level_${n}.webp`;
 }
 
 // Fallback png se webp non carica (chiamata da onerror inline)
@@ -8188,7 +8243,7 @@ async function openClassicWarDetail(key, opts) {
     const sorted = [...members].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
     return sorted.map(m => {
       const thN = String(m.townhallLevel ?? 1).padStart(2, '0');
-      const thSrc = (m.townhallLevel ?? 1) <= 18 ? `th/level_${thN}.webp` : `th/level_${thN}.png`;
+      const thSrc = `th/level_${thN}.webp`;
       const thFb  = `onerror="this.onerror=null;this.src='th/level_${thN}.png'"`;
 
       const attacks = [...(m.attacks || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -8352,28 +8407,28 @@ const LEAGUE_EN_TO_IT = {
 
 // Icone trofeo CWL — immagini locali (scaricate da Fandom CoC wiki, stile in-game)
 const LEAGUE_BADGE = {
-  'Bronzo III':   '/leagues/BronzoIII.png',
-  'Bronzo II':    '/leagues/BronzoII.png',
-  'Bronzo I':     '/leagues/BronzoI.png',
-  'Argento III':  '/leagues/ArgentoIII.png',
-  'Argento II':   '/leagues/ArgentoII.png',
-  'Argento I':    '/leagues/ArgentoI.png',
-  'Oro III':      '/leagues/OroIII.png',
-  'Oro II':       '/leagues/OroII.png',
-  'Oro I':        '/leagues/OroI.png',
-  'Cristallo III':'/leagues/CristalloIII.png',
-  'Cristallo II': '/leagues/CristalloII.png',
-  'Cristallo I':  '/leagues/CristalloI.png',
-  'Maestro III':  '/leagues/MaestroIII.png',
-  'Maestro II':   '/leagues/MaestroII.png',
-  'Maestro I':    '/leagues/MaestroI.png',
-  'Campione III': '/leagues/CampioneIII.png',
-  'Campione II':  '/leagues/CampioneII.png',
-  'Campione I':   '/leagues/CampioneI.png',
-  'Titano III':   '/leagues/TitanoIII.png',
-  'Titano II':    '/leagues/TitanoII.png',
-  'Titano I':     '/leagues/TitanoI.png',
-  'Leggenda':     '/leagues/Leggenda.png',
+  'Bronzo III':   '/leagues/BronzoIII.webp',
+  'Bronzo II':    '/leagues/BronzoII.webp',
+  'Bronzo I':     '/leagues/BronzoI.webp',
+  'Argento III':  '/leagues/ArgentoIII.webp',
+  'Argento II':   '/leagues/ArgentoII.webp',
+  'Argento I':    '/leagues/ArgentoI.webp',
+  'Oro III':      '/leagues/OroIII.webp',
+  'Oro II':       '/leagues/OroII.webp',
+  'Oro I':        '/leagues/OroI.webp',
+  'Cristallo III':'/leagues/CristalloIII.webp',
+  'Cristallo II': '/leagues/CristalloII.webp',
+  'Cristallo I':  '/leagues/CristalloI.webp',
+  'Maestro III':  '/leagues/MaestroIII.webp',
+  'Maestro II':   '/leagues/MaestroII.webp',
+  'Maestro I':    '/leagues/MaestroI.webp',
+  'Campione III': '/leagues/CampioneIII.webp',
+  'Campione II':  '/leagues/CampioneII.webp',
+  'Campione I':   '/leagues/CampioneI.webp',
+  'Titano III':   '/leagues/TitanoIII.webp',
+  'Titano II':    '/leagues/TitanoII.webp',
+  'Titano I':     '/leagues/TitanoI.webp',
+  'Leggenda':     '/leagues/Leggenda.webp',
 };
 // Fallback emoji (usato se img non carica)
 const LEAGUE_ICON = {
@@ -9721,9 +9776,10 @@ function renderPlayerView(p, prefix) {
   const bhEl = document.getElementById(ids.bhStats);
   const bhLvl = p.builderHallLevel || null;
   const bhImg = bhLvl ? bhImgUrl(bhLvl) : '';
+  const bhFb = bhLvl ? bhImgUrlFallback(bhLvl) : '';
   if (bhEl) bhEl.innerHTML = `<div class="profilo-bh-card">
     ${bhImg
-      ? `<img src="${bhImg}" alt="Base del Costruttore" class="profilo-bh-icon-img" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+      ? `<img src="${bhImg}" alt="Base del Costruttore" class="profilo-bh-icon-img" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="if(this.dataset.bhTried){this.style.display='none';this.nextElementSibling.style.display='block'}else{this.dataset.bhTried=1;this.src='${bhFb}'">
          <svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28" style="color:var(--gold);opacity:.8;display:none"><path d="M19 3H5v2h1v14H4v2h16v-2h-2V5h1V3zm-4 16h-6v-5h6v5zm0-7h-6V8h6v4z"/></svg>`
       : `<svg viewBox="0 0 24 24" fill="currentColor" width="28" height="28" style="color:var(--gold);opacity:.8"><path d="M19 3H5v2h1v14H4v2h16v-2h-2V5h1V3zm-4 16h-6v-5h6v5zm0-7h-6V8h6v4z"/></svg>`}
     <div>
@@ -9861,6 +9917,10 @@ const BH_WIKI_URL = {
   10: 'https://static.wikia.nocookie.net/clashofclans/images/8/87/Builder_Hall10.png/revision/latest',
 };
 function bhImgUrl(level) {
+  const n = Math.max(1, Math.min(10, parseInt(level, 10) || 1));
+  return `units/builder/hall-${n}.webp`;
+}
+function bhImgUrlFallback(level) {
   const n = Math.max(1, Math.min(10, parseInt(level, 10) || 1));
   return BH_WIKI_URL[n] || '';
 }
@@ -10139,6 +10199,19 @@ const UNIT_NAME_IT = {
 
 function _unitNameIt(name) { return UNIT_NAME_IT[name] || name; }
 
+/** Path WebP locale pre-generato (units/{cat}/{slug}.webp) — primo fallback prima dei CDN esterni. */
+function getLocalUnitWebpPath(name, category) {
+  if (!name) return '';
+  if (UNIT_COC_SLUG[name]) {
+    const { c, s } = UNIT_COC_SLUG[name];
+    return `units/${c}/${s}.webp`;
+  }
+  const CAT = { heroes: 'hero', troops: 'troop', spells: 'spell', pets: 'pet', equipment: 'equipment' };
+  const cat = CAT[category] || category || 'troop';
+  const slug = name.toLowerCase().replace(/['.()]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-');
+  return `units/${cat}/${slug}.webp`;
+}
+
 /** Ultimo fallback: slug coc.guide (spesso 404 per contenuti nuovi). */
 function getCocGuideUrl(name, category) {
   if (!name) return '';
@@ -10310,13 +10383,14 @@ function _renderAchievements(containerId, achievements) {
 }
 
 function switchProfiloTab(tab, btn) {
-  ['home','builder','capital'].forEach(t => {
+  ['home','builder','capital','events'].forEach(t => {
     const el = document.getElementById(`profilo-tab-${t}`);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
-  document.querySelectorAll('#tab-profilo .subtab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#profilo-main-subtabs .subtab-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   _profiloActiveTab = tab;
+  if (tab === 'events') loadCardEventTab();
 }
 
 // ── CERCA ─────────────────────────────────────────────────────────────────────
@@ -10697,19 +10771,129 @@ function _renderCercaMembersList(members, clanTag) {
   </table></div></div>`;
 }
 
+async function fetchCwlLiveSafe(clanTag) {
+  const tag = normClanTag(clanTag);
+  if (!tag) return null;
+  try {
+    const r = await fetch(`/api/cwl-stats?clanTag=${encodeURIComponent(tag)}`, { cache: 'no-store' });
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (!d || d.state === 'notInWar' || !d.state) return null;
+    return d;
+  } catch (_) {
+    return null;
+  }
+}
+
+function _cercaLiveWarBannerHtml(cw) {
+  if (!cw || !['preparation', 'inWar', 'warEnded'].includes(cw.state)) return '';
+  const us = cw.clan || {}, them = cw.opponent || {};
+  const usBadge = us.badgeUrls?.small ? `<img src="${us.badgeUrls.small}" class="wlb-badge" alt="">` : '<span class="wlb-badge-ph">🛡️</span>';
+  const themBadge = them.badgeUrls?.small ? `<img src="${them.badgeUrls.small}" class="wlb-badge" alt="">` : '<span class="wlb-badge-ph">🛡️</span>';
+  const stateClass = cw.state === 'preparation' ? 'wlb--prep' : cw.state === 'inWar' ? 'wlb--battle' : 'wlb--ended';
+  return `<div class="war-live-banner ${stateClass}">
+    <div class="wlb-top">
+      <span class="wlb-live-dot"></span>
+      <strong>⚔️ War classica in corso</strong>
+      <span class="wlb-state">${_wlStateLabel(cw.state)}</span>
+    </div>
+    <div class="wlb-matchup">
+      <div class="wlb-clan">${usBadge}<span class="wlb-clan-name">${escH(us.name || '—')}</span></div>
+      <div class="wlb-vs">VS</div>
+      <div class="wlb-clan">${themBadge}<span class="wlb-clan-name">${escH(them.name || '—')}</span></div>
+    </div>
+    <button class="btn-primary btn-sm wlb-detail-btn" onclick="openCercaLiveWar()">Vedi dettagli war live</button>
+  </div>`;
+}
+
+function _cercaLiveCwlBannerHtml(cwl, { switchScope } = {}) {
+  if (!cwl || cwl.state === 'notInWar') return '';
+  const league = cwl.leagueNameIt || cwl.leagueName || cwl.leagueNameEn || 'CWL';
+  const season = cwl.season || '';
+  const rounds = cwl.roundsData || cwl.rounds || [];
+  const goTab = switchScope === 'rk' ? '_gotoRankCwlTab()' : '_gotoCercaCwlTab()';
+  return `<div class="cerca-cwl-live-banner">
+    <div>
+      <span class="cwl-live-dot-sm"></span>
+      <strong>🏆 CWL in corso</strong>
+      <span style="margin-left:0.4rem;color:var(--text-2)">${escH(league)}${season ? ` · ${escH(seasonLabel(season))}` : ''}</span>
+      ${rounds.length ? `<span style="margin-left:0.45rem;font-size:0.78rem;color:var(--text-3)">${rounds.length} round</span>` : ''}
+    </div>
+    <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
+      <button type="button" class="btn-secondary btn-sm" onclick="${goTab}">Apri cronologia CWL</button>
+      <button type="button" class="btn-primary btn-sm" onclick="openCercaCwlLiveDetail()">Vedi dettagli</button>
+    </div>
+  </div>`;
+}
+
+function _gotoCercaCwlTab() {
+  const btn = document.querySelector('#cerca-clan-content .subtab-btn[onclick*="cwl"]');
+  _switchCercaClanTab('cwl', btn);
+}
+
+function _gotoRankCwlTab() {
+  const btn = document.querySelector('#rank-clan-detail .subtab-btn[onclick*="cwl"]');
+  _switchRkClanTab('cwl', btn);
+}
+
+function openCercaLiveWar() {
+  const cw = window._cercaWarLive;
+  if (!cw) return;
+  _warLiveData = cw;
+  openWarLiveModal();
+}
+
+function openCercaCwlLiveDetail() {
+  const d = window._cercaCwlLive;
+  if (!d) return;
+  const rounds = d.roundsData || d.rounds || [];
+  if (!rounds.length) {
+    alert('Dettaglio CWL non disponibile per questo clan (registro chiuso o dati incompleti).');
+    return;
+  }
+  const focusTag = window._cercaClanTag || d.clanTag;
+  const focusName = d.ourName || rounds[0]?.clan?.name || 'Clan';
+  _renderCwlDetailModal(d.season, rounds, d.groupStandings || null, {
+    season: d.season,
+    league: LEAGUE_EN_TO_IT[d.leagueNameEn] || d.leagueNameIt || d.leagueName || d.leagueNameEn,
+    position: d.ourPosition,
+    groupStandings: d.groupStandings || null,
+    players: d.players || null,
+  }, { focusClanTag: focusTag, focusClanName: focusName });
+}
+
 async function _loadCercaWarLog(clanTag, tabId = 'cc-tab-warlog') {
   const cont = document.getElementById(tabId);
   if (!cont) return;
-  window._cercaClanTag = normClanTag(clanTag);
+  const tag = normClanTag(clanTag);
+  window._cercaClanTag = tag;
+  const switchScope = tabId.startsWith('rk') ? 'rk' : 'cc';
   try {
-    const r = await fetch(`/api/war-log?clanTag=${encodeURIComponent(clanTag)}`);
-    const data = await r.json();
-    if (r.status === 403 || data.reason === 'accessDenied') {
-      cont.innerHTML = '<div class="profilo-empty"><p>⚠️ War log privato. Il clan ha il registro guerra impostato su privato.</p></div>';
+    const [logR, cw, cwl] = await Promise.all([
+      fetch(`/api/war-log?clanTag=${encodeURIComponent(tag)}`).then(async r => ({ status: r.status, data: await r.json().catch(() => ({})) })),
+      fetchCurrentWarApi(tag),
+      fetchCwlLiveSafe(tag),
+    ]);
+    window._cercaWarLive = cw || null;
+    window._cercaCwlLive = cwl || null;
+    window._cercaCwlLiveTag = tag;
+
+    const data = logR.data || {};
+    const logPrivate = logR.status === 403 || data.reason === 'accessDenied' || data.error === 'accessDenied';
+    const banners = [_cercaLiveWarBannerHtml(cw), _cercaLiveCwlBannerHtml(cwl, { switchScope })].filter(Boolean);
+    const bannersHtml = banners.length ? `<div class="cerca-live-banners">${banners.join('')}</div>` : '';
+
+    if (logPrivate && !cw && !cwl) {
+      cont.innerHTML = '<div class="profilo-empty"><p>⚠️ Registro guerra privato. Non è possibile consultare war o CWL in corso per questo clan.</p></div>';
       return;
     }
-    if (!r.ok) throw new Error(data.error||'Errore');
-    const wars = (data.items||[]).filter(w=>{
+    if (logPrivate) {
+      cont.innerHTML = `${bannersHtml}<div class="profilo-empty"><p>⚠️ Lo storico war classiche è privato. War/CWL in corso ${cw || cwl ? 'sono visibili sopra' : 'non sono consultabili'}.</p></div>`;
+      return;
+    }
+    if (!logR.status || logR.status >= 400) throw new Error(data.error || 'Errore');
+
+    let wars = (data.items||[]).filter(w=>{
       const wt=(w.warType||'').toLowerCase();
       if(wt==='cwl') return false;
       if(!w.opponent?.name) return false;
@@ -10717,16 +10901,42 @@ async function _loadCercaWarLog(clanTag, tabId = 'cc-tab-warlog') {
       if((w.clan?.stars||0)>maxStars) return false;
       return true;
     }).slice(0,20);
-    if (!wars.length) { cont.innerHTML='<div class="profilo-empty"><p>Nessuna war classica nel log.</p></div>'; return; }
+
+    if (cw && ['preparation', 'inWar', 'warEnded'].includes(cw.state) && cw.opponent?.name) {
+      const already = wars.some(w => currentWarMatchesLogEntry(cw, w));
+      if (!already) {
+        wars = [{
+          result: (() => {
+            const a = cw.clan?.stars || 0, b = cw.opponent?.stars || 0;
+            if (a > b) return 'win';
+            if (a < b) return 'lose';
+            return 'tie';
+          })(),
+          endTime: cw.endTime,
+          teamSize: cw.teamSize,
+          attacksPerMember: cw.attacksPerMember,
+          clan: cw.clan,
+          opponent: cw.opponent,
+          _fromCurrentWar: true,
+          _warState: cw.state,
+        }, ...wars];
+      }
+    }
 
     window._cercaWarLogItems = wars;
     window._cercaWarLogMap = {};
     wars.forEach(w => { if (w.endTime) window._cercaWarLogMap[w.endTime] = w; });
 
+    if (!wars.length && !banners.length) {
+      cont.innerHTML='<div class="profilo-empty"><p>Nessuna war classica nel log.</p></div>';
+      return;
+    }
+
     const rows = wars.map((w, widx)=>{
       const date = w.endTime ? new Date(
         w.endTime.replace(/(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/,'$1-$2-$3T$4:$5:$6')
       ).toLocaleDateString('it-IT',{day:'2-digit',month:'short',year:'2-digit'}) : '—';
+      const liveLbl = w._warState ? `<div style="font-size:0.7rem;color:#4caf50;font-weight:700">${escH(_wlStateLabelShort(w._warState))}</div>` : '';
       const result = w.result==='win'  ? '<span class="wl-win">Vinta ✓</span>'
                    : w.result==='lose' ? '<span class="wl-lose">Persa ✗</span>'
                    : '<span class="wl-draw">Patta =</span>';
@@ -10744,7 +10954,7 @@ async function _loadCercaWarLog(clanTag, tabId = 'cc-tab-warlog') {
       const destNoi  = (+(w.clan?.destructionPercentage??0)).toFixed(1);
       const destLoro = (+(w.opponent?.destructionPercentage??0)).toFixed(1);
       return `<tr class="wl-row-clickable" onclick="openCercaWarDetail(${widx})">
-        <td class="stat-cell">${date}</td>
+        <td class="stat-cell">${date}${liveLbl}</td>
         <td>${result}</td>
         <td>${clanCell}</td>
         <td class="stat-cell" style="text-align:center">vs<br><span style="font-size:0.72rem;color:var(--text-3)">${size}v${size}</span></td>
@@ -10755,7 +10965,7 @@ async function _loadCercaWarLog(clanTag, tabId = 'cc-tab-warlog') {
       </tr>`;
     }).join('');
 
-    cont.innerHTML = `<p style="font-size:0.78rem;color:var(--text-3);margin:0.5rem 0 0.25rem">Clicca su una riga per vedere i dettagli (roster e attacchi se salvati).</p>
+    const tableHtml = wars.length ? `<p style="font-size:0.78rem;color:var(--text-3);margin:0.5rem 0 0.25rem">Clicca su una riga per vedere i dettagli (roster e attacchi se salvati).</p>
     <div class="table-wrap" style="margin-top:0.25rem">
       <table>
         <thead><tr>
@@ -10765,7 +10975,9 @@ async function _loadCercaWarLog(clanTag, tabId = 'cc-tab-warlog') {
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>`;
+    </div>` : '<div class="profilo-empty"><p>Nessuna war classica nello storico.</p></div>';
+
+    cont.innerHTML = `${bannersHtml}${tableHtml}`;
   } catch(e) {
     cont.innerHTML=`<div class="cerca-error">Errore: ${e.message}</div>`;
   }
@@ -10783,25 +10995,29 @@ async function openCercaWarDetail(idx) {
   });
 }
 
-async function _loadCercaCwlHistory(clanTag) {
-  const cont = document.getElementById('cc-tab-cwl');
+async function _loadCercaCwlHistory(clanTag, tabId = 'cc-tab-cwl') {
+  const cont = document.getElementById(tabId);
   if (!cont) return;
   const tag = normClanTag(clanTag);
+  const switchScope = tabId.startsWith('rk') ? 'rk' : 'cc';
   try {
-    const [seasonsRes, warsRes] = await Promise.all([
+    const [seasonsRes, warsRes, cwlLive] = await Promise.all([
       db.from('cwl_seasons').select('*').eq('clan_tag', tag).order('season', { ascending: false }).limit(20),
       db.from('cwl_wars').select('*').eq('clan_tag', tag).order('season', { ascending: false }).order('round', { ascending: true }),
+      window._cercaCwlLiveTag === tag && window._cercaCwlLive
+        ? Promise.resolve(window._cercaCwlLive)
+        : fetchCwlLiveSafe(tag),
     ]);
+    window._cercaCwlLive = cwlLive || null;
+    window._cercaCwlLiveTag = tag;
+    const liveBanner = _cercaLiveCwlBannerHtml(window._cercaCwlLive, { switchScope });
     if (seasonsRes.error) throw new Error(seasonsRes.error.message);
     const data = seasonsRes.data || [];
     if (!data.length) {
-      cont.innerHTML=`<div class="profilo-empty">
-        <p style="font-size:0.85rem;color:var(--text-3);margin-bottom:0.75rem">Nessuna cronologia salvata per questo clan.</p>
-        <button class="btn-secondary btn-sm" onclick="_loadCercaCwlLive('${tag.replace(/'/g,"\\'")}',this)">
-          🔄 Carica CWL attuale dall'API
-        </button>
-        <div id="cc-cwl-live-result" style="margin-top:0.75rem"></div>
-      </div>`;
+      cont.innerHTML = `${liveBanner || ''}
+        <div class="profilo-empty">
+          <p style="font-size:0.85rem;color:var(--text-3);margin-bottom:0.75rem">${window._cercaCwlLive ? 'Nessuna cronologia salvata oltre alla CWL in corso.' : 'Nessuna cronologia salvata per questo clan.'}</p>
+        </div>`;
       return;
     }
 
@@ -10841,7 +11057,7 @@ async function _loadCercaCwlHistory(clanTag) {
     window._cercaCwlSeasons = data;
     window._cercaCwlClanTag = tag;
 
-    cont.innerHTML = data.map(s=>{
+    cont.innerHTML = (liveBanner || '') + data.map(s=>{
       const leagueIt=LEAGUE_EN_TO_IT[s.league]||s.league||'—';
       const lb=LEAGUE_BADGE[leagueIt];
       const pos=s.position||0;
@@ -10942,6 +11158,7 @@ async function openCercaPlayer(playerTag, fromClanTag) {
         <button class="subtab-btn active" onclick="_switchCpTab('home',this)">Villaggio Base</button>
         <button class="subtab-btn" onclick="_switchCpTab('builder',this)">Base Costruttore</button>
         <button class="subtab-btn" onclick="_switchCpTab('capital',this)">Capitale</button>
+        <button class="subtab-btn" onclick="_switchCpTab('events',this)">Eventi</button>
       </div>
       <div id="cp-tab-home">
         <div class="profilo-section">
@@ -10971,6 +11188,9 @@ async function openCercaPlayer(playerTag, fromClanTag) {
       <div id="cp-tab-capital" style="display:none">
         <div id="cp-capital-stats" class="profilo-bh-stats"></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Truppe Capitale</h3><div id="cp-capital-troops" class="profilo-units-grid"></div></div>
+      </div>
+      <div id="cp-tab-events" style="display:none">
+        <div id="cp-events-content"><div class="profilo-empty"><p style="color:var(--text-3)">Caricamento…</p></div></div>
       </div>`;
 
     renderPlayerView(p, 'cp');
@@ -10980,12 +11200,16 @@ async function openCercaPlayer(playerTag, fromClanTag) {
 }
 
 function _switchCpTab(tab, btn) {
-  ['home','builder','capital'].forEach(t=>{
+  ['home','builder','capital','events'].forEach(t=>{
     const el=document.getElementById(`cp-tab-${t}`);
     if(el) el.style.display=t===tab?'block':'none';
   });
-  document.querySelectorAll('#cerca-player-content .subtab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('#cerca-player-content > .subtab-bar .subtab-btn').forEach(b=>b.classList.remove('active'));
   if(btn) btn.classList.add('active');
+  if (tab === 'events') {
+    const tag = document.getElementById('cp-header-card')?.dataset.playerTag;
+    _loadForeignEventsTab('cp-events-content', tag);
+  }
 }
 
 // Reset stack quando si cambia tab
@@ -11158,6 +11382,7 @@ async function openRankPlayer(playerTag) {
         <button class="subtab-btn active" onclick="_switchRkTab('home',this)">Villaggio Base</button>
         <button class="subtab-btn" onclick="_switchRkTab('builder',this)">Base Costruttore</button>
         <button class="subtab-btn" onclick="_switchRkTab('capital',this)">Capitale</button>
+        <button class="subtab-btn" onclick="_switchRkTab('events',this)">Eventi</button>
       </div>
       <div id="rk-tab-home">
         <div class="profilo-section">
@@ -11187,6 +11412,9 @@ async function openRankPlayer(playerTag) {
       <div id="rk-tab-capital" style="display:none">
         <div id="rk-capital-stats" class="profilo-bh-stats"></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Truppe Capitale</h3><div id="rk-capital-troops" class="profilo-units-grid"></div></div>
+      </div>
+      <div id="rk-tab-events" style="display:none">
+        <div id="rk-events-content"><div class="profilo-empty"><p style="color:var(--text-3)">Caricamento…</p></div></div>
       </div>`;
     renderPlayerView(p, 'rk');
   } catch(e) {
@@ -11195,12 +11423,87 @@ async function openRankPlayer(playerTag) {
 }
 
 function _switchRkTab(tab, btn) {
-  ['home','builder','capital'].forEach(t => {
+  ['home','builder','capital','events'].forEach(t => {
     const el = document.getElementById(`rk-tab-${t}`);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
-  document.querySelectorAll('#rank-player-detail .subtab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#rank-player-detail > .subtab-bar .subtab-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
+  if (tab === 'events') {
+    const tag = document.getElementById('rk-header-card')?.dataset.playerTag;
+    _loadForeignEventsTab('rk-events-content', tag);
+  }
+}
+
+function _renderArchiveEventAlbum(coll, catalog) {
+  const cat = catalog || window._cardEventCatalog;
+  if (!cat) return '<div class="profilo-empty"><p>Catalogo eventi non disponibile.</p></div>';
+  const totalFound = cat.cards.filter((c) => (coll[c.key] || 0) >= 1).length;
+  const grids = (cat.category_order || []).map((catKey) => {
+    const cardsInCat = cat.cards.filter((c) => c.category === catKey);
+    const found = cardsInCat.filter((c) => (coll[c.key] || 0) >= 1).length;
+    const grid = _renderCollectionCatGrid(cardsInCat, coll, new Set(), false, 0, true);
+    return `
+      <div class="carte-album-cat">
+        <div class="carte-album-cat-label">
+          <span class="carte-album-cat-dot ${CARTE_CAT_BORDER[catKey] || ''}"></span>
+          ${escH(cat.category_label_it[catKey] || catKey)}
+          <span class="carte-cat-count">${found}/${cardsInCat.length}</span>
+        </div>
+        <div class="carte-grid">${grid}</div>
+      </div>`;
+  }).join('');
+  return `
+    <div class="page-header" style="margin-bottom:0.75rem">
+      <div>
+        <h3 class="profilo-section-title" style="margin:0">🎴 Clash of Cards</h3>
+        <p class="page-sub">Collezione pubblica di questo villaggio.</p>
+      </div>
+    </div>
+    <div class="carte-total-row">
+      <div class="carte-total-counter">Carte trovate: <strong>${totalFound}/${cat.total_cards}</strong></div>
+    </div>
+    ${grids}`;
+}
+
+async function _loadForeignEventsTab(containerId, playerTag) {
+  const box = document.getElementById(containerId);
+  if (!box) return;
+  const tag = String(playerTag || '').trim();
+  if (!tag) {
+    box.innerHTML = '<div class="profilo-empty"><p>Nessun villaggio da mostrare.</p></div>';
+    return;
+  }
+  if (box.dataset.loadedTag === tag && box.dataset.loaded === '1') return;
+  box.innerHTML = '<div class="profilo-loading" style="display:flex"><div class="spinner"></div><span>Caricamento eventi…</span></div>';
+  try {
+    if (!window._cardEventCatalog) {
+      const headers = await authBearerHeaders().catch(() => ({ Accept: 'application/json' }));
+      const rc = await fetch('/api/lookup?type=cards-catalog', { headers });
+      window._cardEventCatalog = await rc.json();
+    }
+    const headers = await authBearerHeaders().catch(() => ({ Accept: 'application/json' }));
+    const r = await fetch(`/api/lookup?type=cards-public-get&playerTag=${encodeURIComponent(tag)}`, { headers });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || 'Errore caricamento eventi');
+    box.dataset.loadedTag = tag;
+    box.dataset.loaded = '1';
+    if (d.is_owner && !d.has_collection) {
+      box.innerHTML = `<div class="profilo-empty"><p>L'evento Clash of Cards è terminato e non hai una collezione salvata.</p></div>`;
+      return;
+    }
+    if (!d.is_owner && (!d.public || !d.has_collection)) {
+      box.innerHTML = `<div class="profilo-empty"><p>Nessuna collezione eventi pubblica.</p><p style="font-size:0.82rem;color:var(--text-3)">Il giocatore non ha reso visibile un mazzo Clash of Cards.</p></div>`;
+      return;
+    }
+    const note = d.is_owner
+      ? `<p class="page-sub" style="margin-bottom:0.6rem">Questa è la tua collezione. La visibilità si gestisce da <b>Il mio Profilo → Eventi</b>.</p>`
+      : '';
+    box.innerHTML = note + _renderArchiveEventAlbum(d.collection || {}, window._cardEventCatalog);
+  } catch (e) {
+    box.dataset.loaded = '0';
+    box.innerHTML = `<div class="cerca-error">Errore: ${escH(e.message || '')}</div>`;
+  }
 }
 
 // ── PROFILO CLAN INLINE ───────────────────────────────────────────────────────
@@ -11267,11 +11570,14 @@ function _renderRankClanDetail(info, members, clanTag, container) {
     <div class="subtab-bar">
       <button class="subtab-btn active" onclick="_switchRkClanTab('members',this)">Membri</button>
       <button class="subtab-btn" onclick="_switchRkClanTab('warlog',this)">War Classiche</button>
+      <button class="subtab-btn" onclick="_switchRkClanTab('cwl',this)">Cronologia CWL</button>
     </div>
     <div id="rk-cc-tab-members">${_renderRankMembersList(members, clanTag)}</div>
     <div id="rk-cc-tab-warlog" style="display:none"><div class="profilo-loading" style="display:flex"><div class="spinner"></div><span>Caricamento…</span></div></div>
+    <div id="rk-cc-tab-cwl" style="display:none"><div class="profilo-loading" style="display:flex"><div class="spinner"></div><span>Caricamento…</span></div></div>
   `;
   _loadCercaWarLog(clanTag, 'rk-cc-tab-warlog');
+  _loadCercaCwlHistory(clanTag, 'rk-cc-tab-cwl');
 }
 
 function _renderRankMembersList(members, clanTag) {
@@ -11304,7 +11610,7 @@ function _renderRankMembersList(members, clanTag) {
 }
 
 function _switchRkClanTab(tab, btn) {
-  ['members','warlog'].forEach(t => {
+  ['members','warlog','cwl'].forEach(t => {
     const el = document.getElementById(`rk-cc-tab-${t}`);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });

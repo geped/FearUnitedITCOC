@@ -237,7 +237,7 @@ async function currentWarDirect(clanTag) {
 }
 
 async function clanMembers(clanTag) {
-  return fetchJson('/api/clan-members', { clanTag });
+  return fetchCoC('/clan-members', '/api/clan-members', { clanTag }, 20000);
 }
 
 async function clanInfo(clanTag) {
@@ -269,7 +269,7 @@ async function cwlStats(clanTag) {
 }
 
 async function warLog(clanTag) {
-  return fetchJson('/api/war-log', { clanTag });
+  return fetchCoC('/war-log', '/api/war-log', { clanTag }, 30000);
 }
 
 /** Converte un round di cwl-stats nel formato “war” usato dalle notifiche. */
@@ -380,15 +380,36 @@ async function saveWar(clanTag) {
 }
 
 async function lookupPlayer(playerTag) {
+  if (canUseLocalProxy()) {
+    try {
+      return await fetchLocalProxy('/player', { playerTag }, 20000);
+    } catch (e) {
+      console.warn('[cocboard-api] local player failed', e.message);
+    }
+  }
   return fetchJson('/api/lookup', { type: 'player', playerTag });
 }
 
 async function searchClans(q) {
+  if (canUseLocalProxy()) {
+    try {
+      return await fetchLocalProxy('/search-clans', { q }, 20000);
+    } catch (e) {
+      console.warn('[cocboard-api] local search-clans failed', e.message);
+    }
+  }
   return fetchJson('/api/lookup', { type: 'search-clans', q });
 }
 
 /** Classifiche CoC (stesso endpoint del sito: Italia vs globale). */
 async function rankings(rankType, locationId) {
+  if (canUseLocalProxy()) {
+    try {
+      return await fetchLocalProxy('/rankings', { type: rankType, locationId }, 35000);
+    } catch (e) {
+      console.warn('[cocboard-api] local rankings failed', e.message);
+    }
+  }
   return fetchJson('/api/lookup', { type: 'rankings', rankType, locationId });
 }
 

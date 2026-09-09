@@ -2,7 +2,12 @@
   "name": "cocboard",
   "version": "1.0.0",
   "scripts": {
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "images:convert": "node scripts/convert-images.mjs",
+    "images:units": "node scripts/fetch-unit-images.mjs"
+  },
+  "devDependencies": {
+    "sharp": "^0.33.5"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.0.0"

@@ -72,3 +72,56 @@ describe('card-event: catalogPayload', () => {
     assert.deepEqual(payload.category_order, ['elixir', 'dark_elixir', 'builder_base', 'super_troop']);
   });
 });
+
+describe('card-event: collectionHasCards', () => {
+  it('false se vuota o solo zeri', () => {
+    assert.equal(cardEvent.collectionHasCards({}), false);
+    assert.equal(cardEvent.collectionHasCards({ elx_barbarian: 0 }), false);
+    assert.equal(cardEvent.collectionHasCards(null), false);
+  });
+  it('true se almeno una carta posseduta', () => {
+    assert.equal(cardEvent.collectionHasCards({ elx_barbarian: 1 }), true);
+    assert.equal(cardEvent.collectionHasCards({ elx_archer: 0, elx_barbarian: 2 }), true);
+  });
+});
+
+describe('card-event: getPublicCollectionByTag', () => {
+  const { makeFakeSupabase } = require('./_fake-supabase');
+
+  function seed() {
+    return makeFakeSupabase({
+      user_coc_profiles: [
+        { id: 'p-a', user_id: 'user-a', coc_tag: '#AAA1', username: 'Alice', card_deck_public: false },
+        { id: 'p-b', user_id: 'user-b', coc_tag: '#BBB1', username: 'Bob', card_deck_public: true },
+      ],
+      card_event_collections: [
+        { coc_tag: '#AAA1', card_key: 'elx_barbarian', qty_state: 2 },
+        { coc_tag: '#BBB1', card_key: 'elx_archer', qty_state: 1 },
+      ],
+    });
+  }
+
+  it('non espone la collezione se il mazzo è nascosto', async () => {
+    const admin = seed();
+    const res = await cardEvent.getPublicCollectionByTag(admin, '#AAA1', 'user-b');
+    assert.equal(res.public, false);
+    assert.equal(res.collection, undefined);
+  });
+
+  it('il proprietario vede sempre la propria collezione anche se nascosta', async () => {
+    const admin = seed();
+    const res = await cardEvent.getPublicCollectionByTag(admin, '#AAA1', 'user-a');
+    assert.equal(res.is_owner, true);
+    assert.equal(res.public, false);
+    assert.equal(res.has_collection, true);
+    assert.equal(res.collection.elx_barbarian, 2);
+  });
+
+  it('espone la collezione se resa pubblica', async () => {
+    const admin = seed();
+    const res = await cardEvent.getPublicCollectionByTag(admin, '#BBB1', 'user-a');
+    assert.equal(res.public, true);
+    assert.equal(res.has_collection, true);
+    assert.equal(res.collection.elx_archer, 1);
+  });
+});

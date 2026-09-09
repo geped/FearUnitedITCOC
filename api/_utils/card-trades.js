@@ -229,7 +229,8 @@ async function getMatchesForProfile(admin, user, profileId) {
 
   const { data: publicProfiles, error: ePub } = await admin
     .from('user_coc_profiles')
-    .select('id, coc_tag, username, coc_clan_name, coc_clan_badge_url, town_hall_level, user_id')
+    .select('id, coc_tag, username, coc_clan_name, coc_clan_badge_url, town_hall_level, user_id, card_deck_public')
+    .eq('card_deck_public', true)
     .neq('user_id', user.id);
   if (ePub) throw ePub;
 
@@ -312,6 +313,15 @@ async function getSelfMatches(admin, user) {
 
 async function setProfilePublic(admin, user, profileId, isPublic) {
   const me = await myProfileOr403(admin, user, profileId);
+  if (isPublic === true) {
+    const { data: rows, error: eColl } = await admin
+      .from('card_event_collections')
+      .select('qty_state')
+      .eq('coc_tag', me.coc_tag);
+    if (eColl) throw eColl;
+    const has = (rows || []).some((r) => Number(r.qty_state) >= 1);
+    if (!has) throw err(400, 'Non hai una collezione da rendere pubblica.', 'NO_COLLECTION');
+  }
   const { data, error } = await admin
     .from('user_coc_profiles')
     .update({ card_deck_public: isPublic === true })
@@ -339,7 +349,8 @@ async function listPublicDecks(admin, user, myProfileId) {
   const myTags = myProfiles.map((p) => p.coc_tag);
   const { data: publicProfiles, error: e1 } = await admin
     .from('user_coc_profiles')
-    .select('id, coc_tag, username, coc_clan_name, coc_clan_badge_url, town_hall_level, user_id')
+    .select('id, coc_tag, username, coc_clan_name, coc_clan_badge_url, town_hall_level, user_id, card_deck_public')
+    .eq('card_deck_public', true)
     .neq('user_id', user.id);
   if (e1) throw e1;
 

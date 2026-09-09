@@ -167,17 +167,38 @@ function setup(bot, deps) {
     const coll = activeColl(st);
     const live = st.catalog.settings?.live === true;
     const found = st.catalog.cards.filter((c) => (coll[c.key] || 0) >= 1).length;
+    const hasCollection = found > 0;
     const admin = await isAdmin(ctx);
     const endsAt = st.catalog.settings?.ends_at ? new Date(st.catalog.settings.ends_at) : null;
+    const myPublic = p?.card_deck_public === true;
 
-    const lines = [`${fmt.DIV}`, '🎴 <b>Evento Clash of Cards</b>', fmt.DIV, ''];
+    const lines = [`${fmt.DIV}`, '🎴 <b>Eventi · Clash of Cards</b>', fmt.DIV, ''];
+    if (!live && !hasCollection) {
+      lines.push(
+        'L’evento è terminato e non hai una collezione salvata, quindi non è più possibile creare un mazzo.',
+        '',
+        'I prossimi eventi appariranno qui.',
+      );
+      await renderView(
+        ctx,
+        lines.join('\n'),
+        Markup.inlineKeyboard([
+          [Markup.button.callback('« Profilo', 'me'), Markup.button.callback('« Menù', 'menu')],
+        ]),
+      );
+      return;
+    }
     if (!live) {
-      lines.push('⚠️ Evento terminato o disattivato: sezione in sola lettura.', '');
+      lines.push('Evento terminato: collezione in sola lettura.', '');
     } else if (endsAt) {
       lines.push(`Segna le carte che possiedi. Scambi con gli altri entro il ${endsAt.toLocaleDateString('it-IT')}.`, '');
     }
     lines.push(`Profilo attivo: <b>${escapeHtml(profileLabel(p))}</b>`);
     lines.push(`Carte trovate: <b>${found}/${st.catalog.total_cards}</b>`);
+    if (hasCollection) {
+      lines.push(`Visibilità: <b>${myPublic ? 'pubblica 🌐' : 'nascosta 🔒'}</b>`);
+      lines.push('<i>Di default è nascosta. Se pubblica, gli altri la vedono nel tuo profilo.</i>');
+    }
 
     const rows = [];
     if (st.profiles.length > 1) {
@@ -189,8 +210,13 @@ function setup(bot, deps) {
       }
     }
     rows.push([Markup.button.callback('📋 La mia collezione', 'cards:coll')]);
-    rows.push([Markup.button.callback('🔄 Scambi', 'cards:tr')]);
-    rows.push([Markup.button.callback('🔔 Avvisi scambi', 'cards:nt')]);
+    if (hasCollection) {
+      rows.push([Markup.button.callback(myPublic ? '🔒 Rendi nascosta' : '🌐 Rendi pubblica', 'cards:pubtoggle')]);
+    }
+    if (live) {
+      rows.push([Markup.button.callback('🔄 Scambi', 'cards:tr')]);
+      rows.push([Markup.button.callback('🔔 Avvisi scambi', 'cards:nt')]);
+    }
     if (admin) {
       rows.push([
         Markup.button.callback(
@@ -199,7 +225,7 @@ function setup(bot, deps) {
         ),
       ]);
     }
-    rows.push([Markup.button.callback('« Menù', 'menu')]);
+    rows.push([Markup.button.callback('« Profilo', 'me'), Markup.button.callback('« Menù', 'menu')]);
     await renderView(ctx, lines.join('\n'), Markup.inlineKeyboard(rows));
   }
 
@@ -212,6 +238,11 @@ function setup(bot, deps) {
     if (guard(ctx)) return;
     safeAnswerCb(ctx);
     await withErrors(ctx, () => openHub(ctx));
+  });
+  bot.action('cards:menu', async (ctx) => {
+    if (guard(ctx)) return;
+    safeAnswerCb(ctx);
+    await withErrors(ctx, () => openHub(ctx, { forceReload: true }));
   });
 
   bot.action(/^cards:p:(\d+)$/, async (ctx) => {
@@ -829,10 +860,9 @@ function setup(bot, deps) {
       const st = await ensureState(sb, tauth, ctx.from.id);
       const p = activeProfile(st);
       if (!p) return;
-      const data = await cardsApi.publicList(st.token, null);
-      const myActivePublic = (data.my_profiles || []).find((mp) => mp.id === p.id)?.card_deck_public === true;
-      await cardsApi.publicToggle(st.token, p.id, !myActivePublic);
-      await renderPublicDecksView(ctx, st);
+      const next = p.card_deck_public !== true;
+      await cardsApi.publicToggle(st.token, p.id, next);
+      await openHub(ctx, { forceReload: true });
     });
   });
 

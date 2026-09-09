@@ -368,6 +368,17 @@ describe('card-trades: mazzi pubblici', () => {
     assert.equal(row.card_deck_public, true);
   });
 
+  it('setProfilePublic rifiuta se il profilo non ha carte', async () => {
+    const admin = seedBase();
+    admin.db.tables.user_coc_profiles.push({
+      id: 'p-empty', user_id: USER_A, coc_tag: '#EMPTY', username: 'NoCards', clan_role: 'membro',
+    });
+    await assert.rejects(
+      () => cardTrades.setProfilePublic(admin, fakeUser(USER_A), 'p-empty', true),
+      /collezione/,
+    );
+  });
+
   it('listPublicDecks esclude i profili del proprio account e quelli non pubblici', async () => {
     const admin = seedBase();
     await cardTrades.setProfilePublic(admin, fakeUser(USER_A), 'p-a2', true); // proprio account: va escluso
@@ -399,12 +410,19 @@ describe('card-trades: mazzi pubblici', () => {
     assert.equal(res.decks[0].matches[0].card_give, 'elx_barbarian');
   });
 
-  it('getMatchesForProfile mostra i match di tutti i mazzi (ogni mazzo è pubblico)', async () => {
+  it('getMatchesForProfile mostra i match solo sui mazzi pubblici', async () => {
     const admin = seedBase();
+    await cardTrades.setProfilePublic(admin, fakeUser(USER_B), 'p-b1', true);
     const res = await cardTrades.getMatchesForProfile(admin, fakeUser(USER_A), 'p-a1');
     assert.equal(res.matches.length, 1);
     assert.equal(res.matches[0].other_profile.coc_tag, '#BBB1');
     assert.equal(res.matches[0].i_unlock, true);
+  });
+
+  it('getMatchesForProfile ignora i mazzi nascosti', async () => {
+    const admin = seedBase();
+    const res = await cardTrades.getMatchesForProfile(admin, fakeUser(USER_A), 'p-a1');
+    assert.equal(res.matches.length, 0);
   });
 
   it('computeP2pMatches: stessa categoria, doppione vs mancante', () => {
@@ -431,6 +449,8 @@ describe('card-trades: mazzi pubblici', () => {
 
   it('getMatchesForProfile mostra il match a entrambi i lati (anche se uno riceve doppione)', async () => {
     const admin = seedBase();
+    await cardTrades.setProfilePublic(admin, fakeUser(USER_A), 'p-a1', true);
+    await cardTrades.setProfilePublic(admin, fakeUser(USER_B), 'p-b1', true);
     // Bob possiede già Barbaro: Alice sblocca Arciere, Bob riceve un doppione Barbaro.
     const barb = admin.db.tables.card_event_collections.find(
       (r) => r.coc_tag === '#BBB1' && r.card_key === 'elx_barbarian',

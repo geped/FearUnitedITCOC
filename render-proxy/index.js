@@ -1033,11 +1033,8 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`[cocboard] Unified service listening on port ${PORT}`);
 
-    // Self-ping ogni 13 minuti. URL esterno (RENDER_EXTERNAL_URL) evita spin-down
-    // anche senza richieste reali — più affidabile del solo localhost.
-    // Fallback a localhost in sviluppo locale.
-    const selfUrl = (process.env.RENDER_EXTERNAL_URL || '').trim().replace(/\/$/, '');
-    const pingUrl = selfUrl ? `${selfUrl}/health` : `http://localhost:${PORT}/health`;
+    // Self-ping su localhost: zero banda outbound (evita round-trip su URL pubblico Render).
+    const pingUrl = `http://127.0.0.1:${PORT}/health`;
     const KEEP_ALIVE_MS = 13 * 60 * 1000;
     setInterval(() => {
         fetch(pingUrl, { signal: AbortSignal.timeout(10000) })

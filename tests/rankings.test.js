@@ -29,7 +29,7 @@ function rankLeagueBadgeHtml(league, opts) {
   const titleEsc = nameEn.replace(/"/g, '&quot;').replace(/</g, '');
   const apiUrl = league.iconUrls && (league.iconUrls.large || league.iconUrls.medium || league.iconUrls.small);
   const localFile = LEAGUE_BADGE_MAP[nameEn];
-  const localPath = localFile ? `leagues/${localFile}.png` : '';
+  const localPath = localFile ? `leagues/${localFile}.webp` : '';
   const fbAttr = localPath ? ` data-league-fb="${localPath.replace(/"/g, '&quot;')}"` : '';
 
   if (apiUrl) {

@@ -4168,8 +4168,35 @@ tbody tr:last-child td { border-bottom: none; }
 .wl-plan-no-sugg { font-size: 0.8rem; color: var(--text-3); font-style: italic; padding: 0.25rem 0; }
 .wl-ds-label { font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-3); }
 
+.cerca-live-banners { display: flex; flex-direction: column; gap: 0.65rem; margin: 0 0 0.85rem; }
+.cerca-cwl-live-banner {
+    display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.75rem 1rem;
+    border: 1px solid rgba(76, 175, 80, 0.45);
+    background: rgba(76, 175, 80, 0.08);
+    border-radius: var(--radius);
+}
+.carte-privacy-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.55rem 0.75rem;
+    padding: 0.7rem 0.85rem;
+    margin: 0 0 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-2);
+}
+.carte-privacy-row .carte-privacy-hint {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: 0.78rem;
+    color: var(--text-3);
+}
+.carte-privacy-state { font-weight: 700; font-size: 0.85rem; }
+.carte-privacy-state.is-on { color: var(--gold); }
+.carte-privacy-state.is-off { color: var(--text-3); }
+
 /* ═══════════════════════════════════════════════════════════════
-   EVENTO "CLASH OF CARDS" (temporaneo)
+   EVENTO "CLASH OF CARDS" (archivio in Profilo → Eventi)
    ═══════════════════════════════════════════════════════════════ */
 .event-badge-mini {
     display: inline-block;

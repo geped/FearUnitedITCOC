@@ -701,6 +701,7 @@ module.exports = async (req, res) => {
           type === 'cards-self-apply' ||
           type === 'cards-trade-log' ||
           type === 'cards-public-list' ||
+          type === 'cards-public-get' ||
           type === 'cards-public-toggle' ||
           type === 'cards-triangles' ||
           type === 'cards-quads' ||
@@ -724,6 +725,26 @@ module.exports = async (req, res) => {
                     return res.status(200).json(cardEvent.catalogPayload(settings));
                 } catch (e) {
                     return res.status(500).json({ error: e.message });
+                }
+            }
+
+            if (type === 'cards-public-get') {
+                if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
+                const playerTag = req.query.playerTag || req.query.tag || req.query.coc_tag;
+                if (!playerTag) return res.status(400).json({ error: 'playerTag obbligatorio.' });
+                try {
+                    let viewerId = null;
+                    const token = profilesUtil.bearerFromReq(req);
+                    if (token) {
+                        try {
+                            const viewer = await profilesUtil.getUserFromJwt(token);
+                            viewerId = viewer?.id || null;
+                        } catch (_) {}
+                    }
+                    const data = await cardEvent.getPublicCollectionByTag(admin, playerTag, viewerId);
+                    return res.status(200).json(data);
+                } catch (e) {
+                    return res.status(e.status || 500).json({ error: e.message });
                 }
             }
 
@@ -983,7 +1004,7 @@ module.exports = async (req, res) => {
         } else {
             return res.status(400).json({
                 error:
-                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, password-reset-request, password-reset-confirm, cards-catalog, cards-get, cards-save, cards-matches, cards-self-matches, cards-rooms, cards-room-open, cards-room-detail, cards-room-send, cards-propose, cards-commit, cards-respond, cards-self-apply, cards-trade-log, cards-public-list, cards-public-toggle, cards-triangles, cards-triangles-self, cards-triangle-propose, cards-triangle-respond, cards-triangle-self-apply, cards-triangle-proposals, cards-notify-prefs',
+                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, password-reset-request, password-reset-confirm, cards-catalog, cards-get, cards-save, cards-matches, cards-self-matches, cards-rooms, cards-room-open, cards-room-detail, cards-room-send, cards-propose, cards-commit, cards-respond, cards-self-apply, cards-trade-log, cards-public-list, cards-public-get, cards-public-toggle, cards-triangles, cards-triangles-self, cards-triangle-propose, cards-triangle-respond, cards-triangle-self-apply, cards-triangle-proposals, cards-notify-prefs',
             });
         }
         const r = await fetch(`${proxyUrl}${proxyPath}`, {
