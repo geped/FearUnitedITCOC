@@ -1001,10 +1001,88 @@ module.exports = async (req, res) => {
                 return res.status(e.status || 500).json({ error: e.message || 'Errore evento carte.', code: e.code || undefined });
             }
             return res.status(400).json({ error: 'type cards non gestito.' });
+        } else if (
+          type === 'village-progress-get' ||
+          type === 'village-progress-import' ||
+          type === 'village-progress-snapshot' ||
+          type === 'village-progress-delete' ||
+          type === 'village-progress-preview'
+        ) {
+            const villageProgress = require('./_utils/village-progress');
+            const profilesUtil = require('./_utils/user-profiles');
+            const admin = profilesUtil.adminClient();
+
+            // Preview: calcolo locale senza DB (utile anche senza schema applicato)
+            if (type === 'village-progress-preview') {
+                if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                const token = profilesUtil.bearerFromReq(req);
+                if (!token) return res.status(401).json({ error: 'Autenticazione richiesta.' });
+                try {
+                    await profilesUtil.getUserFromJwt(token);
+                } catch (e) {
+                    return res.status(e.status || 401).json({ error: e.message });
+                }
+                try {
+                    const body = req.body || {};
+                    const raw = body.json ?? body.raw ?? body.export ?? body;
+                    const data = villageProgress.previewExport(raw);
+                    // Ownership soft-check: se ha profili, tag deve essere suo
+                    const user = await profilesUtil.getUserFromJwt(token);
+                    try {
+                        await villageProgress.resolveOwnedProfile(admin, user, data.tag);
+                    } catch (ownErr) {
+                        return res.status(ownErr.status || 403).json({ error: ownErr.message });
+                    }
+                    return res.status(200).json(data);
+                } catch (e) {
+                    return res.status(e.status || 500).json({ error: e.message, code: e.code });
+                }
+            }
+
+            const token = profilesUtil.bearerFromReq(req);
+            if (!token) return res.status(401).json({ error: 'Autenticazione richiesta.' });
+            let user;
+            try {
+                user = await profilesUtil.getUserFromJwt(token);
+            } catch (e) {
+                return res.status(e.status || 401).json({ error: e.message });
+            }
+
+            try {
+                if (type === 'village-progress-get') {
+                    if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const cocTag = req.query.coc_tag || req.query.cocTag || req.query.tag || null;
+                    const data = await villageProgress.listSnapshots(admin, user, cocTag);
+                    return res.status(200).json(data);
+                }
+                if (type === 'village-progress-import') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const raw = body.json ?? body.raw ?? body.export ?? body;
+                    const data = await villageProgress.importExport(admin, user, raw);
+                    return res.status(200).json(data);
+                }
+                if (type === 'village-progress-snapshot') {
+                    if (req.method !== 'GET') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const id = req.query.id;
+                    const includeRaw = req.query.include_raw === '1' || req.query.includeRaw === '1';
+                    const data = await villageProgress.getSnapshot(admin, user, id, { includeRaw });
+                    return res.status(200).json(data);
+                }
+                if (type === 'village-progress-delete') {
+                    if (req.method !== 'POST') return res.status(405).json({ error: 'Metodo non consentito.' });
+                    const body = req.body || {};
+                    const data = await villageProgress.deleteSnapshot(admin, user, body.id || body.snapshot_id);
+                    return res.status(200).json(data);
+                }
+            } catch (e) {
+                return res.status(e.status || 500).json({ error: e.message || 'Errore progresso villaggio.', code: e.code || undefined });
+            }
+            return res.status(400).json({ error: 'type village-progress non gestito.' });
         } else {
             return res.status(400).json({
                 error:
-                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, password-reset-request, password-reset-confirm, cards-catalog, cards-get, cards-save, cards-matches, cards-self-matches, cards-rooms, cards-room-open, cards-room-detail, cards-room-send, cards-propose, cards-commit, cards-respond, cards-self-apply, cards-trade-log, cards-public-list, cards-public-get, cards-public-toggle, cards-triangles, cards-triangles-self, cards-triangle-propose, cards-triangle-respond, cards-triangle-self-apply, cards-triangle-proposals, cards-notify-prefs',
+                    'type non valido. Usa: player, search-clans, rankings, locations, current-war, proxy-ip, ping, telegram-handoff, session-clan, recruit-list, rphoto, profiles, profiles-switch, resolve-login, password-reset-request, password-reset-confirm, cards-*, village-progress-get, village-progress-import, village-progress-snapshot, village-progress-delete, village-progress-preview',
             });
         }
         const r = await fetch(`${proxyUrl}${proxyPath}`, {
