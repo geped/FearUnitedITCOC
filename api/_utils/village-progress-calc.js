@@ -4,7 +4,7 @@
  * Calcolo progresso villaggio vs max TH corrente e max globale.
  */
 
-const { loadDataset } = require('./village-progress-dataset');
+const { loadDataset, getIconUrl, getCategoryIconUrl } = require('./village-progress-dataset');
 const { emptyCost } = require('./village-progress-parser');
 
 const HOME_CATS = [
@@ -115,7 +115,10 @@ function analyzeEntity(ent, ownedRows, hallLevel, hallGlobal) {
         out.time_sec_th += gap.time;
         out.missing.push({
           scope: 'th',
+          dataId: ent.dataId,
           name: ent.nameIt || ent.name,
+          nameEn: ent.name,
+          icon: getIconUrl(ent.dataId),
           from: capped,
           to: maxLvlTh,
           piece: i + 1,
@@ -203,6 +206,8 @@ function buildVillage(ds, ownedById, village, hallLevel, hallGlobal, categories)
     const b = cats[c];
     b.pct_th = pct(b.current_levels, b.max_levels_th);
     b.pct_global = pct(b.current_levels_global, b.max_levels_global);
+    b.icon = getCategoryIconUrl(c);
+    b.label = c;
     b.missing = b.missing.slice(0, 50);
   }
 
@@ -245,6 +250,7 @@ function calculateProgress(parsed) {
     active_upgrades.push({
       name: it.name,
       dataId: it.dataId,
+      icon: getIconUrl(it.dataId),
       lvl: it.lvl,
       village: it.village,
       eta_unix: Number(parsed.gameTimestamp) + Number(it.timer),
