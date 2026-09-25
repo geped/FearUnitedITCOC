@@ -650,7 +650,7 @@
                         <button class="subtab-btn active" onclick="switchProfiloTab('home',this)">Villaggio Base</button>
                         <button class="subtab-btn" onclick="switchProfiloTab('builder',this)">Base Costruttore</button>
                         <button class="subtab-btn" onclick="switchProfiloTab('capital',this)">Capitale</button>
-                        <button class="subtab-btn" onclick="switchProfiloTab('events',this)">Eventi</button>
+                        <button class="subtab-btn" onclick="switchProfiloTab('space',this)">Spazio personale</button>
                     </div>
                     <div id="profilo-tab-home">
                         <div class="profilo-section">
@@ -681,24 +681,62 @@
                         <div id="profilo-capital-stats" class="profilo-bh-stats"></div>
                         <div class="profilo-section" id="ps-capital-troops"><h3 class="profilo-section-title">Truppe Capitale</h3><div id="profilo-capital-troops" class="profilo-units-grid"></div></div>
                     </div>
-                    <div id="profilo-tab-events" style="display:none">
-                        <div class="page-header" style="margin-bottom:0.75rem">
-                            <div>
-                                <h3 class="profilo-section-title" style="margin:0">🎴 Clash of Cards</h3>
-                                <p class="page-sub" id="carte-event-sub">Archivio evento: la tua collezione carte.</p>
+                    <div id="profilo-tab-space" style="display:none">
+                        <div class="subtab-bar" id="space-main-subtabs" style="margin-bottom:0.85rem">
+                            <button class="subtab-btn active" onclick="switchSpaceSubTab('cards',this)">Carte</button>
+                            <button class="subtab-btn" onclick="switchSpaceSubTab('progress',this)">Progresso</button>
+                        </div>
+
+                        <div id="space-tab-cards">
+                            <div id="profilo-tab-events">
+                                <div class="page-header" style="margin-bottom:0.75rem">
+                                    <div>
+                                        <h3 class="profilo-section-title" style="margin:0">Clash of Cards</h3>
+                                        <p class="page-sub" id="carte-event-sub">Archivio evento: la tua collezione carte.</p>
+                                    </div>
+                                    <button type="button" class="btn-secondary btn-sm carte-notify-open-btn" id="carte-notify-open-btn" onclick="_openCarteNotifyModal()" style="display:none">Avvisi <span id="carte-notify-btn-state" class="carte-notify-btn-state is-off">spenti</span></button>
+                                </div>
+                                <div id="carte-profile-picker" class="carte-profile-picker" style="display:none"></div>
+                                <div class="subtab-bar" id="carte-main-subtabs" style="display:none">
+                                    <button class="subtab-btn active" onclick="_switchCarteMainTab('collezione',this)">La mia collezione</button>
+                                    <button class="subtab-btn" onclick="_switchCarteMainTab('scambi',this)">Scambi</button>
+                                </div>
+                                <div id="carte-content">
+                                    <div class="profilo-empty"><p style="color:var(--text-3)">Caricamento…</p></div>
+                                </div>
+                                <div id="carte-trade-content" style="display:none">
+                                    <div class="profilo-empty"><p style="color:var(--text-3)">Caricamento…</p></div>
+                                </div>
                             </div>
-                            <button type="button" class="btn-secondary btn-sm carte-notify-open-btn" id="carte-notify-open-btn" onclick="_openCarteNotifyModal()" style="display:none">🔔 Avvisi <span id="carte-notify-btn-state" class="carte-notify-btn-state is-off">spenti</span></button>
                         </div>
-                        <div id="carte-profile-picker" class="carte-profile-picker" style="display:none"></div>
-                        <div class="subtab-bar" id="carte-main-subtabs" style="display:none">
-                            <button class="subtab-btn active" onclick="_switchCarteMainTab('collezione',this)">La mia collezione</button>
-                            <button class="subtab-btn" onclick="_switchCarteMainTab('scambi',this)">🔁 Scambi</button>
-                        </div>
-                        <div id="carte-content">
-                            <div class="profilo-empty"><p style="color:var(--text-3)">Caricamento…</p></div>
-                        </div>
-                        <div id="carte-trade-content" style="display:none">
-                            <div class="profilo-empty"><p style="color:var(--text-3)">Caricamento…</p></div>
+
+                        <div id="space-tab-progress" style="display:none">
+                            <div class="page-header" style="margin-bottom:0.75rem">
+                                <div>
+                                    <h3 class="profilo-section-title" style="margin:0">Progresso villaggio</h3>
+                                    <p class="page-sub">Importa l'export JSON dal gioco (solo tuo, mai pubblico). Confronta livelli, costi e tempi vs max del tuo TH e vs max globale.</p>
+                                </div>
+                            </div>
+                            <div id="vp-profile-picker" class="carte-profile-picker" style="display:none"></div>
+                            <div class="profilo-section" id="vp-import-box">
+                                <h3 class="profilo-section-title">Importa export</h3>
+                                <ol class="page-sub" style="margin:0 0 0.75rem 1.1rem; padding:0; line-height:1.45">
+                                    <li>In Clash of Clans: Impostazioni → Altro → Esporta i dati del villaggio</li>
+                                    <li>Tocca <b>Copia</b> e incolla qui sotto (deve essere il tag del profilo selezionato)</li>
+                                </ol>
+                                <textarea id="vp-json-input" class="form-input" rows="6" placeholder='{"tag":"#ABC123", "timestamp":..., "buildings":[...]}' style="width:100%; font-family:ui-monospace,monospace; font-size:0.75rem; resize:vertical"></textarea>
+                                <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.65rem">
+                                    <button type="button" class="btn-primary btn-sm" onclick="vpAnalyzeExport()">Analizza</button>
+                                    <button type="button" class="btn-secondary btn-sm" onclick="vpSaveExport()">Salva nello storico</button>
+                                    <button type="button" class="btn-secondary btn-sm" onclick="vpClearImport()">Svuota</button>
+                                </div>
+                                <p id="vp-import-status" class="page-sub" style="margin-top:0.5rem"></p>
+                            </div>
+                            <div id="vp-history" class="profilo-section" style="display:none">
+                                <h3 class="profilo-section-title">Storico import</h3>
+                                <div id="vp-history-list"></div>
+                            </div>
+                            <div id="vp-results" style="display:none"></div>
                         </div>
                     </div>
                 </div>

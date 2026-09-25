@@ -1230,7 +1230,7 @@ function renderProfilesModal(state, { gate = false } = {}) {
   if (!gate && (state.profiles || []).length > 1) {
     const sortBtn = document.createElement('button');
     sortBtn.className = 'btn-logout btn-sm';
-    sortBtn.textContent = '↕ Ordina profili (Eventi)';
+    sortBtn.textContent = '↕ Ordina profili (Spazio personale)';
     sortBtn.onclick = () => _openCarteProfileSortModal(state.profiles);
     actions.appendChild(sortBtn);
   }
@@ -1609,7 +1609,7 @@ async function showApp(sessionUser) {
       : 'none';
   });
 
-  // Evento Clash of Cards: la tab macro è archiviata in Profilo → Eventi
+  // Evento Clash of Cards: sotto Spazio personale → Carte
   initCardEventTabVisibility().catch(() => {});
 
   // Imposta stagione bonus al mese corrente
@@ -1851,8 +1851,9 @@ function activateTab(tabId) {
     loadProfile();
     if (window._openProfiloEvents) {
       window._openProfiloEvents = false;
-      const btn = document.querySelector('#profilo-main-subtabs .subtab-btn[onclick*="events"]');
-      switchProfiloTab('events', btn);
+      const btn = document.querySelector('#profilo-main-subtabs .subtab-btn[onclick*="space"]')
+        || document.querySelector('#profilo-main-subtabs .subtab-btn[onclick*="events"]');
+      switchProfiloTab('space', btn);
     }
   }, 80);
   if (tabId === 'rankings') { setTimeout(loadRankings, 80); setTimeout(renderFavoriti, 80); _detectUserCountry(); }
@@ -10383,14 +10384,323 @@ function _renderAchievements(containerId, achievements) {
 }
 
 function switchProfiloTab(tab, btn) {
-  ['home','builder','capital','events'].forEach(t => {
+  // Alias legacy: events → space (Carte resta sotto-tab)
+  if (tab === 'events') tab = 'space';
+  ['home', 'builder', 'capital', 'space'].forEach((t) => {
     const el = document.getElementById(`profilo-tab-${t}`);
     if (el) el.style.display = t === tab ? 'block' : 'none';
   });
-  document.querySelectorAll('#profilo-main-subtabs .subtab-btn').forEach(b => b.classList.remove('active'));
+  // Mantieni anche profilo-tab-events nascosto se esiste fuori (compat)
+  const legacyEvents = document.getElementById('profilo-tab-events');
+  if (legacyEvents && tab !== 'space') {
+    /* nested inside space — no-op */
+  }
+  document.querySelectorAll('#profilo-main-subtabs .subtab-btn').forEach((b) => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   _profiloActiveTab = tab;
-  if (tab === 'events') loadCardEventTab();
+  if (tab === 'space') {
+    const sub = window._spaceActiveSub || 'cards';
+    const subBtn = document.querySelector(`#space-main-subtabs .subtab-btn[onclick*="'${sub}'"]`);
+    switchSpaceSubTab(sub, subBtn || document.querySelector('#space-main-subtabs .subtab-btn'));
+  }
+}
+
+function switchSpaceSubTab(sub, btn) {
+  window._spaceActiveSub = sub === 'progress' ? 'progress' : 'cards';
+  const cards = document.getElementById('space-tab-cards');
+  const prog = document.getElementById('space-tab-progress');
+  if (cards) cards.style.display = window._spaceActiveSub === 'cards' ? 'block' : 'none';
+  if (prog) prog.style.display = window._spaceActiveSub === 'progress' ? 'block' : 'none';
+  document.querySelectorAll('#space-main-subtabs .subtab-btn').forEach((b) => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  if (window._spaceActiveSub === 'cards') loadCardEventTab();
+  else loadVillageProgressTab();
+}
+
+// ── Progresso villaggio (Spazio personale) ───────────────────────────────────
+window._vpData = null;
+window._vpActiveTag = null;
+window._vpViewSummary = null;
+
+const VP_CAT_LABELS = {
+  townhall: 'Municipio',
+  defenses: 'Difese',
+  resources: 'Risorse',
+  army_buildings: 'Edifici army',
+  walls: 'Muri',
+  traps: 'Trappole',
+  heroes: 'Eroi',
+  pets: 'Famigli',
+  equipment: 'Equipaggiamento',
+  troops: 'Truppe',
+  spells: 'Incantesimi',
+  siege: 'Assedio',
+  helpers: 'Aiutanti',
+  guardians: 'Guardiani',
+  crafted: 'Crafting',
+  buildings: 'Edifici',
+};
+
+function _vpFmtPct(x) {
+  const n = Math.round((Number(x) || 0) * 1000) / 10;
+  return `${n}%`;
+}
+function _vpFmtNum(n) {
+  const v = Number(n) || 0;
+  if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
+  if (v >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
+  if (v >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
+  return String(Math.round(v));
+}
+function _vpFmtCost(c) {
+  if (!c) return '—';
+  const parts = [];
+  if (c.gold) parts.push(`${_vpFmtNum(c.gold)} oro`);
+  if (c.elixir) parts.push(`${_vpFmtNum(c.elixir)} elisir`);
+  if (c.dark) parts.push(`${_vpFmtNum(c.dark)} DE`);
+  if (c.builder_gold) parts.push(`${_vpFmtNum(c.builder_gold)} oro BB`);
+  return parts.length ? parts.join(' · ') : '0';
+}
+function _vpFmtTime(sec) {
+  const s = Math.max(0, Number(sec) || 0);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  if (d > 0) return `${d}g ${h}h`;
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+function _vpBar(pct) {
+  const p = Math.max(0, Math.min(100, Math.round((Number(pct) || 0) * 100)));
+  return `<div class="vp-bar"><div class="vp-bar-fill" style="width:${p}%"></div><span class="vp-bar-lbl">${p}%</span></div>`;
+}
+
+async function loadVillageProgressTab() {
+  const status = document.getElementById('vp-import-status');
+  if (status) status.textContent = '';
+  try {
+    window._vpData = await profilesApi('village-progress-get');
+  } catch (e) {
+    window._vpData = { profiles: window._profilesState?.profiles || [], snapshots: [], latest: null, error: e.message };
+  }
+  const profiles = window._vpData?.profiles || [];
+  if (!window._vpActiveTag || !profiles.some((p) => p.coc_tag === window._vpActiveTag)) {
+    const activeId = window._profilesState?.active?.id;
+    window._vpActiveTag = (profiles.find((p) => p.id === activeId) || profiles[0])?.coc_tag || null;
+  }
+  _renderVpProfilePicker();
+  _renderVpHistory();
+  const latestForTag = (window._vpData?.snapshots || []).find((s) => s.coc_tag === window._vpActiveTag);
+  if (latestForTag?.summary) {
+    window._vpViewSummary = latestForTag.summary;
+    _renderVpResults(latestForTag.summary, { from: 'storico', at: latestForTag.created_at });
+  } else {
+    const box = document.getElementById('vp-results');
+    if (box) box.style.display = 'none';
+  }
+}
+
+function _renderVpProfilePicker() {
+  const el = document.getElementById('vp-profile-picker');
+  if (!el) return;
+  const profiles = window._vpData?.profiles || [];
+  if (profiles.length <= 1) {
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = 'flex';
+  el.innerHTML = profiles
+    .map((p) => {
+      const active = p.coc_tag === window._vpActiveTag;
+      return `<button type="button" class="carte-profile-chip${active ? ' active' : ''}" onclick="vpSelectProfile('${escH(p.coc_tag)}')">${escH(p.username || p.coc_tag)} <span class="muted">${escH(p.coc_tag)}</span></button>`;
+    })
+    .join('');
+}
+
+function vpSelectProfile(tag) {
+  window._vpActiveTag = tag;
+  _renderVpProfilePicker();
+  _renderVpHistory();
+  const snap = (window._vpData?.snapshots || []).find((s) => s.coc_tag === tag);
+  if (snap?.summary) {
+    window._vpViewSummary = snap.summary;
+    _renderVpResults(snap.summary, { from: 'storico', at: snap.created_at });
+  } else {
+    const box = document.getElementById('vp-results');
+    if (box) {
+      box.style.display = 'block';
+      box.innerHTML = '<div class="profilo-empty"><p style="color:var(--text-3)">Nessun export salvato per questo profilo. Incolla il JSON e analizza.</p></div>';
+    }
+  }
+}
+
+function _renderVpHistory() {
+  const wrap = document.getElementById('vp-history');
+  const list = document.getElementById('vp-history-list');
+  if (!wrap || !list) return;
+  const snaps = (window._vpData?.snapshots || []).filter((s) => !window._vpActiveTag || s.coc_tag === window._vpActiveTag);
+  if (!snaps.length) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = 'block';
+  list.innerHTML = snaps
+    .slice(0, 12)
+    .map((s) => {
+      const when = s.created_at ? new Date(s.created_at).toLocaleString('it-IT') : '—';
+      const pct = s.summary?.home?.pct_th != null ? _vpFmtPct(s.summary.home.pct_th) : '—';
+      return `<div class="vp-hist-row">
+        <button type="button" class="btn-secondary btn-sm" onclick="vpShowSnapshot('${s.id}')">TH${s.th_level ?? '?'} · ${pct} · ${escH(when)}</button>
+        <button type="button" class="btn-secondary btn-sm" onclick="vpDeleteSnapshot('${s.id}')" title="Elimina">✕</button>
+      </div>`;
+    })
+    .join('');
+}
+
+function vpClearImport() {
+  const ta = document.getElementById('vp-json-input');
+  if (ta) ta.value = '';
+  const st = document.getElementById('vp-import-status');
+  if (st) st.textContent = '';
+}
+
+function _vpReadJsonInput() {
+  const ta = document.getElementById('vp-json-input');
+  const text = (ta?.value || '').trim();
+  if (!text) throw new Error('Incolla prima il JSON esportato dal gioco.');
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (_) {
+    throw new Error('JSON non valido.');
+  }
+  return parsed;
+}
+
+async function vpAnalyzeExport() {
+  const st = document.getElementById('vp-import-status');
+  try {
+    if (st) st.textContent = 'Analisi in corso…';
+    const raw = _vpReadJsonInput();
+    const data = await profilesApi('village-progress-preview', { method: 'POST', body: { json: raw } });
+    window._vpViewSummary = data.summary;
+    _renderVpResults(data.summary, { from: 'anteprima', tag: data.tag });
+    if (st) st.textContent = `Anteprima ok per ${data.tag}. Usa «Salva nello storico» per conservarla.`;
+  } catch (e) {
+    if (st) st.textContent = e.message || 'Errore analisi';
+  }
+}
+
+async function vpSaveExport() {
+  const st = document.getElementById('vp-import-status');
+  try {
+    if (st) st.textContent = 'Salvataggio…';
+    const raw = _vpReadJsonInput();
+    const data = await profilesApi('village-progress-import', { method: 'POST', body: { json: raw } });
+    window._vpViewSummary = data.snapshot?.summary;
+    _renderVpResults(data.snapshot.summary, { from: 'salvato', at: data.snapshot.created_at });
+    if (st) st.textContent = 'Snapshot salvato nello storico (privato).';
+    await loadVillageProgressTab();
+  } catch (e) {
+    if (st) st.textContent = e.message || 'Errore salvataggio';
+    // Se schema non applicato, prova comunque anteprima
+    if (/relation|village_progress|schema|42P01/i.test(e.message || '')) {
+      try {
+        await vpAnalyzeExport();
+        if (st) st.textContent = 'Schema DB non ancora applicato su Supabase: mostrata solo anteprima. Applica schema-village-progress.sql per salvare.';
+      } catch (_) {}
+    }
+  }
+}
+
+async function vpShowSnapshot(id) {
+  try {
+    const data = await profilesApi(`village-progress-snapshot&id=${encodeURIComponent(id)}`);
+    // profilesApi only takes type — need custom fetch
+  } catch (_) {}
+  try {
+    const headers = await authBearerHeaders();
+    const r = await fetch(`/api/lookup?type=village-progress-snapshot&id=${encodeURIComponent(id)}`, { headers });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    window._vpViewSummary = j.snapshot?.summary;
+    _renderVpResults(j.snapshot.summary, { from: 'storico', at: j.snapshot.created_at });
+  } catch (e) {
+    const st = document.getElementById('vp-import-status');
+    if (st) st.textContent = e.message || 'Errore';
+  }
+}
+
+async function vpDeleteSnapshot(id) {
+  if (!confirm('Eliminare questo snapshot dallo storico?')) return;
+  try {
+    await profilesApi('village-progress-delete', { method: 'POST', body: { id } });
+    await loadVillageProgressTab();
+  } catch (e) {
+    const st = document.getElementById('vp-import-status');
+    if (st) st.textContent = e.message || 'Errore eliminazione';
+  }
+}
+
+function _renderVpResults(summary, meta = {}) {
+  const box = document.getElementById('vp-results');
+  if (!box || !summary) return;
+  box.style.display = 'block';
+  const home = summary.home || {};
+  const builder = summary.builder || {};
+  const metaLine = meta.from
+    ? `<p class="page-sub">Fonte: ${escH(meta.from)}${meta.at ? ` · ${escH(new Date(meta.at).toLocaleString('it-IT'))}` : ''}${meta.tag ? ` · ${escH(meta.tag)}` : ''}</p>`
+    : '';
+
+  function villageBlock(title, village, hallLabel) {
+    const cats = village.categories || {};
+    const rows = Object.keys(cats)
+      .filter((k) => (cats[k].max_levels_th || 0) > 0 || (cats[k].max_levels_global || 0) > 0)
+      .map((k) => {
+        const c = cats[k];
+        const miss = (c.missing || [])
+          .slice(0, 8)
+          .map((m) => `${escH(m.name)} ${m.from}→${m.to}`)
+          .join(', ');
+        return `<div class="vp-cat">
+          <div class="vp-cat-head"><strong>${escH(VP_CAT_LABELS[k] || k)}</strong>
+            <span>TH ${_vpFmtPct(c.pct_th)} · Max ${_vpFmtPct(c.pct_global)}</span></div>
+          ${_vpBar(c.pct_th)}
+          <div class="vp-cat-meta">Costo TH: ${_vpFmtCost(c.cost_th)} · Tempo ${_vpFmtTime(c.time_sec_th)}</div>
+          ${miss ? `<div class="vp-cat-miss">Manca: ${miss}${(c.missing || []).length > 8 ? '…' : ''}</div>` : ''}
+        </div>`;
+      })
+      .join('');
+    return `<div class="profilo-section">
+      <h3 class="profilo-section-title">${escH(title)} · ${escH(hallLabel)}</h3>
+      <div class="vp-summary-grid">
+        <div class="vp-stat"><div class="vp-stat-val">${_vpFmtPct(village.pct_th)}</div><div class="vp-stat-lbl">Max TH attuale</div>${_vpBar(village.pct_th)}</div>
+        <div class="vp-stat"><div class="vp-stat-val">${_vpFmtPct(village.pct_global)}</div><div class="vp-stat-lbl">Max globale</div>${_vpBar(village.pct_global)}</div>
+        <div class="vp-stat"><div class="vp-stat-val">${_vpFmtCost(village.cost_th)}</div><div class="vp-stat-lbl">Costo rimanente (TH)</div></div>
+        <div class="vp-stat"><div class="vp-stat-val">${_vpFmtTime(village.time_sec_th)}</div><div class="vp-stat-lbl">Tempo rimanente (TH)</div></div>
+      </div>
+      ${rows}
+    </div>`;
+  }
+
+  const upgrades = (summary.active_upgrades || [])
+    .map((u) => {
+      const eta = u.eta_unix ? new Date(u.eta_unix * 1000).toLocaleString('it-IT') : '—';
+      return `<li>${escH(u.name)} lv${u.lvl} → ~${escH(eta)}</li>`;
+    })
+    .join('');
+
+  box.innerHTML = `
+    ${metaLine}
+    ${villageBlock('Villaggio base', home, `TH${summary.th_level ?? '?'}`)}
+    ${villageBlock('Base costruttore', builder, summary.bh_level != null ? `BH${summary.bh_level}` : 'BH —')}
+    ${
+      upgrades
+        ? `<div class="profilo-section"><h3 class="profilo-section-title">Upgrade in corso</h3><ul class="vp-upgrade-list">${upgrades}</ul></div>`
+        : ''
+    }
+    <p class="page-sub">${escH(summary.disclaimer || '')}</p>
+  `;
 }
 
 // ── CERCA ─────────────────────────────────────────────────────────────────────
@@ -11158,7 +11468,7 @@ async function openCercaPlayer(playerTag, fromClanTag) {
         <button class="subtab-btn active" onclick="_switchCpTab('home',this)">Villaggio Base</button>
         <button class="subtab-btn" onclick="_switchCpTab('builder',this)">Base Costruttore</button>
         <button class="subtab-btn" onclick="_switchCpTab('capital',this)">Capitale</button>
-        <button class="subtab-btn" onclick="_switchCpTab('events',this)">Eventi</button>
+        <button class="subtab-btn" onclick="_switchCpTab('events',this)">Carte</button>
       </div>
       <div id="cp-tab-home">
         <div class="profilo-section">
@@ -11382,7 +11692,7 @@ async function openRankPlayer(playerTag) {
         <button class="subtab-btn active" onclick="_switchRkTab('home',this)">Villaggio Base</button>
         <button class="subtab-btn" onclick="_switchRkTab('builder',this)">Base Costruttore</button>
         <button class="subtab-btn" onclick="_switchRkTab('capital',this)">Capitale</button>
-        <button class="subtab-btn" onclick="_switchRkTab('events',this)">Eventi</button>
+        <button class="subtab-btn" onclick="_switchRkTab('events',this)">Carte</button>
       </div>
       <div id="rk-tab-home">
         <div class="profilo-section">
@@ -11497,7 +11807,7 @@ async function _loadForeignEventsTab(containerId, playerTag) {
       return;
     }
     const note = d.is_owner
-      ? `<p class="page-sub" style="margin-bottom:0.6rem">Questa è la tua collezione. La visibilità si gestisce da <b>Il mio Profilo → Eventi</b>.</p>`
+      ? `<p class="page-sub" style="margin-bottom:0.6rem">Questa è la tua collezione. La visibilità si gestisce da <b>Il mio Profilo → Spazio personale → Carte</b>.</p>`
       : '';
     box.innerHTML = note + _renderArchiveEventAlbum(d.collection || {}, window._cardEventCatalog);
   } catch (e) {
