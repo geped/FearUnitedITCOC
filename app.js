@@ -10470,9 +10470,152 @@ function _vpFmtTime(sec) {
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
 }
-function _vpBar(pct) {
+function _vpBar(pct, compact) {
   const p = Math.max(0, Math.min(100, Math.round((Number(pct) || 0) * 100)));
-  return `<div class="vp-bar"><div class="vp-bar-fill" style="width:${p}%"></div><span class="vp-bar-lbl">${p}%</span></div>`;
+  const cls = p >= 95 ? 'is-max' : p >= 70 ? 'is-good' : p >= 40 ? 'is-mid' : 'is-low';
+  return `<div class="vp-bar${compact ? ' vp-bar--sm' : ''}"><div class="vp-bar-fill ${cls}" style="width:${p}%"></div><span class="vp-bar-lbl">${p}%</span></div>`;
+}
+
+function _vpImg(src, alt, cls) {
+  if (!src) {
+    return `<div class="${cls || 'vp-img'} vp-img--empty" aria-hidden="true"></div>`;
+  }
+  return `<img class="${cls || 'vp-img'}" src="${escH(src)}" alt="${escH(alt || '')}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.classList.add('is-broken');this.removeAttribute('src')">`;
+}
+
+function _vpThImg(level) {
+  const n = String(level || 1).padStart(2, '0');
+  return `<img class="vp-hall-img" src="th/webp/level_${n}.webp" alt="TH${level}" loading="lazy" onerror="this.onerror=null;this.src='th/level_${n}.webp'">`;
+}
+
+function _vpMissCard(m) {
+  return `<div class="vp-miss-card" title="${escH(m.name)} ${m.from}→${m.to}">
+    ${_vpImg(m.icon, m.name, 'vp-miss-img')}
+    <div class="vp-miss-body">
+      <div class="vp-miss-name">${escH(m.name)}</div>
+      <div class="vp-miss-lv"><span class="vp-lv-from">${m.from}</span><span class="vp-lv-arrow">→</span><span class="vp-lv-to">${m.to}</span></div>
+    </div>
+  </div>`;
+}
+
+function _renderVpResults(summary, meta = {}) {
+  const box = document.getElementById('vp-results');
+  if (!box || !summary) return;
+  box.style.display = 'block';
+  const home = summary.home || {};
+  const builder = summary.builder || {};
+  const th = summary.th_level ?? '?';
+  const bh = summary.bh_level;
+
+  const metaLine = meta.from
+    ? `<p class="page-sub vp-meta">Fonte: ${escH(meta.from)}${meta.at ? ` · ${escH(new Date(meta.at).toLocaleString('it-IT'))}` : ''}${meta.tag ? ` · ${escH(meta.tag)}` : ''}</p>`
+    : '';
+
+  function villageBlock(title, village, hallKind, hallLevel) {
+    const cats = village.categories || {};
+    const hallImg =
+      hallKind === 'th'
+        ? _vpThImg(hallLevel)
+        : _vpImg(
+            'https://cdn.jsdelivr.net/npm/clash-of-clans-data@0.18.0/images/builder/builder-hall/normal/level-10.png',
+            'BH',
+            'vp-hall-img'
+          );
+
+    const catCards = Object.keys(cats)
+      .filter((k) => (cats[k].max_levels_th || 0) > 0 || (cats[k].max_levels_global || 0) > 0)
+      .sort((a, b) => (cats[a].pct_th || 0) - (cats[b].pct_th || 0))
+      .map((k) => {
+        const c = cats[k];
+        const miss = (c.missing || []).slice(0, 12);
+        const missHtml = miss.length
+          ? `<div class="vp-miss-grid">${miss.map(_vpMissCard).join('')}${(c.missing || []).length > 12 ? `<div class="vp-miss-more">+${(c.missing || []).length - 12}</div>` : ''}</div>`
+          : `<div class="vp-cat-done">Completo per il tuo ${hallKind.toUpperCase()}</div>`;
+        return `<details class="vp-cat-card"${(c.pct_th || 0) < 0.95 ? ' open' : ''}>
+          <summary class="vp-cat-sum">
+            ${_vpImg(c.icon, VP_CAT_LABELS[k] || k, 'vp-cat-icon')}
+            <div class="vp-cat-sum-text">
+              <div class="vp-cat-title">${escH(VP_CAT_LABELS[k] || k)}</div>
+              <div class="vp-cat-pcts"><span>${_vpFmtPct(c.pct_th)} TH</span><span class="vp-dot">·</span><span>${_vpFmtPct(c.pct_global)} max</span></div>
+              ${_vpBar(c.pct_th, true)}
+            </div>
+          </summary>
+          <div class="vp-cat-body">
+            <div class="vp-cat-costs">
+              <div><span class="vp-cost-lbl">Costo</span> ${_vpFmtCost(c.cost_th)}</div>
+              <div><span class="vp-cost-lbl">Tempo</span> ${_vpFmtTime(c.time_sec_th)}</div>
+            </div>
+            ${missHtml}
+          </div>
+        </details>`;
+      })
+      .join('');
+
+    return `<section class="vp-village">
+      <header class="vp-village-head">
+        ${hallImg}
+        <div>
+          <h3 class="profilo-section-title" style="margin:0">${escH(title)}</h3>
+          <div class="vp-village-hall">${escH(hallKind.toUpperCase())}${hallLevel != null ? hallLevel : '—'}</div>
+        </div>
+      </header>
+      <div class="vp-summary-grid">
+        <div class="vp-stat">
+          <div class="vp-stat-lbl">Max ${hallKind.toUpperCase()} attuale</div>
+          <div class="vp-stat-val">${_vpFmtPct(village.pct_th)}</div>
+          ${_vpBar(village.pct_th)}
+        </div>
+        <div class="vp-stat">
+          <div class="vp-stat-lbl">Max globale</div>
+          <div class="vp-stat-val">${_vpFmtPct(village.pct_global)}</div>
+          ${_vpBar(village.pct_global)}
+        </div>
+        <div class="vp-stat vp-stat--wide">
+          <div class="vp-stat-lbl">Rimanente (TH)</div>
+          <div class="vp-stat-val vp-stat-val--sm">${_vpFmtCost(village.cost_th)}</div>
+          <div class="vp-stat-sub">${_vpFmtTime(village.time_sec_th)}</div>
+        </div>
+      </div>
+      <div class="vp-cat-list">${catCards}</div>
+    </section>`;
+  }
+
+  const upgrades = (summary.active_upgrades || [])
+    .map((u) => {
+      const eta = u.eta_unix ? new Date(u.eta_unix * 1000).toLocaleString('it-IT') : '—';
+      return `<div class="vp-upg-card">
+        ${_vpImg(u.icon, u.name, 'vp-upg-img')}
+        <div class="vp-upg-body">
+          <div class="vp-upg-name">${escH(u.name)}</div>
+          <div class="vp-upg-meta">lv${u.lvl} · fine ~${escH(eta)}</div>
+        </div>
+      </div>`;
+    })
+    .join('');
+
+  box.innerHTML = `
+    ${metaLine}
+    <div class="vp-overview">
+      <div class="vp-overview-hall">${_vpThImg(th)}<span>TH${escH(String(th))}</span></div>
+      ${
+        bh != null
+          ? `<div class="vp-overview-hall">${_vpImg(
+              'https://cdn.jsdelivr.net/npm/clash-of-clans-data@0.18.0/images/builder/builder-hall/normal/level-10.png',
+              'BH',
+              'vp-hall-img'
+            )}<span>BH${escH(String(bh))}</span></div>`
+          : ''
+      }
+    </div>
+    ${villageBlock('Villaggio base', home, 'th', th)}
+    ${villageBlock('Base costruttore', builder, 'bh', bh)}
+    ${
+      upgrades
+        ? `<section class="vp-village"><h3 class="profilo-section-title">Upgrade in corso</h3><div class="vp-upg-grid">${upgrades}</div></section>`
+        : ''
+    }
+    <p class="page-sub vp-disclaimer">${escH(summary.disclaimer || '')}</p>
+  `;
 }
 
 async function loadVillageProgressTab() {
@@ -10549,9 +10692,14 @@ function _renderVpHistory() {
     .map((s) => {
       const when = s.created_at ? new Date(s.created_at).toLocaleString('it-IT') : '—';
       const pct = s.summary?.home?.pct_th != null ? _vpFmtPct(s.summary.home.pct_th) : '—';
+      const th = s.th_level ?? '?';
+      const n = String(th).padStart(2, '0');
       return `<div class="vp-hist-row">
-        <button type="button" class="btn-secondary btn-sm" onclick="vpShowSnapshot('${s.id}')">TH${s.th_level ?? '?'} · ${pct} · ${escH(when)}</button>
-        <button type="button" class="btn-secondary btn-sm" onclick="vpDeleteSnapshot('${s.id}')" title="Elimina">✕</button>
+        <button type="button" class="btn-secondary btn-sm vp-hist-btn" onclick="vpShowSnapshot('${s.id}')">
+          <img class="vp-hist-th" src="th/webp/level_${n}.webp" alt="" width="28" height="28" loading="lazy" onerror="this.style.display='none'">
+          <span>TH${th} · ${pct}<br><small>${escH(when)}</small></span>
+        </button>
+        <button type="button" class="btn-secondary btn-sm" onclick="vpDeleteSnapshot('${s.id}')" title="Elimina" aria-label="Elimina">✕</button>
       </div>`;
     })
     .join('');
@@ -10640,67 +10788,6 @@ async function vpDeleteSnapshot(id) {
     const st = document.getElementById('vp-import-status');
     if (st) st.textContent = e.message || 'Errore eliminazione';
   }
-}
-
-function _renderVpResults(summary, meta = {}) {
-  const box = document.getElementById('vp-results');
-  if (!box || !summary) return;
-  box.style.display = 'block';
-  const home = summary.home || {};
-  const builder = summary.builder || {};
-  const metaLine = meta.from
-    ? `<p class="page-sub">Fonte: ${escH(meta.from)}${meta.at ? ` · ${escH(new Date(meta.at).toLocaleString('it-IT'))}` : ''}${meta.tag ? ` · ${escH(meta.tag)}` : ''}</p>`
-    : '';
-
-  function villageBlock(title, village, hallLabel) {
-    const cats = village.categories || {};
-    const rows = Object.keys(cats)
-      .filter((k) => (cats[k].max_levels_th || 0) > 0 || (cats[k].max_levels_global || 0) > 0)
-      .map((k) => {
-        const c = cats[k];
-        const miss = (c.missing || [])
-          .slice(0, 8)
-          .map((m) => `${escH(m.name)} ${m.from}→${m.to}`)
-          .join(', ');
-        return `<div class="vp-cat">
-          <div class="vp-cat-head"><strong>${escH(VP_CAT_LABELS[k] || k)}</strong>
-            <span>TH ${_vpFmtPct(c.pct_th)} · Max ${_vpFmtPct(c.pct_global)}</span></div>
-          ${_vpBar(c.pct_th)}
-          <div class="vp-cat-meta">Costo TH: ${_vpFmtCost(c.cost_th)} · Tempo ${_vpFmtTime(c.time_sec_th)}</div>
-          ${miss ? `<div class="vp-cat-miss">Manca: ${miss}${(c.missing || []).length > 8 ? '…' : ''}</div>` : ''}
-        </div>`;
-      })
-      .join('');
-    return `<div class="profilo-section">
-      <h3 class="profilo-section-title">${escH(title)} · ${escH(hallLabel)}</h3>
-      <div class="vp-summary-grid">
-        <div class="vp-stat"><div class="vp-stat-val">${_vpFmtPct(village.pct_th)}</div><div class="vp-stat-lbl">Max TH attuale</div>${_vpBar(village.pct_th)}</div>
-        <div class="vp-stat"><div class="vp-stat-val">${_vpFmtPct(village.pct_global)}</div><div class="vp-stat-lbl">Max globale</div>${_vpBar(village.pct_global)}</div>
-        <div class="vp-stat"><div class="vp-stat-val">${_vpFmtCost(village.cost_th)}</div><div class="vp-stat-lbl">Costo rimanente (TH)</div></div>
-        <div class="vp-stat"><div class="vp-stat-val">${_vpFmtTime(village.time_sec_th)}</div><div class="vp-stat-lbl">Tempo rimanente (TH)</div></div>
-      </div>
-      ${rows}
-    </div>`;
-  }
-
-  const upgrades = (summary.active_upgrades || [])
-    .map((u) => {
-      const eta = u.eta_unix ? new Date(u.eta_unix * 1000).toLocaleString('it-IT') : '—';
-      return `<li>${escH(u.name)} lv${u.lvl} → ~${escH(eta)}</li>`;
-    })
-    .join('');
-
-  box.innerHTML = `
-    ${metaLine}
-    ${villageBlock('Villaggio base', home, `TH${summary.th_level ?? '?'}`)}
-    ${villageBlock('Base costruttore', builder, summary.bh_level != null ? `BH${summary.bh_level}` : 'BH —')}
-    ${
-      upgrades
-        ? `<div class="profilo-section"><h3 class="profilo-section-title">Upgrade in corso</h3><ul class="vp-upgrade-list">${upgrades}</ul></div>`
-        : ''
-    }
-    <p class="page-sub">${escH(summary.disclaimer || '')}</p>
-  `;
 }
 
 // ── CERCA ─────────────────────────────────────────────────────────────────────

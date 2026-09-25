@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>CoCBoard – Fear United IT</title>
     <meta name="description" content="CoCBoard – Gestione CWL e guerra del clan Fear United IT">
     <meta name="theme-color" content="#0D0B08">
@@ -711,30 +711,32 @@
                         </div>
 
                         <div id="space-tab-progress" style="display:none">
-                            <div class="page-header" style="margin-bottom:0.75rem">
-                                <div>
+                            <div class="vp-hero">
+                                <div class="vp-hero-text">
                                     <h3 class="profilo-section-title" style="margin:0">Progresso villaggio</h3>
-                                    <p class="page-sub">Importa l'export JSON dal gioco (solo tuo, mai pubblico). Confronta livelli, costi e tempi vs max del tuo TH e vs max globale.</p>
+                                    <p class="page-sub vp-hero-sub">Solo tuo · confronta livelli, costi e tempi vs max del tuo TH e vs max globale</p>
                                 </div>
                             </div>
-                            <div id="vp-profile-picker" class="carte-profile-picker" style="display:none"></div>
-                            <div class="profilo-section" id="vp-import-box">
-                                <h3 class="profilo-section-title">Importa export</h3>
-                                <ol class="page-sub" style="margin:0 0 0.75rem 1.1rem; padding:0; line-height:1.45">
-                                    <li>In Clash of Clans: Impostazioni → Altro → Esporta i dati del villaggio</li>
-                                    <li>Tocca <b>Copia</b> e incolla qui sotto (deve essere il tag del profilo selezionato)</li>
-                                </ol>
-                                <textarea id="vp-json-input" class="form-input" rows="6" placeholder='{"tag":"#ABC123", "timestamp":..., "buildings":[...]}' style="width:100%; font-family:ui-monospace,monospace; font-size:0.75rem; resize:vertical"></textarea>
-                                <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.65rem">
+                            <div id="vp-profile-picker" class="carte-profile-picker vp-profile-picker" style="display:none"></div>
+                            <div class="profilo-section vp-import-card" id="vp-import-box">
+                                <div class="vp-import-head">
+                                    <img class="vp-import-icon" src="th/webp/level_14.webp" alt="" width="40" height="40" loading="lazy" onerror="this.style.display='none'">
+                                    <div>
+                                        <h3 class="profilo-section-title" style="margin:0">Importa export</h3>
+                                        <p class="page-sub" style="margin:0.2rem 0 0">Dal gioco: Impostazioni → Altro → Esporta → Copia</p>
+                                    </div>
+                                </div>
+                                <textarea id="vp-json-input" class="form-input vp-json-input" rows="5" placeholder='Incolla qui il JSON… {"tag":"#ABC…","timestamp":…}'></textarea>
+                                <div class="vp-import-actions">
                                     <button type="button" class="btn-primary btn-sm" onclick="vpAnalyzeExport()">Analizza</button>
-                                    <button type="button" class="btn-secondary btn-sm" onclick="vpSaveExport()">Salva nello storico</button>
+                                    <button type="button" class="btn-secondary btn-sm" onclick="vpSaveExport()">Salva</button>
                                     <button type="button" class="btn-secondary btn-sm" onclick="vpClearImport()">Svuota</button>
                                 </div>
-                                <p id="vp-import-status" class="page-sub" style="margin-top:0.5rem"></p>
+                                <p id="vp-import-status" class="page-sub vp-import-status"></p>
                             </div>
                             <div id="vp-history" class="profilo-section" style="display:none">
-                                <h3 class="profilo-section-title">Storico import</h3>
-                                <div id="vp-history-list"></div>
+                                <h3 class="profilo-section-title">Storico</h3>
+                                <div id="vp-history-list" class="vp-history-list"></div>
                             </div>
                             <div id="vp-results" style="display:none"></div>
                         </div>
