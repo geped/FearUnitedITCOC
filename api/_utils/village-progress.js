@@ -7,12 +7,13 @@
 const profilesUtil = require('./user-profiles');
 const { parseVillageExport } = require('./village-progress-parser');
 const { calculateProgress } = require('./village-progress-calc');
-const { loadDataset } = require('./village-progress-dataset');
+const { loadDataset, rehydrateSummaryIcons } = require('./village-progress-dataset');
 
 const MAX_SNAPSHOTS_PER_TAG = 12;
 
 function metaFromRow(row) {
   if (!row) return null;
+  const summary = row.summary ? rehydrateSummaryIcons(JSON.parse(JSON.stringify(row.summary))) : row.summary;
   return {
     id: row.id,
     coc_tag: row.coc_tag,
@@ -23,7 +24,7 @@ function metaFromRow(row) {
     dataset_version: row.dataset_version,
     source: row.source,
     created_at: row.created_at,
-    summary: row.summary,
+    summary,
   };
 }
 

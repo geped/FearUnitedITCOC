@@ -1,7 +1,8 @@
 {
   "functions": {
     "api/lookup.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "data/coc-village/**"
     },
     "api/sync-members.js": {
       "maxDuration": 60
