@@ -6,25 +6,32 @@
 <meta name="robots" content="noindex,nofollow">
 <title>CoCBoard &middot; Reclutamento</title>
 <style>
+@font-face {
+  font-family: 'Supercell Magic';
+  src: url('fonts/SupercellMagic-Regular.ttf') format('truetype');
+  font-display: swap;
+}
 :root {
-  --bg:       #0D0B08;
-  --bg-1:     #110E09;
-  --bg-2:     #1A150E;
-  --bg-3:     #221A0F;
-  --border:   #2A2010;
-  --gold:     #C9A962;
-  --text:     #EEEAE0;
-  --text-2:   #C8BCA8;
-  --text-3:   #7A6A50;
-  --green:    #27AE60;
-  --red:      #C0392B;
+  --bg:       #071018;
+  --bg-1:     #0C1822;
+  --bg-2:     #122433;
+  --bg-3:     #1A3042;
+  --border:   #243848;
+  --gold:     #E2B54A;
+  --text:     #F2F4F0;
+  --text-2:   #B8C5CE;
+  --text-3:   #6F8494;
+  --green:    #3FA86A;
+  --red:      #E05A4A;
   --radius:   10px;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { background: var(--bg); }
 body {
-  font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
-  background: var(--bg);
+  font-family: 'Supercell Magic', system-ui, -apple-system, sans-serif;
+  background:
+    radial-gradient(ellipse 90% 55% at 50% -10%, rgba(74,143,191,0.22) 0%, transparent 55%),
+    var(--bg);
   color: var(--text);
   font-size: 15px;
   line-height: 1.65;

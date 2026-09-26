@@ -6672,3 +6672,178 @@ tbody tr:last-child td { border-bottom: none; }
   #profilo-main-subtabs .subtab-btn { font-size: 0.68rem; padding: 0.48rem 0.35rem; }
 }
 
+
+/* ═══════════════════════════════════════════════════════════════
+   CAPITAL NIGHT — polish globale (preview restyle)
+   Coerente con token :root; non spezza la struttura HTML.
+   ═══════════════════════════════════════════════════════════════ */
+
+.profilo-section,
+.profilo-hero-card,
+.profilo-bh-card,
+.cerca-clan-card,
+.cerca-player-card,
+.cc-header,
+.vp-village,
+.vp-import-card,
+.vp-cat-card,
+.vp-boost-bar,
+.carte-match-card {
+  background: var(--bg-panel) !important;
+  border-color: var(--border) !important;
+  box-shadow: var(--shadow-panel);
+}
+
+.profilo-section-title,
+.page-header h2,
+#topbar-title,
+.sidebar-brand-text h2,
+.login-logo h1 {
+  color: var(--gold-hi) !important;
+}
+
+.subtab-btn.active {
+  color: var(--gold-hi);
+  border-bottom-color: var(--gold);
+}
+
+#profilo-main-subtabs .subtab-btn,
+#space-main-subtabs .subtab-btn,
+#carte-main-subtabs .subtab-btn,
+#carte-trade-subtabs .subtab-btn {
+  background: color-mix(in srgb, var(--bg-2) 85%, transparent);
+}
+
+#profilo-main-subtabs .subtab-btn.active,
+#space-main-subtabs .subtab-btn.active,
+#carte-main-subtabs .subtab-btn.active,
+#carte-trade-subtabs .subtab-btn.active {
+  background: var(--gold-dim);
+  border-color: rgba(226, 181, 74, 0.55);
+  color: var(--gold-hi);
+}
+
+.input-wrap input,
+.cerca-input,
+.form-input,
+textarea.form-input,
+.vp-json-input,
+select.admin-select {
+  background: color-mix(in srgb, var(--bg) 70%, var(--bg-2)) !important;
+  border-color: var(--border-2) !important;
+  color: var(--text) !important;
+  border-radius: var(--radius-sm) !important;
+}
+
+.input-wrap input:focus,
+.cerca-input:focus,
+.form-input:focus,
+textarea.form-input:focus,
+.vp-json-input:focus {
+  border-color: var(--gold) !important;
+  outline: none;
+  box-shadow: 0 0 0 3px var(--gold-dim);
+}
+
+.table-wrap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg-1) 90%, transparent);
+}
+
+table th {
+  background: color-mix(in srgb, var(--bg-3) 80%, transparent);
+  color: var(--gold-hi);
+}
+
+.modal-box,
+.wdm-box,
+.carte-share-modal-box,
+.carte-filters-modal-box,
+.carte-notify-modal-box,
+.carte-trade-confirm-box {
+  background: var(--bg-1) !important;
+  border: 1px solid var(--border-2) !important;
+  border-radius: calc(var(--radius) + 2px) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(243, 210, 120, 0.08) !important;
+}
+
+.vp-boost-btn.active,
+.carte-profile-chip.active,
+.toggle-btn.active {
+  color: var(--gold-hi) !important;
+  border-color: rgba(226, 181, 74, 0.6) !important;
+  background: var(--gold-dim) !important;
+}
+
+.vp-bar {
+  background: color-mix(in srgb, var(--bg) 60%, var(--border));
+  border-radius: 999px;
+  overflow: hidden;
+}
+.vp-bar-fill.is-max { background: linear-gradient(90deg, #2f9e62, #55d08a); }
+.vp-bar-fill.is-good { background: linear-gradient(90deg, #c4922e, var(--gold-hi)); }
+.vp-bar-fill.is-mid { background: linear-gradient(90deg, #c47a2e, #e0a14a); }
+.vp-bar-fill.is-low { background: linear-gradient(90deg, #a63d3d, #e05a4a); }
+
+@keyframes cn-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes cn-gold-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 0 transparent; }
+  50% { box-shadow: inset 0 0 0 1px rgba(226, 181, 74, 0.18); }
+}
+.tab-content {
+  animation: cn-fade-up 0.22s ease both;
+}
+.sidebar-nav .tab-btn.active,
+.bnav-btn.active {
+  animation: cn-gold-pulse 2.8s ease-in-out infinite;
+}
+
+@media (max-width: 768px) {
+  body { background-attachment: scroll; }
+  .card,
+  .profilo-section,
+  .profilo-hero-card,
+  .vp-village,
+  .vp-import-card {
+    padding-left: 0.85rem !important;
+    padding-right: 0.85rem !important;
+  }
+  .page-header h2 { font-size: 1.2rem !important; }
+  .app-main {
+    padding-left: 0.7rem;
+    padding-right: 0.7rem;
+  }
+  .login-box { padding: 1.75rem 1.25rem 1.5rem; }
+  .btn-primary,
+  .btn-secondary { min-height: 40px; }
+}
+
+@media (min-width: 1100px) {
+  .app-main { padding: 1.75rem 2rem; }
+  .card,
+  .profilo-section { border-radius: calc(var(--radius) + 2px); }
+}
+
+.cn-preview-banner {
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 90;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.85rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 0.85rem;
+  background: linear-gradient(90deg, rgba(74, 143, 191, 0.22), rgba(226, 181, 74, 0.16));
+  border-bottom: 1px solid var(--border-2);
+  font-size: 0.78rem;
+  color: var(--text-2);
+}
+.cn-preview-banner strong {
+  color: var(--gold-hi);
+  font-family: var(--font-display);
+}
