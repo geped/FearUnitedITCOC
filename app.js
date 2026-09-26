@@ -23,6 +23,29 @@
 
 const db = window.sb;
 
+// ── Tema colore (API definita in index.html head; qui solo alias stabili) ─────
+// Valori: 'classic' | 'capital-night' — persistenza localStorage cocboard_theme
+if (typeof window.setAppTheme !== 'function') {
+  window.setAppTheme = function setAppTheme(theme) {
+    const t = theme === 'capital-night' ? 'capital-night' : 'classic';
+    document.documentElement.setAttribute('data-theme', t);
+    try { localStorage.setItem('cocboard_theme', t); } catch (_) {}
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', t === 'capital-night' ? '#071018' : '#0D0B08');
+    document.querySelectorAll('[data-theme-set]').forEach((btn) => {
+      const on = btn.getAttribute('data-theme-set') === t;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  };
+}
+if (typeof window.getAppTheme !== 'function') {
+  window.getAppTheme = function getAppTheme() {
+    const t = document.documentElement.getAttribute('data-theme');
+    return t === 'capital-night' ? 'capital-night' : 'classic';
+  };
+}
+
 // ── Handoff da bot Telegram (Mini App): codice monouso → sessione ─────────────
 (function readCwlRoundFromQuery() {
   try {

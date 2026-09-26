@@ -5,38 +5,94 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
 <title>CoCBoard &middot; Reclutamento</title>
+<meta name="theme-color" content="#0D0B08">
+<script>
+(function () {
+  var KEY = 'cocboard_theme';
+  var META = { classic: '#0D0B08', 'capital-night': '#071018' };
+  function normalize(t) { return (t === 'capital-night' || t === 'classic') ? t : 'classic'; }
+  function syncButtons(theme) {
+    document.querySelectorAll('[data-theme-set]').forEach(function (btn) {
+      var on = btn.getAttribute('data-theme-set') === theme;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+  function apply(theme, persist) {
+    theme = normalize(theme);
+    document.documentElement.setAttribute('data-theme', theme);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', META[theme]);
+    if (persist !== false) { try { localStorage.setItem(KEY, theme); } catch (e) {} }
+    syncButtons(theme);
+  }
+  var initial = 'classic';
+  try { initial = normalize(localStorage.getItem(KEY) || 'classic'); } catch (e) {}
+  apply(initial, false);
+  window.setAppTheme = function (t) { apply(t, true); };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { syncButtons(normalize(document.documentElement.getAttribute('data-theme'))); });
+  }
+})();
+</script>
 <style>
 @font-face {
   font-family: 'Supercell Magic';
   src: url('fonts/SupercellMagic-Regular.ttf') format('truetype');
   font-display: swap;
 }
-:root {
+:root,
+html[data-theme="classic"] {
+  --bg:       #0D0B08;
+  --bg-1:     #110E09;
+  --bg-2:     #1A150E;
+  --bg-3:     #221A0F;
+  --border:   #2A2010;
+  --gold:     #C9A962;
+  --text:     #F2EDE3;
+  --text-2:   #D2C4AE;
+  --text-3:   #A89478;
+  --green:    #27AE60;
+  --red:      #C0392B;
+  --radius:   3px;
+  --body-atmosphere: radial-gradient(ellipse 70% 45% at 50% 0%, rgba(201,169,98,0.10) 0%, transparent 65%);
+}
+html[data-theme="capital-night"] {
   --bg:       #071018;
   --bg-1:     #0C1822;
   --bg-2:     #122433;
   --bg-3:     #1A3042;
-  --border:   #243848;
+  --border:   #2A4054;
   --gold:     #E2B54A;
-  --text:     #F2F4F0;
-  --text-2:   #B8C5CE;
-  --text-3:   #6F8494;
+  --text:     #F4F6F3;
+  --text-2:   #D0DAE2;
+  --text-3:   #9AADC0;
   --green:    #3FA86A;
   --red:      #E05A4A;
   --radius:   10px;
+  --body-atmosphere: radial-gradient(ellipse 90% 55% at 50% -10%, rgba(74,143,191,0.22) 0%, transparent 55%);
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { background: var(--bg); }
+html { background: var(--bg); color-scheme: dark; }
 body {
   font-family: 'Supercell Magic', system-ui, -apple-system, sans-serif;
-  background:
-    radial-gradient(ellipse 90% 55% at 50% -10%, rgba(74,143,191,0.22) 0%, transparent 55%),
-    var(--bg);
+  background: var(--body-atmosphere), var(--bg);
   color: var(--text);
   font-size: 15px;
   line-height: 1.65;
   padding-bottom: max(env(safe-area-inset-bottom), 32px);
 }
+.theme-switch {
+  display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; background: var(--bg-1); margin-left: auto; flex-shrink: 0;
+}
+.theme-switch-btn {
+  appearance: none; border: none; background: transparent; color: var(--text-3);
+  font-family: inherit; font-size: 0.65rem; font-weight: 700; padding: 0.35rem 0.55rem;
+  min-height: 30px; cursor: pointer;
+}
+.theme-switch-btn + .theme-switch-btn { border-left: 1px solid var(--border); }
+.theme-switch-btn.active { background: var(--gold); color: #1A1204; }
 
 /* Hero */
 .hero {
@@ -48,8 +104,9 @@ body {
   gap: 11px;
 }
 .hero img { width: 38px; height: 38px; object-fit: contain; flex-shrink: 0; }
+.hero-text { flex: 1; min-width: 0; }
 .hero-title { font-size: 18px; font-weight: 800; color: var(--gold); line-height: 1.2; }
-.hero-sub   { font-size: 11px; color: var(--text-3); margin-top: 1px; letter-spacing: .03em; }
+.hero-sub   { font-size: 11px; color: var(--text-2); margin-top: 1px; letter-spacing: .03em; }
 
 /* Status bar */
 .status-bar {
@@ -112,7 +169,7 @@ body {
   height: 160px;
   object-fit: contain;
   display: block;
-  background: #1A150E;
+  background: var(--bg-3);
   filter: drop-shadow(0 1px 6px rgba(0,0,0,.5));
 }
 .photo-loader {
@@ -311,9 +368,13 @@ tg-spoiler.on { background: transparent; color: inherit; }
 
 <div class="hero">
   <img src="assets/cocboardbot-no-bg.webp" alt="CoCBoard" onerror="this.onerror=null;this.src='assets/cocboardbot-no-bg.png'">
-  <div>
+  <div class="hero-text">
     <div class="hero-title">Reclutamento</div>
     <div class="hero-sub">Annunci attivi &middot; CoCBoard Community</div>
+  </div>
+  <div class="theme-switch" role="group" aria-label="Tema colore">
+    <button type="button" class="theme-switch-btn" data-theme-set="classic" onclick="setAppTheme('classic')">Classico</button>
+    <button type="button" class="theme-switch-btn" data-theme-set="capital-night" onclick="setAppTheme('capital-night')">Night</button>
   </div>
 </div>
 

@@ -5,8 +5,51 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <title>CoCBoard – Fear United IT</title>
     <meta name="description" content="CoCBoard – Gestione CWL e guerra del clan Fear United IT">
-    <meta name="theme-color" content="#071018">
+    <meta name="theme-color" content="#0D0B08">
     <meta name="color-scheme" content="dark">
+    <!-- Tema colore prima del paint (evita flash) + API setAppTheme. -->
+    <script>
+    (function () {
+      var KEY = 'cocboard_theme';
+      var META = { classic: '#0D0B08', 'capital-night': '#071018' };
+      function normalize(t) {
+        return (t === 'capital-night' || t === 'classic') ? t : 'classic';
+      }
+      function syncButtons(theme) {
+        var nodes = document.querySelectorAll('[data-theme-set]');
+        for (var i = 0; i < nodes.length; i++) {
+          var btn = nodes[i];
+          var on = btn.getAttribute('data-theme-set') === theme;
+          btn.classList.toggle('active', on);
+          btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
+      }
+      function apply(theme, persist) {
+        theme = normalize(theme);
+        document.documentElement.setAttribute('data-theme', theme);
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', META[theme] || META.classic);
+        if (persist !== false) {
+          try { localStorage.setItem(KEY, theme); } catch (e) {}
+        }
+        syncButtons(theme);
+        try {
+          document.dispatchEvent(new CustomEvent('cocboard:themechange', { detail: { theme: theme } }));
+        } catch (e2) {}
+      }
+      var initial = 'classic';
+      try { initial = normalize(localStorage.getItem(KEY) || 'classic'); } catch (e3) {}
+      apply(initial, false);
+      window.setAppTheme = function (t) { apply(t, true); };
+      window.getAppTheme = function () {
+        return normalize(document.documentElement.getAttribute('data-theme'));
+      };
+      window.syncThemeSwitchButtons = function () { syncButtons(window.getAppTheme()); };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () { syncButtons(window.getAppTheme()); });
+      }
+    })();
+    </script>
     <!-- Mai lasciare credenziali nella barra indirizzi (form GET / password manager). -->
     <script>
     (function () {
@@ -30,7 +73,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20260813a">
+    <link rel="stylesheet" href="style.css?v=20260926t">
 </head>
 <body>
 
@@ -41,6 +84,10 @@
             <span class="login-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M12 3l2 6h6l-5 4 2 8-5-3-5 3 2-8-5-4h6z"/></svg></span>
             <h1>CoCBoard</h1>
             <p class="login-sub">Gestione clan, CWL e giocatori</p>
+        </div>
+        <div class="theme-switch theme-switch--login" role="group" aria-label="Tema colore">
+            <button type="button" class="theme-switch-btn" data-theme-set="classic" onclick="setAppTheme('classic')">Classico</button>
+            <button type="button" class="theme-switch-btn" data-theme-set="capital-night" onclick="setAppTheme('capital-night')">Capital Night</button>
         </div>
         <div id="login-error" style="display:none"></div>
 
@@ -208,6 +255,13 @@
         </nav>
 
         <div class="sidebar-user">
+            <div class="sidebar-theme-row">
+                <span class="sidebar-theme-label">Tema</span>
+                <div class="theme-switch" role="group" aria-label="Tema colore">
+                    <button type="button" class="theme-switch-btn" data-theme-set="classic" onclick="setAppTheme('classic')">Classico</button>
+                    <button type="button" class="theme-switch-btn" data-theme-set="capital-night" onclick="setAppTheme('capital-night')">Night</button>
+                </div>
+            </div>
             <span id="user-email" class="sidebar-user-email"></span>
             <div class="sidebar-user-row">
                 <span id="user-role-badge" class="badge badge-gold" style="display:none"></span>
@@ -231,6 +285,10 @@
             </button>
             <span id="topbar-title">Clan</span>
             <div class="topbar-right">
+                <div class="theme-switch theme-switch--topbar theme-switch--compact" role="group" aria-label="Tema colore">
+                    <button type="button" class="theme-switch-btn" data-theme-set="classic" onclick="setAppTheme('classic')" title="Tema classico">Classico</button>
+                    <button type="button" class="theme-switch-btn" data-theme-set="capital-night" onclick="setAppTheme('capital-night')" title="Tema Capital Night">Night</button>
+                </div>
                 <div class="user-info" style="display:none">
                     <span class="topbar-email" id="topbar-email"></span>
                 </div>
@@ -238,10 +296,6 @@
         </div>
         <div id="no-clan-banner" class="no-clan-banner" style="display:none" role="status">
             Non sei in un clan: puoi usare Profilo, Cerca e Classifica. Unisciti a un clan in Clash of Clans e rientra (o aggiorna il profilo) per sbloccare Clan, Registri e Bonus.
-        </div>
-        <div class="cn-preview-banner" role="note">
-            <span><strong>Capital Night</strong> · anteprima restyling (Supercell Magic invariato)</span>
-            <span class="mono" style="font-size:0.7rem;color:var(--text-3)">non in produzione</span>
         </div>
 
         <!-- MAIN -->
@@ -928,7 +982,7 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="supabase-config.js"></script>
-<script src="app.js?v=20260909e"></script>
+<script src="app.js?v=20260926t"></script>
 
 <!-- ─── MODAL BONUS ───────────────────────────────────────────────────────── -->
 <div id="bonus-modal-overlay" class="modal-overlay" style="display:none" onclick="closeBonusModalIfOutside(event)">
