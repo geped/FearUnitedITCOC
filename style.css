@@ -518,12 +518,14 @@ textarea.mono,
     display: none;
     position: fixed;
     bottom: 0; left: 0; right: 0;
-    height: var(--bnav-h);
+    height: calc(var(--bnav-h) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     background: var(--bg-1);
     border-top: 1px solid var(--border);
     z-index: 150;
     justify-content: space-around;
     align-items: center;
+    box-sizing: border-box;
 }
 .bnav-btn {
     flex: 1;
@@ -549,6 +551,17 @@ textarea.mono,
    RESPONSIVE — MOBILE
    ───────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
+    html, body {
+        overflow-x: clip;
+        max-width: 100%;
+    }
+    .app-shell,
+    .app-body,
+    .app-main,
+    .tab-content {
+        max-width: 100%;
+        min-width: 0;
+    }
     .app-sidebar {
         transform: translateX(-100%);
     }
@@ -562,7 +575,11 @@ textarea.mono,
     .hamburger { display: flex; }
     .bottom-nav { display: flex; }
     .topbar-email { display: none; }
-    .app-main { padding: 0.75rem 0.75rem; padding-bottom: calc(var(--bnav-h) + 0.75rem); }
+    .app-main {
+        padding: 0.75rem 0.75rem;
+        padding-bottom: calc(var(--bnav-h) + env(safe-area-inset-bottom, 0px) + 0.75rem);
+        overflow-x: clip;
+    }
     .app-topbar { padding: 0 0.75rem; }
     .topbar-right .user-info { display: none; }
     /* Clan header compatto su mobile */
@@ -1289,7 +1306,14 @@ tbody tr:last-child td { border-bottom: none; }
     gap: 0;
     margin-bottom: 1.25rem;
     border-bottom: 1px solid var(--border);
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
 }
+.subtab-bar::-webkit-scrollbar { display: none; }
 .subtab-btn {
     background: none;
     border: none;
@@ -1303,9 +1327,100 @@ tbody tr:last-child td { border-bottom: none; }
     margin-bottom: -1px;
     transition: color 0.15s, border-color 0.15s;
     white-space: nowrap;
+    flex: 0 0 auto;
 }
 .subtab-btn:hover { color: var(--text); }
 .subtab-btn.active { color: var(--gold); border-bottom-color: var(--gold); }
+
+/* Profilo + sottosezioni: su mobile i tab lunghi restano tutti raggiungibili */
+@media (max-width: 768px) {
+    .subtab-btn {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.78rem;
+    }
+
+    /* Quattro sottosezioni profilo: griglia 2×2 invece di barra fuori schermo */
+    #profilo-main-subtabs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.4rem;
+        border-bottom: none;
+        overflow: visible;
+        margin-bottom: 1rem;
+        padding-bottom: 0;
+    }
+    #profilo-main-subtabs .subtab-btn {
+        white-space: normal;
+        text-align: center;
+        line-height: 1.25;
+        padding: 0.55rem 0.45rem;
+        font-size: 0.72rem;
+        margin-bottom: 0;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--bg-1);
+        color: var(--text-3);
+    }
+    #profilo-main-subtabs .subtab-btn.active {
+        color: var(--gold);
+        border-color: rgba(201, 169, 98, 0.55);
+        background: rgba(201, 169, 98, 0.08);
+        border-bottom-color: rgba(201, 169, 98, 0.55);
+    }
+
+    #space-main-subtabs,
+    #carte-main-subtabs,
+    #carte-trade-subtabs {
+        display: flex;
+        gap: 0.35rem;
+        border-bottom: none;
+        overflow: visible;
+        flex-wrap: wrap;
+    }
+    #space-main-subtabs .subtab-btn,
+    #carte-main-subtabs .subtab-btn,
+    #carte-trade-subtabs .subtab-btn {
+        flex: 1 1 calc(50% - 0.35rem);
+        min-width: min(100%, 120px);
+        white-space: normal;
+        text-align: center;
+        line-height: 1.25;
+        padding: 0.5rem 0.45rem;
+        font-size: 0.74rem;
+        margin-bottom: 0;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--bg-1);
+    }
+    #space-main-subtabs .subtab-btn.active,
+    #carte-main-subtabs .subtab-btn.active,
+    #carte-trade-subtabs .subtab-btn.active {
+        color: var(--gold);
+        border-color: rgba(201, 169, 98, 0.55);
+        background: rgba(201, 169, 98, 0.08);
+        border-bottom-color: rgba(201, 169, 98, 0.55);
+    }
+
+    /* Altre barre (war, cwl, cerca…): scroll orizzontale contenuto, senza allargare la pagina */
+    #tab-warlog > .subtab-bar,
+    #tab-bonus > .subtab-bar,
+    #tab-admin > .subtab-bar,
+    #cerca-search-area > .subtab-bar {
+        scroll-snap-type: x proximity;
+        gap: 0.15rem;
+        padding-bottom: 1px;
+    }
+    #tab-warlog > .subtab-bar .subtab-btn,
+    #tab-bonus > .subtab-bar .subtab-btn,
+    #tab-admin > .subtab-bar .subtab-btn,
+    #cerca-search-area > .subtab-bar .subtab-btn {
+        scroll-snap-align: start;
+    }
+}
 
 /* ─────────────────────────────────────────────────────────────
    TOOLBAR
@@ -3501,6 +3616,8 @@ tbody tr:last-child td { border-bottom: none; }
     display: flex;
     align-items: flex-start;
     gap: 0.3rem;
+    min-width: 0;
+    word-break: break-word;
 }
 .profilo-equip-group-label::before {
     content: '';
@@ -3515,6 +3632,7 @@ tbody tr:last-child td { border-bottom: none; }
 .profilo-equip-group .profilo-units-grid {
     grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
     gap: 0.25rem;
+    min-width: 0;
 }
 
 .profilo-units-grid {
@@ -3683,6 +3801,13 @@ tbody tr:last-child td { border-bottom: none; }
     .profilo-units-grid { grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); }
     .cerca-row { flex-direction: column; align-items: stretch; }
     .cerca-input-wrap { min-width: unset; }
+    .profilo-section { padding: 0.85rem 0.75rem; }
+    .profilo-hero-card { padding: 0.85rem 0.75rem; }
+    .profilo-equip-group {
+        grid-template-columns: 1fr;
+        gap: 0.25rem;
+    }
+    .profilo-equip-group-label { padding-top: 0; }
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -4644,7 +4769,28 @@ tbody tr:last-child td { border-bottom: none; }
     font-size: 0.88rem;
 }
 
-.carte-cat-bar { margin-bottom: 1rem; flex-wrap: wrap; }
+.carte-cat-bar {
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    overflow: visible;
+    border-bottom: none;
+}
+.carte-cat-bar .subtab-btn {
+    white-space: normal;
+    line-height: 1.2;
+    padding: 0.45rem 0.55rem;
+    font-size: 0.74rem;
+    margin-bottom: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-1);
+}
+.carte-cat-bar .subtab-btn.active {
+    border-color: rgba(201, 169, 98, 0.55);
+    background: rgba(201, 169, 98, 0.08);
+    border-bottom-color: rgba(201, 169, 98, 0.55);
+}
 .carte-cat-count {
     font-family: var(--font-mono);
     font-size: 0.72rem;
@@ -4736,7 +4882,7 @@ tbody tr:last-child td { border-bottom: none; }
 .carte-match-cards { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
 .carte-trade-card-icon { width: 34px; height: 34px; object-fit: contain; }
 .carte-match-arrow { color: var(--gold); font-weight: 700; }
-.carte-match-info { flex: 1; min-width: 180px; }
+.carte-match-info { flex: 1; min-width: 0; }
 .carte-match-names { font-size: 0.85rem; color: var(--text); }
 .carte-match-opponent { font-size: 0.78rem; color: var(--text-3); margin-top: 0.15rem; }
 
@@ -5513,7 +5659,14 @@ tbody tr:last-child td { border-bottom: none; }
 .carte-profile-order-btn:disabled { opacity: 0.25; cursor: default; }
 
 /* ── Carte Evento: total-actions inline ─────────────────────────────────── */
-.carte-total-actions { display: flex; gap: 0.35rem; align-items: center; flex-shrink: 0; }
+.carte-total-actions {
+    display: flex;
+    gap: 0.35rem;
+    align-items: center;
+    flex-shrink: 1;
+    flex-wrap: wrap;
+    min-width: 0;
+}
 .carte-tutorial-inline-btn { font-weight: 700; min-width: 28px; }
 
 /* ── Carte Evento: share modal - esclude completate ─────────────────────── */
@@ -6337,19 +6490,59 @@ tbody tr:last-child td { border-bottom: none; }
 .vp-upg-name { font-weight: 700; font-size: 0.85rem; }
 .vp-upg-meta { font-size: 0.72rem; color: var(--text-3); }
 
-#space-main-subtabs {
-  display: flex;
-  gap: 0;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+/* Base desktop: space subtabs a larghezza equa.
+   Su mobile le regole in SUBTAB BAR (@media max-width:768px) hanno priorità
+   se collocate dopo questo blocco — quindi qui solo min-width:769. */
+@media (min-width: 769px) {
+  #space-main-subtabs {
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    max-width: 100%;
+    min-width: 0;
+  }
+  #space-main-subtabs::-webkit-scrollbar { display: none; }
+  #space-main-subtabs .subtab-btn {
+    flex: 1 0 auto;
+    min-width: 0;
+    text-align: center;
+    padding: 0.55rem 0.75rem;
+  }
 }
-#space-main-subtabs::-webkit-scrollbar { display: none; }
-#space-main-subtabs .subtab-btn {
-  flex: 1 0 auto;
-  min-width: 0;
-  text-align: center;
-  padding: 0.55rem 0.75rem;
+
+@media (max-width: 768px) {
+  .carte-match-card {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .carte-match-info { min-width: 0; width: 100%; }
+  .carte-row-actions {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .carte-row-actions .btn-sm {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  .carte-total-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .carte-grid {
+    grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    gap: 0.45rem;
+  }
+  #tab-profilo .page-header {
+    gap: 0.65rem;
+  }
+  #tab-profilo .page-header .btn-secondary,
+  #tab-profilo .page-header .btn-primary {
+    flex-shrink: 0;
+  }
 }
 
 @media (min-width: 640px) {
@@ -6364,5 +6557,6 @@ tbody tr:last-child td { border-bottom: none; }
   .vp-cat-icon, .vp-miss-img { width: 32px; height: 32px; }
   .vp-hall-img { width: 32px; height: 32px; }
   .vp-import-actions { grid-template-columns: 1fr; }
+  #profilo-main-subtabs .subtab-btn { font-size: 0.68rem; padding: 0.48rem 0.35rem; }
 }
 
