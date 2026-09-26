@@ -1,0 +1,20 @@
+{
+  "name": "CoCBoard",
+  "install": "npm install && npm install --prefix render-proxy && npm install --prefix telegram-bot",
+  "terminals": [
+    {
+      "name": "proxy-bot",
+      "command": "cd render-proxy && PORT=3000 npm start",
+      "description": "Servizio Render unificato (proxy CoC API + bot Telegram) sulla porta 3000. /health risponde senza segreti; le route CoC richiedono COC_API_TOKEN e il bot Telegram richiede TELEGRAM_BOT_TOKEN (altrimenti viene saltato con un warning)."
+    },
+    {
+      "name": "web",
+      "command": "python3 -m http.server 8000",
+      "description": "Serve la single-page app statica (index.html, app.js, style.css) su http://localhost:8000. Usa la chiave anon pubblica di Supabase gia' presente in supabase-config.js."
+    }
+  ],
+  "ports": [
+    { "name": "web", "port": 8000 },
+    { "name": "proxy-bot", "port": 3000 }
+  ]
+}
