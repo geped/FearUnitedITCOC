@@ -5,31 +5,94 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
 <title>CoCBoard · Guida</title>
+<meta name="theme-color" content="#0D0B08">
+<script>
+(function () {
+  var KEY = 'cocboard_theme';
+  var META = { classic: '#0D0B08', 'capital-night': '#071018' };
+  function normalize(t) { return (t === 'capital-night' || t === 'classic') ? t : 'classic'; }
+  function syncButtons(theme) {
+    document.querySelectorAll('[data-theme-set]').forEach(function (btn) {
+      var on = btn.getAttribute('data-theme-set') === theme;
+      btn.classList.toggle('active', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
+  function apply(theme, persist) {
+    theme = normalize(theme);
+    document.documentElement.setAttribute('data-theme', theme);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', META[theme]);
+    if (persist !== false) { try { localStorage.setItem(KEY, theme); } catch (e) {} }
+    syncButtons(theme);
+  }
+  var initial = 'classic';
+  try { initial = normalize(localStorage.getItem(KEY) || 'classic'); } catch (e) {}
+  apply(initial, false);
+  window.setAppTheme = function (t) { apply(t, true); };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { syncButtons(normalize(document.documentElement.getAttribute('data-theme'))); });
+  }
+})();
+</script>
 <style>
-:root {
+@font-face {
+  font-family: 'Supercell Magic';
+  src: url('fonts/SupercellMagic-Regular.ttf') format('truetype');
+  font-display: swap;
+}
+:root,
+html[data-theme="classic"] {
   --bg:       #0D0B08;
   --bg-1:     #110E09;
   --bg-2:     #1A150E;
   --bg-3:     #221A0F;
   --border:   #2A2010;
   --gold:     #C9A962;
-  --gold-dim: rgba(201,169,98,0.13);
-  --text:     #EEEAE0;
-  --text-2:   #C8BCA8;
-  --text-3:   #7A6A50;
+  --gold-dim: rgba(201,169,98,0.12);
+  --text:     #F2EDE3;
+  --text-2:   #D2C4AE;
+  --text-3:   #A89478;
   --green:    #27AE60;
-  --radius:   6px;
+  --radius:   3px;
+  --body-atmosphere: radial-gradient(ellipse 70% 45% at 50% 0%, rgba(201,169,98,0.10) 0%, transparent 65%);
+}
+html[data-theme="capital-night"] {
+  --bg:       #071018;
+  --bg-1:     #0C1822;
+  --bg-2:     #122433;
+  --bg-3:     #1A3042;
+  --border:   #2A4054;
+  --gold:     #E2B54A;
+  --gold-dim: rgba(226,181,74,0.14);
+  --text:     #F4F6F3;
+  --text-2:   #D0DAE2;
+  --text-3:   #9AADC0;
+  --green:    #3FA86A;
+  --radius:   10px;
+  --body-atmosphere: radial-gradient(ellipse 90% 55% at 50% -10%, rgba(74,143,191,0.22) 0%, transparent 55%);
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; background: var(--bg); }
+html { scroll-behavior: smooth; background: var(--bg); color-scheme: dark; }
 body {
-  font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif;
-  background: var(--bg);
+  font-family: 'Supercell Magic', system-ui, -apple-system, sans-serif;
+  background: var(--body-atmosphere), var(--bg);
   color: var(--text);
   font-size: 15px;
   line-height: 1.65;
   padding-bottom: max(env(safe-area-inset-bottom), 24px);
 }
+.theme-switch {
+  display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; background: var(--bg-1); margin-left: auto;
+}
+.theme-switch-btn {
+  appearance: none; border: none; background: transparent; color: var(--text-3);
+  font-family: inherit; font-size: 0.65rem; font-weight: 700; padding: 0.35rem 0.55rem;
+  min-height: 30px; cursor: pointer;
+}
+.theme-switch-btn + .theme-switch-btn { border-left: 1px solid var(--border); }
+.theme-switch-btn.active { background: var(--gold); color: #1A1204; }
 
 /* ── Hero ── */
 .hero {
@@ -51,7 +114,7 @@ body {
 .hero-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to bottom, rgba(13,11,8,0) 40%, rgba(13,11,8,1) 100%);
+  background: linear-gradient(to bottom, transparent 40%, var(--bg) 100%);
 }
 .hero-badge {
   position: absolute;
@@ -88,11 +151,16 @@ body {
   position: sticky;
   top: 0;
   z-index: 10;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
   font-size: 12px;
-  color: var(--text-3);
+  color: var(--text-2);
   letter-spacing: .04em;
 }
+.subheader-label { flex: 1 1 auto; text-align: center; min-width: 12rem; }
 
 /* ── TOC ── */
 .toc {
@@ -255,7 +323,13 @@ code {
   </div>
 </div>
 
-<div class="subheader">Tutto quello che devi sapere sul bot</div>
+<div class="subheader">
+  <span class="subheader-label">Tutto quello che devi sapere sul bot</span>
+  <div class="theme-switch" role="group" aria-label="Tema colore">
+    <button type="button" class="theme-switch-btn" data-theme-set="classic" onclick="setAppTheme('classic')">Classico</button>
+    <button type="button" class="theme-switch-btn" data-theme-set="capital-night" onclick="setAppTheme('capital-night')">Night</button>
+  </div>
+</div>
 
 <!-- ── TOC ── -->
 <div class="toc">
