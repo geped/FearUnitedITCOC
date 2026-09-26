@@ -4,8 +4,12 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const fixture = require('./fixtures/village-export-th14');
 const { parseVillageExport } = require('../api/_utils/village-progress-parser');
-const { calculateProgress } = require('../api/_utils/village-progress-calc');
-const { loadDataset } = require('../api/_utils/village-progress-dataset');
+const { calculateProgress, GOLD_PASS_TIME_DISCOUNT } = require('../api/_utils/village-progress-calc');
+const {
+  loadDataset,
+  getIconUrl,
+  rehydrateSummaryIcons,
+} = require('../api/_utils/village-progress-dataset');
 
 describe('village-progress dataset', () => {
   it('carica entities con dataId Town Hall e Wall', () => {
@@ -14,6 +18,29 @@ describe('village-progress dataset', () => {
     assert.equal(ds.byId.get(1000001).name, 'Town Hall');
     assert.equal(ds.byId.get(1000010).category, 'walls');
     assert.ok(ds.version);
+  });
+
+  it('icona Town Hall punta a normal/level-N (non weapons)', () => {
+    const url = getIconUrl(1000001, { level: 14 });
+    assert.match(url, /town-hall\/normal\/level-14\.png$/);
+    assert.doesNotMatch(url, /weapons|inferno-artillery/);
+  });
+
+  it('rehydrateSummaryIcons riempie icon mancanti da dataId', () => {
+    const summary = {
+      home: {
+        categories: {
+          defenses: {
+            missing: [{ dataId: 1000013, name: 'Mortaio', from: 1, to: 2, icon: null }],
+          },
+        },
+      },
+      active_upgrades: [{ dataId: 28000000, name: 'BK', lvl: 10, icon: null }],
+    };
+    rehydrateSummaryIcons(summary);
+    assert.ok(summary.home.categories.defenses.missing[0].icon);
+    assert.match(summary.home.categories.defenses.missing[0].icon, /^https:\/\//);
+    assert.ok(summary.active_upgrades[0].icon);
   });
 });
 
@@ -54,6 +81,15 @@ describe('village-progress calc', () => {
     assert.ok(summary.builder.pct_th > 0);
     assert.ok(summary.dataset_version);
     assert.ok(summary.disclaimer);
+    assert.equal(summary.gold_pass_time_discount, GOLD_PASS_TIME_DISCOUNT);
+    assert.equal(GOLD_PASS_TIME_DISCOUNT, 0.2);
+    // Ogni gap ha icona URL valida (CDN)
+    const sample = (summary.home.categories.defenses?.missing || [])[0];
+    if (sample) {
+      assert.ok(sample.icon, 'missing item deve avere icon');
+      assert.match(sample.icon, /^https:\/\//);
+      assert.ok(typeof sample.time_sec === 'number');
+    }
   });
 
   it('preview allinea parser+calc', () => {

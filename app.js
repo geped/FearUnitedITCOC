@@ -10461,8 +10461,43 @@ function _vpFmtCost(c) {
   if (c.builder_gold) parts.push(`${_vpFmtNum(c.builder_gold)} oro BB`);
   return parts.length ? parts.join(' · ') : '0';
 }
-function _vpFmtTime(sec) {
+/** Sconto tempi Gold Pass (0 oppure 0.20). Persistito in localStorage. */
+window._vpGoldPassPct = (() => {
+  try {
+    const v = Number(localStorage.getItem('vp_gold_pass_pct') || 0);
+    return v === 20 ? 20 : 0;
+  } catch (_) {
+    return 0;
+  }
+})();
+
+function vpSetGoldPass(pct) {
+  const n = Number(pct) === 20 ? 20 : 0;
+  window._vpGoldPassPct = n;
+  try {
+    localStorage.setItem('vp_gold_pass_pct', String(n));
+  } catch (_) {}
+  document.getElementById('vp-boost-off')?.classList.toggle('active', n === 0);
+  document.getElementById('vp-boost-gp')?.classList.toggle('active', n === 20);
+  if (window._vpViewSummary) {
+    _renderVpResults(window._vpViewSummary, window._vpViewMeta || {});
+  }
+}
+
+function _vpSyncBoostButtons() {
+  const n = window._vpGoldPassPct === 20 ? 20 : 0;
+  document.getElementById('vp-boost-off')?.classList.toggle('active', n === 0);
+  document.getElementById('vp-boost-gp')?.classList.toggle('active', n === 20);
+}
+
+function _vpEffectiveSec(sec) {
   const s = Math.max(0, Number(sec) || 0);
+  const disc = window._vpGoldPassPct === 20 ? 0.2 : 0;
+  return Math.round(s * (1 - disc));
+}
+
+function _vpFmtTime(sec, { applyGoldPass = true } = {}) {
+  const s = applyGoldPass ? _vpEffectiveSec(sec) : Math.max(0, Number(sec) || 0);
   const d = Math.floor(s / 86400);
   const h = Math.floor((s % 86400) / 3600);
   if (d > 0) return `${d}g ${h}h`;
@@ -10476,11 +10511,40 @@ function _vpBar(pct, compact) {
   return `<div class="vp-bar${compact ? ' vp-bar--sm' : ''}"><div class="vp-bar-fill ${cls}" style="width:${p}%"></div><span class="vp-bar-lbl">${p}%</span></div>`;
 }
 
-function _vpImg(src, alt, cls) {
-  if (!src) {
-    return `<div class="${cls || 'vp-img'} vp-img--empty" aria-hidden="true"></div>`;
+function _vpImgFallback(img) {
+  if (!img || img.dataset.vpTried === '1') {
+    if (img) {
+      img.classList.add('is-broken');
+      img.removeAttribute('src');
+    }
+    return;
   }
-  return `<img class="${cls || 'vp-img'}" src="${escH(src)}" alt="${escH(alt || '')}" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.classList.add('is-broken');this.removeAttribute('src')">`;
+  img.dataset.vpTried = '1';
+  const fb = img.getAttribute('data-fallback');
+  if (fb && img.getAttribute('src') !== fb) {
+    img.setAttribute('src', fb);
+    return;
+  }
+  // Ultimo tentativo: icon.png se era level-1.png (o viceversa)
+  const cur = img.getAttribute('src') || '';
+  let alt = '';
+  if (/\/normal\/level-\d+\.png$/i.test(cur)) alt = cur.replace(/\/normal\/level-\d+\.png$/i, '/icon.png');
+  else if (/\/icon\.png$/i.test(cur)) alt = cur.replace(/\/icon\.png$/i, '/normal/level-1.png');
+  if (alt && alt !== cur) {
+    img.setAttribute('src', alt);
+    return;
+  }
+  img.classList.add('is-broken');
+  img.removeAttribute('src');
+}
+window._vpImgFallback = _vpImgFallback;
+
+function _vpImg(src, alt, cls, fallback) {
+  if (!src) {
+    return `<div class="${cls || 'vp-img'} vp-img--empty" aria-hidden="true" title="${escH(alt || '')}"></div>`;
+  }
+  const fbAttr = fallback ? ` data-fallback="${escH(fallback)}"` : '';
+  return `<img class="${cls || 'vp-img'}" src="${escH(src)}" alt="${escH(alt || '')}" loading="lazy" decoding="async"${fbAttr} onerror="window._vpImgFallback && window._vpImgFallback(this)">`;
 }
 
 function _vpThImg(level) {
@@ -10489,11 +10553,17 @@ function _vpThImg(level) {
 }
 
 function _vpMissCard(m) {
-  return `<div class="vp-miss-card" title="${escH(m.name)} ${m.from}→${m.to}">
+  const timeBit =
+    m.time_sec != null && Number(m.time_sec) > 0
+      ? `<div class="vp-miss-time">${_vpFmtTime(m.time_sec)}</div>`
+      : '';
+  const title = `${m.name || ''} ${m.from}→${m.to}${m.time_sec ? ` · ${_vpFmtTime(m.time_sec)}` : ''}`;
+  return `<div class="vp-miss-card" title="${escH(title)}">
     ${_vpImg(m.icon, m.name, 'vp-miss-img')}
     <div class="vp-miss-body">
       <div class="vp-miss-name">${escH(m.name)}</div>
       <div class="vp-miss-lv"><span class="vp-lv-from">${m.from}</span><span class="vp-lv-arrow">→</span><span class="vp-lv-to">${m.to}</span></div>
+      ${timeBit}
     </div>
   </div>`;
 }
@@ -10502,24 +10572,32 @@ function _renderVpResults(summary, meta = {}) {
   const box = document.getElementById('vp-results');
   if (!box || !summary) return;
   box.style.display = 'block';
+  window._vpViewSummary = summary;
+  window._vpViewMeta = meta || {};
+  _vpSyncBoostButtons();
   const home = summary.home || {};
   const builder = summary.builder || {};
   const th = summary.th_level ?? '?';
   const bh = summary.bh_level;
+  const gpOn = window._vpGoldPassPct === 20;
 
   const metaLine = meta.from
-    ? `<p class="page-sub vp-meta">Fonte: ${escH(meta.from)}${meta.at ? ` · ${escH(new Date(meta.at).toLocaleString('it-IT'))}` : ''}${meta.tag ? ` · ${escH(meta.tag)}` : ''}</p>`
-    : '';
+    ? `<p class="page-sub vp-meta">Fonte: ${escH(meta.from)}${meta.at ? ` · ${escH(new Date(meta.at).toLocaleString('it-IT'))}` : ''}${meta.tag ? ` · ${escH(meta.tag)}` : ''}${gpOn ? ' · <span class="vp-gp-badge">Gold Pass −20%</span>' : ''}</p>`
+    : gpOn
+      ? `<p class="page-sub vp-meta"><span class="vp-gp-badge">Gold Pass −20% tempi attivo</span></p>`
+      : '';
 
   function villageBlock(title, village, hallKind, hallLevel) {
     const cats = village.categories || {};
+    const bhLvl = hallLevel != null ? Math.max(1, Math.min(10, Number(hallLevel) || 10)) : 10;
     const hallImg =
       hallKind === 'th'
         ? _vpThImg(hallLevel)
         : _vpImg(
-            'https://cdn.jsdelivr.net/npm/clash-of-clans-data@0.18.0/images/builder/builder-hall/normal/level-10.png',
+            `https://cdn.jsdelivr.net/npm/clash-of-clans-data@0.18.0/images/builder/builder-hall/normal/level-${bhLvl}.png`,
             'BH',
-            'vp-hall-img'
+            'vp-hall-img',
+            'https://cdn.jsdelivr.net/npm/clash-of-clans-data@0.18.0/images/builder/builder-hall/normal/level-10.png'
           );
 
     const catCards = Object.keys(cats)
@@ -10531,6 +10609,9 @@ function _renderVpResults(summary, meta = {}) {
         const missHtml = miss.length
           ? `<div class="vp-miss-grid">${miss.map(_vpMissCard).join('')}${(c.missing || []).length > 12 ? `<div class="vp-miss-more">+${(c.missing || []).length - 12}</div>` : ''}</div>`
           : `<div class="vp-cat-done">Completo per il tuo ${hallKind.toUpperCase()}</div>`;
+        const timeLabel = gpOn
+          ? `Tempo <span class="vp-gp-inline">GP</span>`
+          : 'Tempo';
         return `<details class="vp-cat-card"${(c.pct_th || 0) < 0.95 ? ' open' : ''}>
           <summary class="vp-cat-sum">
             ${_vpImg(c.icon, VP_CAT_LABELS[k] || k, 'vp-cat-icon')}
@@ -10543,7 +10624,7 @@ function _renderVpResults(summary, meta = {}) {
           <div class="vp-cat-body">
             <div class="vp-cat-costs">
               <div><span class="vp-cost-lbl">Costo</span> ${_vpFmtCost(c.cost_th)}</div>
-              <div><span class="vp-cost-lbl">Tempo</span> ${_vpFmtTime(c.time_sec_th)}</div>
+              <div><span class="vp-cost-lbl">${timeLabel}</span> ${_vpFmtTime(c.time_sec_th)}</div>
             </div>
             ${missHtml}
           </div>
@@ -10571,7 +10652,7 @@ function _renderVpResults(summary, meta = {}) {
           ${_vpBar(village.pct_global)}
         </div>
         <div class="vp-stat vp-stat--wide">
-          <div class="vp-stat-lbl">Rimanente (TH)</div>
+          <div class="vp-stat-lbl">Rimanente (TH)${gpOn ? ' · tempi GP' : ''}</div>
           <div class="vp-stat-val vp-stat-val--sm">${_vpFmtCost(village.cost_th)}</div>
           <div class="vp-stat-sub">${_vpFmtTime(village.time_sec_th)}</div>
         </div>
@@ -10614,13 +10695,19 @@ function _renderVpResults(summary, meta = {}) {
         ? `<section class="vp-village"><h3 class="profilo-section-title">Upgrade in corso</h3><div class="vp-upg-grid">${upgrades}</div></section>`
         : ''
     }
-    <p class="page-sub vp-disclaimer">${escH(summary.disclaimer || '')}</p>
+    <p class="page-sub vp-disclaimer">${escH(
+      gpOn
+        ? 'Tempi mostrati con Gold Pass −20% (builder/ricerca). Costi invariati. Stime senza rune, code o pozioni.'
+        : summary.disclaimer ||
+            'Stime base senza rune, code builder o pozioni. Usa Gold Pass −20% per applicare lo sconto tempi.'
+    )}</p>
   `;
 }
 
 async function loadVillageProgressTab() {
   const status = document.getElementById('vp-import-status');
   if (status) status.textContent = '';
+  _vpSyncBoostButtons();
   try {
     window._vpData = await profilesApi('village-progress-get');
   } catch (e) {

@@ -4,7 +4,12 @@
  * Calcolo progresso villaggio vs max TH corrente e max globale.
  */
 
-const { loadDataset, getIconUrl, getCategoryIconUrl } = require('./village-progress-dataset');
+const {
+  loadDataset,
+  getIconUrl,
+  getCategoryIconUrl,
+  rehydrateSummaryIcons,
+} = require('./village-progress-dataset');
 const { emptyCost } = require('./village-progress-parser');
 
 const HOME_CATS = [
@@ -28,7 +33,10 @@ const HOME_CATS = [
 const BUILDER_CATS = ['buildings', 'traps', 'troops', 'heroes'];
 
 const DISCLAIMER =
-  'Stime senza boost, rune, sconti Gold Pass o coda builder. I moduli crafting senza dati possono essere incompleti.';
+  'Stime base senza rune, code builder o pozioni. Usa i pulsanti Gold Pass in pagina per applicare lo sconto tempi (−20%). I moduli crafting senza dati possono essere incompleti.';
+
+/** Sconto tempi Gold Pass tipico (builder + research). */
+const GOLD_PASS_TIME_DISCOUNT = 0.2;
 
 function emptyCat() {
   return {
@@ -118,10 +126,11 @@ function analyzeEntity(ent, ownedRows, hallLevel, hallGlobal) {
           dataId: ent.dataId,
           name: ent.nameIt || ent.name,
           nameEn: ent.name,
-          icon: getIconUrl(ent.dataId),
+          icon: getIconUrl(ent.dataId, { level: maxLvlTh || capped || 1 }),
           from: capped,
           to: maxLvlTh,
           piece: i + 1,
+          time_sec: gap.time,
         });
       }
     }
@@ -250,7 +259,7 @@ function calculateProgress(parsed) {
     active_upgrades.push({
       name: it.name,
       dataId: it.dataId,
-      icon: getIconUrl(it.dataId),
+      icon: getIconUrl(it.dataId, { level: it.lvl || 1 }),
       lvl: it.lvl,
       village: it.village,
       eta_unix: Number(parsed.gameTimestamp) + Number(it.timer),
@@ -259,7 +268,7 @@ function calculateProgress(parsed) {
   }
   active_upgrades.sort((a, b) => a.eta_unix - b.eta_unix);
 
-  return {
+  const summary = {
     th_level: th,
     bh_level: bh,
     home,
@@ -267,7 +276,9 @@ function calculateProgress(parsed) {
     active_upgrades: active_upgrades.slice(0, 30),
     disclaimer: DISCLAIMER,
     dataset_version: ds.version,
+    gold_pass_time_discount: GOLD_PASS_TIME_DISCOUNT,
   };
+  return rehydrateSummaryIcons(summary);
 }
 
 module.exports = {
@@ -275,4 +286,5 @@ module.exports = {
   HOME_CATS,
   BUILDER_CATS,
   DISCLAIMER,
+  GOLD_PASS_TIME_DISCOUNT,
 };
