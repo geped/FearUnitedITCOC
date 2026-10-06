@@ -1,4 +1,5 @@
 const express = require('express');
+const fetch = require('../shared/fetch-with-timeout').createBoundedFetch(15000);
 const compression = require('compression');
 const { createClient } = require('@supabase/supabase-js');
 const WebSocket = require('ws');
@@ -48,7 +49,8 @@ function supabase() {
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
     return createClient(process.env.SUPABASE_URL, key, {
         auth: { autoRefreshToken: false, persistSession: false },
-        realtime: { transport: WebSocket }
+        realtime: { transport: WebSocket },
+        global: { fetch }
     });
 }
 
@@ -1033,10 +1035,12 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`[cocboard] Unified service listening on port ${PORT}`);
 
-    // Self-ping su localhost: zero banda outbound (evita round-trip su URL pubblico Render).
-    const pingUrl = `http://127.0.0.1:${PORT}/health`;
+    // Localhost traffic does not reach Render's ingress. Public self-ping is
+    // best effort only: it cannot revive a stopped process or guarantee uptime.
+    const publicUrl = (process.env.RENDER_EXTERNAL_URL || '').trim().replace(/\/$/, '');
+    const pingUrl = publicUrl ? `${publicUrl}/health` : null;
     const KEEP_ALIVE_MS = 13 * 60 * 1000;
-    setInterval(() => {
+    if (pingUrl) setInterval(() => {
         fetch(pingUrl, { signal: AbortSignal.timeout(10000) })
             .then(() => console.log('[keep-alive] ping ok', new Date().toISOString()))
             .catch(err => console.warn('[keep-alive] ping failed:', err.message));

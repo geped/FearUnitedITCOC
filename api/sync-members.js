@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const fetch = require('../shared/fetch-with-timeout').createBoundedFetch(45000);
 const { isAccountAdmin } = require('./_utils/require-role');
 
 function isAuthorizedSecret(req) {
@@ -54,12 +55,12 @@ async function authorizeUserJwtForClan(req, clanTag) {
 
 module.exports = async (req, res) => {
     try {
-        if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+        if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'Method not allowed' });
 
         const clanTag = req.query.clanTag || req.body?.clanTag;
-        if (!clanTag) return res.status(400).json({ error: 'clanTag obbligatorio.' });
-
         const secretAuth = isAuthorizedSecret(req);
+        if (req.method === 'GET' && !secretAuth.ok) return res.status(401).json({ error: secretAuth.reason });
+        if (!clanTag && req.method === 'POST') return res.status(400).json({ error: 'clanTag obbligatorio.' });
         if (!secretAuth.ok) {
             const userAuth = await authorizeUserJwtForClan(req, clanTag);
             if (!userAuth.ok) {
@@ -70,13 +71,37 @@ module.exports = async (req, res) => {
         const proxyUrl = process.env.RENDER_PROXY_URL;
         if (!proxyUrl) return res.status(500).json({ error: 'RENDER_PROXY_URL non configurata su Vercel.' });
 
-        // Attende il risveglio del proxy (Render free: cold start ~15–40s).
-        try {
-            await fetch(`${proxyUrl}/health`, { signal: AbortSignal.timeout(35000) });
-        } catch (_) {
-            /* prosegui comunque */
+        if (!clanTag) {
+            const deadline = AbortSignal.timeout(50000);
+            const db = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+                auth: { autoRefreshToken: false, persistSession: false },
+                global: { fetch: (url, options) => fetch(url, { ...options, signal: deadline }) },
+            });
+            const { data, error } = await db.from('members').select('clan_tag').not('clan_tag', 'is', null);
+            if (error) throw error;
+            const tags = [...new Set((data || []).map(row => row.clan_tag).filter(Boolean))];
+            const results = [];
+            let cursor = 0;
+            await Promise.all(Array.from({ length: Math.min(3, tags.length) }, async () => {
+                while (cursor < tags.length) {
+                    const tag = tags[cursor++];
+                    try {
+                        const response = await fetch(`${proxyUrl}/sync?clanTag=${encodeURIComponent(tag)}`, {
+                            method: 'POST', headers: { 'x-sync-key': process.env.SYNC_SECRET || '' }, signal: deadline,
+                        });
+                        const result = await response.json();
+                        if (!response.ok) throw new Error(result.error || `Proxy HTTP ${response.status}`);
+                        results.push({ clan_tag: tag, ok: true, result });
+                    } catch (err) {
+                        results.push({ clan_tag: tag, ok: false, error: err.message });
+                    }
+                }
+            }));
+            return res.status(results.some(row => !row.ok) ? 502 : 200).json({ results });
         }
 
+        // A single request also wakes Render; avoid stacking 35s + 50s
+        // of waits inside a function capped at 60s.
         const response = await fetch(
             `${proxyUrl}/sync?clanTag=${encodeURIComponent(clanTag)}`,
             {

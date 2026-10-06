@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const fetch = require('../shared/fetch-with-timeout').createBoundedFetch(20000);
 const profiles = require('./_utils/user-profiles');
 
 const COC_ROLE_MAP = profiles.COC_ROLE_MAP;

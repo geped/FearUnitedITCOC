@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const fetch = require('../../shared/fetch-with-timeout').createBoundedFetch(10000);
 const { createClient } = require('@supabase/supabase-js');
 const { requireRole } = require('../_utils/require-role');
 

@@ -1,3 +1,4 @@
+const fetch = require('../../shared/fetch-with-timeout').createBoundedFetch(45000);
 /**
  * Client condiviso per le chiamate al render-proxy.
  * Centralizza URL, headers e gestione errori — evita duplicazione negli endpoint Vercel.
@@ -30,18 +31,30 @@ async function proxyFetch(res, path, params = {}) {
 
     const url = `${proxyUrl}${path}${qs ? '?' + qs : ''}`;
 
-    const response = await fetch(url, {
-        headers: { 'x-sync-key': process.env.SYNC_SECRET || '' }
-    });
+    try {
+        const response = await fetch(url, {
+            headers: { 'x-sync-key': process.env.SYNC_SECRET || '' }
+        });
 
-    const data = await response.json().catch(() => ({}));
+        const data = await response.json();
 
-    if (!response.ok) {
-        res.status(response.status).json({ error: data.error || `Proxy error ${response.status}` });
+        if (!response.ok) {
+            res.status(response.status).json({ error: data.error || `Proxy error ${response.status}` });
+            return null;
+        }
+
+        return data;
+    } catch (err) {
+        const timeout = ['TimeoutError', 'AbortError'].includes(err.name);
+        res.setHeader('Cache-Control', 'no-store');
+        if (timeout) res.setHeader('Retry-After', '30');
+        console.error('[proxy-fetch]', { path, code: timeout ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_ERROR' });
+        res.status(timeout ? 503 : 502).json({
+            error: timeout ? 'Il server è in avvio o non risponde. Riprova tra 30 secondi.' : 'Risposta del server non disponibile.',
+            code: timeout ? 'UPSTREAM_TIMEOUT' : 'UPSTREAM_ERROR',
+        });
         return null;
     }
-
-    return data;
 }
 
 module.exports = { proxyFetch };

@@ -1,4 +1,5 @@
 // Cache bot username per l'intera vita dell'istanza serverless.
+const fetch = require('../shared/fetch-with-timeout').createBoundedFetch(20000);
 let _cachedBotUsername = null;
 async function fetchBotUsername(botToken) {
     if (_cachedBotUsername) return _cachedBotUsername;
@@ -1114,6 +1115,11 @@ module.exports = async (req, res) => {
         }
         res.status(r.status).json(data);
     } catch (err) {
+        if (['TimeoutError', 'AbortError'].includes(err.name)) {
+            res.setHeader('Cache-Control', 'no-store');
+            res.setHeader('Retry-After', '30');
+            return res.status(503).json({ error: 'Server temporaneamente non disponibile. Riprova tra 30 secondi.', code: 'UPSTREAM_TIMEOUT' });
+        }
         res.status(500).json({ error: err.message });
     }
 };

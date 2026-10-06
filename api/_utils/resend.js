@@ -1,4 +1,5 @@
 'use strict';
+const fetch = require('../../shared/fetch-with-timeout').createBoundedFetch(10000);
 
 /**
  * Invio email transazionali (benvenuto, reset password, avvisi).

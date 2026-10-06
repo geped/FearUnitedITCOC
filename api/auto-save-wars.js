@@ -1,3 +1,4 @@
+const fetch = require('../shared/fetch-with-timeout').createBoundedFetch(50000);
 function isAuthorized(req) {
     const authHeader = req.headers['authorization'] || '';
     const provided = String(authHeader).replace(/^Bearer\s+/i, '').trim();
@@ -9,7 +10,7 @@ function isAuthorized(req) {
 }
 
 module.exports = async (req, res) => {
-    if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+    if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'GET/POST only' });
     try {
         const auth = isAuthorized(req);
         if (!auth.ok) return res.status(401).json({ error: auth.reason });
@@ -34,11 +35,14 @@ module.exports = async (req, res) => {
             return res.status(200).json(data);
         }
         const [classicRes, cwlRes, raidsRes] = await Promise.allSettled([
-            fetch(`${proxyUrl}/save-all-wars`, { method: 'POST', headers: syncHeaders }).then(r => r.json()),
-            fetch(`${proxyUrl}/save-all-cwl`,  { method: 'POST', headers: syncHeaders }).then(r => r.json()),
-            fetch(`${proxyUrl}/save-all-raids`, { method: 'POST', headers: syncHeaders }).then(r => r.json()),
+            ...['/save-all-wars', '/save-all-cwl', '/save-all-raids'].map(async path => {
+                const r = await fetch(`${proxyUrl}${path}`, { method: 'POST', headers: syncHeaders });
+                const data = await r.json();
+                if (!r.ok) throw new Error(data.error || `Proxy HTTP ${r.status}`);
+                return data;
+            }),
         ]);
-        res.status(200).json({
+        res.status([classicRes, cwlRes, raidsRes].some(r => r.status === 'rejected') ? 502 : 200).json({
             classic: classicRes.status === 'fulfilled' ? classicRes.value : { error: classicRes.reason?.message },
             cwl:     cwlRes.status === 'fulfilled'     ? cwlRes.value     : { error: cwlRes.reason?.message },
             raids:   raidsRes.status === 'fulfilled'   ? raidsRes.value   : { error: raidsRes.reason?.message },
