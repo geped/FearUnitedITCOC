@@ -57,3 +57,29 @@ test('scheduled war save accepts authenticated GET and reports upstream HTTP fai
         }
     }
 });
+
+test('keepalive reports unhealthy Render as a failed HTTP invocation', async () => {
+    const handler = require('../api/lookup');
+    const previous = globalThis.fetch;
+    const oldSecret = process.env.CRON_SECRET;
+    const oldUrl = process.env.RENDER_PROXY_URL;
+    process.env.CRON_SECRET = 'test-secret';
+    process.env.RENDER_PROXY_URL = 'https://example.test';
+    try {
+        globalThis.fetch = async () => new Response('Unavailable', { status: 503 });
+        const res = {
+            status(code) { this.code = code; return this; },
+            json(body) { this.body = body; return this; },
+            setHeader() {},
+        };
+        await handler({ method: 'GET', headers: { authorization: 'Bearer test-secret' }, query: { type: 'ping' } }, res);
+        assert.equal(res.code, 502);
+        assert.equal(res.body.ok, false);
+        assert.equal(res.body.status, 503);
+    } finally {
+        globalThis.fetch = previous;
+        for (const [key, value] of [['CRON_SECRET', oldSecret], ['RENDER_PROXY_URL', oldUrl]]) {
+            if (value === undefined) delete process.env[key]; else process.env[key] = value;
+        }
+    }
+});

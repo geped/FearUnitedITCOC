@@ -19,6 +19,17 @@ header di autenticazione. Nessun secret va inserito nell'URL.
 Il monitor esterno può risvegliare Render ma non supera quote o indisponibilità
 del provider; controllare gli errori e l'eventuale disabilitazione del job.
 
+Configurazione poi fornita: cron-job.org chiama ogni 5 minuti
+`https://cocboard.vercel.app/api/lookup?type=ping`, timeout 30s, Authorization.
+Questo genera circa 2016 invocazioni Vercel/settimana. Il codice ping attende
+Render fino a 28s: può fallire durante un risveglio più lungo. Corretto il falso
+successo HTTP 200 per risposte Render non-2xx; mantenuto il limite specifico 28s.
+Configurazione consigliata per il solo keepalive: GET diretto
+`https://fearuniteditcoc.onrender.com/health` ogni 5 minuti, nessun header segreto,
+notifiche fallimento/recupero/disattivazione attive. L'URL va confermato nella
+dashboard Render. Questa configurazione è proposta, non applicata al job esterno.
+Il segreto condiviso in chat va ruotato nelle impostazioni; non è salvato qui.
+
 ## Correzioni preparate
 
 | Problema | Correzione |

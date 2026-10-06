@@ -446,7 +446,7 @@ module.exports = async (req, res) => {
             let r;
             let lastErr;
             try {
-                r = await fetch(`${proxyUrl}/health`, {
+                r = await globalThis.fetch(`${proxyUrl}/health`, {
                     signal: AbortSignal.timeout(fetchTimeoutMs),
                 });
             } catch (e) {
@@ -460,7 +460,8 @@ module.exports = async (req, res) => {
                 });
             }
             const ms = Date.now() - started;
-            return res.status(200).json({ ok: r.ok, status: r.status, ms });
+            res.setHeader('Cache-Control', 'no-store');
+            return res.status(r.ok ? 200 : 502).json({ ok: r.ok, status: r.status, ms });
         } else if (type === 'session-clan') {
             if (req.method !== 'GET') {
                 return res.status(405).json({ error: 'Metodo non consentito.' });
