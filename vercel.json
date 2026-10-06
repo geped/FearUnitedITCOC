@@ -1,11 +1,15 @@
 {
   "functions": {
-    "api/*.js": {
-      "maxDuration": 60
-    },
-    "api/admin/*.js": {
-      "maxDuration": 60
-    },
+    "api/admin/users.js": { "maxDuration": 60 },
+    "api/auto-save-wars.js": { "maxDuration": 60 },
+    "api/clan-info.js": { "maxDuration": 60 },
+    "api/clan-members.js": { "maxDuration": 60 },
+    "api/cwl-stats.js": { "maxDuration": 60 },
+    "api/generate-bonuses.js": { "maxDuration": 60 },
+    "api/import-bonus.js": { "maxDuration": 60 },
+    "api/purge-ex-players.js": { "maxDuration": 60 },
+    "api/register-with-coc.js": { "maxDuration": 60 },
+    "api/war-log.js": { "maxDuration": 60 },
     "api/lookup.js": {
       "maxDuration": 60,
       "includeFiles": "data/coc-village/**"
