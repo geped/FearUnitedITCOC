@@ -490,12 +490,11 @@
                     </div>
 
                     <div id="assign-month-selector" class="card" style="margin-bottom:1rem">
-                        <div class="form-row">
-                            <label class="form-label-inline">
-                                📅 Seleziona mese
-                                <input type="month" id="assign-season-pick" class="form-input-sm">
-                            </label>
-                            <button class="btn-primary btn-sm" onclick="loadAssignMonth()">Carica</button>
+                        <div class="form-row assign-season-row">
+                            <span class="form-label-inline">📅 Stagione CWL</span>
+                            <div class="cwl-season-picker" data-for="assign-season-pick" data-onchange="loadAssignMonth">
+                                <input type="hidden" id="assign-season-pick">
+                            </div>
                             <span id="assign-load-status"></span>
                             <button id="open-bonus-modal" class="btn-secondary btn-sm admin-only" style="display:none;margin-left:auto">📋 Criteri Bonus</button>
                         </div>
@@ -1030,7 +1029,8 @@
           </label>
         </div>
         <div class="form-row" style="margin-top:0.75rem;gap:0.75rem">
-          <label class="form-label-inline">Stagione <input type="month" id="bm-season" class="form-input-sm"></label>
+          <span class="form-label-inline">Stagione</span>
+          <div class="cwl-season-picker" data-for="bm-season"><input type="hidden" id="bm-season"></div>
           <label class="form-label-inline">N° bonus <input type="number" id="bm-bonus-count" value="6" min="1" max="8" class="num-input"></label>
           <button id="bm-apply" class="btn-primary btn-sm" onclick="applyBonusCriteria()">🔍 Applica</button>
         </div>
@@ -1039,8 +1039,8 @@
       <!-- MANUALE -->
       <div id="bm-manual-section" style="display:none">
         <div class="form-row" style="margin-bottom:0.5rem">
-          <label class="form-label-inline">Stagione <input type="month" id="bm-manual-season" class="form-input-sm"></label>
-          <button class="btn-primary btn-sm" onclick="loadManualMemberList()">📋 Carica</button>
+          <span class="form-label-inline">Stagione</span>
+          <div class="cwl-season-picker" data-for="bm-manual-season" data-onchange="loadManualMemberList"><input type="hidden" id="bm-manual-season"></div>
         </div>
         <p style="font-size:0.82rem;color:var(--text-3);margin-bottom:0.6rem">
           Seleziona chi ha ricevuto il bonus CWL questa stagione.

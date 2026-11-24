@@ -5687,31 +5687,22 @@ async function loadAssignBonus() {
       if (liveBadge) liveBadge.style.display = 'none';
       cwlLiveData = null;
 
-      const pick = document.getElementById('assign-season-pick');
-      if (pick && !pick.value) pick.value = new Date().toISOString().slice(0, 7);
-
-      status.textContent = 'Nessuna CWL in corso. Seleziona un mese storico.';
+      status.textContent = 'Nessuna CWL in corso. Seleziona una stagione dallo storico.';
       await loadAssignMostRecent();
     }
   } catch (err) {
     status.textContent = '⚠ API non disponibile. Seleziona un mese manualmente.';
     const selector = document.getElementById('assign-month-selector');
     if (selector) selector.style.display = 'block';
-    const pick = document.getElementById('assign-season-pick');
-    if (pick && !pick.value) pick.value = new Date().toISOString().slice(0, 7);
     await loadAssignMostRecent();
   }
 }
 
 async function loadAssignMostRecent() {
-  const qRecent = db.from('cwl_history').select('season').order('season', { ascending: false }).limit(1);
-  if (window._userClanTag) qRecent.eq('clan_tag', window._userClanTag);
-  const { data } = await qRecent;
-  if (data?.[0]?.season) {
-    const pick = document.getElementById('assign-season-pick');
-    if (pick) pick.value = data[0].season;
-    await loadAssignMonth(data[0].season);
-  }
+  const keys = await refreshCwlSeasonPickers();
+  const cur = document.getElementById('assign-season-pick')?.value;
+  const target = cur && keys.includes(cur) ? cur : keys[0];
+  if (target) await loadAssignMonth(target);
 }
 
 async function loadAssignLive() {
@@ -5779,30 +5770,183 @@ async function saveCwlSeasonLive() {
   } else {
     if (status) status.textContent = `✓ Stagione ${season} salvata — ${rows.length} giocatori. Ora assegna i bonus.`;
     // Reload the assign content to reflect saved data
+    _cwlSeasonKeysCache.at = 0;
+    await refreshCwlSeasonPickers(true);
     await loadAssignMonth(season);
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   SELETTORE STAGIONI CWL (sostituisce <input type="month"> nativo)
+   Markup: <div class="cwl-season-picker" data-for="ID" data-onchange="fn">
+             <input type="hidden" id="ID"></div>
+   ═══════════════════════════════════════════════════════════════ */
+const _CSP_MONTHS = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+  'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+
+function _cspLabel(key) {
+  const [y, m] = String(key || '').split('-');
+  const name = _CSP_MONTHS[+m] || key;
+  const idx = cwlDoubleIndex(key);
+  return {
+    main: `${name} ${y}`,
+    tag: idx === 1 ? '1ª CWL' : idx === 2 ? '2ª CWL · bonus' : '',
+    note: cwlSeasonStatsUnavailable(key) ? 'statistiche non registrate' : '',
+  };
+}
+
+function _cspWrap(id) {
+  return document.querySelector(`.cwl-season-picker[data-for="${id}"]`);
+}
+
+/** Imposta il valore (chiave stagione) e aggiorna l'etichetta del pulsante. */
+function setCwlSeasonPicker(id, key) {
+  const input = document.getElementById(id);
+  if (input) input.value = key || '';
+  const wrap = _cspWrap(id);
+  const btn = wrap?.querySelector('.csp-btn');
+  if (!btn) return;
+  if (!key) { btn.innerHTML = '<span class="csp-main csp-placeholder">Seleziona stagione</span><span class="csp-caret">▾</span>'; return; }
+  const l = _cspLabel(key);
+  btn.innerHTML = `<span class="csp-main">${escH(l.main)}</span>${l.tag ? `<span class="csp-tag">${escH(l.tag)}</span>` : ''}<span class="csp-caret">▾</span>`;
+  wrap.querySelectorAll('.csp-opt').forEach(o => o.setAttribute('aria-selected', o.dataset.key === key ? 'true' : 'false'));
+}
+
+function _cspClose(wrap) {
+  const panel = wrap?.querySelector('.csp-panel');
+  if (!panel || panel.hidden) return;
+  panel.hidden = true;
+  wrap.querySelector('.csp-btn')?.setAttribute('aria-expanded', 'false');
+}
+
+function _cspCloseAll(except) {
+  document.querySelectorAll('.cwl-season-picker').forEach(w => { if (w !== except) _cspClose(w); });
+}
+
+function _cspSelect(wrap, key) {
+  const id = wrap.dataset.for;
+  setCwlSeasonPicker(id, key);
+  _cspClose(wrap);
+  wrap.querySelector('.csp-btn')?.focus();
+  const fn = wrap.dataset.onchange;
+  if (fn && typeof window[fn] === 'function') window[fn](key);
+}
+
+/** Costruisce/aggiorna tutti i selettori presenti nella pagina con le stagioni del clan. */
+async function refreshCwlSeasonPickers(force = false) {
+  const wraps = [...document.querySelectorAll('.cwl-season-picker')];
+  if (!wraps.length) return [];
+  const keys = await getCwlSeasonKeys(force);
+  for (const wrap of wraps) {
+    const id = wrap.dataset.for;
+    let btn = wrap.querySelector('.csp-btn');
+    let panel = wrap.querySelector('.csp-panel');
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'csp-btn';
+      btn.setAttribute('aria-haspopup', 'listbox');
+      btn.setAttribute('aria-expanded', 'false');
+      wrap.appendChild(btn);
+      panel = document.createElement('div');
+      panel.className = 'csp-panel';
+      panel.setAttribute('role', 'listbox');
+      panel.hidden = true;
+      wrap.appendChild(panel);
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const open = panel.hidden;
+        _cspCloseAll(wrap);
+        panel.hidden = !open;
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        if (open) (panel.querySelector('.csp-opt[aria-selected="true"]') || panel.querySelector('.csp-opt'))?.focus();
+      });
+      panel.addEventListener('keydown', (e) => {
+        const opts = [...panel.querySelectorAll('.csp-opt')];
+        const i = opts.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown') { e.preventDefault(); opts[Math.min(i + 1, opts.length - 1)]?.focus(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); opts[Math.max(i - 1, 0)]?.focus(); }
+        else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); _cspClose(wrap); btn.focus(); }
+      });
+    }
+    if (!keys.length) {
+      panel.innerHTML = '<div class="csp-empty">Nessuna stagione CWL salvata.</div>';
+    } else {
+      let lastYear = '';
+      panel.innerHTML = keys.map(k => {
+        const y = k.slice(0, 4);
+        const head = y !== lastYear ? `<div class="csp-year">${y}</div>` : '';
+        lastYear = y;
+        const l = _cspLabel(k);
+        return `${head}<button type="button" role="option" class="csp-opt" data-key="${escH(k)}">
+          <span class="csp-main">${escH(l.main)}</span>
+          ${l.tag ? `<span class="csp-tag">${escH(l.tag)}</span>` : ''}
+          ${l.note ? `<span class="csp-note">⚠️ ${escH(l.note)}</span>` : ''}
+        </button>`;
+      }).join('');
+      panel.querySelectorAll('.csp-opt').forEach(o => o.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _cspSelect(wrap, o.dataset.key);
+      }));
+    }
+    const cur = document.getElementById(id)?.value;
+    setCwlSeasonPicker(id, cur && (keys.includes(cur) || !keys.length) ? cur : (cur || ''));
+  }
+  return keys;
+}
+
+document.addEventListener('click', () => _cspCloseAll(null));
+
+/** Cache stagioni CWL del clan (chiavi reali di cwl_history, più recenti prima). */
+let _cwlSeasonKeysCache = { clan: null, keys: null, at: 0 };
+
+async function getCwlSeasonKeys(force = false) {
+  const clan = window._userClanTag || '';
+  const fresh = Date.now() - _cwlSeasonKeysCache.at < 60_000;
+  if (!force && fresh && _cwlSeasonKeysCache.clan === clan && _cwlSeasonKeysCache.keys) {
+    return _cwlSeasonKeysCache.keys;
+  }
+  let keys = [];
+  try {
+    // Paginato: lo storico supera il limite di righe di una singola risposta
+    for (let from = 0; from < 20000; from += 1000) {
+      let q = db.from('cwl_history').select('season').order('season', { ascending: false }).range(from, from + 999);
+      if (clan) q = q.eq('clan_tag', clan);
+      const { data, error } = await q;
+      if (error || !data?.length) break;
+      data.forEach(r => { if (r.season && !keys.includes(r.season)) keys.push(r.season); });
+      if (data.length < 1000) break;
+    }
+  } catch (_) {}
+  keys.sort((a, b) => b.localeCompare(a));
+  _cwlSeasonKeysCache = { clan, keys, at: Date.now() };
+  return keys;
+}
+
 /**
- * Il selettore mese produce "YYYY-MM", ma la CoC API salva la stagione CWL come "YYYY-MM-01"/"YYYY-MM-02"
- * (in alcuni mesi ci sono state due CWL). Restituisce la chiave reale presente in cwl_history per il clan
- * (la più recente del mese); se non esiste, lascia il valore invariato.
+ * Chiave stagione reale per cwl_history.
+ * - Se la chiave esiste così com'è (es. "2026-06" = 1ª CWL di giugno) si usa quella.
+ * - Se è un mese "YYYY-MM" senza righe, si usa la chiave CoC API del mese ("YYYY-MM-02").
  */
 async function resolveCwlSeasonKey(season) {
   const s = String(season || '').trim();
   if (!/^\d{4}-\d{2}$/.test(s)) return s;
-  try {
-    const q = db.from('cwl_history').select('season').like('season', `${s}-%`)
-      .order('season', { ascending: false }).limit(1);
-    if (window._userClanTag) q.eq('clan_tag', window._userClanTag);
-    const { data } = await q;
-    if (data && data[0]?.season) return data[0].season;
-  } catch (_) {}
-  return s;
+  const keys = await getCwlSeasonKeys();
+  if (keys.includes(s)) return s;
+  const sameMonth = keys.filter(k => k.startsWith(`${s}-`));
+  return sameMonth[0] || s;
+}
+
+/** CWL precedente nello storico del clan (per "escludi bonus stagione precedente"). */
+async function prevCwlSeasonKey(season) {
+  const s = String(season || '');
+  const keys = await getCwlSeasonKeys();
+  return keys.find(k => k.localeCompare(s) < 0) || null;
 }
 
 async function loadAssignMonth(overrideSeason) {
   const season = await resolveCwlSeasonKey(overrideSeason || document.getElementById('assign-season-pick')?.value);
+  if (season) setCwlSeasonPicker('assign-season-pick', season);
   if (!season) {
     const d = document.getElementById('assign-content');
     if (d) d.innerHTML = '<p class="wl-loading">Seleziona un mese.</p>';
@@ -5833,7 +5977,9 @@ async function loadAssignMonth(overrideSeason) {
     });
   }
 
-  if (statusEl) statusEl.textContent = '';
+  if (statusEl) statusEl.textContent = cwlSeasonStatsUnavailable(season)
+    ? '⚠️ 2ª CWL di giugno 2026: statistiche non registrate (copia della 1ª), i bonus sono validi.'
+    : '';
   renderAssignContent(history || [], season, false, expiryMap);
 }
 
@@ -6400,11 +6546,15 @@ let bmSelections = new Set(); // selezioni correnti nel modal
 function openBonusModal() {
   document.getElementById('bonus-modal-overlay').style.display = 'flex';
   document.body.style.overflow = 'hidden';
-  // Imposta mese corrente come default
-  const now = new Date().toISOString().slice(0, 7);
-  if (!document.getElementById('bm-season').value)      document.getElementById('bm-season').value = now;
-  if (!document.getElementById('bm-history-season').value) document.getElementById('bm-history-season').value = now;
   switchBmTab('criteria', document.querySelector('[data-bm-tab="criteria"]'));
+  // Default: stessa stagione aperta nella tabella, altrimenti la più recente
+  refreshCwlSeasonPickers().then((keys) => {
+    const assignCur = document.getElementById('assign-season-pick')?.value;
+    const def = assignCur && keys.includes(assignCur) ? assignCur : keys[0];
+    ['bm-season', 'bm-manual-season'].forEach((id) => {
+      if (!document.getElementById(id)?.value && def) setCwlSeasonPicker(id, def);
+    });
+  }).catch(() => {});
 }
 
 function closeBonusModal() {
@@ -6439,9 +6589,10 @@ function switchBonusMode(mode) {
   document.getElementById('bm-candidates').innerHTML = '';
   document.getElementById('bm-footer').style.display = 'none';
   if (mode === 'manual') {
-    const now = new Date().toISOString().slice(0, 7);
     const el = document.getElementById('bm-manual-season');
-    if (!el.value) el.value = now;
+    const def = document.getElementById('bm-season')?.value;
+    if (!el.value && def) setCwlSeasonPicker('bm-manual-season', def);
+    if (el.value) loadManualMemberList();
   }
 }
 
@@ -6491,8 +6642,7 @@ async function loadManualMemberList() {
   }
 
   // Controlla chi ha già ricevuto il bonus in questa stagione
-  // Tutto il mese: include anche bonus salvati in passato con chiave "YYYY-MM"
-  const qExisting = db.from('cwl_history').select('player_name').like('season', `${String(season).slice(0, 7)}%`).eq('bonus_assigned', true);
+  const qExisting = db.from('cwl_history').select('player_name').eq('season', season).eq('bonus_assigned', true);
   if (window._userClanTag) qExisting.eq('clan_tag', window._userClanTag);
   const { data: existing } = await qExisting;
   const alreadyBonus = new Set((existing || []).map(r => r.player_name));
@@ -6761,12 +6911,12 @@ async function applyBonusCriteria() {
   // Carica bonus stagione precedente per criterio "no prev bonus"
   let prevSeasonBonusNames = new Set();
   if (critNoPrevBonus) {
-    const prevSeason = prevSeasonYM(season);
+    // CWL precedente reale (in un mese con doppia CWL la 2ª guarda la 1ª, non il mese prima)
+    const prevSeason = await prevCwlSeasonKey(season);
     if (prevSeason) {
       const qPrev = db.from('cwl_history')
         .select('player_name')
-        // prevSeason è YYYY-MM: include anche le chiavi CoC API YYYY-MM-01 / YYYY-MM-02
-        .like('season', `${prevSeason}%`)
+        .eq('season', prevSeason)
         .eq('bonus_assigned', true);
       if (window._userClanTag) qPrev.eq('clan_tag', window._userClanTag);
       const { data: prevData } = await qPrev;
@@ -6991,8 +7141,9 @@ async function saveBonusFromModal() {
 
 // ── Storico bonus per mese ────────────────────────────
 async function loadBonusHistory() {
-  const season  = document.getElementById('bm-history-season').value;
+  const season  = document.getElementById('bm-history-season')?.value;
   const div     = document.getElementById('bm-history-results');
+  if (!div) return;
   if (!season) { div.innerHTML = '<p style="color:#5a7a98">Seleziona un mese.</p>'; return; }
 
   div.innerHTML = '<p style="color:#5a7a98;padding:1rem 0">Caricamento…</p>';
@@ -8671,10 +8822,44 @@ const LEAGUE_COLOR = {
 const MONTH_IT = ['', 'Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
                   'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 
+/**
+ * Mesi in cui il gioco ha fatto disputare DUE CWL (evento Supercell).
+ * Per questi mesi le stagioni NON vanno accorpate per mese: ogni chiave è una CWL distinta.
+ * Documentato anche in CLAUDE.md ("Stagioni CWL e doppie CWL") e nel bot (lib/cwl-seasons.js).
+ *  - first/second: chiavi stagione in cwl_history / cwl_seasons / cwl_wars
+ *  - statsCopied: le statistiche salvate per la 2ª CWL sono una copia della 1ª (dati reali non registrati)
+ */
+const DOUBLE_CWL_MONTHS = {
+  '2026-06': {
+    first: '2026-06',
+    second: '2026-06-16',
+    note: 'Giugno 2026: CWL regolare (inizio mese) + CWL bonus (dal 15-16 giugno).',
+    statsCopied: true,
+  },
+};
+
+/** 1 o 2 se la stagione appartiene a un mese con doppia CWL, altrimenti 0. */
+function cwlDoubleIndex(season) {
+  const s = String(season || '');
+  const d = DOUBLE_CWL_MONTHS[s.slice(0, 7)];
+  if (!d) return 0;
+  if (s === d.second) return 2;
+  if (s === d.first) return 1;
+  return 0;
+}
+
+/** True se per questa stagione le statistiche salvate non sono affidabili (copia della 1ª CWL). */
+function cwlSeasonStatsUnavailable(season) {
+  const d = DOUBLE_CWL_MONTHS[String(season || '').slice(0, 7)];
+  return !!(d && d.statsCopied && season === d.second);
+}
+
 function seasonLabel(season) {
   // season = 'YYYY-MM' oppure 'YYYY-MM-DD' (API CWL)
   const [y, m] = String(season || '').split('-');
-  return `Stagione di ${MONTH_IT[+m] || season} ${y}`;
+  const idx = cwlDoubleIndex(season);
+  const suffix = idx === 1 ? ' · 1ª CWL' : idx === 2 ? ' · 2ª CWL (bonus)' : '';
+  return `Stagione di ${MONTH_IT[+m] || season} ${y}${suffix}`;
 }
 
 /** Chiave mese per dedup stagioni CWL: '2026-08-01' e '2026-08' → '2026-08' */
@@ -8710,7 +8895,13 @@ function dedupeCwlSeasonEntries(merged, roundsMap) {
     byMonth.get(mk).push(s);
   }
   const out = [];
-  for (const [, group] of byMonth) {
+  for (const [mk, group] of byMonth) {
+    // Mese con doppia CWL ufficiale: ogni chiave registrata è una CWL distinta
+    const dbl = DOUBLE_CWL_MONTHS[mk];
+    if (dbl) {
+      const keep = group.filter(s => s.season === dbl.first || s.season === dbl.second);
+      if (keep.length) { out.push(...keep); continue; }
+    }
     const fullDates = group.filter(s => String(s.season).length > 7);
     if (fullDates.length >= 2) {
       out.push(...fullDates);
@@ -9072,6 +9263,7 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
       <div class="cwl-season-card${s.hasRounds ? ' cwl-season-card--clickable' : ''}" data-season="${s.season}" style="border-left-color:${leagueColor}"${s.hasRounds ? ` onclick="openCwlSeasonDetail('${s.season}')" title="Clicca per vedere i turni"` : ''}>
         <div class="cwl-card-left">
           <div class="cwl-card-month">${seasonLabel(s.season)} ${liveBadge}</div>
+          ${cwlSeasonStatsUnavailable(s.season) ? '<div class="cwl-card-note" title="I dati salvati per questa CWL sono una copia della 1ª CWL di giugno: le partite reali non sono state registrate">⚠️ Statistiche non disponibili (non registrate)</div>' : ''}
           <div class="cwl-card-league">
             ${badgeUrl
               ? `<img src="${badgeUrl}" class="cwl-league-img" alt="${league}" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='')"><span style="display:none;font-size:1.1rem">${LEAGUE_ICON[league] || '🏆'}</span>`

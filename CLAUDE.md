@@ -321,6 +321,27 @@ Regola UX chat pulita: i messaggi operativi/temporanei del bot (wizard, conferme
 
 ---
 
+## Stagioni CWL e doppie CWL
+
+**Chiavi stagione** (`season` in `cwl_history`, `cwl_seasons`, `cwl_wars`):
+
+- `YYYY-MM` — storico salvato fino a luglio 2026 (unico formato di quei mesi: sono dati veri, non duplicati).
+- `YYYY-MM-NN` — chiave del gruppo lega restituita dalla CoC API (es. `2026-11-02`). `NN` **non** è un giorno da mostrare: l'etichetta è il mese.
+- Mai confrontare stagioni per "mese di calendario": usare la chiave esatta. Il selettore stagioni del sito (`.cwl-season-picker`) e il bot propongono le chiavi reali del clan.
+
+**Doppie CWL (evento Supercell).** In alcuni mesi il gioco ha fatto disputare due CWL. Ogni chiave è una CWL distinta: non accorparle per mese.
+
+| Mese | 1ª CWL | 2ª CWL | Note |
+| ---- | ------ | ------ | ---- |
+| Giugno 2026 | `2026-06` (inizio mese) | `2026-06-16` (CWL bonus dal 15-16 giugno) | Le statistiche salvate per `2026-06-16` sono una **copia** della 1ª CWL (stessi round 2-9 giugno): le partite reali non sono state registrate. I bonus assegnati sono validi. |
+
+- Registro nel codice: `DOUBLE_CWL_MONTHS` in `app.js` **e** `telegram-bot/lib/cwl-seasons.js` (devono restare allineati; `tests/cwl-seasons.test.js` lo verifica).
+- Per un nuovo mese con doppia CWL: aggiungere la voce in entrambi i registri e in questa tabella.
+- "Escludi bonus stagione precedente" = **CWL precedente** nello storico del clan (la 2ª di giugno guarda la 1ª), non il mese prima.
+- Backup `cwl_history` del 2026-11-24 (prima dell'unione delle righe bonus 2026-08/2026-09): tabella `cwl_history_backup_20261124` + `docs/db-backups/`.
+
+---
+
 ## Algoritmo Bonus CWL
 
 ```
@@ -330,7 +351,7 @@ merit = (stelle / attacchi_richiesti) × 40
 ```
 
 - `distruzione_media%` = `destructionPercentage / attacksMade` (media per attacco, non totale)
-- Giocatori che hanno ricevuto il bonus il mese scorso ricevono score = 0 (anti-duplicati)
+- Giocatori che hanno ricevuto il bonus nella CWL precedente ricevono score = 0 (anti-duplicati) — vedi "Stagioni CWL e doppie CWL"
 - Calcolo automatico o override manuale
 - I bonus vengono salvati su `cwl_bonuses` e storicizzati su `cwl_history`
 - Implementazione autorevole: `api/generate-bonuses.js` → `calculateMerit()` + `tests/bonus-calculator.test.js`

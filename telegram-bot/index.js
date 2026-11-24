@@ -15,6 +15,7 @@ const cv = require('./lib/community-validation');
 const comm = require('./lib/community-handlers');
 const privateUi = require('./lib/private-ui-cleanup');
 const bonusAssist = require('./lib/bonus-assistant');
+const cwlSeasons = require('./lib/cwl-seasons');
 const notifUi = require('./lib/notification-settings-ui');
 const notifExt = require('./lib/notifications-extended');
 const profilesUi = require('./lib/profiles-ui');
@@ -2441,16 +2442,8 @@ async function buildSearchPickKb(ctx) {
 }
 
 function bonusAssignSeasonLabelIt(season) {
-  const s = String(season || '').trim();
-  const full = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (full) {
-    const d = new Date(Number(full[1]), Number(full[2]) - 1, Number(full[3]));
-    return d.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' });
-  }
-  const [y, m] = s.split('-');
-  if (!y || !m) return s;
-  const d = new Date(Number(y), Number(m) - 1, 1);
-  return d.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
+  // Chiavi "YYYY-MM-NN" della CoC API non sono giorni; mesi con doppia CWL → 1ª / 2ª CWL
+  return cwlSeasons.cwlSeasonLabelIt(season);
 }
 
 async function renderBonusAssignSeasonPick(ctx, clanTag) {
@@ -2628,7 +2621,12 @@ async function runBonusWizardComputeAndShow(ctx, clanTag, season, slots, mask) {
     await renderBonusAssignModePick(ctx, clanTag, season);
     return;
   }
-  const prev = bonusAssist.prevSeasonYM(season);
+  // CWL precedente reale (nei mesi con doppia CWL la 2ª guarda la 1ª, non il mese prima)
+  let prev = null;
+  if (mask & bonusAssist.EXCL_PREV) {
+    const allSeasons = await sb.listCwlSeasonsForClan(clanTag, 200).catch(() => []);
+    prev = cwlSeasons.prevCwlSeasonKey(season, allSeasons);
+  }
   let prevSet = new Set();
   if (prev && (mask & bonusAssist.EXCL_PREV)) {
     prevSet = await sb.fetchBonusAssignedNamesForSeason(clanTag, prev).catch(() => new Set());

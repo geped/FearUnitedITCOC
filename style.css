@@ -6975,3 +6975,47 @@ option {
 
 /* Esito salvataggio bonus accanto al pulsante */
 .bm-save-status { font-size: 0.8rem; margin-right: auto; margin-left: 0.75rem; }
+
+/* Nota su stagione CWL con statistiche non registrate (2ª CWL giugno 2026) */
+.cwl-card-note { font-size: 0.72rem; color: var(--gold-dim, #c9a227); margin-top: 2px; }
+
+/* ── Selettore stagioni CWL (sostituisce il campo mese nativo del browser) ── */
+.assign-season-row { align-items: center; flex-wrap: wrap; }
+.cwl-season-picker { position: relative; display: inline-block; }
+.csp-btn {
+  display: inline-flex; align-items: center; gap: 0.5rem;
+  min-width: 200px; padding: 0.42rem 0.7rem;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius-sm, 8px);
+  font: inherit; font-size: 0.88rem; cursor: pointer; text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.csp-btn:hover, .csp-btn[aria-expanded="true"] { border-color: var(--gold); }
+.csp-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.csp-caret { margin-left: auto; color: var(--text-3); font-size: 0.75rem; }
+.csp-placeholder { color: var(--text-3); }
+.csp-tag {
+  font-size: 0.68rem; font-weight: 700; padding: 0.08rem 0.4rem; border-radius: 999px;
+  color: var(--gold); border: 1px solid var(--gold-dim, #c9a227); white-space: nowrap;
+}
+.csp-panel {
+  position: absolute; z-index: 60; top: calc(100% + 4px); left: 0;
+  min-width: 100%; width: max-content; max-width: min(320px, 90vw); max-height: 320px; overflow-y: auto;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  padding: 0.3rem;
+}
+.csp-panel[hidden] { display: none; }
+.csp-year {
+  font-size: 0.68rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--text-3); padding: 0.45rem 0.55rem 0.2rem;
+}
+.csp-opt {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; width: 100%;
+  padding: 0.42rem 0.55rem; border: 0; border-radius: 6px; background: transparent;
+  color: inherit; font: inherit; font-size: 0.86rem; text-align: left; cursor: pointer;
+}
+.csp-opt:hover, .csp-opt:focus-visible { background: rgba(255, 255, 255, 0.06); outline: none; }
+.csp-opt[aria-selected="true"] { background: rgba(201, 162, 39, 0.16); color: var(--gold); }
+.csp-note { flex-basis: 100%; font-size: 0.7rem; color: var(--text-2); }
+.csp-empty { padding: 0.6rem; font-size: 0.82rem; color: var(--text-3); }
