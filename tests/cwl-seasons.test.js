@@ -41,3 +41,22 @@ test('registro doppie CWL allineato tra sito (app.js) e bot', () => {
     assert.ok(app.includes(`second: '${d.second}'`), `app.js deve avere second: '${d.second}'`);
   }
 });
+
+test('registro guerre CoC: le due CWL di giugno vanno su stagioni diverse', () => {
+  const vm = require('vm');
+  const app = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  const grab = (re) => app.match(re)[0];
+  const ctx = {};
+  vm.createContext(ctx);
+  vm.runInContext(
+    grab(/const DOUBLE_CWL_MONTHS = \{[\s\S]*?\n\};/) + '\n' +
+    grab(/function cwlSeasonKeyFromWarLogEnd\([\s\S]*?\n\}/) + '\nthis.f = cwlSeasonKeyFromWarLogEnd;',
+    ctx
+  );
+  assert.equal(ctx.f('20260609T171812.000Z'), '2026-06');     // 1ª CWL (15v15)
+  assert.equal(ctx.f('20260624T190316.000Z'), '2026-06-16');  // 2ª CWL bonus (11v11)
+  assert.equal(ctx.f('20261110T184145.000Z'), '2026-11');
+  for (const [, d] of Object.entries(c.DOUBLE_CWL_MONTHS)) {
+    assert.ok(app.includes(`secondFrom: '${d.secondFrom}'`), 'secondFrom allineato tra sito e bot');
+  }
+});

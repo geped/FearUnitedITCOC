@@ -14,8 +14,10 @@ const DOUBLE_CWL_MONTHS = {
   '2026-06': {
     first: '2026-06',
     second: '2026-06-16',
+    secondFrom: '20260615', // voci del registro guerre CoC che terminano da qui in poi = 2ª CWL
     note: 'Giugno 2026: CWL regolare (inizio mese) + CWL bonus (dal 15-16 giugno).',
-    statsCopied: true, // le statistiche salvate per la 2ª CWL sono una copia della 1ª
+    statsCopied: true, // per-giocatore e per-round della 2ª CWL non registrati
+    secondSummary: { endDate: '2026-06-24', teamSize: 11, stars: 224, destruction: 667.9 }, // da registro guerre CoC
   },
 };
 

@@ -5978,7 +5978,7 @@ async function loadAssignMonth(overrideSeason) {
   }
 
   if (statusEl) statusEl.textContent = cwlSeasonStatsUnavailable(season)
-    ? '⚠️ 2ª CWL di giugno 2026: statistiche non registrate (copia della 1ª), i bonus sono validi.'
+    ? '⚠️ 2ª CWL di giugno 2026 (11 vs 11, 224 ⭐): statistiche per giocatore non registrate, i bonus sono validi.'
     : '';
   renderAssignContent(history || [], season, false, expiryMap);
 }
@@ -6887,6 +6887,11 @@ async function applyBonusCriteria() {
     if (window._userClanTag) qCrit.eq('clan_tag', window._userClanTag);
     const { data: history, error } = await qCrit;
 
+    if (!error && history?.length && cwlSeasonStatsUnavailable(season)) {
+      msg.textContent = '⚠ Questa CWL non ha statistiche per giocatore registrate: usa la modalità ✏️ Manuale.';
+      applyBtn.textContent = '🔍 Applica Criteri';
+      return;
+    }
     if (error || !history?.length) {
       msg.textContent = '⚠ Nessun dato per questa stagione. Prima carica lo storico o i dati live dalla tab CWL.';
       applyBtn.textContent = '🔍 Applica Criteri';
@@ -8833,10 +8838,24 @@ const DOUBLE_CWL_MONTHS = {
   '2026-06': {
     first: '2026-06',
     second: '2026-06-16',
+    // Le voci del registro guerre CoC che terminano da questa data in poi sono della 2ª CWL
+    secondFrom: '20260615',
     note: 'Giugno 2026: CWL regolare (inizio mese) + CWL bonus (dal 15-16 giugno).',
+    // Per-giocatore e per-round della 2ª CWL non registrati (la riga copiata è stata corretta il 2026-11-24).
     statsCopied: true,
+    // Risultato di squadra recuperato dal registro guerre CoC API
+    secondSummary: { endDate: '2026-06-24', teamSize: 11, stars: 224, destruction: 667.9 },
   },
 };
+
+/** Chiave stagione per una voce del registro guerre CoC (CWL), separando le doppie CWL. */
+function cwlSeasonKeyFromWarLogEnd(endTime) {
+  const et = String(endTime || '');
+  const month = `${et.slice(0, 4)}-${et.slice(4, 6)}`;
+  const d = DOUBLE_CWL_MONTHS[month];
+  if (d && d.secondFrom && et.slice(0, 8) >= d.secondFrom) return d.second;
+  return month;
+}
 
 /** 1 o 2 se la stagione appartiene a un mese con doppia CWL, altrimenti 0. */
 function cwlDoubleIndex(season) {
@@ -8846,6 +8865,16 @@ function cwlDoubleIndex(season) {
   if (s === d.second) return 2;
   if (s === d.first) return 1;
   return 0;
+}
+
+/** Nota per la 2ª CWL di un mese doppio: risultato di squadra dal registro guerre CoC. */
+function _cwlSecondSummaryNote(season) {
+  const d = DOUBLE_CWL_MONTHS[String(season || '').slice(0, 7)];
+  const sm = d?.secondSummary;
+  const head = sm
+    ? `${sm.teamSize} vs ${sm.teamSize} · ${sm.stars} ⭐ (vittorie incluse) · fine ${sm.endDate.split('-').reverse().join('/')}`
+    : '';
+  return `<div class="cwl-card-note" title="Risultato di squadra dal registro guerre CoC. Statistiche per giocatore e per turno non registrate.">${head ? `${head} · ` : ''}⚠️ dettaglio giocatori non registrato</div>`;
 }
 
 /** True se per questa stagione le statistiche salvate non sono affidabili (copia della 1ª CWL). */
@@ -9017,8 +9046,8 @@ async function loadCwlSeasons() {
       const isAggregated = (w.clan?.stars || 0) > maxStars;
       return (wt === 'cwl' || !w.opponent?.name || isAggregated) && w.endTime;
     }).forEach(w => {
-      // Estrae stagione da endTime: "20250315T000000.000Z" → "2025-03"
-      const s = w.endTime.slice(0, 4) + '-' + w.endTime.slice(4, 6);
+      // Estrae stagione da endTime: "20250315T000000.000Z" → "2025-03" (mesi con doppia CWL → chiave della 2ª)
+      const s = cwlSeasonKeyFromWarLogEnd(w.endTime);
       if (!warSeasonMap[s]) warSeasonMap[s] = { wins: 0, losses: 0, draws: 0, totalStars: 0, totalDestr: 0, teamSize: 0, warCount: 0 };
       const ws = warSeasonMap[s];
       ws.warCount++;
@@ -9263,7 +9292,7 @@ CREATE POLICY "cwl_seasons_write" ON cwl_seasons FOR ALL TO authenticated USING 
       <div class="cwl-season-card${s.hasRounds ? ' cwl-season-card--clickable' : ''}" data-season="${s.season}" style="border-left-color:${leagueColor}"${s.hasRounds ? ` onclick="openCwlSeasonDetail('${s.season}')" title="Clicca per vedere i turni"` : ''}>
         <div class="cwl-card-left">
           <div class="cwl-card-month">${seasonLabel(s.season)} ${liveBadge}</div>
-          ${cwlSeasonStatsUnavailable(s.season) ? '<div class="cwl-card-note" title="I dati salvati per questa CWL sono una copia della 1ª CWL di giugno: le partite reali non sono state registrate">⚠️ Statistiche non disponibili (non registrate)</div>' : ''}
+          ${cwlSeasonStatsUnavailable(s.season) ? _cwlSecondSummaryNote(s.season) : ''}
           <div class="cwl-card-league">
             ${badgeUrl
               ? `<img src="${badgeUrl}" class="cwl-league-img" alt="${league}" onerror="this.style.display='none';this.nextElementSibling&&(this.nextElementSibling.style.display='')"><span style="display:none;font-size:1.1rem">${LEAGUE_ICON[league] || '🏆'}</span>`

@@ -333,12 +333,14 @@ Regola UX chat pulita: i messaggi operativi/temporanei del bot (wizard, conferme
 
 | Mese | 1ª CWL | 2ª CWL | Note |
 | ---- | ------ | ------ | ---- |
-| Giugno 2026 | `2026-06` (inizio mese) | `2026-06-16` (CWL bonus dal 15-16 giugno) | Le statistiche salvate per `2026-06-16` sono una **copia** della 1ª CWL (stessi round 2-9 giugno): le partite reali non sono state registrate. I bonus assegnati sono validi. |
+| Giugno 2026 | `2026-06` (15v15, 2-9 giugno) | `2026-06-16` (CWL bonus **11v11**, fine 24 giugno, 224 ⭐ vittorie incluse) | La 2ª CWL era stata copiata dalla 1ª il 2026-08-02 con una query manuale (fuori dal codice). Il 2026-11-24 è stata corretta: round copiati rimossi, statistiche per giocatore azzerate, risultato di squadra preso dal registro guerre CoC. Per-giocatore e per-round **non recuperabili**. I 4 bonus assegnati sono validi. |
 
 - Registro nel codice: `DOUBLE_CWL_MONTHS` in `app.js` **e** `telegram-bot/lib/cwl-seasons.js` (devono restare allineati; `tests/cwl-seasons.test.js` lo verifica).
 - Per un nuovo mese con doppia CWL: aggiungere la voce in entrambi i registri e in questa tabella.
 - "Escludi bonus stagione precedente" = **CWL precedente** nello storico del clan (la 2ª di giugno guarda la 1ª), non il mese prima.
 - Backup `cwl_history` del 2026-11-24 (prima dell'unione delle righe bonus 2026-08/2026-09): tabella `cwl_history_backup_20261124` + `docs/db-backups/`.
+- Backup `cwl_seasons` / `cwl_wars` del 2026-11-24 (prima della correzione di `2026-06-16`): `cwl_seasons_backup_20261124`, `cwl_wars_backup_20261124`.
+- Le voci CWL del registro guerre CoC sono assegnate alla stagione con `cwlSeasonKeyFromWarLogEnd()` (nei mesi doppi usa `secondFrom`).
 
 ---
 
