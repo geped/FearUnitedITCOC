@@ -6729,7 +6729,8 @@ async function applyBonusCriteria() {
     if (prevSeason) {
       const qPrev = db.from('cwl_history')
         .select('player_name')
-        .eq('season', prevSeason)
+        // prevSeason è YYYY-MM: include anche le chiavi CoC API YYYY-MM-01 / YYYY-MM-02
+        .like('season', `${prevSeason}%`)
         .eq('bonus_assigned', true);
       if (window._userClanTag) qPrev.eq('clan_tag', window._userClanTag);
       const { data: prevData } = await qPrev;
@@ -11427,6 +11428,31 @@ async function fetchCwlLiveSafe(clanTag) {
   }
 }
 
+/**
+ * Intestazione banner war classica coerente con lo stato API:
+ * preparation/inWar = "in corso" (pallino live); warEnded = "conclusa" con esito e data fine.
+ */
+function _warBannerTopHtml(w) {
+  const ended = w?.state === 'warEnded';
+  if (!ended) {
+    return `<div class="wlb-top">
+      <span class="wlb-live-dot"></span>
+      <strong>⚔️ War classica in corso</strong>
+      <span class="wlb-state">${_wlStateLabel(w?.state)}</span>
+    </div>`;
+  }
+  const us = w.clan || {}, them = w.opponent || {};
+  const cs = Number(us.stars || 0), os = Number(them.stars || 0);
+  const cd = Number(us.destructionPercentage || 0), od = Number(them.destructionPercentage || 0);
+  const res = cs > os || (cs === os && cd > od) ? '🏆 Vittoria'
+    : cs < os || (cs === os && cd < od) ? '❌ Sconfitta' : '⚖️ Pareggio';
+  const when = w.endTime ? ` · ${_formatApiTime(w.endTime)}` : '';
+  return `<div class="wlb-top">
+    <strong>⚔️ Ultima war classica · conclusa</strong>
+    <span class="wlb-state">${res} ${cs}–${os}${when}</span>
+  </div>`;
+}
+
 function _cercaLiveWarBannerHtml(cw) {
   if (!cw || !['preparation', 'inWar', 'warEnded'].includes(cw.state)) return '';
   const us = cw.clan || {}, them = cw.opponent || {};
@@ -11434,17 +11460,13 @@ function _cercaLiveWarBannerHtml(cw) {
   const themBadge = them.badgeUrls?.small ? `<img src="${them.badgeUrls.small}" class="wlb-badge" alt="">` : '<span class="wlb-badge-ph">🛡️</span>';
   const stateClass = cw.state === 'preparation' ? 'wlb--prep' : cw.state === 'inWar' ? 'wlb--battle' : 'wlb--ended';
   return `<div class="war-live-banner ${stateClass}">
-    <div class="wlb-top">
-      <span class="wlb-live-dot"></span>
-      <strong>⚔️ War classica in corso</strong>
-      <span class="wlb-state">${_wlStateLabel(cw.state)}</span>
-    </div>
+    ${_warBannerTopHtml(cw)}
     <div class="wlb-matchup">
       <div class="wlb-clan">${usBadge}<span class="wlb-clan-name">${escH(us.name || '—')}</span></div>
       <div class="wlb-vs">VS</div>
       <div class="wlb-clan">${themBadge}<span class="wlb-clan-name">${escH(them.name || '—')}</span></div>
     </div>
-    <button class="btn-primary btn-sm wlb-detail-btn" onclick="openCercaLiveWar()">Vedi dettagli war live</button>
+    <button class="btn-primary btn-sm wlb-detail-btn" onclick="openCercaLiveWar()">${cw.state === 'warEnded' ? 'Vedi riepilogo war' : 'Vedi dettagli war live'}</button>
   </div>`;
 }
 
@@ -11454,12 +11476,16 @@ function _cercaLiveCwlBannerHtml(cwl, { switchScope } = {}) {
   const season = cwl.season || '';
   const rounds = cwl.roundsData || cwl.rounds || [];
   const goTab = switchScope === 'rk' ? '_gotoRankCwlTab()' : '_gotoCercaCwlTab()';
-  return `<div class="cerca-cwl-live-banner">
+  // state CoC leaguegroup: preparation | inWar | ended (resta "ended" fino alla stagione successiva)
+  const cwlEnded = cwl.state === 'ended';
+  const cwlTitle = cwlEnded ? '🏆 CWL conclusa' : cwl.state === 'preparation' ? '🏆 CWL in preparazione' : '🏆 CWL in corso';
+  const posTxt = cwlEnded && cwl.ourPosition ? `<span style="margin-left:0.45rem;font-size:0.78rem;color:var(--gold)">${Number(cwl.ourPosition)}° posto</span>` : '';
+  return `<div class="cerca-cwl-live-banner${cwlEnded ? ' cerca-cwl-live-banner--ended' : ''}">
     <div>
-      <span class="cwl-live-dot-sm"></span>
-      <strong>🏆 CWL in corso</strong>
+      ${cwlEnded ? '' : '<span class="cwl-live-dot-sm"></span>'}
+      <strong>${cwlTitle}</strong>
       <span style="margin-left:0.4rem;color:var(--text-2)">${escH(league)}${season ? ` · ${escH(seasonLabel(season))}` : ''}</span>
-      ${rounds.length ? `<span style="margin-left:0.45rem;font-size:0.78rem;color:var(--text-3)">${rounds.length} round</span>` : ''}
+      ${rounds.length ? `<span style="margin-left:0.45rem;font-size:0.78rem;color:var(--text-3)">${rounds.length} round</span>` : ''}${posTxt}
     </div>
     <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
       <button type="button" class="btn-secondary btn-sm" onclick="${goTab}">Apri cronologia CWL</button>
@@ -11658,7 +11684,7 @@ async function _loadCercaCwlHistory(clanTag, tabId = 'cc-tab-cwl') {
     if (!data.length) {
       cont.innerHTML = `${liveBanner || ''}
         <div class="profilo-empty">
-          <p style="font-size:0.85rem;color:var(--text-3);margin-bottom:0.75rem">${window._cercaCwlLive ? 'Nessuna cronologia salvata oltre alla CWL in corso.' : 'Nessuna cronologia salvata per questo clan.'}</p>
+          <p style="font-size:0.85rem;color:var(--text-3);margin-bottom:0.75rem">${window._cercaCwlLive ? `Nessuna cronologia salvata oltre alla CWL ${window._cercaCwlLive.state === 'ended' ? 'appena conclusa' : 'in corso'}.` : 'Nessuna cronologia salvata per questo clan.'}</p>
         </div>`;
       return;
     }
@@ -12456,11 +12482,7 @@ async function _checkWarLiveBanner() {
     banner.className = `war-live-banner ${stateClass}`;
     banner.style.display = '';
     banner.innerHTML = `
-      <div class="wlb-top">
-        <span class="wlb-live-dot"></span>
-        <strong>⚔️ War classica in corso</strong>
-        <span class="wlb-state">${_wlStateLabel(data.state)}</span>
-      </div>
+      ${_warBannerTopHtml(data)}
       <div class="wlb-matchup">
         <div class="wlb-clan">
           ${usBadge}
@@ -12472,7 +12494,7 @@ async function _checkWarLiveBanner() {
           <span class="wlb-clan-name">${escH(them.name || '—')}</span>
         </div>
       </div>
-      <button class="btn-primary btn-sm wlb-detail-btn" onclick="openWarLiveModal()">Vedi dettagli war live</button>`;
+      <button class="btn-primary btn-sm wlb-detail-btn" onclick="openWarLiveModal()">${data.state === 'warEnded' ? 'Vedi riepilogo war' : 'Vedi dettagli war live'}</button>`;
   } catch (_) {
     banner.style.display = 'none';
   }

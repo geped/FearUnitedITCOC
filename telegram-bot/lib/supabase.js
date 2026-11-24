@@ -1047,7 +1047,8 @@ async function fetchBonusAssignedNamesForSeason(clanTagRaw, season) {
     .from('cwl_history')
     .select('player_name')
     .eq('clan_tag', tag)
-    .eq('season', String(season))
+    // Mese "YYYY-MM": include anche le chiavi CoC API con suffisso (YYYY-MM-01, YYYY-MM-02)
+    .like('season', `${String(season).slice(0, 7)}%`)
     .eq('bonus_assigned', true);
   if (error) throw new Error(error.message);
   return new Set((data || []).map((r) => r.player_name).filter(Boolean));

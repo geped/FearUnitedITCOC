@@ -378,7 +378,7 @@ function formatCwlOverview(data) {
   const st = CWL_STATE_IT[data.state] || data.state || '—';
   const lines = [
     `${DIV}`,
-    `🏆 <b>CWL live</b> · ${escapeHtml(data.leagueNameIt || data.leagueNameEn || 'Lega')}`,
+    `🏆 <b>${data.state === 'ended' ? 'CWL conclusa' : data.state === 'preparation' ? 'CWL in preparazione' : 'CWL live'}</b> · ${escapeHtml(data.leagueNameIt || data.leagueNameEn || 'Lega')}`,
     `${DIV}`,
     `📅 Stagione <code>${escapeHtml(data.season || '—')}</code>`,
     `📌 Stato lega: <b>${escapeHtml(st)}</b>`,
