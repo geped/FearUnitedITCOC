@@ -6531,40 +6531,55 @@ function toggleManualMember(name, checked) {
 
 async function saveManualBonus(season) {
   season = await resolveCwlSeasonKey(season);
-  if (!bmManualSelected.size) {
-    alert('Nessun giocatore selezionato.');
-    return;
-  }
   const btn = event?.target;
+  const msg = document.getElementById('bm-msg');
+  const say = (text, ok) => { if (msg) { msg.textContent = text; msg.style.color = ok ? '#4caf50' : '#ff6b6b'; } };
   if (btn) { btn.disabled = true; btn.textContent = '💾 Salvataggio…'; }
 
-  const rows = [...bmManualSelected].map(name => ({
-    clan_tag:         window._userClanTag || null,
-    player_name:      name,
-    season,
-    participated:     true,
-    bonus_assigned:   true,
-    stars:            0,
-    destruction:      0.0,
-    attacks_made:     0,
-    attacks_required: 0,
-    bonus_score:      0,
-    still_in_clan:    true,
-    is_secondary:     false,
-  }));
+  try {
+    const clan = window._userClanTag || null;
+    const selected = [...bmManualSelected];
+    const inList = (names) => `(${names.map(n => `"${String(n).replace(/"/g, '\\"')}"`).join(',')})`;
 
-  const { error } = await db.from('cwl_history')
-    .upsert(rows, { onConflict: 'player_name,season,clan_tag' });
+    // Righe già presenti per la stagione: NON si toccano le statistiche CWL, solo il flag bonus.
+    let qEx = db.from('cwl_history').select('player_name').eq('season', season);
+    if (clan) qEx = qEx.eq('clan_tag', clan);
+    const { data: existing, error: exErr } = await qEx;
+    if (exErr) throw exErr;
+    const existingSet = new Set((existing || []).map(r => r.player_name));
 
-  if (btn) { btn.disabled = false; btn.textContent = '💾 Salva Bonus Manuali'; }
+    const toFlag   = selected.filter(n => existingSet.has(n));
+    const toInsert = selected.filter(n => !existingSet.has(n));
 
-  if (error) {
-    alert('Errore nel salvataggio: ' + error.message);
-  } else {
-    const msg = document.getElementById('bm-msg');
-    msg.textContent = `✅ ${bmManualSelected.size} bonus salvati per ${season}!`;
-    msg.style.color = '#4caf50';
-    setTimeout(() => { if (msg) msg.textContent = ''; }, 4000);
+    if (toFlag.length) {
+      let q = db.from('cwl_history').update({ bonus_assigned: true }).eq('season', season).in('player_name', toFlag);
+      if (clan) q = q.eq('clan_tag', clan);
+      const { error } = await q;
+      if (error) throw error;
+    }
+    if (toInsert.length) {
+      // Giocatore senza dati CWL in questa stagione (es. bonus extra): riga minima
+      const rows = toInsert.map(name => ({
+        clan_tag: clan, player_name: name, season,
+        participated: false, bonus_assigned: true,
+        stars: 0, destruction: 0, attacks_made: 0, attacks_required: 0, bonus_score: 0,
+        still_in_clan: true, is_secondary: false,
+      }));
+      const { error } = await db.from('cwl_history').insert(rows);
+      if (error) throw error;
+    }
+    // Deselezionati: il bonus viene tolto
+    let qReset = db.from('cwl_history').update({ bonus_assigned: false }).eq('season', season).eq('bonus_assigned', true);
+    if (clan) qReset = qReset.eq('clan_tag', clan);
+    if (selected.length) qReset = qReset.not('player_name', 'in', inList(selected));
+    const { error: resetErr } = await qReset;
+    if (resetErr) throw resetErr;
+
+    say(`✅ ${selected.length} bonus salvati per ${season}${selected.length ? ': ' + selected.join(', ') : ''}`, true);
+  } catch (e) {
+    say('✗ Salvataggio non riuscito: ' + (e?.message || e), false);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Salva Bonus Manuali'; }
   }
 }
 
@@ -6817,7 +6832,7 @@ async function applyBonusCriteria() {
     const thDisplay = critThWeight ? ` <span style="color:var(--text-3);font-size:0.75rem">TH${p.th_level || '?'}</span>` : '';
     return `<tr>
       <td style="width:40px;text-align:center">${pos}</td>
-      <td><label style="cursor:pointer"><input type="checkbox" ${sel} onchange="toggleBonusSelection('${escH(p.player_name).replace(/'/g, "&#39;")}',this.checked)"> <span class="member-name">${escH(p.player_name)}</span>${thDisplay}</label></td>
+      <td><label style="cursor:pointer"><input type="checkbox" ${sel} onchange="toggleBmBonus('${escH(p.player_name).replace(/'/g, "&#39;")}',this.checked)"> <span class="member-name">${escH(p.player_name)}</span>${thDisplay}</label></td>
       <td style="text-align:center">${p.stars || 0}</td>
       <td style="text-align:center">${p.attacks_made || 0}/${p.attacks_required || 0}</td>
       <td style="text-align:center">${p.avg_destr.toFixed(1)}%</td>
@@ -6911,34 +6926,67 @@ async function saveBonusFromModal() {
   const season = await resolveCwlSeasonKey(document.getElementById('bm-season').value);
   const msg    = document.getElementById('bm-msg');
   const btn    = document.getElementById('bm-save');
-  if (!bmCandidates.length) { msg.textContent = '⚠ Prima applica i criteri.'; return; }
+  // Esito accanto al pulsante (il box #bm-msg è in cima al modale e resta fuori vista)
+  const say = (text, ok) => {
+    if (msg) msg.textContent = text;
+    let el = document.getElementById('bm-save-status');
+    if (!el && btn) {
+      el = document.createElement('span');
+      el.id = 'bm-save-status';
+      el.className = 'bm-save-status';
+      btn.parentNode.insertBefore(el, btn);
+    }
+    if (el) { el.textContent = text; el.style.color = ok ? 'var(--green)' : 'var(--red)'; }
+  };
+  if (!bmCandidates.length) { say('⚠ Prima applica i criteri.', false); return; }
+  if (!season) { say('⚠ Seleziona una stagione.', false); return; }
 
+  btn.disabled = true;
   btn.textContent = 'Salvataggio…';
+  try {
+    const upsertData = bmCandidates.map(c => ({
+      clan_tag:         window._userClanTag || null,
+      player_name:      c.player_name,
+      season,
+      participated:     c.participated ?? false,
+      stars:            Math.round(c.stars || 0),
+      destruction:      parseFloat((Number(c.destruction) || 0).toFixed(2)),
+      attacks_made:     c.attacks_made || 0,
+      attacks_required: c.attacks_required || 0,
+      bonus_score:      Math.round(c.merit || 0),
+      bonus_assigned:   bmSelections.has(c.player_name),
+      still_in_clan:    true,
+      is_secondary:     false
+    }));
 
-  const upsertData = bmCandidates.map(c => ({
-    clan_tag:         window._userClanTag || null,
-    player_name:      c.player_name,
-    season,
-    participated:     c.participated ?? false,
-    stars:            Math.round(c.stars || 0),
-    destruction:      parseFloat((c.destruction || 0).toFixed(2)),
-    attacks_made:     c.attacks_made || 0,
-    attacks_required: c.attacks_required || 0,
-    bonus_score:      Math.round(c.merit || 0),
-    bonus_assigned:   bmSelections.has(c.player_name),
-    still_in_clan:    true,
-    is_secondary:     false
-  }));
+    const { error } = await db.from('cwl_history').upsert(upsertData, { onConflict: 'player_name,season,clan_tag' });
+    if (error) throw error;
 
-  const { error } = await db.from('cwl_history').upsert(upsertData, { onConflict: 'player_name,season,clan_tag' });
-  btn.textContent = '💾 Salva Assegnazione';
-  if (error) { msg.textContent = '✗ ' + error.message; return; }
+    // L'assegnazione salvata è esattamente la selezione: chi aveva il bonus da un salvataggio
+    // precedente ma ora non è selezionato (anche se escluso dai criteri) viene azzerato.
+    const selected = [...bmSelections];
+    let qReset = db.from('cwl_history').update({ bonus_assigned: false })
+      .eq('season', season).eq('bonus_assigned', true);
+    if (window._userClanTag) qReset = qReset.eq('clan_tag', window._userClanTag);
+    if (selected.length) {
+      const list = selected.map(n => `"${String(n).replace(/"/g, '\\"')}"`).join(',');
+      qReset = qReset.not('player_name', 'in', `(${list})`);
+    }
+    const { error: resetErr } = await qReset;
+    if (resetErr) throw resetErr;
 
-  const names = [...bmSelections].join(', ');
-  msg.textContent = `✓ ${bmSelections.size} bonus salvati per ${season}: ${names}`;
-  // Aggiorna il badge nella tabella CWL principale
-  const mainHistory = await loadCwlHistory();
-  renderCwlTable(mainHistory, cwlLiveData);
+    say(`✓ Salvati ${selected.length} bonus per ${season}: ${selected.join(', ') || 'nessuno'}`, true);
+    // Aggiorna il badge nella tabella CWL principale
+    try {
+      const mainHistory = await loadCwlHistory();
+      renderCwlTable(mainHistory, cwlLiveData);
+    } catch (_) {}
+  } catch (e) {
+    say('✗ Salvataggio non riuscito: ' + (e?.message || e), false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '💾 Salva Assegnazione';
+  }
 }
 
 // ── Storico bonus per mese ────────────────────────────

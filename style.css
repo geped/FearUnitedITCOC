@@ -6972,3 +6972,6 @@ option {
 .rank-type-toggles .toggle-btn { flex: 1 1 auto; text-align: center; white-space: nowrap; }
 /* CWL conclusa: stesso layout, toni neutri (niente effetto "live") */
 .cerca-cwl-live-banner--ended { border-color: var(--border); background: var(--bg-2, rgba(255,255,255,0.03)); }
+
+/* Esito salvataggio bonus accanto al pulsante */
+.bm-save-status { font-size: 0.8rem; margin-right: auto; margin-left: 0.75rem; }
