@@ -445,6 +445,7 @@
                         <span class="toolbar-label">🏰 Weekend Raid — <span class="clan-name-dyn">—</span></span>
                         <button class="btn-secondary btn-sm" onclick="loadCapitalRaids()">🔄 Aggiorna</button>
                     </div>
+                    <div id="wl-capital-overview"></div>
                     <div id="wl-capital-results">
                         <p class="wl-loading">Caricamento raid capitale…</p>
                     </div>
@@ -728,6 +729,7 @@
                         <div class="profilo-section" id="ps-super-troops"><h3 class="profilo-section-title">Super Truppe</h3><div id="profilo-super-troops" class="profilo-units-grid"></div></div>
                         <div class="profilo-section" id="ps-spells"><h3 class="profilo-section-title">Incantesimi</h3><div id="profilo-spells" class="profilo-units-grid"></div></div>
                         <div class="profilo-section" id="ps-siege"><h3 class="profilo-section-title">Macchine d'Assedio</h3><div id="profilo-siege" class="profilo-units-grid"></div></div>
+                        <div class="profilo-section" id="ps-squads-sec" style="display:none"><h3 class="profilo-section-title">Squadre</h3><div id="profilo-squads" class="profilo-units-grid"></div></div>
                         <div class="profilo-section" id="ps-achievements"><h3 class="profilo-section-title">Obiettivi Villaggio</h3><div id="profilo-ach-home" class="profilo-achievements-list"></div></div>
                     </div>
                     <div id="profilo-tab-builder" style="display:none">
@@ -880,8 +882,11 @@
                 <div class="card rank-controls-card" id="rank-controls">
                     <div class="rank-controls-primary">
                         <div class="toggle-group rank-type-toggles">
-                            <button type="button" class="toggle-btn active" id="rank-btn-players" onclick="switchRankType('players')">Giocatori</button>
-                            <button type="button" class="toggle-btn" id="rank-btn-clans" onclick="switchRankType('clans')">Clan</button>
+                            <button type="button" class="toggle-btn active" id="rank-btn-players" data-rank-type="players" onclick="switchRankType('players')">Giocatori</button>
+                            <button type="button" class="toggle-btn" id="rank-btn-clans" data-rank-type="clans" onclick="switchRankType('clans')">Clan</button>
+                            <button type="button" class="toggle-btn" id="rank-btn-players-bb" data-rank-type="players-builder-base" onclick="switchRankType('players-builder-base')" title="Trofei Base del Costruttore">Giocatori BB</button>
+                            <button type="button" class="toggle-btn" id="rank-btn-clans-bb" data-rank-type="clans-builder-base" onclick="switchRankType('clans-builder-base')" title="Punti Base del Costruttore">Clan BB</button>
+                            <button type="button" class="toggle-btn" id="rank-btn-capitals" data-rank-type="capitals" onclick="switchRankType('capitals')" title="Punti Capitale del clan">Capitale</button>
                         </div>
                     </div>
                     <div class="rank-controls-geo">

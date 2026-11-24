@@ -854,6 +854,9 @@ app.get('/clan-info', authMiddleware, async (req, res) => {
             warLeague: data.warLeague || null,
             capitalLeague: data.capitalLeague || null,
             clanCapitalPoints: data.clanCapitalPoints ?? null,
+            // Additivo: Municipio capitale + distretti ({ capitalHallLevel, districts[] })
+            clanCapital: data.clanCapital || null,
+            chatLanguage: data.chatLanguage || null,
             members: data.members,
             description: data.description || '',
             type: data.type || '',
@@ -986,7 +989,7 @@ app.get('/rankings', authMiddleware, async (req, res) => {
     try {
         const { type, locationId } = req.query;
         if (!type || !locationId) return res.status(400).json({ error: 'type e locationId obbligatori.' });
-        const validTypes = ['players', 'clans', 'players-builder-base', 'clans-builder-base'];
+        const validTypes = ['players', 'clans', 'players-builder-base', 'clans-builder-base', 'capitals'];
         if (!validTypes.includes(type)) return res.status(400).json({ error: 'type non valido.' });
         const url = `https://api.clashofclans.com/v1/locations/${encodeURIComponent(locationId)}/rankings/${encodeURIComponent(type)}?limit=50`;
         const r = await fetch(url, { headers: cocHeaders() });

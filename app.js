@@ -869,14 +869,35 @@ function renderClanDetails(info, div) {
     ? `<div class="clan-detail-item">${SVG_SHIELD}<span>Lv ${info.clanLevel}</span></div>`
     : '';
 
+  // Capitale del clan: lega, punti e Municipio capitale (clanCapital arriva dal proxy)
+  const capitalHtml = _clanCapitalDetailItems(info);
+
   const descRaw = (info.description && String(info.description).trim()) ? String(info.description).trim() : '';
   const descHtml = descRaw
     ? `<div class="clan-detail-desc-wrap"><div class="cc-desc clan-detail-desc">${descRaw.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div></div>`
     : '';
 
   div.innerHTML = `${descHtml}<div class="clan-detail-grid">
-    ${leagueHtml}${locationHtml}${langHtml}${typeHtml}${trophiesHtml}${pointsHtml}${levelHtml}
+    ${leagueHtml}${locationHtml}${langHtml}${typeHtml}${trophiesHtml}${pointsHtml}${levelHtml}${capitalHtml}
   </div>`;
+}
+
+/** Voci "capitale" per la griglia info clan (vuoto se l'API non le fornisce). */
+function _clanCapitalDetailItems(info) {
+  if (!info) return '';
+  const out = [];
+  const capLeague = info.capitalLeague?.name;
+  if (capLeague && capLeague !== 'Unranked') {
+    out.push(`<div class="clan-detail-item">${SVG_SHIELD}<span>Capitale: ${escH(capLeague)}</span></div>`);
+  }
+  if (info.clanCapitalPoints != null && info.clanCapitalPoints > 0) {
+    out.push(`<div class="clan-detail-item">${SVG_TROPHY}<span>${Number(info.clanCapitalPoints).toLocaleString('it-IT')} pt capitale</span></div>`);
+  }
+  const hall = info.clanCapital?.capitalHallLevel;
+  if (hall) {
+    out.push(`<div class="clan-detail-item">${SVG_SHIELD}<span>Municipio capitale ${Number(hall)}</span></div>`);
+  }
+  return out.join('');
 }
 
 function showNoClanScreen(username) {
@@ -7939,6 +7960,7 @@ async function loadCapitalRaids() {
   const div = document.getElementById('wl-capital-results');
   if (!div) return;
   div.innerHTML = '<p class="wl-loading">Caricamento weekend raid…</p>';
+  _loadCapitalOverview();
 
   try {
     const tag = window._userClanTag || '';
@@ -7977,6 +7999,11 @@ async function loadCapitalRaids() {
           raids_completed: Number(it?.raidsCompleted || 0),
           top_contributor_name: top?.name || null,
           top_contributor_loot: Number(top?.capitalResourcesLooted || 0),
+          offensive_reward: Number(it?.offensiveReward || 0),
+          defensive_reward: Number(it?.defensiveReward || 0),
+          state: it?.state || null,
+          attack_log: Array.isArray(it?.attackLog) ? it.attackLog : [],
+          defense_log: Array.isArray(it?.defenseLog) ? it.defenseLog : [],
           members,
         };
       });
@@ -7990,13 +8017,14 @@ async function loadCapitalRaids() {
     const cards = rows.map((r, ridx) => `
       <div class="raid-card raid-card--clickable" onclick="openCapitalRaidDetail(${ridx})" title="Clicca per il dettaglio membri">
         <div class="raid-card-top">
-          <div><strong>${_formatApiTime(r.weekend_start)}</strong> <span style="color:var(--text-3)">→ ${_formatApiTime(r.weekend_end)}</span></div>
+          <div><strong>${_formatApiTime(r.weekend_start)}</strong> <span style="color:var(--text-3)">→ ${_formatApiTime(r.weekend_end)}</span>${r.state === 'ongoing' ? ' <span class="raid-live-pill">IN CORSO</span>' : ''}</div>
           <div class="raid-loot">💰 ${Number(r.capital_total_loot || 0).toLocaleString('it-IT')}</div>
         </div>
         <div class="raid-metrics">
           <span>⚔️ Attacchi: <b>${Number(r.total_attacks || 0)}</b></span>
           <span>🏚️ Distretti: <b>${Number(r.enemy_districts_destroyed || 0)}</b></span>
           <span>✅ Raid completati: <b>${Number(r.raids_completed || 0)}</b></span>
+          ${_raidRewardsHtml(r)}
         </div>
         <div class="raid-top-player">🥇 Top contributore: <b>${r.top_contributor_name || '—'}</b> · ${Number(r.top_contributor_loot || 0).toLocaleString('it-IT')} loot</div>
         <div class="raid-card-hint">Dettagli membri →</div>
@@ -8007,6 +8035,83 @@ async function loadCapitalRaids() {
     div.innerHTML = `<div class="raid-list">${cards}</div>`;
   } catch (_) {
     div.innerHTML = '<p class="wl-err">⚠️ Impossibile caricare i weekend raid.</p>';
+  }
+}
+
+/** JSONB dal DB può arrivare come stringa: normalizza ad array. */
+function _raidJsonArr(v) {
+  if (Array.isArray(v)) return v;
+  if (typeof v === 'string') { try { const x = JSON.parse(v); return Array.isArray(x) ? x : []; } catch (_) { return []; } }
+  return [];
+}
+
+function _raidRewardsHtml(r) {
+  const off = Number(r?.offensive_reward || 0);
+  const def = Number(r?.defensive_reward || 0);
+  if (!off && !def) return '';
+  return `<span>🏅 Medaglie raid: <b>${(off + def).toLocaleString('it-IT')}</b> <small style="color:var(--text-3)">(⚔️ ${off} · 🛡️ ${def})</small></span>`;
+}
+
+/** Registro attacchi/difese di un weekend raid (attackLog/defenseLog CoC API). */
+function _raidLogHtml(logRaw, kind) {
+  const log = _raidJsonArr(logRaw);
+  if (!log.length) return '';
+  const isAtk = kind === 'attack';
+  const rows = log.map((e) => {
+    const other = isAtk ? e.defender : e.attacker;
+    const badge = cocBadgeUrl(other?.badgeUrls);
+    const districts = Array.isArray(e.districts) ? e.districts : [];
+    const destroyed = Number(e.districtsDestroyed ?? districts.filter(d => Number(d.destructionPercent) >= 100).length);
+    const total = Number(e.districtCount ?? districts.length);
+    const chips = districts.map((d) => {
+      const pct = Number(d.destructionPercent || 0);
+      const cls = pct >= 100 ? 'raid-district--done' : pct > 0 ? 'raid-district--part' : '';
+      const loot = d.totalLooted ? ` · 💰 ${Number(d.totalLooted).toLocaleString('it-IT')}` : '';
+      return `<span class="raid-district ${cls}" title="${escH(d.name || '')} — ${Number(d.attackCount || 0)} attacchi${loot}">${escH(d.name || '?')}${d.districtHallLevel ? ` <small>Lv${Number(d.districtHallLevel)}</small>` : ''} · ${pct}%</span>`;
+    }).join('');
+    return `<div class="raid-log-row">
+      <div class="raid-log-head">
+        ${badge ? `<img src="${badge}" alt="" width="26" height="26" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none'">` : ''}
+        <span class="raid-log-name">${escH(other?.name || '—')}</span>
+        ${other?.level ? `<span class="raid-log-sub">Lv ${Number(other.level)}</span>` : ''}
+        <span class="raid-log-score">🏚️ ${destroyed}/${total} · ⚔️ ${Number(e.attackCount || 0)}</span>
+      </div>
+      ${chips ? `<div class="raid-district-list">${chips}</div>` : ''}
+    </div>`;
+  }).join('');
+  return `<h4 class="raid-log-title">${isAtk ? '⚔️ Clan attaccati' : '🛡️ Difese (clan che ci hanno attaccato)'}</h4><div class="raid-log">${rows}</div>`;
+}
+
+/** Pannello "La nostra capitale": Municipio, lega, punti, distretti (da clan-info). */
+async function _loadCapitalOverview() {
+  const box = document.getElementById('wl-capital-overview');
+  if (!box) return;
+  const tag = window._userClanTag || '';
+  if (!tag) { box.innerHTML = ''; return; }
+  try {
+    const r = await fetch(`/api/clan-info?clanTag=${encodeURIComponent(tag)}`);
+    if (!r.ok) { box.innerHTML = ''; return; }
+    const info = await r.json();
+    const cap = info?.clanCapital || null;
+    const districts = Array.isArray(cap?.districts) ? cap.districts : [];
+    const league = info?.capitalLeague?.name && info.capitalLeague.name !== 'Unranked' ? info.capitalLeague.name : null;
+    if (!cap?.capitalHallLevel && !league && !info?.clanCapitalPoints) { box.innerHTML = ''; return; }
+    const chips = districts
+      .slice()
+      .sort((a, b) => Number(a.id || 0) - Number(b.id || 0))
+      .map(d => `<span class="raid-district raid-district--own">${escH(d.name || '?')} <small>Lv${Number(d.districtHallLevel || 0)}</small></span>`)
+      .join('');
+    box.innerHTML = `<div class="raid-card capital-overview">
+      <div class="raid-card-top"><strong>🏰 La nostra capitale</strong>${cap?.capitalHallLevel ? `<span class="raid-loot">Municipio ${Number(cap.capitalHallLevel)}</span>` : ''}</div>
+      <div class="raid-metrics">
+        ${league ? `<span>🛡️ Lega: <b>${escH(league)}</b></span>` : ''}
+        ${info?.clanCapitalPoints ? `<span>🏆 Punti capitale: <b>${Number(info.clanCapitalPoints).toLocaleString('it-IT')}</b></span>` : ''}
+        ${districts.length ? `<span>🏘️ Distretti: <b>${districts.length}</b></span>` : ''}
+      </div>
+      ${chips ? `<div class="raid-district-list">${chips}</div>` : ''}
+    </div>`;
+  } catch (_) {
+    box.innerHTML = '';
   }
 }
 
@@ -8027,7 +8132,9 @@ function openCapitalRaidDetail(idx) {
   const memberCards = sorted.length
     ? sorted.map((m, i) => {
         const loot = Number(m.capitalResourcesLooted || 0).toLocaleString('it-IT');
-        const atks = m.attacks != null ? Number(m.attacks) : (m.attackCount != null ? Number(m.attackCount) : '—');
+        const atkN = m.attacks != null ? Number(m.attacks) : (m.attackCount != null ? Number(m.attackCount) : null);
+        const atkLim = m.attackLimit != null ? Number(m.attackLimit) + Number(m.bonusAttackLimit || 0) : null;
+        const atks = atkN == null ? '—' : (atkLim ? `${atkN}/${atkLim}` : String(atkN));
         return `<div class="wdm-member-card">
           <div class="wdm-member-header">
             <span class="wdm-pos">${i + 1}.</span>
@@ -8064,7 +8171,11 @@ function openCapitalRaidDetail(idx) {
         <div class="cdm-war-side"><div class="cdm-war-stars">⚔️ ${Number(r.total_attacks || 0)}</div><div class="cdm-war-destr">Attacchi</div></div>
         <div class="cdm-war-side"><div class="cdm-war-stars">🏚️ ${Number(r.enemy_districts_destroyed || 0)}</div><div class="cdm-war-destr">Distretti</div></div>
       </div>
-      <div class="wdm-panel" style="margin-top:0.75rem">${memberCards}</div>
+      ${_raidRewardsHtml(r) ? `<div class="raid-metrics" style="justify-content:center;margin-top:0.6rem">${_raidRewardsHtml(r)}</div>` : ''}
+      ${_raidLogHtml(r.attack_log, 'attack')}
+      ${_raidLogHtml(r.defense_log, 'defense')}
+      <h4 class="raid-log-title">Membri</h4>
+      <div class="wdm-panel" style="margin-top:0.35rem">${memberCards}</div>
     </div>`;
   modal.addEventListener('click', closeCapitalRaidDetail);
   document.body.appendChild(modal);
@@ -9767,6 +9878,7 @@ function renderPlayerView(p, prefix) {
     superTroops: `${prefix}-super-troops`,
     spells:      `${prefix}-spells`,
     siege:       `${prefix}-siege`,
+    squads:      `${prefix}-squads`,
     achHome:     `${prefix}-ach-home`,
     bhStats:     `${prefix}-bh-stats`,
     builderH:    `${prefix}-builder-heroes`,
@@ -9787,10 +9899,12 @@ function renderPlayerView(p, prefix) {
   // `p.troops`, mescolati alle truppe normali. Filtrarli da `p.pets` (che non esiste)
   // lasciava la sezione famigli sempre vuota per ogni giocatore.
   const pets     = (p.troops||[]).filter(x=>isHomeV(x)&&PETS_SET.has(x.name));
-  const troopsAll= (p.troops||[]).filter(x=>isHomeV(x)&&!PETS_SET.has(x.name)&&!SIEGE_SET.has(x.name)&&!SUPER_TROOP_SET.has(x.name));
+  const troopsAll= (p.troops||[]).filter(x=>isHomeV(x)&&!PETS_SET.has(x.name)&&!SIEGE_SET.has(x.name)&&!SUPER_TROOP_SET.has(x.name)&&!isSquadName(x.name));
   const superTroops = (p.troops||[]).filter(x=>isHomeV(x)&&SUPER_TROOP_SET.has(x.name));
   const spells   = (p.spells||[]).filter(isHomeV);
   const siege    = (p.troops||[]).filter(x=>isHomeV(x)&&SIEGE_SET.has(x.name));
+  // Squadre (TH19): arrivano in p.troops con nome "<X> Squad"
+  const squads   = (p.troops||[]).filter(x=>isHomeV(x)&&isSquadName(x.name));
   const achHome  = (p.achievements||[]).filter(a=>a.village==='home'||!a.village);
 
   _renderUnits(ids.heroes,       heroes,    'heroes');
@@ -9800,10 +9914,13 @@ function renderPlayerView(p, prefix) {
   _renderUnits(ids.superTroops, superTroops, 'troops');
   _renderUnits(ids.spells,    spells,    'spells');
   _renderUnits(ids.siege,     siege,     'troops');
+  _renderUnits(ids.squads,    squads,    'troops');
   _renderAchievements(ids.achHome, achHome);
 
   const petsSec = document.getElementById(`${secPfx}-pets-sec`)||document.getElementById(`${prefix}-pets-sec`);
   if (petsSec) petsSec.style.display = pets.length ? 'block' : 'none';
+  const squadsSec = document.getElementById(`${secPfx}-squads-sec`)||document.getElementById(`${prefix}-squads-sec`);
+  if (squadsSec) squadsSec.style.display = squads.length ? 'block' : 'none';
 
   // Builder
   const bhEl = document.getElementById(ids.bhStats);
@@ -10109,6 +10226,7 @@ const UNIT_COC_SLUG = {
   'Meteor Golem':       {c:'troop', s:'meteor-golem'},
   'Ice Block Spell':    {c:'spell', s:'ice-block-spell'},
   'Totem Spell':        {c:'spell', s:'totem-spell'},
+  'Angry Spell':        {c:'spell', s:'angry-spell'},
   'Super Yeti':         {c:'troop', s:'super-yeti'},
   'Super Valkyrie':     {c:'troop', s:'super-valkyrie'},
 };
@@ -10276,6 +10394,8 @@ function _unitFallbackColor(name) {
 
 const PETS_SET = new Set(['L.A.S.S.I','Electro Owl','Mighty Yak','Unicorn','Frosty','Diggy','Poison Lizard','Phoenix','Spirit Fox','Angry Jelly','Sneezy','Greedy Raven']);
 const SIEGE_SET = new Set(['Wall Wrecker','Battle Blimp','Stone Slammer','Siege Barracks','Log Launcher','Flame Flinger','Battle Drill','Sky Wagon','Troop Launcher']);
+/** Squadre TH19 (es. "Barch Squad"): la CoC API le restituisce in `troops`. */
+function isSquadName(name) { return /\sSquad$/.test(String(name || '')); }
 // Super Truppe (potenziamenti temporanei sbloccabili con gemme): sezione separata in "Il mio profilo"
 const SUPER_TROOP_SET = new Set(['Super Barbarian','Super Archer','Super Giant','Sneaky Goblin','Super Wall Breaker','Rocket Balloon','Super Wizard','Super Dragon','Inferno Dragon','Super Miner','Super Yeti','Super Minion','Super Hog Rider','Super Valkyrie','Super Witch','Ice Hound','Super Bowler']);
 
@@ -11699,6 +11819,7 @@ async function openCercaPlayer(playerTag, fromClanTag) {
         <div class="profilo-section"><h3 class="profilo-section-title">Super Truppe</h3><div id="cp-super-troops" class="profilo-units-grid"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Incantesimi</h3><div id="cp-spells" class="profilo-units-grid"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Macchine d'Assedio</h3><div id="cp-siege" class="profilo-units-grid"></div></div>
+        <div class="profilo-section" id="cp-squads-sec" style="display:none"><h3 class="profilo-section-title">Squadre</h3><div id="cp-squads" class="profilo-units-grid"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Obiettivi Villaggio</h3><div id="cp-ach-home" class="profilo-achievements-list"></div></div>
       </div>
       <div id="cp-tab-builder" style="display:none">
@@ -11743,15 +11864,16 @@ document.querySelectorAll('.tab-btn,.bnav-btn').forEach(btn=>{
 // `global` deve essere la stringa letterale richiesta dalla CoC API per il mondiale
 const RANK_LOCATIONS = { global: 'global', italy: '32000094' };
 
-let _rankType      = 'players'; // players | clans
+let _rankType      = 'players'; // players | clans | players-builder-base | clans-builder-base | capitals
 let _rankLocaleId  = RANK_LOCATIONS.italy;
 let _rankActiveBtnId = 'rank-btn-local';
 let _rankLocations = null; // cache lista locations CoC API
 
 function switchRankType(type) {
   _rankType = type;
-  document.getElementById('rank-btn-players').classList.toggle('active', type==='players');
-  document.getElementById('rank-btn-clans').classList.toggle('active', type==='clans');
+  document.querySelectorAll('#rank-controls .rank-type-toggles .toggle-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.rankType === type);
+  });
   loadRankings();
 }
 
@@ -11821,6 +11943,9 @@ async function loadRankings() {
     const items = d.items || [];
     if (!items.length) { el.innerHTML = '<div class="profilo-empty"><p>Nessun dato disponibile.</p></div>'; return; }
     if (type === 'players') _renderRankPlayers(el, items);
+    else if (type === 'players-builder-base') _renderRankPlayers(el, items, 'builder');
+    else if (type === 'clans-builder-base') _renderRankClans(el, items, 'builder');
+    else if (type === 'capitals') _renderRankClans(el, items, 'capital');
     else _renderRankClans(el, items);
   } catch(e) {
     el.innerHTML = `<div class="cerca-error">Errore: ${e.message}</div>`;
@@ -11923,6 +12048,7 @@ async function openRankPlayer(playerTag) {
         <div class="profilo-section"><h3 class="profilo-section-title">Super Truppe</h3><div id="rk-super-troops" class="profilo-units-grid"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Incantesimi</h3><div id="rk-spells" class="profilo-units-grid"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Macchine d'Assedio</h3><div id="rk-siege" class="profilo-units-grid"></div></div>
+        <div class="profilo-section" id="rk-squads-sec" style="display:none"><h3 class="profilo-section-title">Squadre</h3><div id="rk-squads" class="profilo-units-grid"></div></div>
         <div class="profilo-section"><h3 class="profilo-section-title">Obiettivi Villaggio</h3><div id="rk-ach-home" class="profilo-achievements-list"></div></div>
       </div>
       <div id="rk-tab-builder" style="display:none">
@@ -12140,14 +12266,26 @@ function _switchRkClanTab(tab, btn) {
   if (btn) btn.classList.add('active');
 }
 
-function _renderRankPlayers(el, items) {
+/** Freccia variazione posizione rispetto alla stagione/giorno precedente (previousRank CoC API). */
+function _rankTrendHtml(item) {
+  const cur = Number(item?.rank);
+  const prev = Number(item?.previousRank);
+  if (!cur || !prev || prev <= 0) return '';
+  const d = prev - cur;
+  if (d > 0) return `<span class="rank-trend rank-trend--up" title="Era #${prev}">▲${d}</span>`;
+  if (d < 0) return `<span class="rank-trend rank-trend--down" title="Era #${prev}">▼${-d}</span>`;
+  return '';
+}
+
+function _renderRankPlayers(el, items, mode) {
+  const isBB = mode === 'builder';
   el.innerHTML = `<div class="table-wrap"><table>
     <thead><tr>
-      <th>#</th><th>Giocatore</th><th>Clan</th><th>Trofei</th><th>Att. vinti</th><th>Dif. vinte</th>
+      <th>#</th><th>Giocatore</th><th>Clan</th>${isBB ? '<th>Trofei BB</th><th>Lega BB</th>' : '<th>Trofei</th><th>Att. vinti</th><th>Dif. vinte</th>'}
     </tr></thead>
     <tbody>
       ${items.map((p,i) => {
-        const lbHtml = rankLeagueBadgeHtml(_rankingPlayerLeague(p));
+        const lbHtml = isBB ? '' : rankLeagueBadgeHtml(_rankingPlayerLeague(p));
         const cb = cocBadgeUrl(p.clan?.badgeUrls);
         const clanLabel = p.clan?.name || '—';
         const clanCell = cb
@@ -12157,17 +12295,20 @@ function _renderRankPlayers(el, items) {
         const def = p.defenseWins != null ? p.defenseWins : '—';
         const rankClass = i===0?'rank-gold':i===1?'rank-silver':i===2?'rank-bronze':'';
         return `<tr class="cc-member-row" onclick="openRankPlayer('${p.tag.replace(/'/g,"\\'")}')">
-          <td class="stat-cell"><span class="rank-num ${rankClass}">${p.rank??i+1}</span></td>
+          <td class="stat-cell"><span class="rank-num ${rankClass}">${p.rank??i+1}</span>${_rankTrendHtml(p)}</td>
           <td>
             <div style="display:flex;align-items:center;gap:0.35rem">
-              ${lbHtml}<span style="font-weight:600">${p.name}</span>
+              ${lbHtml}<span style="font-weight:600">${escH(p.name)}</span>
             </div>
             <div class="mono" style="font-size:0.72rem;color:var(--text-3)">${p.tag}</div>
           </td>
           <td>${clanCell}</td>
-          <td class="stat-cell">${(p.trophies||0).toLocaleString('it')}</td>
-          <td class="stat-cell">${atk}</td>
-          <td class="stat-cell">${def}</td>
+          ${isBB
+            ? `<td class="stat-cell">${(p.builderBaseTrophies||0).toLocaleString('it')}</td>
+               <td style="font-size:0.8rem;color:var(--text-2)">${escH(p.builderBaseLeague?.name || '—')}</td>`
+            : `<td class="stat-cell">${(p.trophies||0).toLocaleString('it')}</td>
+               <td class="stat-cell">${atk}</td>
+               <td class="stat-cell">${def}</td>`}
         </tr>`;
       }).join('')}
     </tbody>
@@ -12215,28 +12356,34 @@ async function _repairRankingClanBadges(container, items) {
   } catch (_) {}
 }
 
-function _renderRankClans(el, items) {
+function _renderRankClans(el, items, mode) {
+  // mode: undefined = villaggio principale, 'builder' = Base costruttore, 'capital' = Capitale del clan
+  const metric = mode === 'builder'
+    ? { label: 'Punti BB', get: c => c.clanBuilderBasePoints, icon: '🔨' }
+    : mode === 'capital'
+      ? { label: 'Punti capitale', get: c => c.clanCapitalPoints, icon: '🏰' }
+      : { label: 'Trofei', get: c => c.clanPoints, icon: '🏆' };
   el.innerHTML = `<div class="table-wrap"><table>
     <thead><tr>
-      <th>#</th><th>Clan</th><th>Membri</th><th>Trofei</th>
+      <th>#</th><th>Clan</th><th>Membri</th><th>${metric.label}</th>
     </tr></thead>
     <tbody>
       ${items.map((c,i) => {
         const badge = cocBadgeUrl(c.badgeUrls);
         const rankClass = i===0?'rank-gold':i===1?'rank-silver':i===2?'rank-bronze':'';
         return `<tr class="cc-member-row" onclick="openRankClan('${c.tag.replace(/'/g,"\\'")}')">
-          <td class="stat-cell"><span class="rank-num ${rankClass}">${c.rank??i+1}</span></td>
+          <td class="stat-cell"><span class="rank-num ${rankClass}">${c.rank??i+1}</span>${_rankTrendHtml(c)}</td>
           <td>
             <div style="display:flex;align-items:center;gap:0.4rem">
               ${badge?`<img src="${badge}" class="cerca-clan-badge" style="width:28px;height:28px" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<span class=\\'cdm-clan-badge-ph\\'>🛡️</span>'">`:'' }
               <div>
-                <div style="font-weight:600">${c.name}</div>
+                <div style="font-weight:600">${escH(c.name)}</div>
                 <div class="mono" style="font-size:0.72rem;color:var(--text-3)">${c.tag}</div>
               </div>
             </div>
           </td>
           <td class="stat-cell">${c.members??'—'}/50</td>
-          <td class="stat-cell">${(c.clanPoints||0).toLocaleString('it')} 🏆</td>
+          <td class="stat-cell">${(metric.get(c)||0).toLocaleString('it')} ${metric.icon}</td>
         </tr>`;
       }).join('')}
     </tbody>

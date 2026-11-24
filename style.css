@@ -1893,6 +1893,32 @@ tbody tr:last-child td { border-bottom: none; }
   font-size: 0.84rem;
   color: var(--text-2);
 }
+
+/* Capitale: panoramica distretti + registro attacchi/difese */
+.capital-overview { margin-top: 0.75rem; }
+.raid-live-pill {
+  display: inline-block; margin-left: 0.4rem; padding: 0.05rem 0.45rem;
+  border-radius: 999px; font-size: 0.68rem; font-weight: 700;
+  background: var(--green, #2e9e5b); color: #fff; vertical-align: middle;
+}
+.raid-log-title { margin: 0.9rem 0 0.35rem; font-size: 0.86rem; color: var(--text-2); }
+.raid-log { display: grid; gap: 0.5rem; }
+.raid-log-row {
+  border: 1px solid var(--line); border-radius: 10px; padding: 0.5rem 0.6rem;
+}
+.raid-log-head { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+.raid-log-name { font-weight: 600; }
+.raid-log-sub { font-size: 0.72rem; color: var(--text-3); }
+.raid-log-score { margin-left: auto; font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-2); }
+.raid-district-list { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.45rem; }
+.raid-district {
+  font-size: 0.72rem; padding: 0.15rem 0.45rem; border-radius: 6px;
+  border: 1px solid var(--line); color: var(--text-2); white-space: nowrap;
+}
+.raid-district small { color: var(--text-3); }
+.raid-district--done { border-color: var(--green, #2e9e5b); color: var(--green, #2e9e5b); }
+.raid-district--part { border-color: var(--gold-dim, #c9a227); color: var(--gold, #e0b84a); }
+.raid-district--own { border-color: var(--gold-dim, #c9a227); }
 @keyframes pulse-live {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
@@ -6936,3 +6962,11 @@ option {
   color: var(--text);
 }
 
+
+/* Classifiche: variazione posizione (previousRank) */
+.rank-trend { display: block; font-size: 0.62rem; font-weight: 700; line-height: 1; margin-top: 2px; }
+.rank-trend--up { color: var(--green, #2e9e5b); }
+.rank-trend--down { color: var(--red, #d9534f); }
+/* 5 tipi di classifica: vanno a capo su schermi stretti invece di uscire dal bordo */
+.rank-type-toggles.toggle-group { flex-wrap: wrap; }
+.rank-type-toggles .toggle-btn { flex: 1 1 auto; text-align: center; white-space: nowrap; }
