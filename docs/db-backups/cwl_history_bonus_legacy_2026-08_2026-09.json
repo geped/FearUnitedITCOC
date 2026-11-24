@@ -1,0 +1,21 @@
+{
+  "descrizione": "Righe cwl_history 'solo bonus' (stagione senza suffisso) unite il 2026-11-24 nelle stagioni CoC API 2026-08-02 / 2026-09-02. Backup completo della tabella: public.cwl_history_backup_20261124.",
+  "clan_tag": "#2J2VLPP9R",
+  "righe_rimosse": [
+    {"id":671122,"player_name":"♠Aman♠","season":"2026-08","bonus_assigned":true},
+    {"id":671120,"player_name":"Ettore","season":"2026-08","bonus_assigned":true},
+    {"id":671121,"player_name":"geky888","season":"2026-08","bonus_assigned":true},
+    {"id":671124,"player_name":"Geped™","season":"2026-08","bonus_assigned":true},
+    {"id":671126,"player_name":"l97","season":"2026-08","bonus_assigned":true},
+    {"id":671123,"player_name":"Miky","season":"2026-08","bonus_assigned":true},
+    {"id":671128,"player_name":"Ohlins","season":"2026-08","bonus_assigned":true},
+    {"id":671127,"player_name":"siddi++","season":"2026-08","bonus_assigned":true},
+    {"id":671125,"player_name":"乂✦尺卂乃乃工匕✦乂","season":"2026-08","bonus_assigned":true},
+    {"id":671207,"player_name":"Fosco","season":"2026-09","bonus_assigned":true},
+    {"id":671208,"player_name":"Gianni","season":"2026-09","bonus_assigned":true},
+    {"id":671205,"player_name":"Miky","season":"2026-09","bonus_assigned":true},
+    {"id":671206,"player_name":"Pexy","season":"2026-09","bonus_assigned":true}
+  ],
+  "valori_comuni_righe_rimosse": {"participated":true,"stars":0,"destruction":0,"attacks_made":0,"attacks_required":0,"bonus_score":0,"still_in_clan":true,"is_secondary":false},
+  "righe_aggiornate": "bonus_assigned false -> true sulle righe con stesso player_name e season = <mese>-02 (prima tutte false)"
+}
