@@ -5783,8 +5783,26 @@ async function saveCwlSeasonLive() {
   }
 }
 
+/**
+ * Il selettore mese produce "YYYY-MM", ma la CoC API salva la stagione CWL come "YYYY-MM-01"/"YYYY-MM-02"
+ * (in alcuni mesi ci sono state due CWL). Restituisce la chiave reale presente in cwl_history per il clan
+ * (la più recente del mese); se non esiste, lascia il valore invariato.
+ */
+async function resolveCwlSeasonKey(season) {
+  const s = String(season || '').trim();
+  if (!/^\d{4}-\d{2}$/.test(s)) return s;
+  try {
+    const q = db.from('cwl_history').select('season').like('season', `${s}-%`)
+      .order('season', { ascending: false }).limit(1);
+    if (window._userClanTag) q.eq('clan_tag', window._userClanTag);
+    const { data } = await q;
+    if (data && data[0]?.season) return data[0].season;
+  } catch (_) {}
+  return s;
+}
+
 async function loadAssignMonth(overrideSeason) {
-  const season = overrideSeason || document.getElementById('assign-season-pick')?.value;
+  const season = await resolveCwlSeasonKey(overrideSeason || document.getElementById('assign-season-pick')?.value);
   if (!season) {
     const d = document.getElementById('assign-content');
     if (d) d.innerHTML = '<p class="wl-loading">Seleziona un mese.</p>';
@@ -6030,6 +6048,7 @@ function toggleAssignEdit(cancel = false) {
 }
 
 async function saveAssignChanges(season) {
+  season = await resolveCwlSeasonKey(season);
   const saveBtn = document.getElementById('assign-save-btn');
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '💾 Salvataggio…'; }
 
@@ -6430,7 +6449,7 @@ function switchBonusMode(mode) {
 let bmManualSelected = new Set();
 
 async function loadManualMemberList() {
-  const season = document.getElementById('bm-manual-season').value;
+  const season = await resolveCwlSeasonKey(document.getElementById('bm-manual-season').value);
   const listDiv = document.getElementById('bm-manual-list');
   if (!season) { listDiv.innerHTML = '<p style="color:#f0a500;font-size:0.85rem">Seleziona prima la stagione.</p>'; return; }
 
@@ -6472,7 +6491,8 @@ async function loadManualMemberList() {
   }
 
   // Controlla chi ha già ricevuto il bonus in questa stagione
-  const qExisting = db.from('cwl_history').select('player_name').eq('season', season).eq('bonus_assigned', true);
+  // Tutto il mese: include anche bonus salvati in passato con chiave "YYYY-MM"
+  const qExisting = db.from('cwl_history').select('player_name').like('season', `${String(season).slice(0, 7)}%`).eq('bonus_assigned', true);
   if (window._userClanTag) qExisting.eq('clan_tag', window._userClanTag);
   const { data: existing } = await qExisting;
   const alreadyBonus = new Set((existing || []).map(r => r.player_name));
@@ -6510,6 +6530,7 @@ function toggleManualMember(name, checked) {
 }
 
 async function saveManualBonus(season) {
+  season = await resolveCwlSeasonKey(season);
   if (!bmManualSelected.size) {
     alert('Nessun giocatore selezionato.');
     return;
@@ -6654,7 +6675,7 @@ async function saveAliases() {
 }
 
 async function applyBonusCriteria() {
-  const season  = document.getElementById('bm-season').value;
+  const season  = await resolveCwlSeasonKey(document.getElementById('bm-season').value);
   const count   = parseInt(document.getElementById('bm-bonus-count').value) || 6;
   const msg     = document.getElementById('bm-msg');
   const div     = document.getElementById('bm-candidates');
@@ -6887,7 +6908,7 @@ function toggleBmBonus(name, checked) {
 
 // ── Salva assegnazione da modal ───────────────────────
 async function saveBonusFromModal() {
-  const season = document.getElementById('bm-season').value;
+  const season = await resolveCwlSeasonKey(document.getElementById('bm-season').value);
   const msg    = document.getElementById('bm-msg');
   const btn    = document.getElementById('bm-save');
   if (!bmCandidates.length) { msg.textContent = '⚠ Prima applica i criteri.'; return; }
@@ -6930,7 +6951,8 @@ async function loadBonusHistory() {
 
   const qBonusHist = db.from('cwl_history')
     .select('*')
-    .eq('season', season)
+    // Tutto il mese: chiavi CoC API (YYYY-MM-01/02) e bonus storici salvati come "YYYY-MM"
+    .like('season', `${String(season).slice(0, 7)}%`)
     .eq('bonus_assigned', true)
     .order('bonus_score', { ascending: false });
   if (window._userClanTag) qBonusHist.eq('clan_tag', window._userClanTag);
