@@ -1178,7 +1178,7 @@ function renderProfilesModal(state, { gate = false } = {}) {
     if (prefs.default_profile_id === p.id) marks.push('⭐');
     if (prefs.mini_app_profile_id === p.id) marks.push('📱');
     const th = Number(p.town_hall_level) || 0;
-    const thN = String(Math.min(Math.max(th || 1, 1), 18)).padStart(2, '0');
+    const thN = thImgN(th);
     const thSrc = th > 0 ? `th/level_${thN}.webp` : '';
     const badge = (p.coc_clan_badge_url || '').replace(/"/g, '');
     const name = (p.label || p.username || 'Villaggio').replace(/[<>]/g, '');
@@ -2211,7 +2211,7 @@ function renderCardEventProfilePicker() {
   el.style.display = 'flex';
   el.innerHTML = profiles.map((p) => {
     const th = Number(p.town_hall_level) || 0;
-    const thN = String(Math.min(Math.max(th || 1, 1), 18)).padStart(2, '0');
+    const thN = thImgN(th);
     const thImg = th > 0
       ? `<img src="th/level_${thN}.webp" class="carte-profile-th" alt="" onerror="this.onerror=null;this.src='th/level_${thN}.png'">`
       : '';
@@ -5181,16 +5181,25 @@ async function loadMembers() {
   renderMembers(active, exPlayers);
 }
 
+// Livello TH più alto con icona presente in th/ e th/webp/.
+// Quando aggiungi th/level_19.webp (+ th/webp/level_19.webp + .png), porta questo valore a 19.
+const TH_IMG_MAX = 18;
+
+/** Numero TH a 2 cifre per i file immagine, limitato all'ultima icona disponibile. */
+function thImgN(level) {
+  const lv = Math.min(Math.max(Number(level) || 1, 1), TH_IMG_MAX);
+  return String(lv).padStart(2, '0');
+}
+
 // Ritorna il percorso immagine TH — webp preferito, png come fallback onerror
 function thImgSrc(level) {
-  const n = String(level).padStart(2, "0");
-  return `th/level_${n}.webp`;
+  return `th/level_${thImgN(level)}.webp`;
 }
 
 // Fallback png se webp non carica (chiamata da onerror inline)
 function thImgFallback(el, level) {
   el.onerror = null;
-  el.src = `th/level_${String(level).padStart(2,"0")}.png`;
+  el.src = `th/level_${thImgN(level)}.png`;
 }
 
 function thImg(level) {
@@ -8266,7 +8275,7 @@ async function openClassicWarDetail(key, opts) {
 
     const sorted = [...members].sort((a, b) => (a.mapPosition ?? 99) - (b.mapPosition ?? 99));
     return sorted.map(m => {
-      const thN = String(m.townhallLevel ?? 1).padStart(2, '0');
+      const thN = thImgN(m.townhallLevel);
       const thSrc = `th/level_${thN}.webp`;
       const thFb  = `onerror="this.onerror=null;this.src='th/level_${thN}.png'"`;
 
@@ -10091,6 +10100,9 @@ const UNIT_COC_SLUG = {
   'Flame Blower':       {c:'equipment', s:'flame-blower'},
   'Stun Blaster':       {c:'equipment', s:'stun-blaster'},
   'Electro Fangs':      {c:'equipment', s:'electro-fangs'},
+  'Revenge Deck':       {c:'equipment', s:'revenge-deck'},
+  'Monolith Arrow':     {c:'equipment', s:'monolith-arrow'},
+  'Portal Pendant':     {c:'equipment', s:'portal-pendant'},
   'Rocket Backpack':    {c:'equipment', s:'rocket-backpack'},
   // ── Truppe / incantesimi recenti (slug coc.guide; mirror GH sotto) ───────────
   'Furnace':            {c:'troop', s:'furnace'},
@@ -10276,11 +10288,11 @@ const HERO_EQUIPMENT_MAP = {
   'Giant Gauntlet':'Barbarian King','Spiky Ball':'Barbarian King',
   'Snake Bracelet':'Barbarian King',
   'Stick Horse':'Barbarian King',
-  // Regina degli Arcieri (7 items)
+  // Regina degli Arcieri (8 items)
   'Archer Puppet':'Archer Queen','Invisibility Vial':'Archer Queen',
   'Giant Arrow':'Archer Queen','Healer Puppet':'Archer Queen',
   'Frozen Arrow':'Archer Queen','Magic Mirror':'Archer Queen',
-  'Action Figure':'Archer Queen',
+  'Action Figure':'Archer Queen','Monolith Arrow':'Archer Queen',
   // Grande Custode (7 items)
   'Eternal Tome':'Grand Warden','Life Gem':'Grand Warden',
   'Rage Gem':'Grand Warden','Healing Tome':'Grand Warden',
@@ -10291,13 +10303,15 @@ const HERO_EQUIPMENT_MAP = {
   'Hog Rider Puppet':'Royal Champion','Haste Vial':'Royal Champion',
   'Rocket Spear':'Royal Champion','Electro Boots':'Royal Champion',
   'Frost Flake':'Royal Champion',
-  // Principe degli Sgherri (6 items) — Metal Pants appartiene qui, NON al Campione Reale
+  // Principe degli Sgherri (7 items) — Metal Pants appartiene qui, NON al Campione Reale
   'Dark Orb':'Minion Prince','Henchmen Puppet':'Minion Prince',
   'Metal Pants':'Minion Prince','Dark Crown':'Minion Prince',
   'Meteor Staff':'Minion Prince','Noble Iron':'Minion Prince',
-  // Duca Drago (5 items)
+  'Portal Pendant':'Minion Prince',
+  // Duca Drago (6 items)
   'Fire Heart':'Dragon Duke','Flame Blower':'Dragon Duke',
   'Stun Blaster':'Dragon Duke','Electro Fangs':'Dragon Duke',
+  'Revenge Deck':'Dragon Duke',
   'Rocket Backpack':'Dragon Duke',
 };
 const HERO_ORDER_EQUIP = ['Barbarian King','Archer Queen','Grand Warden','Royal Champion','Minion Prince','Dragon Duke'];
@@ -10571,7 +10585,7 @@ function _vpImg(src, alt, cls, fallback) {
 }
 
 function _vpThImg(level) {
-  const n = String(level || 1).padStart(2, '0');
+  const n = thImgN(level);
   return `<img class="vp-hall-img" src="th/webp/level_${n}.webp" alt="TH${level}" loading="lazy" onerror="this.onerror=null;this.src='th/level_${n}.webp'">`;
 }
 
@@ -10617,10 +10631,10 @@ function _renderVpResults(summary, meta = {}) {
       hallKind === 'th'
         ? _vpThImg(hallLevel)
         : _vpImg(
-            `https://cdn.jsdelivr.net/npm/clash-of-clans-data@0.18.0/images/builder/builder-hall/normal/level-${bhLvl}.png`,
+            `https://cdn.jsdelivr.net/npm/clash-of-clans-data@0.19.1/images/builder/builder-hall/normal/level-${bhLvl}.png`,
             'BH',
             'vp-hall-img',
-            'https://cdn.jsdelivr.net/npm/clash-of-clans-data@0.18.0/images/builder/builder-hall/normal/level-10.png'
+            'https://cdn.jsdelivr.net/npm/clash-of-clans-data@0.19.1/images/builder/builder-hall/normal/level-10.png'
           );
 
     const catCards = Object.keys(cats)
@@ -10704,7 +10718,7 @@ function _renderVpResults(summary, meta = {}) {
       ${
         bh != null
           ? `<div class="vp-overview-hall">${_vpImg(
-              'https://cdn.jsdelivr.net/npm/clash-of-clans-data@0.18.0/images/builder/builder-hall/normal/level-10.png',
+              'https://cdn.jsdelivr.net/npm/clash-of-clans-data@0.19.1/images/builder/builder-hall/normal/level-10.png',
               'BH',
               'vp-hall-img'
             )}<span>BH${escH(String(bh))}</span></div>`
@@ -10718,6 +10732,7 @@ function _renderVpResults(summary, meta = {}) {
         ? `<section class="vp-village"><h3 class="profilo-section-title">Upgrade in corso</h3><div class="vp-upg-grid">${upgrades}</div></section>`
         : ''
     }
+    ${summary.dataset_note ? `<p class="page-sub vp-disclaimer">${escH(summary.dataset_note)}</p>` : ''}
     <p class="page-sub vp-disclaimer">${escH(
       gpOn
         ? 'Tempi mostrati con Gold Pass −20% (builder/ricerca). Costi invariati. Stime senza rune, code o pozioni.'
@@ -10803,7 +10818,7 @@ function _renderVpHistory() {
       const when = s.created_at ? new Date(s.created_at).toLocaleString('it-IT') : '—';
       const pct = s.summary?.home?.pct_th != null ? _vpFmtPct(s.summary.home.pct_th) : '—';
       const th = s.th_level ?? '?';
-      const n = String(th).padStart(2, '0');
+      const n = thImgN(th);
       return `<div class="vp-hist-row">
         <button type="button" class="btn-secondary btn-sm vp-hist-btn" onclick="vpShowSnapshot('${s.id}')">
           <img class="vp-hist-th" src="th/webp/level_${n}.webp" alt="" width="28" height="28" loading="lazy" onerror="this.style.display='none'">
@@ -12395,7 +12410,7 @@ function _wlBuildPlayersHtml(data, side) {
   function starsRow(stars, max) { return '★'.repeat(stars) + '☆'.repeat(Math.max(0, max - stars)); }
 
   const cards = members.map(m => {
-    const thN = String(m.townhallLevel || 1).padStart(2, '0');
+    const thN = thImgN(m.townhallLevel);
     const thImg = `<img src="th/webp/level_${thN}.webp" class="wdm-th-img" alt="TH${m.townhallLevel}" loading="lazy">`;
 
     if (isPrep) {
@@ -12420,7 +12435,7 @@ function _wlBuildPlayersHtml(data, side) {
         </div>`;
       }
       const def = defMap[a.defenderTag];
-      const defThN = def?.thLevel ? String(def.thLevel).padStart(2, '0') : null;
+      const defThN = def?.thLevel ? thImgN(def.thLevel) : null;
       const defThImg = defThN
         ? `<img src="th/webp/level_${defThN}.webp" class="wdm-atk-def-th" alt="TH${def.thLevel}" loading="lazy">`
         : '';
@@ -12668,8 +12683,8 @@ async function _wlmLoadConfronto() {
     const a = usMembers[i], b = themMembers[i];
     const hA = a ? await _getHeroLevelsSum(a.tag) : null;
     const hB = b ? await _getHeroLevelsSum(b.tag) : null;
-    const thNA = a ? String(a.townhallLevel || 1).padStart(2,'0') : null;
-    const thNB = b ? String(b.townhallLevel || 1).padStart(2,'0') : null;
+    const thNA = a ? thImgN(a.townhallLevel) : null;
+    const thNB = b ? thImgN(b.townhallLevel) : null;
     const thImgA = thNA ? `<img src="th/webp/level_${thNA}.webp" alt="TH${a.townhallLevel}" class="wl-th-icon" loading="lazy">` : '—';
     const thImgB = thNB ? `<img src="th/webp/level_${thNB}.webp" alt="TH${b.townhallLevel}" class="wl-th-icon" loading="lazy">` : '—';
     heroRows.push(`<tr>
@@ -12746,7 +12761,7 @@ function _wlPlannerTargetFiveCells(attacker, pick, themWarRank, emptyHint) {
   const thDelta = (attacker.townhallLevel || 0) - (s.th ?? opp.townhallLevel ?? 0);
   const deltaClass = thDelta >= 2 ? 'cdm-td-easy' : thDelta <= -2 ? 'cdm-td-hard' : 'cdm-td-fair';
   const deltaSign = thDelta > 0 ? '+' : '';
-  const bThN = String(opp.townhallLevel || 1).padStart(2, '0');
+  const bThN = thImgN(opp.townhallLevel);
   const bThImg = `<img src="th/webp/level_${bThN}.webp" alt="TH${opp.townhallLevel}" class="wl-th-icon" loading="lazy">`;
   return `<td class="cdm-cf-pos">#${themWarRank.get(opp.tag) ?? '?'}</td>
       <td class="cdm-cf-th">${bThImg}</td>
@@ -12867,7 +12882,7 @@ function _wlBuildPlanner(data, usMembers, themMembers, maxAtk) {
   for (const a of needAtk) {
     const missing = atkPer - (a.attacks?.length ?? 0);
     const prim = primaryByTag.get(a.tag);
-    const aThN = String(a.townhallLevel || 1).padStart(2, '0');
+    const aThN = thImgN(a.townhallLevel);
     const aThImg = `<img src="th/webp/level_${aThN}.webp" alt="TH${a.townhallLevel}" class="wl-th-icon" loading="lazy">`;
 
     let secCells = '';

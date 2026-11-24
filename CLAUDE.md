@@ -384,5 +384,6 @@ npm test
 10. **Ruoli per assegnazione bonus**: `admin`, `capo`, `co-capo` — controllati da `isCapoOrCoCapoForBonus` nel bot e `require-role.js` sul sito.
 11. **Middleware ordine** nel bot è critico: guardMiddleware → usage → coc_off → UI tracking → wipe → global leave → router → session gate. Non riordinare.
 12. `**isGroupClanReadCallback`** è la whitelist dei callback accessibili da ospiti in gruppi collegati. Include: `menu`, `noop`, `clan_home`, `clan_webapps`, `info`, `cwl`, `war_menu`, `bonus:hist`, `bonus:hof`, pattern `bonus:\d+`, `bonus:sv:\d{4}-\d{2}`, `mb\d+`, `cwl_v:`, `war:`. Aggiungere callback qui richiede verifica che non espongano dati sensibili.
-13. **Le immagini TH** livello 1–18 sono `.webp` in `th/webp/`; i file root sono stati rimossi.
+13. **Le immagini TH** livello 1–18 sono `.webp` in `th/webp/` (+ copie in `th/`). Tutti i percorsi passano da `thImgN()` in `app.js`: livelli oltre `TH_IMG_MAX` (oggi 18) usano l'ultima icona disponibile. Per aggiungere il TH19: file `level_19` in `th/` e `th/webp/`, poi `TH_IMG_MAX = 19`.
+14. **Dataset villaggio** (`data/coc-village/`) generato da `scripts/build-coc-village-dataset.mjs` (pacchetto npm `clash-of-clans-data`, versione in `VERSION_PKG`). Uso offline: `npm pack clash-of-clans-data@X`, estrai e lancia con `--local=<dir>/package`. Non contiene dati CoC API: aggiornarlo non tocca il proxy.
 

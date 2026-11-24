@@ -237,7 +237,10 @@ function buildVillage(ds, ownedById, village, hallLevel, hallGlobal, categories)
  */
 function calculateProgress(parsed) {
   const ds = loadDataset();
-  const th = Math.max(1, Math.min(18, Number(parsed.thLevel) || 1));
+  // TH reale del giocatore (anche oltre i dati, es. TH19) vs TH usato per i massimi:
+  // il dataset copre fino a ds.globalMaxTh, oltre si calcola sui massimi dell'ultimo TH noto.
+  const th = Math.max(1, Number(parsed.thLevel) || 1);
+  const thCalc = Math.min(th, ds.globalMaxTh);
   const bh =
     parsed.bhLevel != null ? Math.max(1, Math.min(ds.globalMaxBh, Number(parsed.bhLevel))) : null;
 
@@ -248,7 +251,7 @@ function calculateProgress(parsed) {
     ownedById.get(id).push(it);
   }
 
-  const home = buildVillage(ds, ownedById, 'home', th, ds.globalMaxTh, HOME_CATS);
+  const home = buildVillage(ds, ownedById, 'home', thCalc, ds.globalMaxTh, HOME_CATS);
   const builder = bh
     ? buildVillage(ds, ownedById, 'builder', bh, ds.globalMaxBh, BUILDER_CATS)
     : buildVillage(ds, ownedById, 'builder', null, ds.globalMaxBh, BUILDER_CATS);
@@ -275,6 +278,12 @@ function calculateProgress(parsed) {
     builder,
     active_upgrades: active_upgrades.slice(0, 30),
     disclaimer: DISCLAIMER,
+    ...(th > thCalc
+      ? {
+          dataset_max_th: ds.globalMaxTh,
+          dataset_note: `Dati del Municipio ${th} non ancora disponibili: percentuali e costi calcolati sui massimi del Municipio ${ds.globalMaxTh}.`,
+        }
+      : {}),
     dataset_version: ds.version,
     gold_pass_time_discount: GOLD_PASS_TIME_DISCOUNT,
   };

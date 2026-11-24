@@ -15,11 +15,11 @@ const HERO_EQUIPMENT_MAP = {
   'Giant Gauntlet':'Barbarian King','Spiky Ball':'Barbarian King',
   'Snake Bracelet':'Barbarian King',
   'Stick Horse':'Barbarian King',
-  // Regina degli Arcieri (7 items)
+  // Regina degli Arcieri (8 items)
   'Archer Puppet':'Archer Queen','Invisibility Vial':'Archer Queen',
   'Giant Arrow':'Archer Queen','Healer Puppet':'Archer Queen',
   'Frozen Arrow':'Archer Queen','Magic Mirror':'Archer Queen',
-  'Action Figure':'Archer Queen',
+  'Action Figure':'Archer Queen','Monolith Arrow':'Archer Queen',
   // Grande Custode (7 items)
   'Eternal Tome':'Grand Warden','Life Gem':'Grand Warden',
   'Rage Gem':'Grand Warden','Healing Tome':'Grand Warden',
@@ -30,13 +30,15 @@ const HERO_EQUIPMENT_MAP = {
   'Hog Rider Puppet':'Royal Champion','Haste Vial':'Royal Champion',
   'Rocket Spear':'Royal Champion','Electro Boots':'Royal Champion',
   'Frost Flake':'Royal Champion',
-  // Principe degli Sgherri (6 items)
+  // Principe degli Sgherri (7 items)
   'Dark Orb':'Minion Prince','Henchmen Puppet':'Minion Prince',
   'Metal Pants':'Minion Prince','Dark Crown':'Minion Prince',
   'Meteor Staff':'Minion Prince','Noble Iron':'Minion Prince',
-  // Duca Drago (5 items)
+  'Portal Pendant':'Minion Prince',
+  // Duca Drago (6 items)
   'Fire Heart':'Dragon Duke','Flame Blower':'Dragon Duke',
   'Stun Blaster':'Dragon Duke','Electro Fangs':'Dragon Duke',
+  'Revenge Deck':'Dragon Duke',
   'Rocket Backpack':'Dragon Duke',
 };
 
@@ -91,6 +93,9 @@ const UNIT_COC_SLUG = {
   'Flame Blower':       {c:'equipment', s:'flame-blower'},
   'Stun Blaster':       {c:'equipment', s:'stun-blaster'},
   'Electro Fangs':      {c:'equipment', s:'electro-fangs'},
+  'Revenge Deck':       {c:'equipment', s:'revenge-deck'},
+  'Monolith Arrow':     {c:'equipment', s:'monolith-arrow'},
+  'Portal Pendant':     {c:'equipment', s:'portal-pendant'},
   'Rocket Backpack':    {c:'equipment', s:'rocket-backpack'},
 };
 

@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 
 const DATA_DIR = path.join(__dirname, '..', '..', 'data', 'coc-village');
-const CDN_FALLBACK = 'https://cdn.jsdelivr.net/npm/clash-of-clans-data@0.18.0/';
+const CDN_FALLBACK = 'https://cdn.jsdelivr.net/npm/clash-of-clans-data@0.19.1/';
 
 let _cache = null;
 let _icons = null;
@@ -79,7 +79,7 @@ function getIconUrl(dataId, opts = {}) {
 
   // Municipio: sempre path normale (mai weapon skin), livello se noto
   if (id === 1000001 || ent?.id === 'town-hall') {
-    const lvl = Math.max(1, Math.min(18, Number(opts.level) || 1));
+    const lvl = Math.max(1, Math.min(ds.globalMaxTh, Number(opts.level) || 1));
     return `${ds.cdnBase}images/home/town-hall/normal/level-${lvl}.png`;
   }
 

@@ -1,17 +1,49 @@
 #!/usr/bin/env node
 /**
- * Rigenera data/coc-village/entities.json da clash-of-clans-data (jsDelivr).
- * Uso: node scripts/build-coc-village-dataset.mjs
+ * Rigenera data/coc-village/entities.json + icons.json da clash-of-clans-data.
+ *
+ * Uso:
+ *   node scripts/build-coc-village-dataset.mjs                 # scarica da jsDelivr
+ *   node scripts/build-coc-village-dataset.mjs --local=<dir>   # legge un pacchetto estratto
+ *                                                              # (npm pack clash-of-clans-data@X && tar xzf …)
+ *
+ * Le icone restano servite da jsDelivr (cdnBase in icons.json), versione = VERSION_PKG.
  */
-'use strict';
+import fs from 'fs';
+import path from 'path';
+import https from 'https';
+import { fileURLToPath } from 'url';
 
-const fs = require('fs');
-const path = require('path');
-const https = require('https');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const VERSION_PKG = '0.18.0';
+const VERSION_PKG = '0.19.1';
+const DATA_MONTH = '2026-10';
 const BASE = `https://cdn.jsdelivr.net/npm/clash-of-clans-data@${VERSION_PKG}/`;
 const OUT_DIR = path.join(__dirname, '..', 'data', 'coc-village');
+/** TH massimo coperto dal pacchetto dati (non il TH massimo del gioco). */
+const DATA_MAX_TH = 18;
+const LOCAL_ARG = process.argv.find((a) => a.startsWith('--local='));
+const LOCAL_DIR = LOCAL_ARG ? path.resolve(LOCAL_ARG.slice('--local='.length)) : null;
+
+/** Icona rappresentativa per categoria (percorsi relativi al pacchetto). */
+const CATEGORY_ICONS = {
+  townhall: 'images/home/town-hall/normal/level-14.png',
+  defenses: 'images/home/defenses/cannon/normal/level-1.png',
+  resources: 'images/home/resource-buildings/gold-mine/normal/level-1.png',
+  army_buildings: 'images/home/army-buildings/army-camp/normal/level-1.png',
+  walls: 'images/home/defenses/wall/normal/level-1.png',
+  traps: 'images/home/traps/bomb/normal/level-1.png',
+  heroes: 'images/home/heroes/barbarian-king/icon.png',
+  pets: 'images/home/pets/lassi/icon.png',
+  equipment: 'images/home/hero-equipment/barbarian-puppet/icon.png',
+  troops: 'images/home/troops/barbarian/icon.png',
+  spells: 'images/home/spells/lightning-spell/icon.png',
+  siege: 'images/home/siege-machines/wall-wrecker/icon.png',
+  guardians: 'images/home/guardians/longshot/normal/level-1.png',
+  crafted: 'images/home/defenses/crafting-station/normal/level-1.png',
+  buildings: 'images/builder/defenses/cannon/normal/level-1.png',
+  helpers: 'images/home/other/helper-hut/normal/level-1.png',
+};
 
 const IT_NAMES = {
   'Town Hall': 'Municipio',
@@ -150,25 +182,68 @@ function categoryFrom(entity, filePath) {
   return 'army_buildings';
 }
 
-async function main() {
+function walkLocal(dir, rel) {
+  const out = [];
+  for (const ent of fs.readdirSync(path.join(dir, rel), { withFileTypes: true })) {
+    const p = `${rel}/${ent.name}`;
+    if (ent.isDirectory()) out.push(...walkLocal(dir, p));
+    else if (ent.name.endsWith('.json')) out.push(p);
+  }
+  return out;
+}
+
+async function listDataFiles() {
+  if (LOCAL_DIR) {
+    const localVer = JSON.parse(fs.readFileSync(path.join(LOCAL_DIR, 'package.json'), 'utf8')).version;
+    if (localVer !== VERSION_PKG) {
+      throw new Error(`Pacchetto locale ${localVer} ≠ VERSION_PKG ${VERSION_PKG}`);
+    }
+    return walkLocal(LOCAL_DIR, 'data');
+  }
   const pkg = await fetchJson(`https://data.jsdelivr.com/v1/packages/npm/clash-of-clans-data@${VERSION_PKG}`);
   const dataDir = pkg.files.find((x) => x.name === 'data');
-  const all = walk(dataDir.files, 'data').filter(
-    (p) => p.startsWith('data/home/') || p.startsWith('data/builder/')
-  );
+  return walk(dataDir.files, 'data');
+}
+
+function loadEntity(rel) {
+  if (LOCAL_DIR) return Promise.resolve(JSON.parse(fs.readFileSync(path.join(LOCAL_DIR, rel), 'utf8')));
+  return fetchJson(BASE + rel);
+}
+
+/** images.icon, altrimenti immagine "normal" del livello 1. */
+function iconPathOf(entity) {
+  if (entity.images && typeof entity.images.icon === 'string') return entity.images.icon;
+  // Difese artigianali: images = [{ fromEffectiveLevel, normal }, …]
+  if (Array.isArray(entity.images) && entity.images[0] && typeof entity.images[0].normal === 'string') {
+    return entity.images[0].normal;
+  }
+  const lv0 = Array.isArray(entity.levels) ? entity.levels[0] : null;
+  const imgs = lv0 && lv0.images;
+  if (imgs && typeof imgs === 'object') {
+    if (typeof imgs.normal === 'string') return imgs.normal;
+    const first = Object.values(imgs).find((v) => typeof v === 'string');
+    if (first) return first;
+  }
+  return null;
+}
+
+async function main() {
+  const all = (await listDataFiles())
+    .filter((p) => p.startsWith('data/home/') || p.startsWith('data/builder/'))
+    .sort();
 
   const entities = [];
   const BATCH = 20;
   for (let start = 0; start < all.length; start += BATCH) {
     const slice = all.slice(start, start + BATCH);
     const results = await Promise.all(
-      slice.map(async (rel) => ({ rel, entity: await fetchJson(BASE + rel) }))
+      slice.map(async (rel) => ({ rel, entity: await loadEntity(rel) }))
     );
     for (const { rel, entity } of results) {
       if (entity.dataId == null) continue;
       const levels = Array.isArray(entity.levels) ? entity.levels : [];
-      const maxLevelByTh = new Array(18).fill(0);
-      const maxCountByTh = new Array(18).fill(0);
+      const maxLevelByTh = new Array(DATA_MAX_TH).fill(0);
+      const maxCountByTh = new Array(DATA_MAX_TH).fill(0);
       const costs = [];
       const times = [];
       const costResources = [];
@@ -176,7 +251,7 @@ async function main() {
       for (const lv of levels) {
         const L = Number(lv.level);
         const thReq = Number(lv.townHallRequired || lv.builderHallRequired || 1);
-        for (let th = thReq; th <= 18; th++) {
+        for (let th = thReq; th <= DATA_MAX_TH; th++) {
           maxLevelByTh[th - 1] = Math.max(maxLevelByTh[th - 1], L);
         }
         costs[L] = Number(lv.buildCost || lv.researchCost || lv.upgradeCost || 0);
@@ -186,7 +261,7 @@ async function main() {
         );
       }
       let last = 0;
-      for (let th = 0; th < 18; th++) {
+      for (let th = 0; th < DATA_MAX_TH; th++) {
         if (maxLevelByTh[th] > 0) last = maxLevelByTh[th];
         else maxLevelByTh[th] = last;
       }
@@ -194,12 +269,12 @@ async function main() {
       const apt = entity.availablePerTownHall || entity.availablePerBuilderHall || [];
       for (const row of apt) {
         const th = Number(row.townHallLevel || row.builderHallLevel || 0);
-        if (th < 1 || th > 18) continue;
+        if (th < 1 || th > DATA_MAX_TH) continue;
         maxCountByTh[th - 1] =
           row.countAfterMerges != null ? Number(row.countAfterMerges) : Number(row.count || 0);
       }
       let lastC = 0;
-      for (let th = 0; th < 18; th++) {
+      for (let th = 0; th < DATA_MAX_TH; th++) {
         if (apt.length) {
           const has = apt.some((r) => Number(r.townHallLevel || r.builderHallLevel) === th + 1);
           if (has) lastC = maxCountByTh[th];
@@ -222,17 +297,40 @@ async function main() {
         costs,
         times,
         costResources,
+        ...(iconPathOf(entity) ? { icon: iconPathOf(entity) } : {}),
       });
     }
     process.stdout.write(`\r${Math.min(start + BATCH, all.length)}/${all.length}`);
   }
   console.log('\nEntities:', entities.length);
 
-  const version = `2026-09-coc-data-${VERSION_PKG}`;
+  const version = `${DATA_MONTH}-coc-data-${VERSION_PKG}`;
+  const byDataId = {};
+  for (const e of entities) {
+    if (!e.icon) continue;
+    byDataId[e.dataId] = {
+      path: e.icon,
+      url: BASE + e.icon,
+      name: e.name,
+      id: e.id,
+      category: e.category,
+      village: e.village,
+    };
+  }
+  const categoryIcons = {};
+  for (const [cat, p] of Object.entries(CATEGORY_ICONS)) categoryIcons[cat] = { path: p, url: BASE + p };
+
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  fs.writeFileSync(path.join(OUT_DIR, 'entities.json'), JSON.stringify({ version, globalMaxTh: 18, globalMaxBh: 10, entities }));
+  fs.writeFileSync(
+    path.join(OUT_DIR, 'entities.json'),
+    JSON.stringify({ version, globalMaxTh: DATA_MAX_TH, globalMaxBh: 10, entities })
+  );
+  fs.writeFileSync(
+    path.join(OUT_DIR, 'icons.json'),
+    JSON.stringify({ version, cdnBase: BASE, byDataId, categoryIcons })
+  );
   fs.writeFileSync(path.join(OUT_DIR, 'VERSION'), `${version}\n`);
-  console.log('Wrote', path.join(OUT_DIR, 'entities.json'));
+  console.log('Wrote', OUT_DIR);
 }
 
 main().catch((e) => {
