@@ -11862,7 +11862,7 @@ document.querySelectorAll('.tab-btn,.bnav-btn').forEach(btn=>{
 
 // ── CLASSIFICHE ──────────────────────────────────────────────────────────────
 // `global` deve essere la stringa letterale richiesta dalla CoC API per il mondiale
-const RANK_LOCATIONS = { global: 'global', italy: '32000094' };
+const RANK_LOCATIONS = { global: 'global', italy: '32000120' }; // 32000120 = Italy (CoC API locations)
 
 let _rankType      = 'players'; // players | clans | players-builder-base | clans-builder-base | capitals
 let _rankLocaleId  = RANK_LOCATIONS.italy;

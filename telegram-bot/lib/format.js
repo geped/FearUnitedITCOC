@@ -11,7 +11,7 @@ const DIV = '━━━━━━━━━━━━━━━━';
 const DIV2 = '▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬';
 
 /** locationId come su CoCBoard (app.js RANK_LOCATIONS). */
-const RANK_LOCATION_ITALY = '32000094';
+const RANK_LOCATION_ITALY = '32000120'; // Italy (CoC API locations)
 const RANK_LOCATION_GLOBAL = 'global';
 
 function escapeHtml(s) {

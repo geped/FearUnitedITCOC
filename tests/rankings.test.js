@@ -9,7 +9,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 // ── Costanti (TARGET state — valore atteso dopo il fix) ───────────────────────
-const RANK_LOCATIONS = { global: 'global', italy: '32000094' };
+const RANK_LOCATIONS = { global: 'global', italy: '32000120' };
 
 // ── Funzioni di supporto copiate da app.js ────────────────────────────────────
 function thImgSrc(l) { return 'th/webp/level_' + String(l).padStart(2, '0') + '.webp'; }
@@ -168,9 +168,9 @@ test('CLAS-01: RANK_LOCATIONS.global è la stringa global', () => {
 });
 
 // CLAS-02: locationId Italia rimane immutata (regression guard)
-test('CLAS-02: RANK_LOCATIONS.italy è 32000094', () => {
-  assert.equal(RANK_LOCATIONS.italy, '32000094',
-    `RANK_LOCATIONS.italy deve essere '32000094'`);
+test('CLAS-02: RANK_LOCATIONS.italy è 32000120 (Italy; 32000094 è Germany)', () => {
+  assert.equal(RANK_LOCATIONS.italy, '32000120',
+    `RANK_LOCATIONS.italy deve essere '32000120'`);
 });
 
 // CLAS-05: thImgV(undefined) restituisce span con classe th-unknown
